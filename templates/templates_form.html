@@ -1,0 +1,45 @@
+{{define "templates_form.html"}}
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>{{template "head" .}}</head>
+<body class="h-full bg-slate-50 text-slate-800">
+<div class="flex h-full">
+{{template "sidebar" .}}
+<main class="flex-1 overflow-y-auto">
+<div class="max-w-6xl mx-auto p-8">
+<div class="mb-8">
+    <h2 class="text-2xl font-bold text-slate-900">{{if .isNew}}New Template{{else}}Edit Template{{end}}</h2>
+    <p class="text-slate-500 mt-1">Use {{`{{variable}}`}} placeholders for personalization</p>
+</div>
+
+<div class="card max-w-2xl">
+    <form method="POST" action="{{if .isNew}}/templates{{else}}/templates/{{.template.ID}}{{end}}" class="space-y-5">
+        <div>
+            <label class="form-label">Name</label>
+            <input type="text" name="name" class="form-input" value="{{if .template}}{{.template.Name}}{{end}}" required placeholder="Welcome Email">
+        </div>
+        <div>
+            <label class="form-label">Subject</label>
+            <input type="text" name="subject" class="form-input" value="{{if .template}}{{.template.Subject}}{{end}}" required placeholder="Hello {{`{{name}}`}}">
+        </div>
+        <div>
+            <label class="form-label">Body (HTML)</label>
+            <textarea name="body" rows="10" class="form-input font-mono text-sm" required placeholder="<p>Hi {{`{{name}}`}}, welcome!</p>">{{if .template}}{{.template.Body}}{{end}}</textarea>
+        </div>
+        <div>
+            <label class="form-label">Variables (one per line)</label>
+            <textarea name="variables" rows="3" class="form-input" placeholder="name&#10;company">{{if .variables}}{{.variables}}{{end}}</textarea>
+            <p class="form-hint">List variable names used in the template</p>
+        </div>
+        <div class="flex gap-3 pt-2">
+            <button type="submit" class="btn-primary">{{if .isNew}}Create Template{{else}}Save Changes{{end}}</button>
+            <a href="/templates" class="btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+</div>
+</main>
+</div>
+</body>
+</html>
+{{end}}

@@ -1,0 +1,120 @@
+{{define "contacts_list.html"}}
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>{{template "head" .}}</head>
+<body class="h-full bg-slate-50 text-slate-800">
+<div class="flex h-full">
+{{template "sidebar" .}}
+<main class="flex-1 overflow-y-auto">
+<div class="max-w-6xl mx-auto p-8">
+<div class="flex items-center justify-between mb-8">
+    <div>
+        <h2 class="text-2xl font-bold text-slate-900">Contacts</h2>
+        <p class="text-slate-500 mt-1">Manage recipients and their personalization data</p>
+    </div>
+    <a href="/contacts/new" class="btn-primary">New Contact</a>
+</div>
+
+{{if .success}}
+<div class="alert-success mb-6">{{.success}}</div>
+{{end}}
+{{if .error}}
+<div class="alert-error mb-6">{{.error}}</div>
+{{end}}
+
+<div class="card mb-6">
+    <h3 class="card-title">Import from Excel</h3>
+  {{if .templates}}
+    <p class="text-sm text-slate-500 mb-4">Select a template to see which columns your spreadsheet needs. The first row must be headers matching the template variables.</p>
+
+    <form method="POST" action="/contacts/upload" enctype="multipart/form-data" class="space-y-4">
+        <div>
+            <label class="form-label">Template</label>
+            <select name="template_id" id="import-template" class="form-input" required onchange="updateImportPreview()">
+                <option value="">Select a template...</option>
+                {{range .templates}}
+                <option value="{{.ID}}" data-vars="{{range $i, $v := .Variables}}{{if $i}},{{end}}{{$v}}{{end}}">{{.Name}}</option>
+                {{end}}
+            </select>
+        </div>
+
+        <div id="import-preview" class="hidden rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <p class="text-sm font-medium text-slate-700 mb-2">Required spreadsheet columns</p>
+            <div id="import-columns" class="flex flex-wrap gap-2 mb-3"></div>
+            <p class="text-xs text-slate-500 mb-3">Row 1 = headers. Column names are case-insensitive. <strong>email</strong> is always required.</p>
+            <a id="sample-download" href="#" class="text-sm text-brand-600 hover:text-brand-700 font-medium">Download sample spreadsheet</a>
+        </div>
+
+        <div>
+            <label class="form-label">Excel file (.xlsx)</label>
+            <input type="file" name="file" class="form-input" accept=".xlsx,.xls" required>
+        </div>
+
+        <button type="submit" class="btn-primary">Upload &amp; Import</button>
+    </form>
+  {{else}}
+    <p class="text-sm text-slate-500">Create a <a href="/templates/new" class="text-brand-600 underline">template</a> first to import contacts with the correct columns.</p>
+  {{end}}
+</div>
+
+<div class="card overflow-hidden">
+    {{if .contacts}}
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Email</th>
+                <th>Variables</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .contacts}}
+            <tr>
+                <td class="font-medium">{{.Email}}</td>
+                <td>
+                    {{if .Variables}}
+                    {{range .Variables}}<span class="badge badge-gray mr-1">{{.Key}}={{.Value}}</span>{{end}}
+                    {{else}}
+                    <span class="text-slate-400">—</span>
+                    {{end}}
+                </td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+    {{else}}
+    <div class="empty-state">
+        <p>No contacts yet.</p>
+        <a href="/contacts/new" class="btn-primary mt-4">Add your first contact</a>
+    </div>
+    {{end}}
+</div>
+</div>
+</main>
+</div>
+<script>
+function updateImportPreview() {
+    const select = document.getElementById('import-template');
+    const preview = document.getElementById('import-preview');
+    const columns = document.getElementById('import-columns');
+    const sampleLink = document.getElementById('sample-download');
+    const option = select.options[select.selectedIndex];
+
+    if (!option || !option.value) {
+        preview.classList.add('hidden');
+        return;
+    }
+
+    const vars = option.dataset.vars ? option.dataset.vars.split(',').filter(Boolean) : [];
+    const allCols = ['email'].concat(vars);
+
+    columns.innerHTML = allCols.map(col =>
+        `<span class="badge badge-blue">${col}</span>`
+    ).join('');
+
+    sampleLink.href = '/contacts/upload/sample/' + option.value;
+    preview.classList.remove('hidden');
+}
+</script>
+</body>
+</html>
+{{end}}

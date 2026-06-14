@@ -1,0 +1,64 @@
+{{define "templates_list.html"}}
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>{{template "head" .}}</head>
+<body class="h-full bg-slate-50 text-slate-800">
+<div class="flex h-full">
+{{template "sidebar" .}}
+<main class="flex-1 overflow-y-auto">
+<div class="max-w-6xl mx-auto p-8">
+<div class="flex items-center justify-between mb-8">
+    <div>
+        <h2 class="text-2xl font-bold text-slate-900">Templates</h2>
+        <p class="text-slate-500 mt-1">Manage your email templates</p>
+    </div>
+    <a href="/templates/new" class="btn-primary">New Template</a>
+</div>
+
+{{if .success}}
+<div class="alert-success mb-6">{{.success}}</div>
+{{end}}
+
+<div class="card overflow-hidden">
+    {{if .templates}}
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Subject</th>
+                <th>Variables</th>
+                <th class="text-right">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .templates}}
+            <tr>
+                <td class="font-medium">{{.Name}}</td>
+                <td class="text-slate-600">{{.Subject}}</td>
+                <td>
+                    {{if .Variables}}
+                    {{range .Variables}}<span class="badge badge-gray mr-1">{{.}}</span>{{end}}
+                    {{else}}
+                    <span class="text-slate-400">—</span>
+                    {{end}}
+                </td>
+                <td class="text-right">
+                    <a href="/templates/{{.ID}}/edit" class="text-brand-600 hover:text-brand-700 text-sm font-medium">Edit</a>
+                </td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+    {{else}}
+    <div class="empty-state">
+        <p>No templates yet.</p>
+        <a href="/templates/new" class="btn-primary mt-4">Create your first template</a>
+    </div>
+    {{end}}
+</div>
+</div>
+</main>
+</div>
+</body>
+</html>
+{{end}}

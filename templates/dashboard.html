@@ -1,0 +1,93 @@
+{{define "dashboard.html"}}
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>{{template "head" .}}</head>
+<body class="h-full bg-slate-50 text-slate-800">
+<div class="flex h-full">
+{{template "sidebar" .}}
+<main class="flex-1 overflow-y-auto">
+<div class="max-w-6xl mx-auto p-8">
+<div class="mb-8">
+    <h2 class="text-2xl font-bold text-slate-900">Dashboard</h2>
+    <p class="text-slate-500 mt-1">Overview of your email outreach performance</p>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+    <div class="stat-card">
+        <p class="stat-label">Total Sent</p>
+        <p class="stat-value">{{.stats.TotalSends}}</p>
+    </div>
+    <div class="stat-card">
+        <p class="stat-label">Opens</p>
+        <p class="stat-value text-blue-600">{{.stats.TotalOpens}}</p>
+        <p class="text-sm text-slate-500 mt-1">{{printf "%.1f" .stats.OpenRate}}% open rate</p>
+    </div>
+    <div class="stat-card">
+        <p class="stat-label">Clicks</p>
+        <p class="stat-value text-emerald-600">{{.stats.TotalClicks}}</p>
+        <p class="text-sm text-slate-500 mt-1">{{printf "%.1f" .stats.ClickRate}}% click rate</p>
+    </div>
+    <div class="stat-card">
+        <p class="stat-label">Engagement</p>
+        <p class="stat-value text-violet-600">{{.stats.TotalOpens}}+{{.stats.TotalClicks}}</p>
+        <p class="text-sm text-slate-500 mt-1">total interactions</p>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="card lg:col-span-2">
+        <h3 class="card-title">Sends vs Opens (14 days)</h3>
+        <canvas id="statsChart" height="120"></canvas>
+    </div>
+    <div class="card">
+        <h3 class="card-title">Recent Activity</h3>
+        <div class="space-y-3">
+            {{if .recentEvents}}
+            {{range .recentEvents}}
+            <div class="flex items-start gap-3 py-2 border-b border-slate-100 last:border-0">
+                <span class="badge {{if eq .EventType "open"}}badge-blue{{else if eq .EventType "click"}}badge-green{{else}}badge-gray{{end}}">{{.EventType}}</span>
+                <div class="flex-1 min-w-0">
+                    <p class="text-sm text-slate-700 truncate">Send #{{.EmailSendID}}</p>
+                    <p class="text-xs text-slate-400">{{.CreatedAt.Format "Jan 2, 15:04"}}</p>
+                </div>
+            </div>
+            {{end}}
+            {{else}}
+            <p class="text-slate-400 text-sm">No activity yet. Send your first email to see tracking data.</p>
+            {{end}}
+        </div>
+    </div>
+</div>
+
+<script>
+    const dailyStats = [
+        {{range .dailyStats}}
+        { date: "{{.Date}}", sends: {{.Sends}}, opens: {{.Opens}} },
+        {{end}}
+    ];
+    const labels = dailyStats.map(d => d.date);
+    const sendsData = dailyStats.map(d => d.sends);
+    const opensData = dailyStats.map(d => d.opens);
+
+    new Chart(document.getElementById('statsChart'), {
+        type: 'bar',
+        data: {
+            labels: labels.length ? labels : ['No data'],
+            datasets: [
+                { label: 'Sends', data: sendsData.length ? sendsData : [0], backgroundColor: '#94a3b8' },
+                { label: 'Opens', data: opensData.length ? opensData : [0], backgroundColor: '#3b82f6' }
+            ]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { position: 'bottom' } },
+            scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
+        }
+    });
+</script>
+</div>
+</main>
+</div>
+</body>
+</html>
+{{end}}

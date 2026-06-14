@@ -1,0 +1,93 @@
+package routes
+
+import (
+	"fmt"
+	"log"
+	"net/http"
+	"net/url"
+	"strconv"
+
+	"emailtracker.com/model"
+	"emailtracker.com/util"
+	"github.com/gin-gonic/gin"
+)
+
+func DownloadContactSample(ctx *gin.Context) {
+	templateID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
+	if err != nil {
+		ctx.String(http.StatusBadRequest, "Invalid template ID")
+		return
+	}
+
+	_, vars, err := model.GetTemplateByID(templateID)
+	if err != nil {
+		ctx.String(http.StatusNotFound, "Template not found")
+		return
+	}
+
+	data, err := util.CreateContactSampleExcel(vars)
+	if err != nil {
+		log.Print(err)
+		ctx.String(http.StatusInternalServerError, "Could not create sample file")
+		return
+	}
+
+	ctx.Header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	ctx.Header("Content-Disposition", "attachment; filename=contacts_sample.xlsx")
+	ctx.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", data)
+}
+
+func UploadContacts(ctx *gin.Context) {
+	templateID, err := strconv.ParseInt(ctx.PostForm("template_id"), 10, 64)
+	if err != nil {
+		ctx.Redirect(http.StatusFound, "/contacts?error=Invalid+template+selected")
+		return
+	}
+
+	template, vars, err := model.GetTemplateByID(templateID)
+	if err != nil {
+		ctx.Redirect(http.StatusFound, "/contacts?error=Template+not+found")
+		return
+	}
+
+	file, err := ctx.FormFile("file")
+	if err != nil {
+		ctx.Redirect(http.StatusFound, "/contacts?error=No+file+uploaded")
+		return
+	}
+
+	src, err := file.Open()
+	if err != nil {
+		ctx.Redirect(http.StatusFound, "/contacts?error=Could+not+read+uploaded+file")
+		return
+	}
+	defer src.Close()
+
+	rows, err := util.ParseContactsExcel(src, vars)
+	if err != nil {
+		ctx.Redirect(http.StatusFound, "/contacts?error="+url.QueryEscape(err.Error()))
+		return
+	}
+
+	imported := 0
+	for _, row := range rows {
+		var cvs []model.ContactVariables
+		for _, key := range vars {
+			cvs = append(cvs, model.ContactVariables{
+				Key:   key,
+				Value: row.Variables[key],
+			})
+		}
+
+		c := model.Contact{Email: row.Email}
+		_, err := c.SaveContact(cvs)
+		if err != nil {
+			log.Print(err)
+			continue
+		}
+		imported++
+	}
+
+	msg := fmt.Sprintf("Imported %d contacts for template %s", imported, template.Name)
+	ctx.Redirect(http.StatusFound, "/contacts?success="+url.QueryEscape(msg))
+}

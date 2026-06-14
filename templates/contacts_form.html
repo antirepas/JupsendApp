@@ -1,0 +1,51 @@
+{{define "contacts_form.html"}}
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>{{template "head" .}}</head>
+<body class="h-full bg-slate-50 text-slate-800">
+<div class="flex h-full">
+{{template "sidebar" .}}
+<main class="flex-1 overflow-y-auto">
+<div class="max-w-6xl mx-auto p-8">
+<div class="mb-8">
+    <h2 class="text-2xl font-bold text-slate-900">New Contact</h2>
+    <p class="text-slate-500 mt-1">Add a recipient with personalization variables</p>
+</div>
+
+<div class="card max-w-2xl">
+    <form method="POST" action="/contacts" class="space-y-5">
+        <div>
+            <label class="form-label">Email</label>
+            <input type="email" name="email" class="form-input" required placeholder="recipient@example.com">
+        </div>
+        <div>
+            <label class="form-label">Variables</label>
+            <div id="variables-container" class="space-y-2">
+                <div class="flex gap-2">
+                    <input type="text" name="var_key" class="form-input" placeholder="Key (e.g. name)">
+                    <input type="text" name="var_value" class="form-input" placeholder="Value (e.g. John)">
+                </div>
+            </div>
+            <button type="button" onclick="addVariableRow()" class="text-sm text-brand-600 hover:text-brand-700 mt-2 font-medium">+ Add variable</button>
+        </div>
+        <div class="flex gap-3 pt-2">
+            <button type="submit" class="btn-primary">Create Contact</button>
+            <a href="/contacts" class="btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+</div>
+</main>
+</div>
+<script>
+function addVariableRow() {
+    const container = document.getElementById('variables-container');
+    const row = document.createElement('div');
+    row.className = 'flex gap-2';
+    row.innerHTML = '<input type="text" name="var_key" class="form-input" placeholder="Key"><input type="text" name="var_value" class="form-input" placeholder="Value">';
+    container.appendChild(row);
+}
+</script>
+</body>
+</html>
+{{end}}

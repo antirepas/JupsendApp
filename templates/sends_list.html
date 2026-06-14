@@ -1,0 +1,72 @@
+{{define "sends_list.html"}}
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>{{template "head" .}}</head>
+<body class="h-full bg-slate-50 text-slate-800">
+<div class="flex h-full">
+{{template "sidebar" .}}
+<main class="flex-1 overflow-y-auto">
+<div class="max-w-6xl mx-auto p-8">
+<div class="flex items-center justify-between mb-8">
+    <div>
+        <h2 class="text-2xl font-bold text-slate-900">Email Sends</h2>
+        <p class="text-slate-500 mt-1">Track delivery and engagement</p>
+    </div>
+    <a href="/sends/new" class="btn-primary">Send Email</a>
+</div>
+
+{{if .success}}
+<div class="alert-success mb-6">{{.success}}</div>
+{{end}}
+
+<div class="card overflow-hidden">
+    {{if .sends}}
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Recipient</th>
+                <th>Template</th>
+                <th>Sent</th>
+                <th>Opens</th>
+                <th>Clicks</th>
+                <th>Status</th>
+                <th class="text-right">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .sends}}
+            <tr>
+                <td class="font-medium">{{.ContactEmail}}</td>
+                <td class="text-slate-600">{{.TemplateName}}</td>
+                <td class="text-slate-500 text-sm">{{.SentAt.Format "Jan 2, 2006 15:04"}}</td>
+                <td>{{.OpenCount}}</td>
+                <td>{{.ClickCount}}</td>
+                <td>
+                    {{if gt .ClickCount 0}}
+                    <span class="badge badge-green">Clicked</span>
+                    {{else if gt .OpenCount 0}}
+                    <span class="badge badge-blue">Opened</span>
+                    {{else}}
+                    <span class="badge badge-gray">Sent</span>
+                    {{end}}
+                </td>
+                <td class="text-right">
+                    <a href="/sends/{{.ID}}" class="text-brand-600 hover:text-brand-700 text-sm font-medium">Details</a>
+                </td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+    {{else}}
+    <div class="empty-state">
+        <p>No emails sent yet.</p>
+        <a href="/sends/new" class="btn-primary mt-4">Send your first email</a>
+    </div>
+    {{end}}
+</div>
+</div>
+</main>
+</div>
+</body>
+</html>
+{{end}}

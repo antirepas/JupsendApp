@@ -1,0 +1,27 @@
+# Binaries
+*.exe
+emailtracker
+emailtracker.com
+
+# Database
+*.db
+
+# Environment
+.env
+.env.*
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test coverage
+coverage.out
+*.test
+
+# Go workspace
+vendor/

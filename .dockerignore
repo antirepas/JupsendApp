@@ -1,0 +1,9 @@
+.env
+.git
+.gitignore
+*.md
+my.db
+*.db
+coverage.out
+.idea
+.vscode

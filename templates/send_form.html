@@ -1,0 +1,56 @@
+{{define "send_form.html"}}
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>{{template "head" .}}</head>
+<body class="h-full bg-slate-50 text-slate-800">
+<div class="flex h-full">
+{{template "sidebar" .}}
+<main class="flex-1 overflow-y-auto">
+<div class="max-w-6xl mx-auto p-8">
+<div class="mb-8">
+    <h2 class="text-2xl font-bold text-slate-900">Send Email</h2>
+    <p class="text-slate-500 mt-1">Choose a template and recipient to send</p>
+</div>
+
+{{if .error}}
+<div class="alert-error mb-6">{{.error}}</div>
+{{end}}
+
+<div class="card max-w-lg">
+    <form method="POST" action="/sends" class="space-y-5">
+        <div>
+            <label class="form-label">Template</label>
+            <select name="template_id" class="form-input" required>
+                <option value="">Select a template...</option>
+                {{range .templates}}
+                <option value="{{.ID}}">{{.Name}} — {{.Subject}}</option>
+                {{end}}
+            </select>
+        </div>
+        <div>
+            <label class="form-label">Contact</label>
+            <select name="contact_id" class="form-input" required>
+                <option value="">Select a contact...</option>
+                {{range .contacts}}
+                <option value="{{.ID}}">{{.Email}}</option>
+                {{end}}
+            </select>
+        </div>
+        <div class="flex gap-3 pt-2">
+            <button type="submit" class="btn-primary">Send Email</button>
+            <a href="/sends" class="btn-secondary">Cancel</a>
+        </div>
+    </form>
+    {{if not .templates}}
+    <p class="text-sm text-amber-600 mt-4">You need at least one <a href="/templates/new" class="underline">template</a> to send emails.</p>
+    {{end}}
+    {{if not .contacts}}
+    <p class="text-sm text-amber-600 mt-2">You need at least one <a href="/contacts/new" class="underline">contact</a> to send emails.</p>
+    {{end}}
+</div>
+</div>
+</main>
+</div>
+</body>
+</html>
+{{end}}
