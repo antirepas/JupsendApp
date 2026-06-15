@@ -12,6 +12,9 @@
     <p class="text-slate-500 mt-1">Overview of your email outreach performance</p>
 </div>
 
+{{if .success}}<div class="alert-success mb-6">{{.success}}</div>{{end}}
+{{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
+
 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
     <div class="stat-card">
         <p class="stat-label">Total Sent</p>
@@ -28,9 +31,40 @@
         <p class="text-sm text-slate-500 mt-1">{{printf "%.1f" .stats.ClickRate}}% click rate</p>
     </div>
     <div class="stat-card">
-        <p class="stat-label">Engagement</p>
-        <p class="stat-value text-violet-600">{{.stats.TotalOpens}}+{{.stats.TotalClicks}}</p>
-        <p class="text-sm text-slate-500 mt-1">total interactions</p>
+        <p class="stat-label">In database</p>
+        <p class="text-sm text-slate-700 mt-2">{{.counts.Templates}} templates · {{.counts.Contacts}} contacts · {{.counts.Campaigns}} campaigns</p>
+    </div>
+</div>
+
+<div class="card mb-8">
+    <h3 class="card-title">Quick actions</h3>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <a href="/campaigns/new" class="btn-secondary justify-center">New campaign</a>
+        <a href="/templates/new" class="btn-secondary justify-center">New template</a>
+        <a href="/contacts/new" class="btn-secondary justify-center">New contact</a>
+        <a href="/sends/new" class="btn-secondary justify-center">Send email</a>
+        <a href="/campaigns" class="btn-secondary justify-center">All campaigns</a>
+        <a href="/templates" class="btn-secondary justify-center">All templates</a>
+        <a href="/contacts" class="btn-secondary justify-center">All contacts</a>
+        <a href="/sends" class="btn-secondary justify-center">All sends</a>
+    </div>
+</div>
+
+<div class="card mb-8">
+    <h3 class="card-title">Tracking setup</h3>
+    {{if .trackingWarning}}
+    <div class="alert-error mb-3">{{.trackingWarning}}</div>
+    {{end}}
+    <p class="text-sm text-slate-600 mb-3">Open/click tracking uses this public URL in emails. It must be reachable from mail clients (not blocked by a tunnel warning page).</p>
+    <p class="text-sm font-mono bg-slate-100 p-2 rounded mb-3">{{.baseURL}}</p>
+    <form method="POST" action="/settings/base-url" class="flex gap-2 mb-3">
+        <input type="url" name="base_url" class="form-input flex-1" placeholder="https://your-domain.com" value="{{.baseURL}}">
+        <button type="submit" class="btn-primary">Update URL</button>
+    </form>
+    <div class="flex gap-3 text-sm">
+        <a href="/test-pixel" class="text-brand-600 font-medium">Test tracking pixel</a>
+        <span class="text-slate-400">|</span>
+        <span class="text-slate-500">Gmail blocks images until recipient clicks "Display images"</span>
     </div>
 </div>
 
@@ -53,11 +87,30 @@
             </div>
             {{end}}
             {{else}}
-            <p class="text-slate-400 text-sm">No activity yet. Send your first email to see tracking data.</p>
+            <p class="text-slate-400 text-sm">No activity yet.</p>
             {{end}}
         </div>
     </div>
 </div>
+
+{{if .campaigns}}
+<div class="card mt-6">
+    <h3 class="card-title">Recent campaigns</h3>
+    <table class="data-table">
+        <thead><tr><th>Name</th><th>Status</th><th>Contacts</th><th></th></tr></thead>
+        <tbody>
+        {{range .campaigns}}
+        <tr>
+            <td class="font-medium">{{.Name}}</td>
+            <td><span class="badge {{if eq .DisplayStatus "sent"}}badge-green{{else if eq .DisplayStatus "scheduled"}}badge-amber{{else}}badge-gray{{end}}">{{.DisplayStatus}}</span></td>
+            <td>{{.ContactCount}}</td>
+            <td class="text-right"><a href="/campaigns/{{.ID}}" class="text-brand-600 text-sm">View</a></td>
+        </tr>
+        {{end}}
+        </tbody>
+    </table>
+</div>
+{{end}}
 
 <script>
     const dailyStats = [
@@ -68,7 +121,6 @@
     const labels = dailyStats.map(d => d.date);
     const sendsData = dailyStats.map(d => d.sends);
     const opensData = dailyStats.map(d => d.opens);
-
     new Chart(document.getElementById('statsChart'), {
         type: 'bar',
         data: {

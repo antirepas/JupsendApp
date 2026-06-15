@@ -8,28 +8,39 @@
 <main class="flex-1 overflow-y-auto">
 <div class="max-w-6xl mx-auto p-8">
 <div class="mb-8">
-    <h2 class="text-2xl font-bold text-slate-900">New Contact</h2>
+    <h2 class="text-2xl font-bold text-slate-900">{{if .isEdit}}Edit Contact{{else}}New Contact{{end}}</h2>
     <p class="text-slate-500 mt-1">Add a recipient with personalization variables</p>
 </div>
 
+{{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
+
 <div class="card max-w-2xl">
-    <form method="POST" action="/contacts" class="space-y-5">
+    <form method="POST" action="{{if .isEdit}}/contacts/{{.contact.ID}}{{else}}/contacts{{end}}" class="space-y-5">
         <div>
             <label class="form-label">Email</label>
-            <input type="email" name="email" class="form-input" required placeholder="recipient@example.com">
+            <input type="email" name="email" class="form-input" required placeholder="recipient@example.com" value="{{if .isEdit}}{{.contact.Email}}{{end}}">
         </div>
         <div>
             <label class="form-label">Variables</label>
             <div id="variables-container" class="space-y-2">
+                {{if .isEdit}}
+                {{range .vars}}
+                <div class="flex gap-2">
+                    <input type="text" name="var_key" class="form-input" placeholder="Key" value="{{.Key}}">
+                    <input type="text" name="var_value" class="form-input" placeholder="Value" value="{{.Value}}">
+                </div>
+                {{end}}
+                {{else}}
                 <div class="flex gap-2">
                     <input type="text" name="var_key" class="form-input" placeholder="Key (e.g. name)">
                     <input type="text" name="var_value" class="form-input" placeholder="Value (e.g. John)">
                 </div>
+                {{end}}
             </div>
             <button type="button" onclick="addVariableRow()" class="text-sm text-brand-600 hover:text-brand-700 mt-2 font-medium">+ Add variable</button>
         </div>
         <div class="flex gap-3 pt-2">
-            <button type="submit" class="btn-primary">Create Contact</button>
+            <button type="submit" class="btn-primary">{{if .isEdit}}Save Changes{{else}}Create Contact{{end}}</button>
             <a href="/contacts" class="btn-secondary">Cancel</a>
         </div>
     </form>

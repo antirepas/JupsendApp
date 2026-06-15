@@ -1,0 +1,87 @@
+{{define "campaigns_form.html"}}
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>{{template "head" .}}</head>
+<body class="h-full bg-slate-50 text-slate-800">
+<div class="flex h-full">
+{{template "sidebar" .}}
+<main class="flex-1 overflow-y-auto">
+<div class="max-w-6xl mx-auto p-8">
+<div class="mb-8">
+    <h2 class="text-2xl font-bold text-slate-900">New Campaign</h2>
+    <p class="text-slate-500 mt-1">Bulk send with A/B templates, or attach a behavior workflow</p>
+</div>
+
+{{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
+
+<div class="card max-w-2xl">
+    <form method="POST" action="/campaigns" class="space-y-5" id="campaign-form">
+        <div>
+            <label class="form-label">Campaign name</label>
+            <input type="text" name="name" class="form-input" required placeholder="Spring outreach test">
+        </div>
+        <div>
+            <label class="form-label">Execution mode</label>
+            <select name="execution_mode" id="execution_mode" class="form-input">
+                <option value="bulk">Bulk send (templates A/B)</option>
+                <option value="workflow">Workflow automation</option>
+            </select>
+        </div>
+        <div id="bulk-fields">
+            <div>
+                <label class="form-label">Template A (variant A)</label>
+                <select name="template_a_id" class="form-input">
+                    <option value="">Select template A...</option>
+                    {{range .templates}}
+                    <option value="{{.ID}}">{{.Name}}</option>
+                    {{end}}
+                </select>
+            </div>
+            <div>
+                <label class="form-label">Template B (optional)</label>
+                <select name="template_b_id" class="form-input">
+                    <option value="">No B variant</option>
+                    {{range .templates}}
+                    <option value="{{.ID}}">{{.Name}}</option>
+                    {{end}}
+                </select>
+            </div>
+        </div>
+        <div id="workflow-fields" class="hidden">
+            <label class="form-label">Published workflow</label>
+            <select name="workflow_version_id" class="form-input">
+                <option value="">Select workflow...</option>
+                {{range .workflows}}
+                <option value="{{.CurrentVersionID}}">{{.Name}}</option>
+                {{end}}
+            </select>
+            <p class="form-hint">Create and publish a workflow under Workflows first.</p>
+        </div>
+        <div class="flex gap-3">
+            <button type="submit" class="btn-primary">Create Campaign</button>
+            <a href="/campaigns" class="btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+</div>
+</main>
+</div>
+<script>
+const mode = document.getElementById('execution_mode');
+const bulk = document.getElementById('bulk-fields');
+const wf = document.getElementById('workflow-fields');
+function toggleMode() {
+    if (mode.value === 'workflow') {
+        bulk.classList.add('hidden');
+        wf.classList.remove('hidden');
+    } else {
+        bulk.classList.remove('hidden');
+        wf.classList.add('hidden');
+    }
+}
+mode.addEventListener('change', toggleMode);
+toggleMode();
+</script>
+</body>
+</html>
+{{end}}

@@ -25,3 +25,6 @@ coverage.out
 
 # Go workspace
 vendor/
+
+# Frontend build
+node_modules/

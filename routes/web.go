@@ -1,16 +1,20 @@
 package routes
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
 	"strings"
 
+	"emailtracker.com/config"
 	"emailtracker.com/model"
 	"github.com/gin-gonic/gin"
 )
 
 func Dashboard(ctx *gin.Context) {
+	config.Reload()
+
 	stats, err := model.GetDashboardStats()
 	if err != nil {
 		log.Print(err)
@@ -28,12 +32,21 @@ func Dashboard(ctx *gin.Context) {
 		log.Print(err)
 	}
 
+	counts, _ := model.GetEntityCounts()
+	campaigns, _ := model.ListCampaigns()
+
 	ctx.HTML(http.StatusOK, "dashboard.html", gin.H{
-		"title":        "Dashboard",
-		"active":       "dashboard",
-		"stats":        stats,
-		"recentEvents": recent,
-		"dailyStats":   daily,
+		"title":            "Dashboard",
+		"active":           "dashboard",
+		"stats":            stats,
+		"recentEvents":     recent,
+		"dailyStats":       daily,
+		"counts":           counts,
+		"campaigns":        campaigns,
+		"baseURL":          config.BaseURL,
+		"trackingWarning":  config.TrackingWarning(config.BaseURL),
+		"success":          ctx.Query("success"),
+		"error":            ctx.Query("error"),
 	})
 }
 
@@ -49,6 +62,7 @@ func ListTemplatesPage(ctx *gin.Context) {
 		"active":    "templates",
 		"templates": templates,
 		"success":   ctx.Query("success"),
+		"error":     ctx.Query("error"),
 	})
 }
 
@@ -182,6 +196,26 @@ func CreateContact(ctx *gin.Context) {
 	ctx.Redirect(http.StatusFound, "/contacts?success=Contact+created")
 }
 
+func PasteContactsQuick(ctx *gin.Context) {
+	paste := ctx.PostForm("paste")
+	lines := strings.Split(paste, "\n")
+	added := 0
+	for _, line := range lines {
+		email := strings.TrimSpace(line)
+		if !strings.Contains(email, "@") {
+			continue
+		}
+		_, err := model.FindOrCreateContact(email, nil)
+		if err != nil {
+			log.Print(err)
+			continue
+		}
+		added++
+	}
+	msg := fmt.Sprintf("Added %d contacts", added)
+	ctx.Redirect(http.StatusFound, "/contacts?success="+msg)
+}
+
 func ListSendsPage(ctx *gin.Context) {
 	sends, err := model.ListEmailSends()
 	if err != nil {
@@ -227,7 +261,7 @@ func CreateSend(ctx *gin.Context) {
 		return
 	}
 
-	emailSendID, err := processAndSendEmail(templateID, contactID)
+	emailSendID, err := processAndSendEmail(templateID, contactID, 0, "", 0)
 	if err != nil {
 		log.Print(err)
 		ctx.Redirect(http.StatusFound, "/sends/new?error="+err.Error())

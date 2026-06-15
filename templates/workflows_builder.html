@@ -1,0 +1,102 @@
+{{define "workflows_builder.html"}}
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>{{template "head" .}}</head>
+<body class="h-full bg-slate-50 text-slate-800">
+<div class="flex h-full">
+{{template "sidebar" .}}
+<main class="flex-1 overflow-y-auto">
+<div class="max-w-7xl mx-auto p-6">
+<div class="flex items-center justify-between mb-4">
+    <div>
+        <a href="/workflows" class="text-sm text-brand-600">← Workflows</a>
+        <h2 class="text-2xl font-bold text-slate-900 mt-1">{{.workflow.Name}}</h2>
+        <p class="text-sm text-slate-500 mt-1">Drag nodes on the canvas. Drag the dot below a node to another node to connect. Right-click a line to delete it.</p>
+    </div>
+    <div class="flex gap-2">
+        <button type="button" id="btn-validate" class="btn-secondary">Validate</button>
+        <button type="button" id="btn-save" class="btn-primary">Save</button>
+        <button type="button" id="btn-publish" class="btn-primary">Publish</button>
+    </div>
+</div>
+<div id="builder-msg" class="mb-4 hidden"></div>
+
+<div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
+    <div class="card lg:col-span-1">
+        <h3 class="font-semibold mb-2">Node palette</h3>
+        <p class="text-xs text-slate-500 mb-3">Drag onto canvas or click to add</p>
+        <div class="space-y-2" id="node-palette">
+            <div class="palette-item" draggable="true" data-type="trigger_campaign_started" data-label="Campaign Start">Trigger: Start</div>
+            <div class="palette-item palette-action" draggable="true" data-type="action_send_email" data-label="Send Email">Action: Send Email</div>
+            <div class="palette-item palette-action" draggable="true" data-type="action_wait" data-label="Wait">Action: Wait</div>
+            <div class="palette-item palette-condition" draggable="true" data-type="condition_engagement" data-label="Condition">Condition</div>
+            <div class="palette-item palette-end" draggable="true" data-type="action_end" data-label="End">End</div>
+        </div>
+        <div id="node-props" class="mt-6 hidden">
+            <h4 class="font-medium text-sm mb-2">Node properties</h4>
+            <div class="space-y-2 text-sm" id="node-props-fields"></div>
+            <button type="button" id="btn-delete-node" class="btn-secondary text-red-600 text-sm mt-4 w-full">Delete node</button>
+        </div>
+    </div>
+    <div class="card lg:col-span-3 p-0 overflow-hidden" style="min-height: 560px;">
+        <div id="canvas-wrap" class="workflow-canvas-wrap">
+            <svg id="edge-svg" class="workflow-edge-svg"></svg>
+            <div id="canvas" class="workflow-canvas"></div>
+        </div>
+    </div>
+</div>
+
+<div class="card mt-4">
+    <h3 class="font-semibold mb-1">Connections</h3>
+    <p class="text-xs text-slate-500 mb-4">Click a line on the canvas to edit it, or right-click a line to delete. You can also drag from the <span class="font-medium">blue dot</span> under a node to the <span class="font-medium">green dot</span> on another node.</p>
+
+    <div id="edge-editor" class="wf-edge-editor">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+                <label class="form-label" for="edge-from">Starts at</label>
+                <select id="edge-from" class="form-input text-sm"></select>
+                <p class="form-hint">Source node — where the arrow begins</p>
+            </div>
+            <div>
+                <label class="form-label" for="edge-type">Connection type</label>
+                <select id="edge-type" class="form-input text-sm">
+                    <option value="default">Then → next step</option>
+                    <option value="true">If yes (condition met)</option>
+                    <option value="false">If no (condition not met)</option>
+                </select>
+                <p class="form-hint">Use yes/no only after a Condition node</p>
+            </div>
+            <div>
+                <label class="form-label" for="edge-to">Goes to</label>
+                <select id="edge-to" class="form-input text-sm"></select>
+                <p class="form-hint">Target node — where the arrow points</p>
+            </div>
+        </div>
+        <div class="flex flex-wrap gap-2 mt-4 items-center">
+            <button type="button" id="btn-save-edge" class="btn-primary text-sm">Connect nodes</button>
+            <button type="button" id="btn-update-edge" class="btn-primary text-sm hidden">Update connection</button>
+            <button type="button" id="btn-delete-edge" class="btn-secondary text-sm text-red-600 hidden">Delete connection</button>
+            <button type="button" id="btn-clear-edge" class="btn-secondary text-sm hidden">Cancel</button>
+        </div>
+    </div>
+
+    <div class="mt-6 border-t border-slate-100 pt-4">
+        <h4 class="text-sm font-semibold text-slate-700 mb-2">All connections <span id="edge-count" class="text-slate-400 font-normal"></span></h4>
+        <ul id="edge-list" class="text-sm space-y-1"></ul>
+        <p id="edge-list-empty" class="text-sm text-slate-400 hidden">No connections yet — add nodes and they will link automatically, or connect manually above.</p>
+    </div>
+</div>
+</div>
+</main>
+</div>
+<script>
+const WORKFLOW_ID = {{.workflow.ID}};
+const VERSION_ID = {{.versionID}};
+const TEMPLATES = [
+    {{range .templates}}{ id: {{.ID}}, name: "{{.Name}}" },{{end}}
+];
+</script>
+<script src="/static/js/workflow-builder.js"></script>
+</body>
+</html>
+{{end}}

@@ -15,9 +15,8 @@
     <a href="/templates/new" class="btn-primary">New Template</a>
 </div>
 
-{{if .success}}
-<div class="alert-success mb-6">{{.success}}</div>
-{{end}}
+{{if .success}}<div class="alert-success mb-6">{{.success}}</div>{{end}}
+{{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
 
 <div class="card overflow-hidden">
     {{if .templates}}
@@ -38,12 +37,13 @@
                 <td>
                     {{if .Variables}}
                     {{range .Variables}}<span class="badge badge-gray mr-1">{{.}}</span>{{end}}
-                    {{else}}
-                    <span class="text-slate-400">—</span>
-                    {{end}}
+                    {{else}}<span class="text-slate-400">—</span>{{end}}
                 </td>
-                <td class="text-right">
-                    <a href="/templates/{{.ID}}/edit" class="text-brand-600 hover:text-brand-700 text-sm font-medium">Edit</a>
+                <td class="text-right space-x-3">
+                    <a href="/templates/{{.ID}}/edit" class="text-brand-600 text-sm font-medium">Edit</a>
+                    <form method="POST" action="/templates/{{.ID}}/delete" class="inline" onsubmit="return confirm('Delete this template?');">
+                        <button type="submit" class="text-red-600 text-sm font-medium">Delete</button>
+                    </form>
                 </td>
             </tr>
             {{end}}

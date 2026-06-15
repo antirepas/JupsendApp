@@ -131,4 +131,38 @@ func CreateTables() {
 	if err != nil {
 		log.Fatalf("Failed to create email sends table: %v", err)
 	}
+
+	createCampaignsTable := `
+		CREATE TABLE IF NOT EXISTS campaigns (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL,
+			template_a_id INTEGER NOT NULL,
+			template_b_id INTEGER,
+			status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'sent')),
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (template_a_id) REFERENCES template(id),
+			FOREIGN KEY (template_b_id) REFERENCES template(id)
+		);
+	`
+	_, err = DB.Exec(createCampaignsTable)
+	if err != nil {
+		log.Fatalf("Failed to create campaigns table: %v", err)
+	}
+
+	createCampaignContactsTable := `
+		CREATE TABLE IF NOT EXISTS campaign_contacts (
+			campaign_id INTEGER NOT NULL,
+			contact_id INTEGER NOT NULL,
+			PRIMARY KEY (campaign_id, contact_id),
+			FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE,
+			FOREIGN KEY (contact_id) REFERENCES contact(id) ON DELETE CASCADE
+		);
+	`
+	_, err = DB.Exec(createCampaignContactsTable)
+	if err != nil {
+		log.Fatalf("Failed to create campaign_contacts table: %v", err)
+	}
+
+	runMigrations()
 }
+

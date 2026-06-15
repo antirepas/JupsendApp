@@ -107,3 +107,39 @@ func DeleteContact(id int64) error {
 	_, err := db.DB.Exec(`DELETE FROM contact WHERE id = ?`, id)
 	return err
 }
+
+func UpdateContact(id int64, email string, variables []ContactVariables) error {
+	_, err := db.DB.Exec(`UPDATE contact SET email = ? WHERE id = ?`, email, id)
+	if err != nil {
+		return err
+	}
+	_, err = db.DB.Exec(`DELETE FROM contact_variables WHERE contact_id = ?`, id)
+	if err != nil {
+		return err
+	}
+	for _, v := range variables {
+		if v.Key == "" {
+			continue
+		}
+		_, err = db.DB.Exec(
+			`INSERT INTO contact_variables (key, value, contact_id) VALUES (?, ?, ?)`,
+			v.Key, v.Value, id,
+		)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func FindOrCreateContact(email string, variables []ContactVariables) (int64, error) {
+	row := db.DB.QueryRow(`SELECT id FROM contact WHERE email = ?`, email)
+	var id int64
+	err := row.Scan(&id)
+	if err == nil {
+		return id, nil
+	}
+
+	c := Contact{Email: email}
+	return c.SaveContact(variables)
+}

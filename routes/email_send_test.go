@@ -58,7 +58,7 @@ func TestEmailSend_Success(t *testing.T) {
 		}, []model.ContactVariables{{Key: "name", Value: "John"}}, nil
 	}
 
-	saveSendEmail = func(tId, cId int64, trackId string) (int64, error) {
+	saveSendEmail = func(tId, cId int64, trackId string, campaignID int64, variant string, workflowInstanceID int64) (int64, error) {
 		return 1, nil
 	}
 

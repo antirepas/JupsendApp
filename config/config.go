@@ -19,9 +19,17 @@ var (
 
 func Load() {
 	_ = godotenv.Load()
+	reloadFromEnv()
+}
 
+func Reload() {
+	_ = godotenv.Load()
+	reloadFromEnv()
+}
+
+func reloadFromEnv() {
 	Port = envOr("PORT", "8080")
-	BaseURL = envOr("BASE_URL", "http://localhost:8080")
+	BaseURL = strings.TrimRight(strings.TrimSpace(envOr("BASE_URL", "http://localhost:8080")), "/")
 	SMTPHost = envOr("SMTP_HOST", "smtp.gmail.com")
 	SMTPPort = envOr("SMTP_PORT", "587")
 	SMTPUser = strings.TrimSpace(os.Getenv("SMTP_USER"))

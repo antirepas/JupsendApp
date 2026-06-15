@@ -1,0 +1,236 @@
+{{define "campaigns_detail.html"}}
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>{{template "head" .}}</head>
+<body class="h-full bg-slate-50 text-slate-800">
+<div class="flex h-full">
+{{template "sidebar" .}}
+<main class="flex-1 overflow-y-auto">
+<div class="max-w-7xl mx-auto p-8">
+<div class="flex items-center justify-between mb-6">
+    <div>
+        <a href="/campaigns" class="text-sm text-brand-600 font-medium">← Campaigns</a>
+        <h2 class="text-2xl font-bold text-slate-900 mt-2">{{.campaign.Name}}</h2>
+        <p class="text-slate-500 mt-1">{{.campaign.ContactCount}} contacts ·
+            <span class="badge {{if eq .campaign.DisplayStatus "sent"}}badge-green{{else if eq .campaign.DisplayStatus "scheduled"}}badge-amber{{else}}badge-gray{{end}}">{{.campaign.DisplayStatus}}</span>
+            {{if .campaign.ScheduledAt}}<span class="text-sm text-slate-500 ml-2">· sends {{.campaign.ScheduledAt.Format "Jan 2, 2006 15:04"}}</span>{{end}}
+        </p>
+    </div>
+    <div class="flex gap-3 items-center flex-wrap justify-end">
+        <a href="/campaigns/{{.campaign.ID}}/analytics" class="btn-secondary">Campaign analytics</a>
+        <form method="POST" action="/campaigns/{{.campaign.ID}}/delete" onsubmit="return confirm('Delete this campaign?');">
+            <button type="submit" class="btn-secondary text-red-600">Delete</button>
+        </form>
+        {{if gt .campaign.ContactCount 0}}
+        {{if ne .campaign.DisplayStatus "sent"}}
+        <form method="POST" action="/campaigns/{{.campaign.ID}}/send" onsubmit="return confirm('Send to all {{.campaign.ContactCount}} contacts now?');">
+            <button type="submit" class="btn-primary">Send now</button>
+        </form>
+        {{end}}
+        {{end}}
+    </div>
+</div>
+
+{{if .success}}<div class="alert-success mb-6">{{.success}}</div>{{end}}
+{{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
+
+{{if ne .campaign.DisplayStatus "sent"}}
+{{if gt .campaign.ContactCount 0}}
+<div class="card mb-6">
+    <h3 class="card-title">Schedule send</h3>
+    {{if .campaign.ScheduledAt}}
+    <p class="text-sm text-slate-600 mb-3">Scheduled for <strong>{{.campaign.ScheduledAt.Format "Monday, Jan 2, 2006 at 15:04"}}</strong> (your local time). The server checks every 30 seconds and sends automatically.</p>
+    <form method="POST" action="/campaigns/{{.campaign.ID}}/cancel-schedule" class="mb-4">
+        <button type="submit" class="btn-secondary text-red-600">Cancel schedule</button>
+    </form>
+    {{else}}
+    <p class="text-sm text-slate-600 mb-3">Pick a date and time to send this campaign automatically.</p>
+    {{end}}
+    <form method="POST" action="/campaigns/{{.campaign.ID}}/schedule" class="flex flex-wrap gap-3 items-end">
+        <div class="flex-1 min-w-[200px]">
+            <label class="form-label">Date &amp; time</label>
+            <input type="datetime-local" name="scheduled_at" class="form-input" required value="{{.scheduledAtLocal}}">
+        </div>
+        <button type="submit" class="btn-primary">{{if .campaign.ScheduledAt}}Update schedule{{else}}Schedule campaign{{end}}</button>
+    </form>
+</div>
+{{end}}
+{{end}}
+
+<div class="card mb-6 bg-blue-50 border-blue-100">
+    <h3 class="font-semibold text-slate-900 mb-2">How A/B assignment works</h3>
+    <p class="text-sm text-slate-600">Contacts are ordered by ID. Position 1 → Variant <span class="badge badge-blue">A</span>, position 2 → <span class="badge badge-violet">B</span> (if Template B exists), then alternates. Each contact receives the template for their variant; <code class="text-xs bg-white px-1 rounded">{{"{{variable}}"}}</code> placeholders in subject and body are replaced with that contact's values.</p>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+    <div class="card border-l-4 border-blue-500">
+        <div class="flex items-center justify-between mb-3">
+            <h3 class="font-semibold text-slate-900">Template A — {{.templateA.Name}}</h3>
+            <span class="badge badge-blue">Variant A</span>
+        </div>
+        <p class="text-xs text-slate-500 mb-2">Variables: {{if .templateA.Variables}}{{range .templateA.Variables}}<code class="mr-1">{{"{{"}}{{.}}{{"}}"}}</code>{{end}}{{else}}none{{end}}</p>
+        <div class="space-y-3 text-sm">
+            <div>
+                <p class="font-medium text-slate-700">Subject template</p>
+                <p class="mt-1 p-2 bg-slate-50 rounded font-mono text-xs">{{.templateA.HighlightedSubject}}</p>
+            </div>
+            <div>
+                <p class="font-medium text-slate-700">Body template</p>
+                <div class="mt-1 p-3 bg-slate-50 rounded text-xs max-h-40 overflow-y-auto prose prose-sm">{{.templateA.HighlightedBody}}</div>
+            </div>
+        </div>
+        <div class="grid grid-cols-3 gap-4 mt-4 text-center border-t pt-4">
+            <div><p class="stat-label">Sends</p><p class="text-xl font-bold">{{.campaign.VariantA.Sends}}</p></div>
+            <div><p class="stat-label">Opens</p><p class="text-xl font-bold text-blue-600">{{.campaign.VariantA.Opens}}</p></div>
+            <div><p class="stat-label">Clicks</p><p class="text-xl font-bold text-emerald-600">{{.campaign.VariantA.Clicks}}</p></div>
+        </div>
+    </div>
+    {{if .hasB}}
+    <div class="card border-l-4 border-violet-500">
+        <div class="flex items-center justify-between mb-3">
+            <h3 class="font-semibold text-slate-900">Template B — {{.templateB.Name}}</h3>
+            <span class="badge badge-violet">Variant B</span>
+        </div>
+        <p class="text-xs text-slate-500 mb-2">Variables: {{if .templateB.Variables}}{{range .templateB.Variables}}<code class="mr-1">{{"{{"}}{{.}}{{"}}"}}</code>{{end}}{{else}}none{{end}}</p>
+        <div class="space-y-3 text-sm">
+            <div>
+                <p class="font-medium text-slate-700">Subject template</p>
+                <p class="mt-1 p-2 bg-slate-50 rounded font-mono text-xs">{{.templateB.HighlightedSubject}}</p>
+            </div>
+            <div>
+                <p class="font-medium text-slate-700">Body template</p>
+                <div class="mt-1 p-3 bg-slate-50 rounded text-xs max-h-40 overflow-y-auto">{{.templateB.HighlightedBody}}</div>
+            </div>
+        </div>
+        <div class="grid grid-cols-3 gap-4 mt-4 text-center border-t pt-4">
+            <div><p class="stat-label">Sends</p><p class="text-xl font-bold">{{.campaign.VariantB.Sends}}</p></div>
+            <div><p class="stat-label">Opens</p><p class="text-xl font-bold text-blue-600">{{.campaign.VariantB.Opens}}</p></div>
+            <div><p class="stat-label">Clicks</p><p class="text-xl font-bold text-emerald-600">{{.campaign.VariantB.Clicks}}</p></div>
+        </div>
+    </div>
+    {{end}}
+</div>
+
+{{if .mergedVars}}
+<div class="card mb-6">
+    <h3 class="card-title">Import variable columns</h3>
+    <p class="text-sm text-slate-600 mb-3">When pasting or uploading contacts, use these columns (merged from both templates):</p>
+    <div class="flex flex-wrap gap-2">
+        <span class="badge badge-blue">email</span>
+        {{range .mergedVars}}<span class="badge badge-gray">{{.}}</span>{{end}}
+    </div>
+</div>
+{{end}}
+
+<div class="card overflow-hidden mb-6">
+    <h3 class="card-title">Contacts &amp; personalized previews ({{len .contactRows}})</h3>
+    {{if .contactRows}}
+    <div class="overflow-x-auto">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Email</th>
+                <th>Variant</th>
+                <th>Template</th>
+                <th>Variables for template</th>
+                <th>Rendered subject</th>
+                <th>Status</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .contactRows}}
+            <tr class="{{if .MissingVars}}bg-amber-50/50{{end}}">
+                <td class="text-slate-500">{{.Index}}</td>
+                <td class="font-medium">{{.Email}}</td>
+                <td><span class="badge {{if eq .Variant "A"}}badge-blue{{else}}badge-violet{{end}}">{{.Variant}}</span></td>
+                <td class="text-sm text-slate-600">{{.TemplateName}}</td>
+                <td>
+                    {{range .Variables}}
+                    <span class="badge {{if .Missing}}badge-red{{else}}badge-gray{{end}} mr-1 mb-1">{{.Key}}={{if .Value}}{{.Value}}{{else}}<em>empty</em>{{end}}</span>
+                    {{end}}
+                    {{if .MissingVars}}
+                    <p class="text-xs text-amber-700 mt-1">Missing: {{range .MissingVars}}<code>{{"{{"}}{{.}}{{"}}"}}</code> {{end}}</p>
+                    {{end}}
+                </td>
+                <td class="text-sm max-w-xs truncate" title="{{.RenderedSubject}}">{{.RenderedSubject}}</td>
+                <td>
+                    {{if .Sent}}
+                    <span class="badge badge-green">Sent</span>
+                    <span class="text-xs text-slate-500 block">{{.OpenCount}} opens · {{.ClickCount}} clicks</span>
+                    {{else}}
+                    <span class="badge badge-gray">Pending</span>
+                    {{end}}
+                </td>
+                <td>
+                    <button type="button" class="text-brand-600 text-sm font-medium preview-toggle" data-target="preview-{{.ID}}">Preview</button>
+                    {{if .Sent}}<a href="/sends/{{.SendID}}" class="text-slate-500 text-sm ml-2">Send</a>{{end}}
+                </td>
+            </tr>
+            <tr id="preview-{{.ID}}" class="hidden bg-slate-50">
+                <td colspan="8" class="p-4">
+                    <p class="text-xs font-medium text-slate-500 mb-1">Rendered body preview (no tracking pixel)</p>
+                    <div class="p-3 bg-white border rounded text-sm max-h-48 overflow-y-auto">{{.RenderedBody}}</div>
+                </td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+    </div>
+    {{else}}
+    <p class="text-slate-400 text-sm py-4">No contacts yet. Add them below.</p>
+    {{end}}
+</div>
+
+<div class="card mb-6">
+    <h3 class="card-title">Add contacts</h3>
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div>
+            <p class="text-sm font-medium text-slate-700 mb-2">Select existing</p>
+            <form method="POST" action="/campaigns/{{.campaign.ID}}/contacts" class="space-y-2">
+                <div class="max-h-48 overflow-y-auto border border-slate-200 rounded-lg p-2 space-y-1">
+                    {{range .allContacts}}
+                    <label class="flex items-center gap-2 text-sm p-1 hover:bg-slate-50 rounded">
+                        <input type="checkbox" name="contact_ids" value="{{.ID}}">
+                        <span>{{.Email}}</span>
+                    </label>
+                    {{else}}
+                    <p class="text-slate-400 text-sm">No contacts yet.</p>
+                    {{end}}
+                </div>
+                <button type="submit" class="btn-primary text-sm">Add selected</button>
+            </form>
+        </div>
+        <div>
+            <p class="text-sm font-medium text-slate-700 mb-2">Quick paste</p>
+            <form method="POST" action="/campaigns/{{.campaign.ID}}/paste" class="space-y-2">
+                <textarea name="paste" rows="6" class="form-input text-sm font-mono" placeholder="email,name,company&#10;john@example.com,John,Acme"></textarea>
+                <p class="form-hint">One per line: email or email,var1,var2 matching template variables</p>
+                <button type="submit" class="btn-primary text-sm">Import pasted</button>
+            </form>
+        </div>
+        <div>
+            <p class="text-sm font-medium text-slate-700 mb-2">Excel upload</p>
+            <form method="POST" action="/campaigns/{{.campaign.ID}}/upload" enctype="multipart/form-data" class="space-y-2">
+                <input type="file" name="file" class="form-input" accept=".xlsx,.xls" required>
+                <a href="/campaigns/{{.campaign.ID}}/sample" class="text-sm text-brand-600 font-medium">Download sample</a>
+                <button type="submit" class="btn-primary text-sm">Upload Excel</button>
+            </form>
+        </div>
+    </div>
+</div>
+</div>
+</main>
+</div>
+<script>
+document.querySelectorAll('.preview-toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const row = document.getElementById(btn.dataset.target);
+        if (row) row.classList.toggle('hidden');
+    });
+});
+</script>
+</body>
+</html>
+{{end}}

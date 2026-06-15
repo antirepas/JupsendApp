@@ -23,6 +23,15 @@
 {{end}}
 
 <div class="card mb-6">
+    <h3 class="card-title">Quick add contacts</h3>
+    <p class="text-sm text-slate-500 mb-3">Paste one email per line — duplicates are skipped.</p>
+    <form method="POST" action="/contacts/paste" class="flex gap-3">
+        <textarea name="paste" rows="4" class="form-input flex-1 text-sm font-mono" placeholder="alice@example.com&#10;bob@example.com"></textarea>
+        <button type="submit" class="btn-primary shrink-0">Add contacts</button>
+    </form>
+</div>
+
+<div class="card mb-6">
     <h3 class="card-title">Import from Excel</h3>
   {{if .templates}}
     <p class="text-sm text-slate-500 mb-4">Select a template to see which columns your spreadsheet needs. The first row must be headers matching the template variables.</p>
@@ -64,6 +73,7 @@
             <tr>
                 <th>Email</th>
                 <th>Variables</th>
+                <th class="text-right">Actions</th>
             </tr>
         </thead>
         <tbody>
@@ -76,6 +86,12 @@
                     {{else}}
                     <span class="text-slate-400">—</span>
                     {{end}}
+                </td>
+                <td class="text-right space-x-3">
+                    <a href="/contacts/{{.ID}}/edit" class="text-brand-600 text-sm font-medium">Edit</a>
+                    <form method="POST" action="/contacts/{{.ID}}/delete" class="inline" onsubmit="return confirm('Delete this contact?');">
+                        <button type="submit" class="text-red-600 text-sm font-medium">Delete</button>
+                    </form>
                 </td>
             </tr>
             {{end}}

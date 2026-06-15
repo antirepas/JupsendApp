@@ -79,13 +79,13 @@ func UploadContacts(ctx *gin.Context) {
 			})
 		}
 
-		c := model.Contact{Email: row.Email}
-		_, err := c.SaveContact(cvs)
+		cid, err := model.FindOrCreateContact(row.Email, cvs)
 		if err != nil {
 			log.Print(err)
 			continue
 		}
 		imported++
+		_ = cid
 	}
 
 	msg := fmt.Sprintf("Imported %d contacts for template %s", imported, template.Name)

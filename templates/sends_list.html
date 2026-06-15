@@ -36,8 +36,8 @@
         <tbody>
             {{range .sends}}
             <tr>
-                <td class="font-medium">{{.ContactEmail}}</td>
-                <td class="text-slate-600">{{.TemplateName}}</td>
+                <td class="font-medium">{{if .ContactEmail}}{{.ContactEmail}}{{else}}<span class="text-slate-400">Unknown</span>{{end}}</td>
+                <td class="text-slate-600">{{if .TemplateName}}{{.TemplateName}}{{else}}<span class="text-slate-400">Unknown</span>{{end}}</td>
                 <td class="text-slate-500 text-sm">{{.SentAt.Format "Jan 2, 2006 15:04"}}</td>
                 <td>{{.OpenCount}}</td>
                 <td>{{.ClickCount}}</td>

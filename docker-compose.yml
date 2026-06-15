@@ -1,10 +1,9 @@
 services:
-  email-tracker:
-    build: .
+  emailtracker:
+    image: ghcr.io/akilai/emailtracker:latest
+    container_name: emailtracker
+    restart: unless-stopped
     ports:
-      - "${PORT:-8080}:8080"
+      - "8080:8080"
     env_file:
       - .env
-    environment:
-      PORT: "8080"
-    restart: unless-stopped

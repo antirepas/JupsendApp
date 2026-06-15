@@ -58,11 +58,15 @@ func resolveEmailSendID(trackingID string) int64 {
 
 func StoreEvent(trackingID, eventType, userAgent, ip string) error {
 	emailSendID := resolveEmailSendID(trackingID)
+	var sendID interface{}
+	if emailSendID > 0 {
+		sendID = emailSendID
+	}
 	query := `
 		INSERT INTO email_events (email_send_id, tracking_id, event_type, user_agent, ip_address, created_at)
 		VALUES (?, ?, ?, ?, ?, ?)
 	`
-	_, err := db.DB.Exec(query, emailSendID, trackingID, eventType, userAgent, ip, time.Now())
+	_, err := db.DB.Exec(query, sendID, trackingID, eventType, userAgent, ip, time.Now())
 	return err
 }
 
@@ -196,4 +200,24 @@ func GetDailyStats(days int) ([]DailyStat, error) {
 		})
 	}
 	return stats, nil
+}
+
+type EntityCounts struct {
+	Templates int
+	Contacts  int
+	Campaigns int
+}
+
+func GetEntityCounts() (EntityCounts, error) {
+	var c EntityCounts
+	if err := db.DB.QueryRow(`SELECT COUNT(*) FROM template`).Scan(&c.Templates); err != nil {
+		return c, err
+	}
+	if err := db.DB.QueryRow(`SELECT COUNT(*) FROM contact`).Scan(&c.Contacts); err != nil {
+		return c, err
+	}
+	if err := db.DB.QueryRow(`SELECT COUNT(*) FROM campaigns`).Scan(&c.Campaigns); err != nil {
+		return c, err
+	}
+	return c, nil
 }

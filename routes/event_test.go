@@ -13,7 +13,13 @@ func TestTrackOpenSuccess(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	originalStoreEvent := storeEvent
-	defer func() { storeEvent = originalStoreEvent }()
+	originalRecordEngagement := recordEngagementEventFn
+	defer func() {
+		storeEvent = originalStoreEvent
+		recordEngagementEventFn = originalRecordEngagement
+	}()
+
+	recordEngagementEventFn = func(string, string, map[string]interface{}) {}
 
 	called := false
 
@@ -60,13 +66,23 @@ func TestTrackOpenSuccess(t *testing.T) {
 	if len(w.Body.Bytes()) == 0 {
 		t.Fatal("expected gif body")
 	}
+
+	if len(w.Body.Bytes()) != len(trackingPixelGIF) {
+		t.Fatalf("expected gif length %d, got %d", len(trackingPixelGIF), len(w.Body.Bytes()))
+	}
 }
 
 func TestTrackOpenStoreEventError(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	originalStoreEvent := storeEvent
-	defer func() { storeEvent = originalStoreEvent }()
+	originalRecordEngagement := recordEngagementEventFn
+	defer func() {
+		storeEvent = originalStoreEvent
+		recordEngagementEventFn = originalRecordEngagement
+	}()
+
+	recordEngagementEventFn = func(string, string, map[string]interface{}) {}
 
 	storeEvent = func(id, eventType, userAgent, ip string) error {
 		return errors.New("db error")
@@ -80,8 +96,12 @@ func TestTrackOpenStoreEventError(t *testing.T) {
 
 	router.ServeHTTP(w, req)
 
-	if w.Code != http.StatusInternalServerError {
-		t.Fatalf("expected status 500, got %d", w.Code)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200 even on store error, got %d", w.Code)
+	}
+
+	if w.Header().Get("Content-Type") != "image/gif" {
+		t.Fatalf("expected Content-Type image/gif, got %s", w.Header().Get("Content-Type"))
 	}
 }
 
@@ -90,11 +110,15 @@ func TestTrackClickSuccess(t *testing.T) {
 
 	originalStoreEvent := storeEvent
 	originalGetOriginalURL := getOriginalURL
+	originalRecordEngagement := recordEngagementEventFn
 
 	defer func() {
 		storeEvent = originalStoreEvent
 		getOriginalURL = originalGetOriginalURL
+		recordEngagementEventFn = originalRecordEngagement
 	}()
+
+	recordEngagementEventFn = func(string, string, map[string]interface{}) {}
 
 	getOriginalURL = func(id string) (string, error) {
 		if id != "abc123" {

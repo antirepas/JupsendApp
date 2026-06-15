@@ -19,6 +19,13 @@ func GetOriginalURL(trackingID string) (string, error) {
 	}
 	return og, nil
 }
+
+func GetSendIDByLinkTracking(trackingID string) (int64, error) {
+	var sendID int64
+	err := db.DB.QueryRow(`SELECT email_send_id FROM tracked_links WHERE tracking_id = ?`, trackingID).Scan(&sendID)
+	return sendID, err
+}
+
 func SaveTrackLink(emailsendID int64, trackingId string, ogUrl string) (int64, error) {
 	query := `INSERT INTO tracked_links (email_send_id, tracking_id, original_url) VALUES (?, ?, ?) RETURNING id`
 	row := db.DB.QueryRow(query, emailsendID, trackingId, ogUrl)

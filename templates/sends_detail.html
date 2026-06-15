@@ -36,6 +36,9 @@
     <div class="stat-card">
         <p class="stat-label">Opens</p>
         <p class="stat-value text-blue-600">{{.send.OpenCount}}</p>
+        {{if eq .send.OpenCount 0}}
+        <p class="text-xs text-slate-500 mt-1">Opens are recorded when your mail client loads images. In Gmail, click <strong>Display images</strong> below the message.</p>
+        {{end}}
     </div>
     <div class="stat-card">
         <p class="stat-label">Clicks</p>

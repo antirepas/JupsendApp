@@ -11,10 +11,14 @@ func main() {
 	config.Load()
 
 	server := gin.Default()
+	server.SetTrustedProxies(nil)
 
 	db.Prepare()
 	defer db.DB.Close()
 
+	engine := routes.InitWorkflowEngine()
+	routes.StartCampaignScheduler()
+	routes.StartWorkflowScheduler(engine)
 	routes.RegisterRoutes(server)
 
 	server.Run(":" + config.Port)

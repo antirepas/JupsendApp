@@ -40,11 +40,13 @@ func (s *EmailSender) Send(to, subject, plainBody, htmlBody string) error {
 
 			"--" + boundary + "\r\n" +
 			"Content-Type: text/plain; charset=\"UTF-8\"\r\n" +
+			"Content-Transfer-Encoding: 8bit\r\n" +
 			"\r\n" +
 			plainBody + "\r\n" +
 
 			"--" + boundary + "\r\n" +
 			"Content-Type: text/html; charset=\"UTF-8\"\r\n" +
+			"Content-Transfer-Encoding: 8bit\r\n" +
 			"\r\n" +
 			htmlBody + "\r\n" +
 

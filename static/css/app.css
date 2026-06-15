@@ -186,3 +186,191 @@
     padding: 3rem 1.5rem;
     color: #94a3b8;
 }
+
+/* Workflow builder canvas */
+.workflow-canvas-wrap {
+    position: relative;
+    min-height: 560px;
+    height: 560px;
+    background-color: #f1f5f9;
+    background-image: radial-gradient(circle, #cbd5e1 1px, transparent 1px);
+    background-size: 20px 20px;
+    overflow: auto;
+}
+
+.workflow-canvas {
+    position: relative;
+    min-width: 1200px;
+    min-height: 560px;
+    z-index: 2;
+}
+
+.workflow-edge-svg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    min-width: 1200px;
+    min-height: 560px;
+    z-index: 1;
+}
+
+.wf-edge-hit {
+    cursor: pointer;
+}
+
+.wf-edge-hit:hover + .wf-edge-vis,
+.wf-edge-vis.wf-edge-hover {
+    stroke-width: 3;
+    filter: drop-shadow(0 0 2px rgba(37, 99, 235, 0.4));
+}
+
+.wf-edge-vis.wf-edge-selected {
+    stroke-width: 3.5;
+    filter: drop-shadow(0 0 4px rgba(37, 99, 235, 0.55));
+}
+
+.wf-edge-preview {
+    stroke: #2563eb;
+    stroke-width: 2;
+    stroke-dasharray: 6 4;
+    pointer-events: none;
+}
+
+.wf-edge-editor {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.5rem;
+    padding: 1rem;
+}
+
+.wf-edge-editor.wf-edge-editing {
+    background: #eff6ff;
+    border-color: #bfdbfe;
+}
+
+.wf-edge-list-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.375rem;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: background 0.12s, border-color 0.12s;
+}
+
+.wf-edge-list-item:hover {
+    background: #f1f5f9;
+}
+
+.wf-edge-list-item.selected {
+    background: #eff6ff;
+    border-color: #bfdbfe;
+}
+
+.wf-edge-badge {
+    display: inline-block;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    padding: 0.125rem 0.375rem;
+    border-radius: 0.25rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.wf-edge-badge-default { background: #f1f5f9; color: #475569; }
+.wf-edge-badge-true { background: #d1fae5; color: #047857; }
+.wf-edge-badge-false { background: #fee2e2; color: #b91c1c; }
+
+.wf-port {
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    border-radius: 9999px;
+    border: 2px solid #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    z-index: 4;
+}
+
+.wf-port-in {
+    top: -6px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #16a34a;
+}
+
+.wf-port-out {
+    bottom: -6px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #2563eb;
+    cursor: crosshair;
+}
+
+.wf-node.connect-target {
+    border-color: #16a34a;
+    box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.25);
+}
+
+.wf-node {
+    position: absolute;
+    width: 168px;
+    padding: 12px 14px 16px;
+    border-radius: 0.5rem;
+    border: 2px solid #e2e8f0;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    cursor: grab;
+    user-select: none;
+    z-index: 3;
+    transition: box-shadow 0.15s, border-color 0.15s;
+}
+
+.wf-node:active {
+    cursor: grabbing;
+}
+
+.wf-node.selected {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
+}
+
+.wf-node.dragging {
+    opacity: 0.92;
+    z-index: 10;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+}
+
+.wf-node-type-trigger { border-left: 4px solid #64748b; }
+.wf-node-type-action { border-left: 4px solid #3b82f6; }
+.wf-node-type-condition { border-left: 4px solid #f59e0b; }
+.wf-node-type-end { border-left: 4px solid #94a3b8; }
+
+.palette-item {
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.375rem;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    font-size: 0.875rem;
+    cursor: grab;
+    transition: background 0.15s;
+}
+
+.palette-item:hover {
+    background: #f8fafc;
+}
+
+.palette-item:active {
+    cursor: grabbing;
+}
+
+.palette-action { border-left: 3px solid #3b82f6; }
+.palette-condition { border-left: 3px solid #f59e0b; }
+.palette-end { border-left: 3px solid #94a3b8; }
+
+.workflow-canvas-wrap.drag-over {
+    outline: 2px dashed #3b82f6;
+    outline-offset: -4px;
+}
