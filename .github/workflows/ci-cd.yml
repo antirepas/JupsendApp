@@ -92,7 +92,12 @@ jobs:
           key: ${{ secrets.DROPLET_SSH_KEY }}
           passphrase: ${{ secrets.DROPLET_SSH_PASSPHRASE }}
           script: |
-            cd /opt/emailtracker
-            docker compose pull
-            docker compose up -d
+            docker pull ghcr.io/antirepas/emailtracker:latest
+            docker stop emailtracker || true
+            docker rm emailtracker || true
+            docker run -d \
+              --name emailtracker \
+              --restart unless-stopped \
+              -p 127.0.0.1:8080:8080 \
+              ghcr.io/antirepas/emailtracker:latest
             docker image prune -f
