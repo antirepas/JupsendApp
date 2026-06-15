@@ -24,7 +24,7 @@ type ContactListItem struct {
 func (c *Contact) SaveContact(variables []ContactVariables) (int64, error) {
 	query := `INSERT INTO contact (email) VALUES (?) RETURNING id`
 
-	row := db.DB.QueryRow(query, c.Email)
+	row := db.DB.QueryRow(query, c.Email) //new comment
 	var contactID int64
 	err := row.Scan(&contactID)
 	if err != nil {
