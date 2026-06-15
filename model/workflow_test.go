@@ -11,7 +11,7 @@ func TestValidateWorkflowGraphEmpty(t *testing.T) {
 	wid, _ := CreateWorkflow("test", "")
 	w, _ := GetWorkflow(wid)
 	errs := ValidateWorkflowGraph(w.CurrentVersionID)
-	if len(errs) == 0 {
+	if len(errs) == 0 { //comment
 		t.Fatal("expected validation errors for empty graph")
 	}
 }
