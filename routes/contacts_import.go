@@ -19,7 +19,7 @@ func DownloadContactSample(ctx *gin.Context) {
 		return
 	}
 
-	_, vars, err := model.GetTemplateByID(templateID)
+	_, vars, err := model.GetTemplateByID(templateID, mustUserID(ctx))
 	if err != nil {
 		ctx.String(http.StatusNotFound, "Template not found")
 		return
@@ -44,7 +44,7 @@ func UploadContacts(ctx *gin.Context) {
 		return
 	}
 
-	template, vars, err := model.GetTemplateByID(templateID)
+	template, vars, err := model.GetTemplateByID(templateID, mustUserID(ctx))
 	if err != nil {
 		ctx.Redirect(http.StatusFound, "/contacts?error=Template+not+found")
 		return
@@ -79,7 +79,7 @@ func UploadContacts(ctx *gin.Context) {
 			})
 		}
 
-		cid, err := model.FindOrCreateContact(row.Email, cvs)
+		cid, err := model.FindOrCreateContact(mustUserID(ctx), row.Email, cvs)
 		if err != nil {
 			log.Print(err)
 			continue

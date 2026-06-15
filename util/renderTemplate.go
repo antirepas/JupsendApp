@@ -27,7 +27,11 @@ func RenderTemplate(tBody string, contactVars []model.ContactVariables, trackId 
 
 // InjectTrackingPixel appends a 1x1 open-tracking image inside the HTML body.
 func InjectTrackingPixel(body, trackId string) string {
-	base := config.BaseURL
+	return InjectTrackingPixelWithBase(body, trackId, config.BaseURL)
+}
+
+func InjectTrackingPixelWithBase(body, trackId, baseURL string) string {
+	base := strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	if base == "" {
 		base = "http://localhost:8080"
 	}
@@ -56,7 +60,10 @@ func InjectTrackingPixel(body, trackId string) string {
 }
 
 func RewriteLinks(htmlBody string, emailSendId int64) string {
-	config.Reload()
+	return RewriteLinksWithBase(htmlBody, emailSendId, config.BaseURL)
+}
+
+func RewriteLinksWithBase(htmlBody string, emailSendId int64, baseURL string) string {
 	re := regexp.MustCompile(`href="([^"]+)"`)
 
 	return re.ReplaceAllStringFunc(htmlBody, func(match string) string {
@@ -68,7 +75,7 @@ func RewriteLinks(htmlBody string, emailSendId int64) string {
 			return match
 		}
 
-		base := config.BaseURL
+		base := strings.TrimRight(strings.TrimSpace(baseURL), "/")
 		if base == "" {
 			base = "http://localhost:8080"
 		}

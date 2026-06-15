@@ -84,6 +84,7 @@ func TestSaveContacts_Integration(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/contacts", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
 	ctx.Request = req
+	setTestUser(ctx, 1)
 
 	// 5. Call handler
 	SaveContacts(ctx)

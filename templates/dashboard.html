@@ -57,6 +57,7 @@
     {{end}}
     <p class="text-sm text-slate-600 mb-3">Open/click tracking uses this public URL in emails. It must be reachable from mail clients (not blocked by a tunnel warning page).</p>
     <p class="text-sm font-mono bg-slate-100 p-2 rounded mb-3">{{.baseURL}}</p>
+    <p class="text-sm text-slate-600 mb-3">Configure SMTP and tracking in <a href="/settings" class="text-brand-600 font-medium">Settings</a>.</p>
     <form method="POST" action="/settings/base-url" class="flex gap-2 mb-3">
         <input type="url" name="base_url" class="form-input flex-1" placeholder="https://your-domain.com" value="{{.baseURL}}">
         <button type="submit" class="btn-primary">Update URL</button>
@@ -102,7 +103,7 @@
         {{range .campaigns}}
         <tr>
             <td class="font-medium">{{.Name}}</td>
-            <td><span class="badge {{if eq .DisplayStatus "sent"}}badge-green{{else if eq .DisplayStatus "scheduled"}}badge-amber{{else}}badge-gray{{end}}">{{.DisplayStatus}}</span></td>
+            <td><span class="badge {{if eq .DisplayStatus "sent"}}badge-green{{else if eq .DisplayStatus "scheduled"}}badge-amber{{else if eq .DisplayStatus "sending"}}badge-blue{{else}}badge-gray{{end}}">{{.DisplayStatus}}</span></td>
             <td>{{.ContactCount}}</td>
             <td class="text-right"><a href="/campaigns/{{.ID}}" class="text-brand-600 text-sm">View</a></td>
         </tr>

@@ -19,7 +19,7 @@ func SaveTemplate(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"message": "could not get request body"})
 		return
 	}
-	_, err = st.T.SaveTemplate(st.TV)
+	_, err = st.T.SaveTemplate(mustUserID(ctx), st.TV)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 		return

@@ -4,66 +4,22 @@ import (
 	"bytes"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 
-	"emailtracker.com/config"
-	"emailtracker.com/model"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 )
 
-type MockMailSender struct{}
-
-func (m MockMailSender) Send(to, subject, plainBody, htmlBody string) error {
-	return nil
-}
-
 func TestEmailSend_Success(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	origGetTemplate := getTemplate
-	origGetContact := getContact
-	origSaveSendEmail := saveSendEmail
-	origNewEmailSender := newEmailSender
-
+	origEnqueue := enqueueSendFn
 	defer func() {
-		getTemplate = origGetTemplate
-		getContact = origGetContact
-		saveSendEmail = origSaveSendEmail
-		newEmailSender = origNewEmailSender
+		enqueueSendFn = origEnqueue
 	}()
 
-	os.Setenv("SMTP_USER", "test@example.com")
-	os.Setenv("APP_PASSWORD", "test-password")
-	config.Load()
-	defer func() {
-		os.Unsetenv("SMTP_USER")
-		os.Unsetenv("APP_PASSWORD")
-	}()
-
-	getTemplate = func(templateId int64) (model.Template, error) {
-		return model.Template{
-			ID:      templateId,
-			Name:    "test",
-			Subject: "Hello {{name}}",
-			Body:    "Welcome {{name}}",
-		}, nil
-	}
-
-	getContact = func(contactId int64) (model.Contact, []model.ContactVariables, error) {
-		return model.Contact{
-			ID:    contactId,
-			Email: "test@example.com",
-		}, []model.ContactVariables{{Key: "name", Value: "John"}}, nil
-	}
-
-	saveSendEmail = func(tId, cId int64, trackId string, campaignID int64, variant string, workflowInstanceID int64) (int64, error) {
+	enqueueSendFn = func(userID, templateID, contactID, campaignID int64, variant string, workflowInstanceID int64) (int64, error) {
 		return 1, nil
-	}
-
-	newEmailSender = func() MailSender {
-		return MockMailSender{}
 	}
 
 	body := `{
@@ -71,38 +27,30 @@ func TestEmailSend_Success(t *testing.T) {
 		"contact_id": 1
 	}`
 
-	req, _ := http.NewRequest(
-		http.MethodPost,
-		"/send",
-		bytes.NewBufferString(body),
-	)
+	req, _ := http.NewRequest(http.MethodPost, "/send", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
 	w := httptest.NewRecorder()
-
 	ctx, _ := gin.CreateTestContext(w)
 	ctx.Request = req
+	setTestUser(ctx, 1)
 
 	Email_send(ctx)
 
 	assert.Equal(t, http.StatusOK, w.Code)
-	assert.Contains(t, w.Body.String(), "email sent successfully")
+	assert.Contains(t, w.Body.String(), "queued")
 }
 
 func TestEmailSend_InvalidJSON(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	req, _ := http.NewRequest(
-		http.MethodPost,
-		"/send",
-		bytes.NewBufferString(`invalid-json`),
-	)
+	req, _ := http.NewRequest(http.MethodPost, "/send", bytes.NewBufferString(`invalid-json`))
 	req.Header.Set("Content-Type", "application/json")
 
 	w := httptest.NewRecorder()
-
 	ctx, _ := gin.CreateTestContext(w)
 	ctx.Request = req
+	setTestUser(ctx, 1)
 
 	Email_send(ctx)
 
@@ -110,34 +58,26 @@ func TestEmailSend_InvalidJSON(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "could not get request body")
 }
 
-func TestEmailSend_TemplateError(t *testing.T) {
+func TestEmailSend_EnqueueError(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	origGetTemplate := getTemplate
+	origEnqueue := enqueueSendFn
 	defer func() {
-		getTemplate = origGetTemplate
+		enqueueSendFn = origEnqueue
 	}()
 
-	getTemplate = func(templateId int64) (model.Template, error) {
-		return model.Template{}, assert.AnError
+	enqueueSendFn = func(userID, templateID, contactID, campaignID int64, variant string, workflowInstanceID int64) (int64, error) {
+		return 0, assert.AnError
 	}
 
-	body := `{
-		"template_id": 1,
-		"contact_id": 1
-	}`
-
-	req, _ := http.NewRequest(
-		http.MethodPost,
-		"/send",
-		bytes.NewBufferString(body),
-	)
+	body := `{"template_id": 1, "contact_id": 1}`
+	req, _ := http.NewRequest(http.MethodPost, "/send", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
 	w := httptest.NewRecorder()
-
 	ctx, _ := gin.CreateTestContext(w)
 	ctx.Request = req
+	setTestUser(ctx, 1)
 
 	Email_send(ctx)
 

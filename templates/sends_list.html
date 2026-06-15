@@ -42,7 +42,11 @@
                 <td>{{.OpenCount}}</td>
                 <td>{{.ClickCount}}</td>
                 <td>
-                    {{if gt .ClickCount 0}}
+                    {{if eq .DeliveryStatus "queued"}}
+                    <span class="badge badge-amber">Queued</span>
+                    {{else if eq .DeliveryStatus "failed"}}
+                    <span class="badge badge-gray">Failed</span>
+                    {{else if gt .ClickCount 0}}
                     <span class="badge badge-green">Clicked</span>
                     {{else if gt .OpenCount 0}}
                     <span class="badge badge-blue">Opened</span>

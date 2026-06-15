@@ -8,6 +8,7 @@ import (
 
 type Template struct {
 	ID      int64
+	UserID  int64
 	Name    string
 	Subject string
 	Body    string
@@ -25,10 +26,10 @@ type TemplateListItem struct {
 	Variables []string
 }
 
-func (t *Template) SaveTemplate(variables []TemplateVariable) (int64, error) {
-	query := `INSERT INTO template (name, subject, body) VALUES (?,?,?) RETURNING id`
+func (t *Template) SaveTemplate(userID int64, variables []TemplateVariable) (int64, error) {
+	query := `INSERT INTO template (name, subject, body, user_id) VALUES (?,?,?,?) RETURNING id`
 
-	row := db.DB.QueryRow(query, t.Name, t.Subject, t.Body)
+	row := db.DB.QueryRow(query, t.Name, t.Subject, t.Body, userID)
 	var tID int64
 	err := row.Scan(&tID)
 	if err != nil {
@@ -52,18 +53,29 @@ func (t *Template) SaveTemplate(variables []TemplateVariable) (int64, error) {
 }
 
 func GetTemplate(templateId int64) (Template, error) {
-	query := `SELECT id, name, subject, body FROM template WHERE id = ?`
+	query := `SELECT id, COALESCE(user_id, 0), name, subject, body FROM template WHERE id = ?`
 	row := db.DB.QueryRow(query, templateId)
 	var t Template
-	err := row.Scan(&t.ID, &t.Name, &t.Subject, &t.Body)
+	err := row.Scan(&t.ID, &t.UserID, &t.Name, &t.Subject, &t.Body)
 	if err != nil {
 		return Template{}, err
 	}
 	return t, nil
 }
 
-func GetTemplateByID(id int64) (Template, []string, error) {
-	t, err := GetTemplate(id)
+func GetTemplateForUser(templateId, userID int64) (Template, error) {
+	t, err := GetTemplate(templateId)
+	if err != nil {
+		return Template{}, err
+	}
+	if userID > 0 && t.UserID > 0 && t.UserID != userID {
+		return Template{}, errNotFound
+	}
+	return t, nil
+}
+
+func GetTemplateByID(id, userID int64) (Template, []string, error) {
+	t, err := GetTemplateForUser(id, userID)
 	if err != nil {
 		return Template{}, nil, err
 	}
@@ -85,9 +97,9 @@ func GetTemplateByID(id int64) (Template, []string, error) {
 	return t, vars, nil
 }
 
-func ListTemplates() ([]TemplateListItem, error) {
-	query := `SELECT id, name, subject FROM template ORDER BY id DESC`
-	rows, err := db.DB.Query(query)
+func ListTemplates(userID int64) ([]TemplateListItem, error) {
+	query := `SELECT id, name, subject FROM template WHERE user_id = ? ORDER BY id DESC`
+	rows, err := db.DB.Query(query, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -118,7 +130,10 @@ func ListTemplates() ([]TemplateListItem, error) {
 	return items, nil
 }
 
-func UpdateTemplate(id int64, name, subject, body string, variables []string) error {
+func UpdateTemplate(id, userID int64, name, subject, body string, variables []string) error {
+	if _, err := GetTemplateForUser(id, userID); err != nil {
+		return err
+	}
 	_, err := db.DB.Exec(
 		`UPDATE template SET name = ?, subject = ?, body = ? WHERE id = ?`,
 		name, subject, body, id,
@@ -147,7 +162,10 @@ func UpdateTemplate(id int64, name, subject, body string, variables []string) er
 	return nil
 }
 
-func DeleteTemplate(id int64) error {
+func DeleteTemplate(id, userID int64) error {
+	if _, err := GetTemplateForUser(id, userID); err != nil {
+		return err
+	}
 	_, err := db.DB.Exec(`DELETE FROM template WHERE id = ?`, id)
 	return err
 }

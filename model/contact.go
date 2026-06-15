@@ -1,12 +1,17 @@
 package model
 
 import (
+	"database/sql"
+
 	"emailtracker.com/db"
 )
 
+var errNotFound = sql.ErrNoRows
+
 type Contact struct {
-	ID    int64
-	Email string
+	ID     int64
+	UserID int64
+	Email  string
 }
 
 type ContactVariables struct {
@@ -21,10 +26,10 @@ type ContactListItem struct {
 	Variables []ContactVariables
 }
 
-func (c *Contact) SaveContact(variables []ContactVariables) (int64, error) {
-	query := `INSERT INTO contact (email) VALUES (?) RETURNING id`
+func (c *Contact) SaveContact(userID int64, variables []ContactVariables) (int64, error) {
+	query := `INSERT INTO contact (email, user_id) VALUES (?, ?) RETURNING id`
 
-	row := db.DB.QueryRow(query, c.Email) //new comment
+	row := db.DB.QueryRow(query, c.Email, userID)
 	var contactID int64
 	err := row.Scan(&contactID)
 	if err != nil {
@@ -42,10 +47,10 @@ func (c *Contact) SaveContact(variables []ContactVariables) (int64, error) {
 }
 
 func GetContact(contactId int64) (Contact, []ContactVariables, error) {
-	query := `SELECT id, email FROM contact WHERE id = ?`
+	query := `SELECT id, COALESCE(user_id, 0), email FROM contact WHERE id = ?`
 	row := db.DB.QueryRow(query, contactId)
 	var c Contact
-	err := row.Scan(&c.ID, &c.Email)
+	err := row.Scan(&c.ID, &c.UserID, &c.Email)
 	if err != nil {
 		return Contact{}, nil, err
 	}
@@ -68,8 +73,19 @@ func GetContact(contactId int64) (Contact, []ContactVariables, error) {
 	return c, cVars, nil
 }
 
-func ListContacts() ([]ContactListItem, error) {
-	rows, err := db.DB.Query(`SELECT id, email FROM contact ORDER BY id DESC`)
+func GetContactForUser(contactId, userID int64) (Contact, []ContactVariables, error) {
+	c, vars, err := GetContact(contactId)
+	if err != nil {
+		return Contact{}, nil, err
+	}
+	if userID > 0 && c.UserID > 0 && c.UserID != userID {
+		return Contact{}, nil, errNotFound
+	}
+	return c, vars, nil
+}
+
+func ListContacts(userID int64) ([]ContactListItem, error) {
+	rows, err := db.DB.Query(`SELECT id, email FROM contact WHERE user_id = ? ORDER BY id DESC`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -103,12 +119,18 @@ func ListContacts() ([]ContactListItem, error) {
 	return items, nil
 }
 
-func DeleteContact(id int64) error {
+func DeleteContact(id, userID int64) error {
+	if _, _, err := GetContactForUser(id, userID); err != nil {
+		return err
+	}
 	_, err := db.DB.Exec(`DELETE FROM contact WHERE id = ?`, id)
 	return err
 }
 
-func UpdateContact(id int64, email string, variables []ContactVariables) error {
+func UpdateContact(id, userID int64, email string, variables []ContactVariables) error {
+	if _, _, err := GetContactForUser(id, userID); err != nil {
+		return err
+	}
 	_, err := db.DB.Exec(`UPDATE contact SET email = ? WHERE id = ?`, email, id)
 	if err != nil {
 		return err
@@ -132,8 +154,8 @@ func UpdateContact(id int64, email string, variables []ContactVariables) error {
 	return nil
 }
 
-func FindOrCreateContact(email string, variables []ContactVariables) (int64, error) {
-	row := db.DB.QueryRow(`SELECT id FROM contact WHERE email = ?`, email)
+func FindOrCreateContact(userID int64, email string, variables []ContactVariables) (int64, error) {
+	row := db.DB.QueryRow(`SELECT id FROM contact WHERE email = ? AND user_id = ?`, email, userID)
 	var id int64
 	err := row.Scan(&id)
 	if err == nil {
@@ -141,5 +163,12 @@ func FindOrCreateContact(email string, variables []ContactVariables) (int64, err
 	}
 
 	c := Contact{Email: email}
-	return c.SaveContact(variables)
+	return c.SaveContact(userID, variables)
+}
+
+func FindContactByEmail(userID int64, email string) (Contact, error) {
+	row := db.DB.QueryRow(`SELECT id, COALESCE(user_id, 0), email FROM contact WHERE email = ? AND user_id = ?`, email, userID)
+	var c Contact
+	err := row.Scan(&c.ID, &c.UserID, &c.Email)
+	return c, err
 }

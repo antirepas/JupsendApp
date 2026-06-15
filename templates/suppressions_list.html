@@ -1,0 +1,69 @@
+{{define "suppressions_list.html"}}
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>{{template "head" .}}</head>
+<body class="h-full bg-slate-50 text-slate-800">
+<div class="flex h-full">
+{{template "sidebar" .}}
+<main class="flex-1 overflow-y-auto">
+<div class="max-w-6xl mx-auto p-8">
+<div class="flex items-center justify-between mb-8">
+    <div>
+        <h2 class="text-2xl font-bold text-slate-900">Suppressions</h2>
+        <p class="text-slate-500 mt-1">Contacts blocked from outbound sends (bounces, manual)</p>
+    </div>
+</div>
+{{if .success}}<div class="alert-success mb-6">{{.success}}</div>{{end}}
+{{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
+<div class="card mb-6">
+    <h3 class="card-title">Add manual suppression</h3>
+    <form method="POST" action="/suppressions" class="flex flex-wrap gap-3 items-end">
+        <div class="flex-1 min-w-[200px]">
+            <label class="form-label">Contact</label>
+            <select name="contact_id" class="form-input" required>
+                <option value="">Select contact…</option>
+                {{range .contacts}}
+                <option value="{{.ID}}">{{.Email}}</option>
+                {{end}}
+            </select>
+        </div>
+        <div>
+            <label class="form-label">Reason</label>
+            <select name="reason" class="form-input">
+                <option value="manual">manual</option>
+                <option value="complaint">complaint</option>
+            </select>
+        </div>
+        <button type="submit" class="btn-primary">Suppress</button>
+    </form>
+</div>
+<div class="card overflow-hidden">
+    {{if .suppressions}}
+    <table class="data-table">
+        <thead><tr><th>Contact</th><th>Reason</th><th>Source</th><th>Since</th><th></th></tr></thead>
+        <tbody>
+            {{range .suppressions}}
+            <tr>
+                <td class="font-medium">{{.ContactEmail}}</td>
+                <td><span class="badge badge-gray">{{.Reason}}</span></td>
+                <td class="text-sm text-slate-500">{{.SourceMessage}}</td>
+                <td class="text-sm text-slate-500">{{.CreatedAt.Format "Jan 2, 2006"}}</td>
+                <td class="text-right">
+                    <form method="POST" action="/suppressions/{{.ContactID}}/remove" class="inline">
+                        <button type="submit" class="text-red-600 text-sm">Remove</button>
+                    </form>
+                </td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+    {{else}}
+    <div class="empty-state"><p>No suppressions.</p></div>
+    {{end}}
+</div>
+</div>
+</main>
+</div>
+</body>
+</html>
+{{end}}

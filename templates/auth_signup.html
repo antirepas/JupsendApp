@@ -1,0 +1,31 @@
+{{define "auth_signup.html"}}
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>{{template "head" .}}</head>
+<body class="h-full bg-slate-50 text-slate-800">
+<div class="min-h-full flex items-center justify-center p-6">
+<div class="card w-full max-w-md">
+    <h1 class="text-2xl font-bold text-slate-900 mb-2">Create account</h1>
+    <p class="text-slate-500 text-sm mb-6">Each account has its own contacts, campaigns, and SMTP settings.</p>
+    {{if .error}}<div class="alert-error mb-4">{{.error}}</div>{{end}}
+    <form method="POST" action="/signup" class="space-y-4">
+        <div>
+            <label class="form-label">Email</label>
+            <input type="email" name="email" class="form-input" required autofocus>
+        </div>
+        <div>
+            <label class="form-label">Password</label>
+            <input type="password" name="password" class="form-input" required minlength="8">
+        </div>
+        <div>
+            <label class="form-label">Confirm password</label>
+            <input type="password" name="confirm_password" class="form-input" required minlength="8">
+        </div>
+        <button type="submit" class="btn-primary w-full justify-center">Create account</button>
+    </form>
+    <p class="text-sm text-slate-500 mt-6 text-center">Already have an account? <a href="/login" class="text-brand-600 font-medium">Sign in</a></p>
+</div>
+</div>
+</body>
+</html>
+{{end}}

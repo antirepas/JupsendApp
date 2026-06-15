@@ -13,27 +13,33 @@ import (
 )
 
 func Dashboard(ctx *gin.Context) {
+	userID := mustUserID(ctx)
 	config.Reload()
+	user, _ := model.GetUserByID(userID)
+	baseURL := user.BaseURL
+	if baseURL == "" {
+		baseURL = config.BaseURL
+	}
 
-	stats, err := model.GetDashboardStats()
+	stats, err := model.GetDashboardStats(userID)
 	if err != nil {
 		log.Print(err)
 		ctx.HTML(http.StatusInternalServerError, "error.html", gin.H{"title": "Error", "active": "dashboard", "error": "Failed to load stats"})
 		return
 	}
 
-	recent, err := model.GetRecentEvents(10)
+	recent, err := model.GetRecentEvents(userID, 10)
 	if err != nil {
 		log.Print(err)
 	}
 
-	daily, err := model.GetDailyStats(14)
+	daily, err := model.GetDailyStats(userID, 14)
 	if err != nil {
 		log.Print(err)
 	}
 
-	counts, _ := model.GetEntityCounts()
-	campaigns, _ := model.ListCampaigns()
+	counts, _ := model.GetEntityCounts(userID)
+	campaigns, _ := model.ListCampaigns(userID)
 
 	ctx.HTML(http.StatusOK, "dashboard.html", gin.H{
 		"title":            "Dashboard",
@@ -43,15 +49,16 @@ func Dashboard(ctx *gin.Context) {
 		"dailyStats":       daily,
 		"counts":           counts,
 		"campaigns":        campaigns,
-		"baseURL":          config.BaseURL,
-		"trackingWarning":  config.TrackingWarning(config.BaseURL),
+		"baseURL":          baseURL,
+		"trackingWarning":  config.TrackingWarning(baseURL),
 		"success":          ctx.Query("success"),
 		"error":            ctx.Query("error"),
 	})
 }
 
 func ListTemplatesPage(ctx *gin.Context) {
-	templates, err := model.ListTemplates()
+	userID := mustUserID(ctx)
+	templates, err := model.ListTemplates(userID)
 	if err != nil {
 		log.Print(err)
 		ctx.HTML(http.StatusInternalServerError, "error.html", gin.H{"title": "Error", "active": "templates", "error": "Failed to load templates"})
@@ -75,6 +82,7 @@ func NewTemplatePage(ctx *gin.Context) {
 }
 
 func CreateTemplate(ctx *gin.Context) {
+	userID := mustUserID(ctx)
 	name := ctx.PostForm("name")
 	subject := ctx.PostForm("subject")
 	body := ctx.PostForm("body")
@@ -86,7 +94,7 @@ func CreateTemplate(ctx *gin.Context) {
 		tv[i] = model.TemplateVariable{Key: v}
 	}
 
-	_, err := t.SaveTemplate(tv)
+	_, err := t.SaveTemplate(userID, tv)
 	if err != nil {
 		log.Print(err)
 		ctx.HTML(http.StatusInternalServerError, "error.html", gin.H{"title": "Error", "active": "templates", "error": "Failed to save template"})
@@ -96,13 +104,14 @@ func CreateTemplate(ctx *gin.Context) {
 }
 
 func EditTemplatePage(ctx *gin.Context) {
+	userID := mustUserID(ctx)
 	id, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
 	if err != nil {
 		ctx.HTML(http.StatusBadRequest, "error.html", gin.H{"title": "Error", "active": "templates", "error": "Invalid template ID"})
 		return
 	}
 
-	t, vars, err := model.GetTemplateByID(id)
+	t, vars, err := model.GetTemplateByID(id, userID)
 	if err != nil {
 		log.Print(err)
 		ctx.HTML(http.StatusNotFound, "error.html", gin.H{"title": "Error", "active": "templates", "error": "Template not found"})
@@ -119,6 +128,7 @@ func EditTemplatePage(ctx *gin.Context) {
 }
 
 func UpdateTemplate(ctx *gin.Context) {
+	userID := mustUserID(ctx)
 	id, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
 	if err != nil {
 		ctx.HTML(http.StatusBadRequest, "error.html", gin.H{"title": "Error", "active": "templates", "error": "Invalid template ID"})
@@ -130,7 +140,7 @@ func UpdateTemplate(ctx *gin.Context) {
 	body := ctx.PostForm("body")
 	variables := parseLines(ctx.PostForm("variables"))
 
-	err = model.UpdateTemplate(id, name, subject, body, variables)
+	err = model.UpdateTemplate(id, userID, name, subject, body, variables)
 	if err != nil {
 		log.Print(err)
 		ctx.HTML(http.StatusInternalServerError, "error.html", gin.H{"title": "Error", "active": "templates", "error": "Failed to update template"})
@@ -140,14 +150,15 @@ func UpdateTemplate(ctx *gin.Context) {
 }
 
 func ListContactsPage(ctx *gin.Context) {
-	contacts, err := model.ListContacts()
+	userID := mustUserID(ctx)
+	contacts, err := model.ListContacts(userID)
 	if err != nil {
 		log.Print(err)
 		ctx.HTML(http.StatusInternalServerError, "error.html", gin.H{"title": "Error", "active": "contacts", "error": "Failed to load contacts"})
 		return
 	}
 
-	templates, err := model.ListTemplates()
+	templates, err := model.ListTemplates(userID)
 	if err != nil {
 		log.Print(err)
 	}
@@ -170,6 +181,7 @@ func NewContactPage(ctx *gin.Context) {
 }
 
 func CreateContact(ctx *gin.Context) {
+	userID := mustUserID(ctx)
 	email := ctx.PostForm("email")
 	keys := ctx.PostFormArray("var_key")
 	values := ctx.PostFormArray("var_value")
@@ -187,7 +199,7 @@ func CreateContact(ctx *gin.Context) {
 	}
 
 	c := model.Contact{Email: email}
-	_, err := c.SaveContact(cvs)
+	_, err := c.SaveContact(userID, cvs)
 	if err != nil {
 		log.Print(err)
 		ctx.HTML(http.StatusInternalServerError, "error.html", gin.H{"title": "Error", "active": "contacts", "error": "Failed to save contact"})
@@ -197,6 +209,7 @@ func CreateContact(ctx *gin.Context) {
 }
 
 func PasteContactsQuick(ctx *gin.Context) {
+	userID := mustUserID(ctx)
 	paste := ctx.PostForm("paste")
 	lines := strings.Split(paste, "\n")
 	added := 0
@@ -205,7 +218,7 @@ func PasteContactsQuick(ctx *gin.Context) {
 		if !strings.Contains(email, "@") {
 			continue
 		}
-		_, err := model.FindOrCreateContact(email, nil)
+		_, err := model.FindOrCreateContact(userID, email, nil)
 		if err != nil {
 			log.Print(err)
 			continue
@@ -217,7 +230,8 @@ func PasteContactsQuick(ctx *gin.Context) {
 }
 
 func ListSendsPage(ctx *gin.Context) {
-	sends, err := model.ListEmailSends()
+	userID := mustUserID(ctx)
+	sends, err := model.ListEmailSends(userID)
 	if err != nil {
 		log.Print(err)
 		ctx.HTML(http.StatusInternalServerError, "error.html", gin.H{"title": "Error", "active": "sends", "error": "Failed to load sends"})
@@ -232,11 +246,12 @@ func ListSendsPage(ctx *gin.Context) {
 }
 
 func NewSendPage(ctx *gin.Context) {
-	templates, err := model.ListTemplates()
+	userID := mustUserID(ctx)
+	templates, err := model.ListTemplates(userID)
 	if err != nil {
 		log.Print(err)
 	}
-	contacts, err := model.ListContacts()
+	contacts, err := model.ListContacts(userID)
 	if err != nil {
 		log.Print(err)
 	}
@@ -261,13 +276,13 @@ func CreateSend(ctx *gin.Context) {
 		return
 	}
 
-	emailSendID, err := processAndSendEmail(templateID, contactID, 0, "", 0)
+	emailSendID, err := processAndSendEmail(mustUserID(ctx), templateID, contactID, 0, "", 0)
 	if err != nil {
 		log.Print(err)
 		ctx.Redirect(http.StatusFound, "/sends/new?error="+err.Error())
 		return
 	}
-	ctx.Redirect(http.StatusFound, "/sends/"+strconv.FormatInt(emailSendID, 10)+"?success=Email+sent")
+	ctx.Redirect(http.StatusFound, "/sends/"+strconv.FormatInt(emailSendID, 10)+"?success=Email+queued+for+delivery")
 }
 
 func SendDetailPage(ctx *gin.Context) {
@@ -277,7 +292,7 @@ func SendDetailPage(ctx *gin.Context) {
 		return
 	}
 
-	detail, err := model.GetEmailSendDetail(id)
+	detail, err := model.GetEmailSendDetailForUser(id, mustUserID(ctx))
 	if err != nil {
 		log.Print(err)
 		ctx.HTML(http.StatusNotFound, "error.html", gin.H{"title": "Error", "active": "sends", "error": "Send not found"})

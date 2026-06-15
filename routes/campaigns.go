@@ -10,13 +10,15 @@ import (
 	"time"
 
 	"emailtracker.com/model"
+	"emailtracker.com/outbound"
 	"emailtracker.com/util"
 	"emailtracker.com/workflow"
 	"github.com/gin-gonic/gin"
 )
 
 func ListCampaignsPage(ctx *gin.Context) {
-	campaigns, err := model.ListCampaigns()
+	userID := mustUserID(ctx)
+	campaigns, err := model.ListCampaigns(userID)
 	if err != nil {
 		log.Print(err)
 		ctx.HTML(http.StatusInternalServerError, "error.html", gin.H{"title": "Error", "active": "campaigns", "error": "Failed to load campaigns"})
@@ -32,8 +34,9 @@ func ListCampaignsPage(ctx *gin.Context) {
 }
 
 func NewCampaignPage(ctx *gin.Context) {
-	templates, _ := model.ListTemplates()
-	workflows, _ := model.GetPublishedWorkflows()
+	userID := mustUserID(ctx)
+	templates, _ := model.ListTemplates(userID)
+	workflows, _ := model.GetPublishedWorkflows(userID)
 	ctx.HTML(http.StatusOK, "campaigns_form.html", gin.H{
 		"title":     "New Campaign",
 		"active":    "campaigns",
@@ -43,6 +46,7 @@ func NewCampaignPage(ctx *gin.Context) {
 }
 
 func CreateCampaign(ctx *gin.Context) {
+	userID := mustUserID(ctx)
 	name := ctx.PostForm("name")
 	executionMode := ctx.PostForm("execution_mode")
 	if executionMode == "" {
@@ -64,7 +68,7 @@ func CreateCampaign(ctx *gin.Context) {
 		templateAID = 1 // placeholder for NOT NULL constraint; unused in workflow mode
 	}
 
-	id, err := model.CreateCampaign(name, templateAID, templateBID, executionMode, workflowVersionID)
+	id, err := model.CreateCampaign(userID, name, templateAID, templateBID, executionMode, workflowVersionID)
 	if err != nil {
 		log.Print(err)
 		ctx.Redirect(http.StatusFound, "/campaigns/new?error=Failed+to+create+campaign")
@@ -74,32 +78,33 @@ func CreateCampaign(ctx *gin.Context) {
 }
 
 func CampaignDetailPage(ctx *gin.Context) {
+	userID := mustUserID(ctx)
 	id, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
 	if err != nil {
 		ctx.HTML(http.StatusBadRequest, "error.html", gin.H{"title": "Error", "active": "campaigns", "error": "Invalid campaign ID"})
 		return
 	}
 
-	detail, err := model.GetCampaignDetail(id)
+	detail, err := model.GetCampaignDetail(id, userID)
 	if err != nil {
 		log.Print(err)
 		ctx.HTML(http.StatusNotFound, "error.html", gin.H{"title": "Error", "active": "campaigns", "error": "Campaign not found"})
 		return
 	}
 
-	campaign, _ := model.GetCampaign(id)
+	campaign, _ := model.GetCampaignForUser(id, userID)
 	contactIDs, _ := model.GetCampaignContactIDs(id)
-	allContacts, _ := model.ListContacts()
-	mergedVars, _ := model.MergeTemplateVariables([]int64{detail.TemplateAID, detail.TemplateBID})
+	allContacts, _ := model.ListContacts(userID)
+	mergedVars, _ := model.MergeTemplateVariables(userID, []int64{detail.TemplateAID, detail.TemplateBID})
 
-	templateA := templatePreviewView(detail.TemplateAID)
+	templateA := templatePreviewView(userID, detail.TemplateAID)
 	var templateB TemplatePreviewView
 	hasB := detail.TemplateBID > 0
 	if hasB {
-		templateB = templatePreviewView(detail.TemplateBID)
+		templateB = templatePreviewView(userID, detail.TemplateBID)
 	}
 
-	contactRows := buildCampaignContactRows(campaign, contactIDs, detail.TemplateAName, detail.TemplateBName)
+	contactRows := buildCampaignContactRows(campaign, userID, contactIDs, detail.TemplateAName, detail.TemplateBName)
 
 	var scheduledAtLocal string
 	if detail.ScheduledAt != nil {
@@ -124,13 +129,14 @@ func CampaignDetailPage(ctx *gin.Context) {
 }
 
 func CampaignAnalyticsPage(ctx *gin.Context) {
+	userID := mustUserID(ctx)
 	id, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
 	if err != nil {
 		ctx.HTML(http.StatusBadRequest, "error.html", gin.H{"title": "Error", "active": "campaigns", "error": "Invalid campaign ID"})
 		return
 	}
 
-	analytics, err := model.GetCampaignAnalytics(id)
+	analytics, err := model.GetCampaignAnalytics(id, userID)
 	if err != nil {
 		log.Print(err)
 		ctx.HTML(http.StatusNotFound, "error.html", gin.H{"title": "Error", "active": "campaigns", "error": "Campaign not found"})
@@ -169,13 +175,13 @@ func PasteCampaignContacts(ctx *gin.Context) {
 		return
 	}
 
-	campaign, err := model.GetCampaign(campaignID)
+	campaign, err := model.GetCampaignForUser(campaignID, mustUserID(ctx))
 	if err != nil {
 		ctx.Redirect(http.StatusFound, "/campaigns?error=Campaign+not+found")
 		return
 	}
 
-	vars, _ := model.MergeTemplateVariables([]int64{campaign.TemplateAID, campaign.TemplateBID})
+	vars, _ := model.MergeTemplateVariables(mustUserID(ctx), []int64{campaign.TemplateAID, campaign.TemplateBID})
 	paste := ctx.PostForm("paste")
 	rows := util.ParseContactPasteWithHeaders(paste, vars)
 
@@ -186,7 +192,7 @@ func PasteCampaignContacts(ctx *gin.Context) {
 		for _, key := range vars {
 			cvs = append(cvs, model.ContactVariables{Key: key, Value: row.Variables[key]})
 		}
-		cid, err := model.FindOrCreateContact(row.Email, cvs)
+		cid, err := model.FindOrCreateContact(mustUserID(ctx), row.Email, cvs)
 		if err != nil {
 			continue
 		}
@@ -209,7 +215,7 @@ func UploadCampaignContacts(ctx *gin.Context) {
 		return
 	}
 
-	campaign, err := model.GetCampaign(campaignID)
+	campaign, err := model.GetCampaignForUser(campaignID, mustUserID(ctx))
 	if err != nil {
 		ctx.Redirect(http.StatusFound, "/campaigns?error=Campaign+not+found")
 		return
@@ -227,7 +233,7 @@ func UploadCampaignContacts(ctx *gin.Context) {
 	}
 	defer src.Close()
 
-	vars, _ := model.MergeTemplateVariables([]int64{campaign.TemplateAID, campaign.TemplateBID})
+	vars, _ := model.MergeTemplateVariables(mustUserID(ctx), []int64{campaign.TemplateAID, campaign.TemplateBID})
 	rows, err := util.ParseContactsExcel(src, vars)
 	if err != nil {
 		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error="+url.QueryEscape(err.Error()))
@@ -240,7 +246,7 @@ func UploadCampaignContacts(ctx *gin.Context) {
 		for _, key := range vars {
 			cvs = append(cvs, model.ContactVariables{Key: key, Value: row.Variables[key]})
 		}
-		cid, err := model.FindOrCreateContact(row.Email, cvs)
+		cid, err := model.FindOrCreateContact(mustUserID(ctx), row.Email, cvs)
 		if err != nil {
 			continue
 		}
@@ -262,14 +268,14 @@ func SendCampaign(ctx *gin.Context) {
 		return
 	}
 
-	sent, failed, err := launchCampaign(campaignID)
+	sent, failed, err := launchCampaign(mustUserID(ctx), campaignID)
 	if err != nil {
 		log.Print(err)
 		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error="+url.QueryEscape(err.Error()))
 		return
 	}
 
-	msg := fmt.Sprintf("Campaign launched: %d succeeded, %d failed", sent, failed)
+	msg := fmt.Sprintf("Campaign queued: %d emails queued, %d suppressed", sent, failed)
 	ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?success="+url.QueryEscape(msg))
 }
 
@@ -318,13 +324,16 @@ func CancelCampaignSchedule(ctx *gin.Context) {
 	ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?success=Schedule+cancelled")
 }
 
-func executeCampaignSend(campaignID int64) (sent, failed int, err error) {
-	campaign, err := model.GetCampaign(campaignID)
+func executeCampaignSend(userID, campaignID int64) (queued, skipped int, err error) {
+	campaign, err := model.GetCampaignForUser(campaignID, userID)
 	if err != nil {
 		return 0, 0, fmt.Errorf("campaign not found")
 	}
 	if campaign.Status == "sent" {
 		return 0, 0, fmt.Errorf("campaign already sent")
+	}
+	if campaign.IsSending {
+		return 0, 0, fmt.Errorf("campaign is already sending")
 	}
 
 	contactIDs, err := model.GetCampaignContactIDs(campaignID)
@@ -333,31 +342,31 @@ func executeCampaignSend(campaignID int64) (sent, failed int, err error) {
 	}
 
 	hasB := campaign.TemplateBID > 0
-	for i, contactID := range contactIDs {
+	result, err := outbound.EnqueueCampaignContacts(userID, campaignID, contactIDs, func(contactID int64, i int) (int64, string) {
 		variant := "A"
 		templateID := campaign.TemplateAID
 		if hasB && i%2 == 1 {
 			variant = "B"
 			templateID = campaign.TemplateBID
 		}
-
-		_, sendErr := processAndSendEmail(templateID, contactID, campaignID, variant, 0)
-		if sendErr != nil {
-			log.Print(sendErr)
-			failed++
-			continue
-		}
-		sent++
+		return templateID, variant
+	})
+	if err != nil {
+		return 0, 0, err
 	}
 
-	if err := model.MarkCampaignSent(campaignID); err != nil {
-		return sent, failed, err
+	if result.Queued == 0 && result.Skipped == len(contactIDs) {
+		return 0, result.Skipped, fmt.Errorf("all contacts are suppressed")
 	}
-	return sent, failed, nil
+
+	if err := model.MarkCampaignSending(campaignID); err != nil {
+		return result.Queued, result.Skipped, err
+	}
+	return result.Queued, result.Skipped, nil
 }
 
-func launchCampaign(campaignID int64) (sent, failed int, err error) {
-	campaign, err := model.GetCampaign(campaignID)
+func launchCampaign(userID, campaignID int64) (queued, skipped int, err error) {
+	campaign, err := model.GetCampaignForUser(campaignID, userID)
 	if err != nil {
 		return 0, 0, fmt.Errorf("campaign not found")
 	}
@@ -367,7 +376,7 @@ func launchCampaign(campaignID int64) (sent, failed int, err error) {
 	if campaign.ExecutionMode == "workflow" && campaign.WorkflowVersionID > 0 {
 		return startWorkflowCampaign(campaignID, campaign)
 	}
-	return executeCampaignSend(campaignID)
+	return executeCampaignSend(userID, campaignID)
 }
 
 func startWorkflowCampaign(campaignID int64, campaign model.Campaign) (sent, failed int, err error) {
@@ -441,12 +450,12 @@ func DownloadCampaignSample(ctx *gin.Context) {
 		ctx.String(http.StatusBadRequest, "Invalid campaign ID")
 		return
 	}
-	campaign, err := model.GetCampaign(campaignID)
+	campaign, err := model.GetCampaignForUser(campaignID, mustUserID(ctx))
 	if err != nil {
 		ctx.String(http.StatusNotFound, "Campaign not found")
 		return
 	}
-	vars, _ := model.MergeTemplateVariables([]int64{campaign.TemplateAID, campaign.TemplateBID})
+	vars, _ := model.MergeTemplateVariables(mustUserID(ctx), []int64{campaign.TemplateAID, campaign.TemplateBID})
 	data, err := util.CreateContactSampleExcel(vars)
 	if err != nil {
 		ctx.String(http.StatusInternalServerError, "Could not create sample")

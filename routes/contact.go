@@ -21,6 +21,7 @@ func SaveContacts(ctx *gin.Context) {
 		return
 	}
 
+	userID := mustUserID(ctx)
 	for _, C := range sc.CS {
 		var cvs []model.ContactVariables
 		for _, V := range sc.CVS {
@@ -28,7 +29,7 @@ func SaveContacts(ctx *gin.Context) {
 				cvs = append(cvs, V)
 			}
 		}
-		_, err = C.SaveContact(cvs)
+		_, err = C.SaveContact(userID, cvs)
 		if err != nil {
 			log.Print(err)
 			continue

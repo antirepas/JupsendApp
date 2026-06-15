@@ -29,7 +29,11 @@ func runDueScheduledCampaigns() {
 		return
 	}
 	for _, id := range ids {
-		sent, failed, err := launchCampaign(id)
+		campaign, err := model.GetCampaign(id)
+		if err != nil {
+			continue
+		}
+		sent, failed, err := launchCampaign(campaign.UserID, id)
 		if err != nil {
 			log.Printf("scheduler: campaign %d: %v", id, err)
 			continue

@@ -10,7 +10,7 @@ import (
 )
 
 func ListWorkflowsPage(ctx *gin.Context) {
-	workflows, err := model.ListWorkflows()
+	workflows, err := model.ListWorkflows(mustUserID(ctx))
 	if err != nil {
 		log.Print(err)
 		ctx.HTML(http.StatusInternalServerError, "error.html", gin.H{"title": "Error", "active": "workflows", "error": "Failed to load workflows"})
@@ -35,7 +35,7 @@ func NewWorkflowPage(ctx *gin.Context) {
 func CreateWorkflowWeb(ctx *gin.Context) {
 	name := ctx.PostForm("name")
 	desc := ctx.PostForm("description")
-	id, err := model.CreateWorkflow(name, desc)
+	id, err := model.CreateWorkflow(mustUserID(ctx), name, desc)
 	if err != nil {
 		ctx.Redirect(http.StatusFound, "/workflows/new?error=Failed+to+create")
 		return
@@ -49,12 +49,12 @@ func WorkflowBuilderPage(ctx *gin.Context) {
 		ctx.HTML(http.StatusBadRequest, "error.html", gin.H{"title": "Error", "active": "workflows", "error": "Invalid ID"})
 		return
 	}
-	w, err := model.GetWorkflow(id)
+	w, err := model.GetWorkflowForUser(id, mustUserID(ctx))
 	if err != nil {
 		ctx.HTML(http.StatusNotFound, "error.html", gin.H{"title": "Error", "active": "workflows", "error": "Not found"})
 		return
 	}
-	templates, _ := model.ListTemplates()
+	templates, _ := model.ListTemplates(mustUserID(ctx))
 	ctx.HTML(http.StatusOK, "workflows_builder.html", gin.H{
 		"title":     w.Name,
 		"active":    "workflows",
@@ -70,7 +70,7 @@ func WorkflowAnalyticsPage(ctx *gin.Context) {
 		ctx.HTML(http.StatusBadRequest, "error.html", gin.H{"title": "Error", "active": "workflows", "error": "Invalid ID"})
 		return
 	}
-	w, err := model.GetWorkflow(id)
+	w, err := model.GetWorkflowForUser(id, mustUserID(ctx))
 	if err != nil {
 		ctx.HTML(http.StatusNotFound, "error.html", gin.H{"title": "Error", "active": "workflows", "error": "Not found"})
 		return

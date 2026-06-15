@@ -8,7 +8,7 @@ import (
 
 func TestValidateWorkflowGraphEmpty(t *testing.T) {
 	db.Prepare()
-	wid, _ := CreateWorkflow("test", "")
+	wid, _ := CreateWorkflow(1, "test", "")
 	w, _ := GetWorkflow(wid)
 	errs := ValidateWorkflowGraph(w.CurrentVersionID)
 	if len(errs) == 0 { //comment
@@ -18,7 +18,7 @@ func TestValidateWorkflowGraphEmpty(t *testing.T) {
 
 func TestValidateWorkflowGraphValid(t *testing.T) {
 	db.Prepare()
-	wid, _ := CreateWorkflow("test2", "")
+	wid, _ := CreateWorkflow(1, "test2", "")
 	w, _ := GetWorkflow(wid)
 	vid := w.CurrentVersionID
 	_ = SaveWorkflowGraph(vid, GraphSaveInput{
@@ -39,7 +39,10 @@ func TestValidateWorkflowGraphValid(t *testing.T) {
 }
 
 func TestComputeDisplayStatus(t *testing.T) {
-	if ComputeDisplayStatus("sent", nil) != "sent" {
+	if ComputeDisplayStatus("sent", nil, false) != "sent" {
 		t.Fatal("expected sent")
+	}
+	if ComputeDisplayStatus("draft", nil, true) != "sending" {
+		t.Fatal("expected sending")
 	}
 }

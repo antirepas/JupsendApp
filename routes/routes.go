@@ -10,6 +10,9 @@ func RegisterRoutes(server *gin.Engine) {
 	server.LoadHTMLFiles(
 		"templates/partials/head.html",
 		"templates/partials/sidebar.html",
+		"templates/auth_login.html",
+		"templates/auth_signup.html",
+		"templates/settings.html",
 		"templates/dashboard.html",
 		"templates/templates_list.html",
 		"templates/templates_form.html",
@@ -26,64 +29,87 @@ func RegisterRoutes(server *gin.Engine) {
 		"templates/workflows_form.html",
 		"templates/workflows_builder.html",
 		"templates/workflows_analytics.html",
+		"templates/suppressions_list.html",
 		"templates/error.html",
 	)
 	server.Static("/static", "./static")
 
-	server.GET("/", Dashboard)
-	server.POST("/settings/base-url", UpdateBaseURL)
-	server.GET("/test-pixel", TestTrackingPixel)
-
-	server.GET("/templates", ListTemplatesPage)
-	server.GET("/templates/new", NewTemplatePage)
-	server.POST("/templates", CreateTemplate)
-	server.GET("/templates/:id/edit", EditTemplatePage)
-	server.POST("/templates/:id", UpdateTemplate)
-	server.POST("/templates/:id/delete", DeleteTemplate)
-
-	server.GET("/contacts", ListContactsPage)
-	server.GET("/contacts/new", NewContactPage)
-	server.GET("/contacts/:id/edit", EditContactPage)
-	server.POST("/contacts", CreateContact)
-	server.POST("/contacts/:id", UpdateContact)
-	server.POST("/contacts/:id/delete", DeleteContact)
-	server.POST("/contacts/paste", PasteContactsQuick)
-	server.GET("/contacts/paste", func(c *gin.Context) { c.Redirect(http.StatusFound, "/contacts") })
-	server.GET("/contacts/upload/sample/:id", DownloadContactSample)
-	server.POST("/contacts/upload", UploadContacts)
-
-	server.GET("/workflows", ListWorkflowsPage)
-	server.GET("/workflows/new", NewWorkflowPage)
-	server.POST("/workflows", CreateWorkflowWeb)
-	server.GET("/workflows/:id/edit", WorkflowBuilderPage)
-	server.GET("/workflows/:id/analytics", WorkflowAnalyticsPage)
-
-	server.GET("/campaigns", ListCampaignsPage)
-	server.GET("/campaigns/new", NewCampaignPage)
-	server.POST("/campaigns", CreateCampaign)
-	server.POST("/campaigns/:id/delete", DeleteCampaign)
-	server.POST("/campaigns/:id/schedule", ScheduleCampaign)
-	server.POST("/campaigns/:id/cancel-schedule", CancelCampaignSchedule)
-	server.GET("/campaigns/:id/analytics", CampaignAnalyticsPage)
-	server.GET("/campaigns/:id", CampaignDetailPage)
-	server.POST("/campaigns/:id/contacts", AddCampaignContacts)
-	server.POST("/campaigns/:id/paste", PasteCampaignContacts)
-	server.POST("/campaigns/:id/upload", UploadCampaignContacts)
-	server.GET("/campaigns/:id/sample", DownloadCampaignSample)
-	server.POST("/campaigns/:id/send", SendCampaign)
-
-	server.GET("/sends", ListSendsPage)
-	server.GET("/sends/new", NewSendPage)
-	server.POST("/sends", CreateSend)
-	server.GET("/sends/:id", SendDetailPage)
+	server.GET("/login", RedirectIfAuthed(), LoginPage)
+	server.POST("/login", RedirectIfAuthed(), LoginSubmit)
+	server.GET("/signup", RedirectIfAuthed(), SignupPage)
+	server.POST("/signup", RedirectIfAuthed(), SignupSubmit)
+	server.POST("/logout", Logout)
 
 	v1 := server.Group("/api/v1")
 	v1.GET("/track/open/:id", TrackOpen)
 	v1.HEAD("/track/open/:id", TrackOpen)
 	v1.GET("/track/click/:id", TrackClick)
 	v1.HEAD("/track/click/:id", TrackClick)
-	v1.POST("/template", SaveTemplate)
-	v1.POST("/contact", SaveContacts)
-	v1.POST("/send", Email_send)
-	RegisterWorkflowAPI(v1)
+
+	authd := server.Group("/")
+	authd.Use(RequireAuth())
+	{
+		authd.GET("/", Dashboard)
+		authd.GET("/settings", SettingsPage)
+		authd.POST("/settings", UpdateSettings)
+		authd.POST("/settings/base-url", UpdateBaseURL)
+		authd.GET("/test-pixel", TestTrackingPixel)
+
+		authd.GET("/templates", ListTemplatesPage)
+		authd.GET("/templates/new", NewTemplatePage)
+		authd.POST("/templates", CreateTemplate)
+		authd.GET("/templates/:id/edit", EditTemplatePage)
+		authd.POST("/templates/:id", UpdateTemplate)
+		authd.POST("/templates/:id/delete", DeleteTemplate)
+
+		authd.GET("/contacts", ListContactsPage)
+		authd.GET("/contacts/new", NewContactPage)
+		authd.GET("/contacts/:id/edit", EditContactPage)
+		authd.POST("/contacts", CreateContact)
+		authd.POST("/contacts/:id", UpdateContact)
+		authd.POST("/contacts/:id/delete", DeleteContact)
+		authd.POST("/contacts/paste", PasteContactsQuick)
+		authd.GET("/contacts/paste", func(c *gin.Context) { c.Redirect(http.StatusFound, "/contacts") })
+		authd.GET("/contacts/upload/sample/:id", DownloadContactSample)
+		authd.POST("/contacts/upload", UploadContacts)
+
+		authd.GET("/workflows", ListWorkflowsPage)
+		authd.GET("/workflows/new", NewWorkflowPage)
+		authd.POST("/workflows", CreateWorkflowWeb)
+		authd.GET("/workflows/:id/edit", WorkflowBuilderPage)
+		authd.GET("/workflows/:id/analytics", WorkflowAnalyticsPage)
+
+		authd.GET("/campaigns", ListCampaignsPage)
+		authd.GET("/campaigns/new", NewCampaignPage)
+		authd.POST("/campaigns", CreateCampaign)
+		authd.POST("/campaigns/:id/delete", DeleteCampaign)
+		authd.POST("/campaigns/:id/schedule", ScheduleCampaign)
+		authd.POST("/campaigns/:id/cancel-schedule", CancelCampaignSchedule)
+		authd.GET("/campaigns/:id/analytics", CampaignAnalyticsPage)
+		authd.GET("/campaigns/:id", CampaignDetailPage)
+		authd.POST("/campaigns/:id/contacts", AddCampaignContacts)
+		authd.POST("/campaigns/:id/paste", PasteCampaignContacts)
+		authd.POST("/campaigns/:id/upload", UploadCampaignContacts)
+		authd.GET("/campaigns/:id/sample", DownloadCampaignSample)
+		authd.POST("/campaigns/:id/send", SendCampaign)
+
+		authd.GET("/suppressions", ListSuppressionsPage)
+		authd.POST("/suppressions", AddSuppressionWeb)
+		authd.POST("/suppressions/:contact_id/remove", RemoveSuppressionWeb)
+
+		authd.GET("/sends", ListSendsPage)
+		authd.GET("/sends/new", NewSendPage)
+		authd.POST("/sends", CreateSend)
+		authd.GET("/sends/:id", SendDetailPage)
+	}
+
+	api := server.Group("/api/v1")
+	api.Use(RequireAuth())
+	{
+		api.POST("/template", SaveTemplate)
+		api.POST("/contact", SaveContacts)
+		api.POST("/send", Email_send)
+		api.GET("/send-jobs", GetSendJobsAPI)
+		RegisterWorkflowAPI(api)
+	}
 }

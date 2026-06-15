@@ -12,7 +12,7 @@
         <a href="/campaigns" class="text-sm text-brand-600 font-medium">← Campaigns</a>
         <h2 class="text-2xl font-bold text-slate-900 mt-2">{{.campaign.Name}}</h2>
         <p class="text-slate-500 mt-1">{{.campaign.ContactCount}} contacts ·
-            <span class="badge {{if eq .campaign.DisplayStatus "sent"}}badge-green{{else if eq .campaign.DisplayStatus "scheduled"}}badge-amber{{else}}badge-gray{{end}}">{{.campaign.DisplayStatus}}</span>
+            <span class="badge {{if eq .campaign.DisplayStatus "sent"}}badge-green{{else if eq .campaign.DisplayStatus "scheduled"}}badge-amber{{else if eq .campaign.DisplayStatus "sending"}}badge-blue{{else}}badge-gray{{end}}">{{.campaign.DisplayStatus}}</span>
             {{if .campaign.ScheduledAt}}<span class="text-sm text-slate-500 ml-2">· sends {{.campaign.ScheduledAt.Format "Jan 2, 2006 15:04"}}</span>{{end}}
         </p>
     </div>
@@ -23,9 +23,11 @@
         </form>
         {{if gt .campaign.ContactCount 0}}
         {{if ne .campaign.DisplayStatus "sent"}}
+        {{if ne .campaign.DisplayStatus "sending"}}
         <form method="POST" action="/campaigns/{{.campaign.ID}}/send" onsubmit="return confirm('Send to all {{.campaign.ContactCount}} contacts now?');">
             <button type="submit" class="btn-primary">Send now</button>
         </form>
+        {{end}}
         {{end}}
         {{end}}
     </div>
@@ -33,6 +35,19 @@
 
 {{if .success}}<div class="alert-success mb-6">{{.success}}</div>{{end}}
 {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
+
+{{if eq .campaign.DisplayStatus "sending"}}
+<div class="card mb-6 border-l-4 border-blue-500">
+    <h3 class="font-semibold text-slate-900 mb-2">Outbound queue progress</h3>
+    <p class="text-sm text-slate-600 mb-2">
+        Pending: <strong>{{.campaign.SendJobCounts.Pending}}</strong> ·
+        Sent: <strong>{{.campaign.SendJobCounts.Sent}}</strong> ·
+        Failed: <strong>{{.campaign.SendJobCounts.Failed}}</strong> ·
+        Dead: <strong>{{.campaign.SendJobCounts.Dead}}</strong>
+    </p>
+    <p class="text-xs text-slate-500">Jobs are processed by the background outbound worker. This page refreshes on reload.</p>
+</div>
+{{end}}
 
 {{if ne .campaign.DisplayStatus "sent"}}
 {{if gt .campaign.ContactCount 0}}

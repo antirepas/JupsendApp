@@ -1,96 +1,28 @@
 package routes
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 
-	"emailtracker.com/config"
 	"emailtracker.com/model"
-	"emailtracker.com/util"
+	"emailtracker.com/outbound"
 	"github.com/gin-gonic/gin"
 )
 
-var (
-	getTemplate    = model.GetTemplate
-	getContact     = model.GetContact
-	saveSendEmail  = model.SaveSendEmail
-)
-
-var newEmailSender = func() MailSender {
-	return util.NewEmailSender(
-		config.SMTPHost,
-		config.SMTPPort,
-		config.SMTPUser,
-		config.SMTPPass,
-		config.SMTPFrom,
-	)
-}
-
-type MailSender interface {
-	Send(to, subject, plainBody, htmlBody string) error
-}
-
-func processAndSendEmail(templateID, contactID, campaignID int64, variant string, workflowInstanceID int64) (int64, error) {
-	trackID := fmt.Sprintf("%d", util.GenerateID())
-
-	template, err := getTemplate(templateID)
-	if err != nil {
-		return 0, fmt.Errorf("could not get template: %w", err)
-	}
-
-	contact, contactVars, err := getContact(contactID)
-	if err != nil {
-		return 0, fmt.Errorf("could not get contact: %w", err)
-	}
-
-	emailSendID, err := saveSendEmail(templateID, contactID, trackID, campaignID, variant, workflowInstanceID)
-	if err != nil {
-		return 0, fmt.Errorf("could not save email send: %w", err)
-	}
-
-	newBody, _ := util.RenderTemplate(template.Body, contactVars, "")
-	newBody = util.WrapHTMLBody(newBody)
-	newBody = util.InjectTrackingPixel(newBody, trackID)
-	newSubject, _ := util.RenderTemplate(template.Subject, contactVars, "")
-	replacedLinksBody := util.RewriteLinks(newBody, emailSendID)
-	plainBody := util.StripHTML(replacedLinksBody)
-
-	if config.SMTPUser == "" || config.SMTPPass == "" {
-		return 0, fmt.Errorf("could not send email: SMTP_USER and APP_PASSWORD must be set in .env")
-	}
-
-	emailSender := newEmailSender()
-	err = emailSender.Send(contact.Email, newSubject, plainBody, replacedLinksBody)
-	if err != nil {
-		return 0, fmt.Errorf("could not send email: %w", err)
-	}
-
-	recordSendContactEvent(contactID, campaignID, workflowInstanceID, emailSendID, templateID)
-
-	return emailSendID, nil
-}
-
-func recordSendContactEvent(contactID, campaignID, workflowInstanceID, emailSendID, templateID int64) {
-	var wfID int64
-	if workflowInstanceID > 0 {
-		inst, err := model.GetWorkflowInstance(workflowInstanceID)
-		if err == nil {
-			v, _ := model.GetWorkflowVersion(inst.WorkflowVersionID)
-			wfID = v.WorkflowID
-		}
-	}
-	_, _ = model.InsertContactEvent(model.ContactEventInput{
+var enqueueSendFn = func(userID, templateID, contactID, campaignID int64, variant string, workflowInstanceID int64) (int64, error) {
+	emailSendID, _, err := outbound.EnqueueSend(outbound.EnqueueInput{
+		UserID:             userID,
 		ContactID:          contactID,
+		TemplateID:         templateID,
 		CampaignID:         campaignID,
-		WorkflowID:         wfID,
+		Variant:            variant,
 		WorkflowInstanceID: workflowInstanceID,
-		EmailSendID:        emailSendID,
-		EventType:          "SEND",
-		Metadata: map[string]interface{}{
-			"template_id": templateID,
-		},
 	})
+	return emailSendID, err
+}
+
+func processAndSendEmail(userID, templateID, contactID, campaignID int64, variant string, workflowInstanceID int64) (int64, error) {
+	return enqueueSendFn(userID, templateID, contactID, campaignID, variant, workflowInstanceID)
 }
 
 func Email_send(ctx *gin.Context) {
@@ -103,7 +35,7 @@ func Email_send(ctx *gin.Context) {
 		return
 	}
 
-	emailSendID, err := processAndSendEmail(emailSend.TemplateID, emailSend.ContactID, 0, "", 0)
+	emailSendID, err := enqueueSendFn(mustUserID(ctx), emailSend.TemplateID, emailSend.ContactID, 0, "", 0)
 	if err != nil {
 		log.Print(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
@@ -111,7 +43,8 @@ func Email_send(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{
-		"message":       "email sent successfully!",
-		"email_send_id": emailSendID,
+		"message":         "email queued for delivery",
+		"email_send_id":   emailSendID,
+		"delivery_status": "queued",
 	})
 }

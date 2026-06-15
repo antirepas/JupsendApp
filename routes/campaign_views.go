@@ -43,19 +43,20 @@ type CampaignContactRowView struct {
 
 func buildCampaignContactRows(
 	campaign model.Campaign,
+	userID int64,
 	contactIDs []int64,
 	templateAName, templateBName string,
 ) []CampaignContactRowView {
 	hasB := campaign.TemplateBID > 0
-	templateA, aVars, _ := model.GetTemplateByID(campaign.TemplateAID)
+	templateA, aVars, _ := model.GetTemplateByID(campaign.TemplateAID, userID)
 	templateB := model.Template{}
 	var bVars []string
 	if hasB {
-		templateB, bVars, _ = model.GetTemplateByID(campaign.TemplateBID)
+		templateB, bVars, _ = model.GetTemplateByID(campaign.TemplateBID, userID)
 	}
 
 	sendMap := map[int64]model.ContactEngagementRow{}
-	analytics, _ := model.GetCampaignAnalytics(campaign.ID)
+	analytics, _ := model.GetCampaignAnalytics(campaign.ID, userID)
 	for _, c := range analytics.Contacts {
 		sendMap[c.ContactID] = c
 	}
@@ -132,8 +133,8 @@ func truncatePreview(s string, max int) string {
 	return s[:max] + "…"
 }
 
-func templatePreviewView(id int64) TemplatePreviewView {
-	t, vars, err := model.GetTemplateByID(id)
+func templatePreviewView(userID, id int64) TemplatePreviewView {
+	t, vars, err := model.GetTemplateByID(id, userID)
 	if err != nil {
 		return TemplatePreviewView{}
 	}

@@ -15,6 +15,7 @@ var (
 	SMTPUser   string
 	SMTPPass   string
 	SMTPFrom   string
+	SessionSecret string
 )
 
 func Load() {
@@ -38,6 +39,7 @@ func reloadFromEnv() {
 	if SMTPFrom == "" {
 		SMTPFrom = SMTPUser
 	}
+	SessionSecret = envOr("SESSION_SECRET", "")
 }
 
 func normalizeAppPassword(password string) string {

@@ -54,11 +54,11 @@ type WorkflowGraph struct {
 	Edges   []WorkflowEdge
 }
 
-func ListWorkflows() ([]Workflow, error) {
+func ListWorkflows(userID int64) ([]Workflow, error) {
 	rows, err := db.DB.Query(`
 		SELECT id, name, description, COALESCE(current_version_id, 0), status, created_at, updated_at
-		FROM workflows ORDER BY updated_at DESC
-	`)
+		FROM workflows WHERE tenant_id = ? ORDER BY updated_at DESC
+	`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -75,13 +75,13 @@ func ListWorkflows() ([]Workflow, error) {
 	return list, nil
 }
 
-func GetPublishedWorkflows() ([]Workflow, error) {
+func GetPublishedWorkflows(userID int64) ([]Workflow, error) {
 	rows, err := db.DB.Query(`
 		SELECT w.id, w.name, w.description, COALESCE(w.current_version_id, 0), w.status, w.created_at, w.updated_at
 		FROM workflows w
-		WHERE w.current_version_id IS NOT NULL AND w.status = 'active'
+		WHERE w.tenant_id = ? AND w.current_version_id IS NOT NULL AND w.status = 'active'
 		ORDER BY w.name
-	`)
+	`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -98,10 +98,10 @@ func GetPublishedWorkflows() ([]Workflow, error) {
 	return list, nil
 }
 
-func CreateWorkflow(name, description string) (int64, error) {
+func CreateWorkflow(userID int64, name, description string) (int64, error) {
 	row := db.DB.QueryRow(`
-		INSERT INTO workflows (name, description) VALUES (?, ?) RETURNING id
-	`, name, description)
+		INSERT INTO workflows (name, description, tenant_id) VALUES (?, ?, ?) RETURNING id
+	`, name, description, userID)
 	var id int64
 	err := row.Scan(&id)
 	if err != nil {
@@ -120,6 +120,16 @@ func GetWorkflow(id int64) (Workflow, error) {
 		SELECT id, name, description, COALESCE(current_version_id, 0), status, created_at, updated_at
 		FROM workflows WHERE id = ?
 	`, id)
+	var w Workflow
+	err := row.Scan(&w.ID, &w.Name, &w.Description, &w.CurrentVersionID, &w.Status, &w.CreatedAt, &w.UpdatedAt)
+	return w, err
+}
+
+func GetWorkflowForUser(id, userID int64) (Workflow, error) {
+	row := db.DB.QueryRow(`
+		SELECT id, name, description, COALESCE(current_version_id, 0), status, created_at, updated_at
+		FROM workflows WHERE id = ? AND tenant_id = ?
+	`, id, userID)
 	var w Workflow
 	err := row.Scan(&w.ID, &w.Name, &w.Description, &w.CurrentVersionID, &w.Status, &w.CreatedAt, &w.UpdatedAt)
 	return w, err

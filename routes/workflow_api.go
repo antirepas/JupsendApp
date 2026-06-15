@@ -26,7 +26,7 @@ func RegisterWorkflowAPI(v1 *gin.RouterGroup) {
 }
 
 func apiListWorkflows(ctx *gin.Context) {
-	list, err := model.ListWorkflows()
+	list, err := model.ListWorkflows(mustUserID(ctx))
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -43,18 +43,18 @@ func apiCreateWorkflow(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
 		return
 	}
-	id, err := model.CreateWorkflow(body.Name, body.Description)
+	id, err := model.CreateWorkflow(mustUserID(ctx), body.Name, body.Description)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	w, _ := model.GetWorkflow(id)
+	w, _ := model.GetWorkflowForUser(id, mustUserID(ctx))
 	ctx.JSON(http.StatusOK, w)
 }
 
 func apiGetWorkflow(ctx *gin.Context) {
 	id, _ := strconv.ParseInt(ctx.Param("id"), 10, 64)
-	w, err := model.GetWorkflow(id)
+	w, err := model.GetWorkflowForUser(id, mustUserID(ctx))
 	if err != nil {
 		ctx.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 		return
@@ -63,7 +63,17 @@ func apiGetWorkflow(ctx *gin.Context) {
 }
 
 func apiGetWorkflowGraph(ctx *gin.Context) {
+	wid, _ := strconv.ParseInt(ctx.Param("id"), 10, 64)
 	vid, _ := strconv.ParseInt(ctx.Param("vid"), 10, 64)
+	if _, err := model.GetWorkflowForUser(wid, mustUserID(ctx)); err != nil {
+		ctx.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+		return
+	}
+	v, err := model.GetWorkflowVersion(vid)
+	if err != nil || v.WorkflowID != wid {
+		ctx.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+		return
+	}
 	g, err := model.GetWorkflowGraph(vid)
 	if err != nil {
 		ctx.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
@@ -73,7 +83,17 @@ func apiGetWorkflowGraph(ctx *gin.Context) {
 }
 
 func apiSaveWorkflowGraph(ctx *gin.Context) {
+	wid, _ := strconv.ParseInt(ctx.Param("id"), 10, 64)
 	vid, _ := strconv.ParseInt(ctx.Param("vid"), 10, 64)
+	if _, err := model.GetWorkflowForUser(wid, mustUserID(ctx)); err != nil {
+		ctx.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+		return
+	}
+	v, err := model.GetWorkflowVersion(vid)
+	if err != nil || v.WorkflowID != wid {
+		ctx.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+		return
+	}
 	var input model.GraphSaveInput
 	if err := ctx.ShouldBindJSON(&input); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -89,6 +109,10 @@ func apiSaveWorkflowGraph(ctx *gin.Context) {
 func apiPublishWorkflow(ctx *gin.Context) {
 	wid, _ := strconv.ParseInt(ctx.Param("id"), 10, 64)
 	vid, _ := strconv.ParseInt(ctx.Param("vid"), 10, 64)
+	if _, err := model.GetWorkflowForUser(wid, mustUserID(ctx)); err != nil {
+		ctx.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+		return
+	}
 	if err := model.PublishWorkflowVersion(wid, vid); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -97,7 +121,17 @@ func apiPublishWorkflow(ctx *gin.Context) {
 }
 
 func apiValidateWorkflow(ctx *gin.Context) {
+	wid, _ := strconv.ParseInt(ctx.Param("id"), 10, 64)
 	vid, _ := strconv.ParseInt(ctx.Param("vid"), 10, 64)
+	if _, err := model.GetWorkflowForUser(wid, mustUserID(ctx)); err != nil {
+		ctx.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+		return
+	}
+	v, err := model.GetWorkflowVersion(vid)
+	if err != nil || v.WorkflowID != wid {
+		ctx.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+		return
+	}
 	errs := model.ValidateWorkflowGraph(vid)
 	if len(errs) > 0 {
 		ctx.JSON(http.StatusOK, gin.H{"valid": false, "errors": errs})
@@ -164,7 +198,7 @@ func apiContactEvents(ctx *gin.Context) {
 
 func apiWorkflowAnalytics(ctx *gin.Context) {
 	id, _ := strconv.ParseInt(ctx.Param("id"), 10, 64)
-	w, err := model.GetWorkflow(id)
+	w, err := model.GetWorkflowForUser(id, mustUserID(ctx))
 	if err != nil {
 		ctx.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 		return

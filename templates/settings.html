@@ -1,0 +1,81 @@
+{{define "settings.html"}}
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>{{template "head" .}}</head>
+<body class="h-full bg-slate-50 text-slate-800">
+<div class="flex h-full">
+{{template "sidebar" .}}
+<main class="flex-1 overflow-y-auto">
+<div class="max-w-3xl mx-auto p-8">
+<h2 class="text-2xl font-bold text-slate-900 mb-2">Settings</h2>
+<p class="text-slate-500 text-sm mb-6">Account, tracking URL, and your single sending profile.</p>
+{{if .success}}<div class="alert-success mb-6">{{.success}}</div>{{end}}
+{{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
+
+<form method="POST" action="/settings" class="space-y-8">
+<div class="card space-y-4">
+    <h3 class="card-title">Account</h3>
+    <p class="text-sm text-slate-600">Signed in as <strong>{{.user.Email}}</strong></p>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div><label class="form-label">Current password</label><input type="password" name="current_password" class="form-input"></div>
+        <div><label class="form-label">New password</label><input type="password" name="new_password" class="form-input" minlength="8"></div>
+        <div><label class="form-label">Confirm new</label><input type="password" name="confirm_password" class="form-input" minlength="8"></div>
+    </div>
+    <p class="text-xs text-slate-500">Leave password fields blank to keep your current password.</p>
+</div>
+
+<div class="card space-y-4">
+    <h3 class="card-title">Tracking</h3>
+    <p class="text-sm text-slate-600">Public URL used in open/click tracking for your emails.</p>
+    <div>
+        <label class="form-label">BASE_URL</label>
+        <input type="url" name="base_url" class="form-input" value="{{.user.BaseURL}}" placeholder="https://your-domain.com">
+    </div>
+</div>
+
+<div class="card space-y-4">
+    <h3 class="card-title">Sending (SMTP + IMAP)</h3>
+    <div class="grid grid-cols-2 gap-4">
+        <div><label class="form-label">SMTP host</label><input name="smtp_host" class="form-input" value="{{if .account.SMTPHost}}{{.account.SMTPHost}}{{else}}smtp.gmail.com{{end}}"></div>
+        <div><label class="form-label">SMTP port</label><input name="smtp_port" class="form-input" value="{{if .account.SMTPPort}}{{.account.SMTPPort}}{{else}}587{{end}}"></div>
+    </div>
+    <div class="grid grid-cols-2 gap-4">
+        <div><label class="form-label">SMTP user</label><input name="smtp_user" class="form-input" value="{{.account.SMTPUser}}"></div>
+        <div><label class="form-label">SMTP password</label><input name="smtp_password" type="password" class="form-input" placeholder="Leave blank to keep"></div>
+    </div>
+    <div class="grid grid-cols-2 gap-4">
+        <div><label class="form-label">From email</label><input name="from_email" class="form-input" value="{{.account.FromEmail}}"></div>
+        <div><label class="form-label">From name</label><input name="from_name" class="form-input" value="{{.account.FromName}}"></div>
+    </div>
+    <div class="grid grid-cols-2 gap-4">
+        <div><label class="form-label">IMAP host</label><input name="imap_host" class="form-input" value="{{if .account.IMAPHost}}{{.account.IMAPHost}}{{else}}imap.gmail.com{{end}}"></div>
+        <div><label class="form-label">IMAP port</label><input name="imap_port" class="form-input" value="{{if .account.IMAPPort}}{{.account.IMAPPort}}{{else}}993{{end}}"></div>
+    </div>
+    <div class="grid grid-cols-2 gap-4">
+        <div><label class="form-label">IMAP user</label><input name="imap_user" class="form-input" value="{{.account.IMAPUser}}"></div>
+        <div><label class="form-label">IMAP password</label><input name="imap_password" type="password" class="form-input" placeholder="Leave blank to keep"></div>
+    </div>
+    <div class="grid grid-cols-3 gap-4">
+        <div><label class="form-label">Daily limit</label><input name="daily_limit" type="number" class="form-input" value="{{if .account.DailyLimit}}{{.account.DailyLimit}}{{else}}50{{end}}"></div>
+        <div><label class="form-label">Per minute</label><input name="per_minute_limit" type="number" class="form-input" value="{{if .account.PerMinuteLimit}}{{.account.PerMinuteLimit}}{{else}}2{{end}}"></div>
+        <div><label class="form-label">Min seconds between</label><input name="min_seconds_between_sends" type="number" class="form-input" value="{{if .account.MinSecondsBetweenSends}}{{.account.MinSecondsBetweenSends}}{{else}}30{{end}}"></div>
+    </div>
+    <div class="flex items-center gap-2">
+        <input type="checkbox" name="warmup_enabled" id="warmup" {{if .account.WarmupEnabled}}checked{{else}}checked{{end}}>
+        <label for="warmup" class="text-sm">Warmup ramp enabled</label>
+    </div>
+    <div class="grid grid-cols-3 gap-4">
+        <div><label class="form-label">Warmup start cap</label><input name="warmup_daily_cap" type="number" class="form-input" value="{{if .account.WarmupDailyCap}}{{.account.WarmupDailyCap}}{{else}}5{{end}}"></div>
+        <div><label class="form-label">Warmup target</label><input name="warmup_target_daily_cap" type="number" class="form-input" value="{{if .account.WarmupTargetDailyCap}}{{.account.WarmupTargetDailyCap}}{{else}}50{{end}}"></div>
+        <div><label class="form-label">Increment / day</label><input name="warmup_increment_per_day" type="number" class="form-input" value="{{if .account.WarmupIncrementPerDay}}{{.account.WarmupIncrementPerDay}}{{else}}5{{end}}"></div>
+    </div>
+</div>
+
+<button type="submit" class="btn-primary">Save settings</button>
+</form>
+</div>
+</main>
+</div>
+</body>
+</html>
+{{end}}

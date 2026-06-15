@@ -109,13 +109,13 @@ type CampaignAnalytics struct {
 	ABWinner       string
 }
 
-func GetCampaignAnalytics(campaignID int64) (CampaignAnalytics, error) {
-	c, err := GetCampaign(campaignID)
+func GetCampaignAnalytics(campaignID, userID int64) (CampaignAnalytics, error) {
+	c, err := GetCampaignForUser(campaignID, userID)
 	if err != nil {
 		return CampaignAnalytics{}, err
 	}
 
-	list, _ := ListCampaigns()
+	list, _ := ListCampaigns(userID)
 	var aName, bName string
 	for _, item := range list {
 		if item.ID == campaignID {
@@ -134,7 +134,7 @@ func GetCampaignAnalytics(campaignID int64) (CampaignAnalytics, error) {
 	analytics := CampaignAnalytics{
 		CampaignID:    campaignID,
 		Name:          c.Name,
-		Status:        ComputeDisplayStatus(c.Status, c.ScheduledAt),
+		Status:        ComputeDisplayStatus(c.Status, c.ScheduledAt, c.IsSending),
 		CreatedAt:     c.CreatedAt,
 		HasVariantB:   hasB,
 		TemplateAName: aName,
@@ -449,7 +449,7 @@ func getVariableCoverage(campaignID int64, templateAID, templateBID int64, conta
 	}
 	varMap := map[string]varInfo{}
 
-	_, aVars, _ := GetTemplateByID(templateAID)
+	_, aVars, _ := GetTemplateByID(templateAID, 0)
 	for _, k := range aVars {
 		info := varMap[k]
 		if info.templates == "" {
@@ -460,7 +460,7 @@ func getVariableCoverage(campaignID int64, templateAID, templateBID int64, conta
 		varMap[k] = info
 	}
 	if templateBID > 0 {
-		_, bVars, _ := GetTemplateByID(templateBID)
+		_, bVars, _ := GetTemplateByID(templateBID, 0)
 		for _, k := range bVars {
 			info := varMap[k]
 			if info.templates == "" {

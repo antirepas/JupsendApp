@@ -1,6 +1,8 @@
 package db
 
-import "log"
+import (
+	"log"
+)
 
 func runMigrations() {
 	legacy := []string{
@@ -123,6 +125,108 @@ func runMigrations() {
 	}
 
 	for _, m := range workflowMigrations {
+		if _, err := DB.Exec(m); err != nil {
+			log.Printf("Migration note: %v", err)
+		}
+	}
+
+	outboundMigrations := []string{
+		`ALTER TABLE campaigns ADD COLUMN is_sending INTEGER DEFAULT 0`,
+		`ALTER TABLE email_sends ADD COLUMN smtp_account_id INTEGER`,
+		`ALTER TABLE email_sends ADD COLUMN send_job_id INTEGER`,
+		`ALTER TABLE email_sends ADD COLUMN delivery_status TEXT DEFAULT 'sent'`,
+
+		`CREATE TABLE IF NOT EXISTS smtp_accounts (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL,
+			smtp_host TEXT NOT NULL,
+			smtp_port TEXT NOT NULL DEFAULT '587',
+			smtp_user TEXT NOT NULL,
+			smtp_password TEXT NOT NULL,
+			from_email TEXT NOT NULL,
+			from_name TEXT DEFAULT '',
+			imap_host TEXT DEFAULT '',
+			imap_port TEXT DEFAULT '993',
+			imap_user TEXT DEFAULT '',
+			imap_password TEXT DEFAULT '',
+			status TEXT NOT NULL DEFAULT 'active',
+			daily_limit INTEGER NOT NULL DEFAULT 50,
+			per_minute_limit INTEGER NOT NULL DEFAULT 2,
+			min_seconds_between_sends INTEGER NOT NULL DEFAULT 30,
+			warmup_enabled INTEGER NOT NULL DEFAULT 1,
+			warmup_daily_cap INTEGER NOT NULL DEFAULT 5,
+			warmup_target_daily_cap INTEGER NOT NULL DEFAULT 50,
+			warmup_increment_per_day INTEGER NOT NULL DEFAULT 5,
+			warmup_started_at DATETIME,
+			sends_today INTEGER NOT NULL DEFAULT 0,
+			sends_today_reset_at DATE,
+			last_send_at DATETIME,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		)`,
+
+		`CREATE TABLE IF NOT EXISTS send_jobs (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			smtp_account_id INTEGER,
+			contact_id INTEGER NOT NULL,
+			template_id INTEGER NOT NULL,
+			campaign_id INTEGER,
+			variant TEXT DEFAULT '',
+			workflow_instance_id INTEGER,
+			email_send_id INTEGER,
+			status TEXT NOT NULL DEFAULT 'pending',
+			priority INTEGER NOT NULL DEFAULT 0,
+			scheduled_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			claimed_at DATETIME,
+			lock_token TEXT,
+			lock_expires_at DATETIME,
+			attempts INTEGER NOT NULL DEFAULT 0,
+			max_attempts INTEGER NOT NULL DEFAULT 5,
+			last_error TEXT DEFAULT '',
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (contact_id) REFERENCES contact(id),
+			FOREIGN KEY (template_id) REFERENCES template(id),
+			FOREIGN KEY (email_send_id) REFERENCES email_sends(id)
+		)`,
+
+		`CREATE INDEX IF NOT EXISTS idx_send_jobs_status_sched ON send_jobs(status, scheduled_at)`,
+		`CREATE INDEX IF NOT EXISTS idx_send_jobs_campaign ON send_jobs(campaign_id, status)`,
+
+		`CREATE TABLE IF NOT EXISTS contact_suppressions (
+			contact_id INTEGER PRIMARY KEY,
+			reason TEXT NOT NULL,
+			source_message TEXT DEFAULT '',
+			smtp_account_id INTEGER,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (contact_id) REFERENCES contact(id) ON DELETE CASCADE
+		)`,
+	}
+
+	for _, m := range outboundMigrations {
+		if _, err := DB.Exec(m); err != nil {
+			log.Printf("Migration note: %v", err)
+		}
+	}
+
+	authMigrations := []string{
+		`CREATE TABLE IF NOT EXISTS users (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			email TEXT NOT NULL UNIQUE,
+			password_hash TEXT NOT NULL,
+			base_url TEXT DEFAULT '',
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`ALTER TABLE template ADD COLUMN user_id INTEGER`,
+		`ALTER TABLE contact ADD COLUMN user_id INTEGER`,
+		`ALTER TABLE campaigns ADD COLUMN user_id INTEGER`,
+		`ALTER TABLE email_sends ADD COLUMN user_id INTEGER`,
+		`ALTER TABLE smtp_accounts ADD COLUMN user_id INTEGER`,
+		`ALTER TABLE send_jobs ADD COLUMN user_id INTEGER`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_smtp_accounts_user ON smtp_accounts(user_id) WHERE user_id IS NOT NULL`,
+	}
+
+	for _, m := range authMigrations {
 		if _, err := DB.Exec(m); err != nil {
 			log.Printf("Migration note: %v", err)
 		}

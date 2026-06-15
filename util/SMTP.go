@@ -1,6 +1,9 @@
 package util
 
-import "net/smtp"
+import (
+	"fmt"
+	"net/smtp"
+)
 
 type SMTPConfig struct {
 	Host     string
@@ -9,6 +12,7 @@ type SMTPConfig struct {
 	Password string
 	From     string
 }
+
 type EmailSender struct {
 	Config SMTPConfig
 }
@@ -25,32 +29,52 @@ func NewEmailSender(host, port, username, password, from string) *EmailSender {
 	}
 }
 
+type SendMeta struct {
+	MessageID          string
+	EmailTrackerSendID string
+	FromName           string
+}
+
 func (s *EmailSender) Send(to, subject, plainBody, htmlBody string) error {
+	return s.SendWithMeta(to, subject, plainBody, htmlBody, SendMeta{})
+}
+
+func (s *EmailSender) SendWithMeta(to, subject, plainBody, htmlBody string, meta SendMeta) error {
 	auth := smtp.PlainAuth("", s.Config.Username, s.Config.Password, s.Config.Host)
 
 	boundary := "my-boundary-123"
 
-	msg := []byte(
-		"From: " + s.Config.From + "\r\n" +
-			"To: " + to + "\r\n" +
-			"Subject: " + subject + "\r\n" +
-			"MIME-Version: 1.0\r\n" +
-			"Content-Type: multipart/alternative; boundary=\"" + boundary + "\"\r\n" +
-			"\r\n" +
+	fromHeader := s.Config.From
+	if meta.FromName != "" {
+		fromHeader = fmt.Sprintf("%s <%s>", meta.FromName, s.Config.From)
+	}
 
-			"--" + boundary + "\r\n" +
-			"Content-Type: text/plain; charset=\"UTF-8\"\r\n" +
-			"Content-Transfer-Encoding: 8bit\r\n" +
-			"\r\n" +
-			plainBody + "\r\n" +
+	headers := "From: " + fromHeader + "\r\n" +
+		"To: " + to + "\r\n" +
+		"Subject: " + subject + "\r\n" +
+		"MIME-Version: 1.0\r\n" +
+		"Content-Type: multipart/alternative; boundary=\"" + boundary + "\"\r\n"
 
-			"--" + boundary + "\r\n" +
-			"Content-Type: text/html; charset=\"UTF-8\"\r\n" +
-			"Content-Transfer-Encoding: 8bit\r\n" +
-			"\r\n" +
-			htmlBody + "\r\n" +
+	if meta.MessageID != "" {
+		headers += "Message-ID: " + meta.MessageID + "\r\n"
+	}
+	if meta.EmailTrackerSendID != "" {
+		headers += "X-EmailTracker-Send-ID: " + meta.EmailTrackerSendID + "\r\n"
+	}
 
-			"--" + boundary + "--\r\n",
+	msg := []byte(headers +
+		"\r\n" +
+		"--" + boundary + "\r\n" +
+		"Content-Type: text/plain; charset=\"UTF-8\"\r\n" +
+		"Content-Transfer-Encoding: 8bit\r\n" +
+		"\r\n" +
+		plainBody + "\r\n" +
+		"--" + boundary + "\r\n" +
+		"Content-Type: text/html; charset=\"UTF-8\"\r\n" +
+		"Content-Transfer-Encoding: 8bit\r\n" +
+		"\r\n" +
+		htmlBody + "\r\n" +
+		"--" + boundary + "--\r\n",
 	)
 
 	return smtp.SendMail(s.Config.Host+":"+s.Config.Port, auth, s.Config.From, []string{to}, msg)

@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"emailtracker.com/db"
 	"emailtracker.com/model"
 	"github.com/gin-gonic/gin"
 )
@@ -39,6 +40,7 @@ func TestSaveTemplate_BadJSON(t *testing.T) {
 
 func TestSaveTemplate_Success(t *testing.T) {
 	gin.SetMode(gin.TestMode)
+	db.Prepare()
 
 	payload := ST{
 		T: model.Template{
@@ -68,6 +70,7 @@ func TestSaveTemplate_Success(t *testing.T) {
 	)
 	req.Header.Set("Content-Type", "application/json")
 	ctx.Request = req
+	setTestUser(ctx, 1)
 
 	SaveTemplate(ctx)
 
