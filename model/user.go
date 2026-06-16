@@ -21,7 +21,7 @@ func CreateUser(email, passwordHash, baseURL string) (int64, error) {
 	if baseURL == "" {
 		baseURL = config.BaseURL
 	}
-	row := db.DB.QueryRow(`
+	row := db.QueryRow(`
 		INSERT INTO users (email, password_hash, base_url) VALUES (?, ?, ?) RETURNING id
 	`, strings.TrimSpace(strings.ToLower(email)), passwordHash, strings.TrimRight(baseURL, "/"))
 	var id int64
@@ -30,14 +30,14 @@ func CreateUser(email, passwordHash, baseURL string) (int64, error) {
 }
 
 func GetUserByEmail(email string) (User, error) {
-	row := db.DB.QueryRow(`
+	row := db.QueryRow(`
 		SELECT id, email, password_hash, COALESCE(base_url, ''), created_at FROM users WHERE email = ?
 	`, strings.TrimSpace(strings.ToLower(email)))
 	return scanUser(row)
 }
 
 func GetUserByID(id int64) (User, error) {
-	row := db.DB.QueryRow(`
+	row := db.QueryRow(`
 		SELECT id, email, password_hash, COALESCE(base_url, ''), created_at FROM users WHERE id = ?
 	`, id)
 	return scanUser(row)
@@ -51,17 +51,17 @@ func scanUser(row interface{ Scan(...interface{}) error }) (User, error) {
 
 func EmailExists(email string) (bool, error) {
 	var n int
-	err := db.DB.QueryRow(`SELECT COUNT(*) FROM users WHERE email = ?`, strings.TrimSpace(strings.ToLower(email))).Scan(&n)
+	err := db.QueryRow(`SELECT COUNT(*) FROM users WHERE email = ?`, strings.TrimSpace(strings.ToLower(email))).Scan(&n)
 	return n > 0, err
 }
 
 func UpdateUserPassword(userID int64, passwordHash string) error {
-	_, err := db.DB.Exec(`UPDATE users SET password_hash = ? WHERE id = ?`, passwordHash, userID)
+	_, err := db.Exec(`UPDATE users SET password_hash = ? WHERE id = ?`, passwordHash, userID)
 	return err
 }
 
 func UpdateUserBaseURL(userID int64, baseURL string) error {
-	_, err := db.DB.Exec(`UPDATE users SET base_url = ? WHERE id = ?`, strings.TrimRight(strings.TrimSpace(baseURL), "/"), userID)
+	_, err := db.Exec(`UPDATE users SET base_url = ? WHERE id = ?`, strings.TrimRight(strings.TrimSpace(baseURL), "/"), userID)
 	return err
 }
 
@@ -85,18 +85,18 @@ func AssignOrphanDataToUser(userID int64) error {
 		{"send_jobs", "user_id"},
 	}
 	for _, t := range tables {
-		if _, err := db.DB.Exec(`UPDATE `+t.table+` SET `+t.col+` = ? WHERE `+t.col+` IS NULL`, userID); err != nil {
+		if _, err := db.Exec(`UPDATE `+t.table+` SET `+t.col+` = ? WHERE `+t.col+` IS NULL`, userID); err != nil {
 			return err
 		}
 	}
-	_, _ = db.DB.Exec(`UPDATE workflows SET tenant_id = ? WHERE tenant_id IS NULL`, userID)
-	_, _ = db.DB.Exec(`UPDATE smtp_accounts SET user_id = ? WHERE user_id IS NULL`, userID)
+	_, _ = db.Exec(`UPDATE workflows SET tenant_id = ? WHERE tenant_id IS NULL`, userID)
+	_, _ = db.Exec(`UPDATE smtp_accounts SET user_id = ? WHERE user_id IS NULL`, userID)
 	return nil
 }
 
 func GetUserIDForContact(contactID int64) (int64, error) {
 	var uid sql.NullInt64
-	err := db.DB.QueryRow(`SELECT user_id FROM contact WHERE id = ?`, contactID).Scan(&uid)
+	err := db.QueryRow(`SELECT user_id FROM contact WHERE id = ?`, contactID).Scan(&uid)
 	if err != nil {
 		return 0, err
 	}

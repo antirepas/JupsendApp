@@ -2,7 +2,6 @@ package routes
 
 import (
 	"bytes"
-	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -37,26 +36,17 @@ func TestSaveContacts_BadJSON(t *testing.T) {
 
 func TestSaveContacts_Integration(t *testing.T) {
 	gin.SetMode(gin.TestMode)
+	db.OpenTestDB(t)
 
-	NewDB, err := sql.Open("sqlite", ":memory:")
+	_, err := db.Exec("DELETE FROM contact_variables")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Exec("DELETE FROM contact")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	db.DB = NewDB
-	db.CreateTables()
-
-	_, err = NewDB.Exec("DELETE FROM contact_variables")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	_, err = NewDB.Exec("DELETE FROM contact")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// 4. Build request body
 	payload := SC{
 		CS: []model.Contact{
 			{
@@ -86,16 +76,14 @@ func TestSaveContacts_Integration(t *testing.T) {
 	ctx.Request = req
 	setTestUser(ctx, 1)
 
-	// 5. Call handler
 	SaveContacts(ctx)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d, body: %s", w.Code, w.Body.String())
 	}
 
-	// 6. Verify data actually exists in DB
 	var count int
-	err = NewDB.QueryRow("SELECT COUNT(*) FROM contact WHERE email = ?", "test@example.com").Scan(&count)
+	err = db.QueryRow("SELECT COUNT(*) FROM contact WHERE email = ?", "test@example.com").Scan(&count)
 	if err != nil {
 		t.Fatal(err)
 	}

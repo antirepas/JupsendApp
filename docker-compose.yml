@@ -1,9 +1,35 @@
 services:
+  postgres:
+    image: postgres:16
+    container_name: emailtracker-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: emailtracker
+      POSTGRES_PASSWORD: emailtracker
+      POSTGRES_DB: emailtracker
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U emailtracker -d emailtracker"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   emailtracker:
-    image: ghcr.io/akilai/emailtracker:latest
+    build: .
     container_name: emailtracker
     restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
     ports:
       - "8080:8080"
     env_file:
       - .env
+    environment:
+      DATABASE_URL: postgres://emailtracker:emailtracker@postgres:5432/emailtracker?sslmode=disable
+
+volumes:
+  pgdata:

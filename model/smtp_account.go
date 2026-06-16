@@ -80,22 +80,22 @@ const smtpAccountCols = `
 `
 
 func GetSMTPAccountByUserID(userID int64) (SMTPAccount, error) {
-	row := db.DB.QueryRow(`SELECT `+smtpAccountCols+` FROM smtp_accounts WHERE user_id = ?`, userID)
+	row := db.QueryRow(`SELECT `+smtpAccountCols+` FROM smtp_accounts WHERE user_id = ?`, userID)
 	return scanSMTPAccount(row)
 }
 
 func GetActiveSMTPAccountForUser(userID int64) (SMTPAccount, error) {
-	row := db.DB.QueryRow(`SELECT `+smtpAccountCols+` FROM smtp_accounts WHERE user_id = ? AND status = 'active'`, userID)
+	row := db.QueryRow(`SELECT `+smtpAccountCols+` FROM smtp_accounts WHERE user_id = ? AND status = 'active'`, userID)
 	return scanSMTPAccount(row)
 }
 
 func GetSMTPAccount(id int64) (SMTPAccount, error) {
-	row := db.DB.QueryRow(`SELECT `+smtpAccountCols+` FROM smtp_accounts WHERE id = ?`, id)
+	row := db.QueryRow(`SELECT `+smtpAccountCols+` FROM smtp_accounts WHERE id = ?`, id)
 	return scanSMTPAccount(row)
 }
 
 func ListActiveSMTPAccounts() ([]SMTPAccount, error) {
-	rows, err := db.DB.Query(`SELECT `+smtpAccountCols+` FROM smtp_accounts WHERE status = 'active' ORDER BY id ASC`)
+	rows, err := db.Query(`SELECT `+smtpAccountCols+` FROM smtp_accounts WHERE status = 'active' ORDER BY id ASC`)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +113,7 @@ func ListActiveSMTPAccounts() ([]SMTPAccount, error) {
 
 func CreateDefaultSMTPAccountForUser(userID int64) error {
 	now := time.Now()
-	_, err := db.DB.Exec(`
+	_, err := db.Exec(`
 		INSERT INTO smtp_accounts (
 			user_id, name, smtp_host, smtp_port, smtp_user, smtp_password, from_email,
 			status, warmup_started_at, sends_today_reset_at, created_at, updated_at
@@ -146,7 +146,7 @@ func CreateSMTPAccountForUser(userID int64, a SMTPAccount) (int64, error) {
 	if a.WarmupStartedAt != nil {
 		warmupStart = *a.WarmupStartedAt
 	}
-	row := db.DB.QueryRow(`
+	row := db.QueryRow(`
 		INSERT INTO smtp_accounts (
 			user_id, name, smtp_host, smtp_port, smtp_user, smtp_password, from_email, from_name,
 			imap_host, imap_port, imap_user, imap_password, status, daily_limit, per_minute_limit,
@@ -170,7 +170,7 @@ func UpdateSMTPAccount(a SMTPAccount) error {
 	if a.WarmupEnabled {
 		warmup = 1
 	}
-	_, err := db.DB.Exec(`
+	_, err := db.Exec(`
 		UPDATE smtp_accounts SET
 			name=?, smtp_host=?, smtp_port=?, smtp_user=?, smtp_password=?, from_email=?, from_name=?,
 			imap_host=?, imap_port=?, imap_user=?, imap_password=?, status=?, daily_limit=?,
@@ -187,13 +187,13 @@ func UpdateSMTPAccount(a SMTPAccount) error {
 }
 
 func SetSMTPAccountStatus(id int64, status string) error {
-	_, err := db.DB.Exec(`UPDATE smtp_accounts SET status=?, updated_at=? WHERE id=?`, status, time.Now(), id)
+	_, err := db.Exec(`UPDATE smtp_accounts SET status=?, updated_at=? WHERE id=?`, status, time.Now(), id)
 	return err
 }
 
 func IncrementAccountSendCount(accountID int64) error {
 	today := time.Now().Format("2006-01-02")
-	_, err := db.DB.Exec(`
+	_, err := db.Exec(`
 		UPDATE smtp_accounts SET
 			sends_today = CASE WHEN sends_today_reset_at = ? THEN sends_today + 1 ELSE 1 END,
 			sends_today_reset_at = ?,

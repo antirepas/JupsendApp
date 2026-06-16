@@ -106,7 +106,7 @@ func CreateSendJob(j SendJob) (int64, error) {
 	if maxAttempts == 0 {
 		maxAttempts = 5
 	}
-	row := db.DB.QueryRow(`
+	row := db.QueryRow(`
 		INSERT INTO send_jobs (
 			user_id, contact_id, template_id, campaign_id, variant, workflow_instance_id, email_send_id,
 			status, priority, scheduled_at, max_attempts, created_at, updated_at
@@ -120,19 +120,19 @@ func CreateSendJob(j SendJob) (int64, error) {
 }
 
 func GetSendJob(id int64) (SendJob, error) {
-	row := db.DB.QueryRow(`SELECT `+sendJobCols+` FROM send_jobs WHERE id = ?`, id)
+	row := db.QueryRow(`SELECT `+sendJobCols+` FROM send_jobs WHERE id = ?`, id)
 	return scanSendJob(row)
 }
 
 func LinkSendJobEmailSend(jobID, emailSendID int64) error {
-	_, err := db.DB.Exec(`UPDATE send_jobs SET email_send_id=?, updated_at=? WHERE id=?`, emailSendID, time.Now(), jobID)
+	_, err := db.Exec(`UPDATE send_jobs SET email_send_id=?, updated_at=? WHERE id=?`, emailSendID, time.Now(), jobID)
 	return err
 }
 
 func ClaimSendJob(jobID int64, lockToken string, lockDuration time.Duration) (bool, error) {
 	now := time.Now()
 	exp := now.Add(lockDuration)
-	res, err := db.DB.Exec(`
+	res, err := db.Exec(`
 		UPDATE send_jobs SET status='processing', lock_token=?, claimed_at=?, lock_expires_at=?, updated_at=?
 		WHERE id=? AND status='pending' AND scheduled_at <= ?
 	`, lockToken, now, exp, now, jobID, now)
@@ -145,7 +145,7 @@ func ClaimSendJob(jobID int64, lockToken string, lockDuration time.Duration) (bo
 
 func CompleteSendJob(jobID int64, accountID int64) error {
 	now := time.Now()
-	_, err := db.DB.Exec(`
+	_, err := db.Exec(`
 		UPDATE send_jobs SET status='sent', smtp_account_id=?, lock_token=NULL, updated_at=? WHERE id=?
 	`, accountID, now, jobID)
 	return err
@@ -153,7 +153,7 @@ func CompleteSendJob(jobID int64, accountID int64) error {
 
 func FailSendJob(jobID int64, errMsg string, status string) error {
 	now := time.Now()
-	_, err := db.DB.Exec(`
+	_, err := db.Exec(`
 		UPDATE send_jobs SET status=?, last_error=?, lock_token=NULL, updated_at=? WHERE id=?
 	`, status, errMsg, now, jobID)
 	return err
@@ -161,7 +161,7 @@ func FailSendJob(jobID int64, errMsg string, status string) error {
 
 func RetrySendJob(jobID int64, attempts int, scheduledAt time.Time, errMsg string) error {
 	now := time.Now()
-	_, err := db.DB.Exec(`
+	_, err := db.Exec(`
 		UPDATE send_jobs SET status='pending', attempts=?, scheduled_at=?, last_error=?, lock_token=NULL, updated_at=?
 		WHERE id=?
 	`, attempts, scheduledAt, errMsg, now, jobID)
@@ -170,7 +170,7 @@ func RetrySendJob(jobID int64, attempts int, scheduledAt time.Time, errMsg strin
 
 func RescheduleSendJob(jobID int64, scheduledAt time.Time, errMsg string) error {
 	now := time.Now()
-	_, err := db.DB.Exec(`
+	_, err := db.Exec(`
 		UPDATE send_jobs SET status='pending', scheduled_at=?, last_error=?, lock_token=NULL, updated_at=?
 		WHERE id=?
 	`, scheduledAt, errMsg, now, jobID)
@@ -179,7 +179,7 @@ func RescheduleSendJob(jobID int64, scheduledAt time.Time, errMsg string) error 
 
 func ReleaseStaleJobs() error {
 	now := time.Now()
-	_, err := db.DB.Exec(`
+	_, err := db.Exec(`
 		UPDATE send_jobs SET status='pending', lock_token=NULL, updated_at=?
 		WHERE status='processing' AND lock_expires_at IS NOT NULL AND lock_expires_at < ?
 	`, now, now)
@@ -187,7 +187,7 @@ func ReleaseStaleJobs() error {
 }
 
 func PendingSendJobIDs(limit int) ([]int64, error) {
-	rows, err := db.DB.Query(`
+	rows, err := db.Query(`
 		SELECT id FROM send_jobs
 		WHERE status='pending' AND scheduled_at <= ?
 		ORDER BY priority DESC, scheduled_at ASC
@@ -210,7 +210,7 @@ func PendingSendJobIDs(limit int) ([]int64, error) {
 
 func CountSendJobsByCampaign(campaignID int64) (SendJobCounts, error) {
 	var c SendJobCounts
-	row := db.DB.QueryRow(`
+	row := db.QueryRow(`
 		SELECT
 			SUM(CASE WHEN status IN ('pending','processing') THEN 1 ELSE 0 END),
 			SUM(CASE WHEN status = 'sent' THEN 1 ELSE 0 END),
@@ -224,7 +224,7 @@ func CountSendJobsByCampaign(campaignID int64) (SendJobCounts, error) {
 
 func HasActiveCampaignJobs(campaignID int64) (bool, error) {
 	var n int
-	err := db.DB.QueryRow(`
+	err := db.QueryRow(`
 		SELECT COUNT(*) FROM send_jobs
 		WHERE campaign_id=? AND status IN ('pending','processing')
 	`, campaignID).Scan(&n)
@@ -233,7 +233,7 @@ func HasActiveCampaignJobs(campaignID int64) (bool, error) {
 
 func CountPendingJobsForCampaign(campaignID int64) (int, error) {
 	var n int
-	err := db.DB.QueryRow(`
+	err := db.QueryRow(`
 		SELECT COUNT(*) FROM send_jobs WHERE campaign_id=? AND status IN ('pending','processing')
 	`, campaignID).Scan(&n)
 	return n, err

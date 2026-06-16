@@ -65,7 +65,7 @@ func InsertContactEvent(in ContactEventInput) (int64, error) {
 		dedupe = in.DedupeKey
 	}
 
-	row := db.DB.QueryRow(`
+	row := db.QueryRow(`
 		INSERT INTO contact_events (
 			contact_id, campaign_id, workflow_id, workflow_instance_id, email_send_id,
 			event_type, metadata_json, occurred_at, dedupe_key
@@ -79,7 +79,7 @@ func InsertContactEvent(in ContactEventInput) (int64, error) {
 	if err != nil {
 		// conflict on dedupe — not an error for tracking
 		if in.DedupeKey != "" {
-			err = db.DB.QueryRow(`SELECT id FROM contact_events WHERE dedupe_key = ?`, in.DedupeKey).Scan(&id)
+			err = db.QueryRow(`SELECT id FROM contact_events WHERE dedupe_key = ?`, in.DedupeKey).Scan(&id)
 		}
 	}
 	return id, err
@@ -89,7 +89,7 @@ func GetContactEvents(contactID int64, limit int) ([]ContactEvent, error) {
 	if limit <= 0 {
 		limit = 50
 	}
-	rows, err := db.DB.Query(`
+	rows, err := db.Query(`
 		SELECT id, contact_id, campaign_id, workflow_id, workflow_instance_id, email_send_id,
 			event_type, metadata_json, occurred_at, created_at, dedupe_key
 		FROM contact_events WHERE contact_id = ? ORDER BY occurred_at DESC LIMIT ?
@@ -155,7 +155,7 @@ func (n *sqlNullInt64) Scan(value interface{}) error {
 
 func CountContactEventsForSend(emailSendID int64, eventType string) (int, error) {
 	var n int
-	err := db.DB.QueryRow(`
+	err := db.QueryRow(`
 		SELECT COUNT(*) FROM contact_events WHERE email_send_id = ? AND event_type = ?
 	`, emailSendID, eventType).Scan(&n)
 	return n, err
@@ -168,7 +168,7 @@ func HasContactEventForSend(emailSendID int64, eventType string) (bool, error) {
 
 func GetLastSendIDForInstance(instanceID int64) (int64, error) {
 	var id int64
-	err := db.DB.QueryRow(`
+	err := db.QueryRow(`
 		SELECT id FROM email_sends WHERE workflow_instance_id = ? ORDER BY sent_at DESC LIMIT 1
 	`, instanceID).Scan(&id)
 	if err != nil {

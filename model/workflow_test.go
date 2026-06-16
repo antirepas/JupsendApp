@@ -7,18 +7,20 @@ import (
 )
 
 func TestValidateWorkflowGraphEmpty(t *testing.T) {
-	db.Prepare()
-	wid, _ := CreateWorkflow(1, "test", "")
+	db.OpenTestDB(t)
+	userID, _ := CreateUser("wf-empty@test.com", "hash", "http://localhost")
+	wid, _ := CreateWorkflow(userID, "test", "")
 	w, _ := GetWorkflow(wid)
 	errs := ValidateWorkflowGraph(w.CurrentVersionID)
-	if len(errs) == 0 { //comment
+	if len(errs) == 0 {
 		t.Fatal("expected validation errors for empty graph")
 	}
 }
 
 func TestValidateWorkflowGraphValid(t *testing.T) {
-	db.Prepare()
-	wid, _ := CreateWorkflow(1, "test2", "")
+	db.OpenTestDB(t)
+	userID, _ := CreateUser("wf-valid@test.com", "hash", "http://localhost")
+	wid, _ := CreateWorkflow(userID, "test2", "")
 	w, _ := GetWorkflow(wid)
 	vid := w.CurrentVersionID
 	_ = SaveWorkflowGraph(vid, GraphSaveInput{

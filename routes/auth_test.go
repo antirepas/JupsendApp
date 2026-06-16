@@ -1,7 +1,6 @@
 package routes
 
 import (
-	"database/sql"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -29,13 +28,7 @@ func testRouter() *gin.Engine {
 }
 
 func TestSignupLoginLogout(t *testing.T) {
-	mem, err := sql.Open("sqlite", ":memory:")
-	if err != nil {
-		t.Fatal(err)
-	}
-	db.DB = mem
-	db.CreateTables()
-	defer mem.Close()
+	db.OpenTestDB(t)
 
 	r := testRouter()
 	email := fmt.Sprintf("auth-test-%d@test.com", time.Now().UnixNano())

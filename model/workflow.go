@@ -55,7 +55,7 @@ type WorkflowGraph struct {
 }
 
 func ListWorkflows(userID int64) ([]Workflow, error) {
-	rows, err := db.DB.Query(`
+	rows, err := db.Query(`
 		SELECT id, name, description, COALESCE(current_version_id, 0), status, created_at, updated_at
 		FROM workflows WHERE tenant_id = ? ORDER BY updated_at DESC
 	`, userID)
@@ -76,7 +76,7 @@ func ListWorkflows(userID int64) ([]Workflow, error) {
 }
 
 func GetPublishedWorkflows(userID int64) ([]Workflow, error) {
-	rows, err := db.DB.Query(`
+	rows, err := db.Query(`
 		SELECT w.id, w.name, w.description, COALESCE(w.current_version_id, 0), w.status, w.created_at, w.updated_at
 		FROM workflows w
 		WHERE w.tenant_id = ? AND w.current_version_id IS NOT NULL AND w.status = 'active'
@@ -99,7 +99,7 @@ func GetPublishedWorkflows(userID int64) ([]Workflow, error) {
 }
 
 func CreateWorkflow(userID int64, name, description string) (int64, error) {
-	row := db.DB.QueryRow(`
+	row := db.QueryRow(`
 		INSERT INTO workflows (name, description, tenant_id) VALUES (?, ?, ?) RETURNING id
 	`, name, description, userID)
 	var id int64
@@ -111,12 +111,12 @@ func CreateWorkflow(userID int64, name, description string) (int64, error) {
 	if err != nil {
 		return id, err
 	}
-	_, _ = db.DB.Exec(`UPDATE workflows SET current_version_id = ? WHERE id = ?`, vid, id)
+	_, _ = db.Exec(`UPDATE workflows SET current_version_id = ? WHERE id = ?`, vid, id)
 	return id, nil
 }
 
 func GetWorkflow(id int64) (Workflow, error) {
-	row := db.DB.QueryRow(`
+	row := db.QueryRow(`
 		SELECT id, name, description, COALESCE(current_version_id, 0), status, created_at, updated_at
 		FROM workflows WHERE id = ?
 	`, id)
@@ -126,7 +126,7 @@ func GetWorkflow(id int64) (Workflow, error) {
 }
 
 func GetWorkflowForUser(id, userID int64) (Workflow, error) {
-	row := db.DB.QueryRow(`
+	row := db.QueryRow(`
 		SELECT id, name, description, COALESCE(current_version_id, 0), status, created_at, updated_at
 		FROM workflows WHERE id = ? AND tenant_id = ?
 	`, id, userID)
@@ -137,8 +137,8 @@ func GetWorkflowForUser(id, userID int64) (Workflow, error) {
 
 func CreateWorkflowVersion(workflowID int64) (int64, error) {
 	var maxVer int
-	_ = db.DB.QueryRow(`SELECT COALESCE(MAX(version), 0) FROM workflow_versions WHERE workflow_id = ?`, workflowID).Scan(&maxVer)
-	row := db.DB.QueryRow(`
+	_ = db.QueryRow(`SELECT COALESCE(MAX(version), 0) FROM workflow_versions WHERE workflow_id = ?`, workflowID).Scan(&maxVer)
+	row := db.QueryRow(`
 		INSERT INTO workflow_versions (workflow_id, version, status) VALUES (?, ?, 'draft') RETURNING id
 	`, workflowID, maxVer+1)
 	var id int64
@@ -147,7 +147,7 @@ func CreateWorkflowVersion(workflowID int64) (int64, error) {
 }
 
 func GetWorkflowVersion(versionID int64) (WorkflowVersion, error) {
-	row := db.DB.QueryRow(`
+	row := db.QueryRow(`
 		SELECT id, workflow_id, version, status, published_at, created_at FROM workflow_versions WHERE id = ?
 	`, versionID)
 	var v WorkflowVersion
@@ -177,7 +177,7 @@ func GetWorkflowGraph(versionID int64) (WorkflowGraph, error) {
 }
 
 func getWorkflowNodes(versionID int64) ([]WorkflowNode, error) {
-	rows, err := db.DB.Query(`
+	rows, err := db.Query(`
 		SELECT id, version_id, node_key, node_type, label, config_json, position_x, position_y
 		FROM workflow_nodes WHERE version_id = ?
 	`, versionID)
@@ -198,7 +198,7 @@ func getWorkflowNodes(versionID int64) ([]WorkflowNode, error) {
 }
 
 func getWorkflowEdges(versionID int64) ([]WorkflowEdge, error) {
-	rows, err := db.DB.Query(`
+	rows, err := db.Query(`
 		SELECT id, version_id, source_node_key, target_node_key, edge_type, priority, condition_json
 		FROM workflow_edges WHERE version_id = ?
 	`, versionID)
@@ -249,7 +249,7 @@ func SaveWorkflowGraph(versionID int64, input GraphSaveInput) error {
 		return fmt.Errorf("only draft versions can be edited")
 	}
 
-	tx, err := db.DB.Begin()
+	tx, err := db.Begin()
 	if err != nil {
 		return err
 	}
@@ -316,7 +316,7 @@ func PublishWorkflowVersion(workflowID, versionID int64) error {
 		return fmt.Errorf("validation failed: %s", errs[0])
 	}
 
-	tx, err := db.DB.Begin()
+	tx, err := db.Begin()
 	if err != nil {
 		return err
 	}
@@ -426,7 +426,7 @@ func ValidateWorkflowGraph(versionID int64) []string {
 
 func GetEntryNodeKey(versionID int64) (string, error) {
 	var key string
-	err := db.DB.QueryRow(`
+	err := db.QueryRow(`
 		SELECT node_key FROM workflow_nodes WHERE version_id = ? AND node_type = 'trigger_campaign_started' LIMIT 1
 	`, versionID).Scan(&key)
 	return key, err

@@ -47,32 +47,32 @@ func CreateQueuedEmailSend(userID, tId, cId int64, trackId string, campaignID in
 	}
 	now := time.Now()
 	query := `INSERT INTO email_sends (template_id, contact_id, tracking_id, sent_at, campaign_id, variant, workflow_instance_id, delivery_status, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, 'queued', ?) RETURNING id`
-	row := db.DB.QueryRow(query, tId, cId, trackId, now, campID, variant, instID, userID)
+	row := db.QueryRow(query, tId, cId, trackId, now, campID, variant, instID, userID)
 	var id int64
 	err := row.Scan(&id)
 	return id, err
 }
 
 func MarkEmailSendSent(sendID, accountID, jobID int64) error {
-	_, err := db.DB.Exec(`
+	_, err := db.Exec(`
 		UPDATE email_sends SET delivery_status='sent', sent_at=?, smtp_account_id=?, send_job_id=? WHERE id=?
 	`, time.Now(), accountID, jobID, sendID)
 	return err
 }
 
 func MarkEmailSendFailed(sendID int64) error {
-	_, err := db.DB.Exec(`UPDATE email_sends SET delivery_status='failed' WHERE id=?`, sendID)
+	_, err := db.Exec(`UPDATE email_sends SET delivery_status='failed' WHERE id=?`, sendID)
 	return err
 }
 
 func LinkEmailSendJob(sendID, jobID int64) error {
-	_, err := db.DB.Exec(`UPDATE email_sends SET send_job_id=? WHERE id=?`, jobID, sendID)
+	_, err := db.Exec(`UPDATE email_sends SET send_job_id=? WHERE id=?`, jobID, sendID)
 	return err
 }
 
 func GetSendWorkflowInstanceID(sendID int64) int64 {
 	var id sql.NullInt64
-	err := db.DB.QueryRow(`SELECT workflow_instance_id FROM email_sends WHERE id = ?`, sendID).Scan(&id)
+	err := db.QueryRow(`SELECT workflow_instance_id FROM email_sends WHERE id = ?`, sendID).Scan(&id)
 	if err != nil || !id.Valid {
 		return 0
 	}
@@ -81,7 +81,7 @@ func GetSendWorkflowInstanceID(sendID int64) int64 {
 
 func GetEmailSendIDByTrackingID(trackingID string) (int64, error) {
 	query := `SELECT id FROM email_sends WHERE tracking_id = ?`
-	row := db.DB.QueryRow(query, trackingID)
+	row := db.QueryRow(query, trackingID)
 	var id int64
 	err := row.Scan(&id)
 	return id, err
@@ -103,7 +103,7 @@ func ListEmailSends(userID int64) ([]EmailSendListItem, error) {
 		GROUP BY es.id
 		ORDER BY es.sent_at DESC
 	`
-	rows, err := db.DB.Query(query, userID)
+	rows, err := db.Query(query, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -140,7 +140,7 @@ func GetEmailSendDetail(id int64) (EmailSendDetail, error) {
 		WHERE es.id = ?
 		GROUP BY es.id
 	`
-	row := db.DB.QueryRow(query, id)
+	row := db.QueryRow(query, id)
 	var detail EmailSendDetail
 	err := row.Scan(
 		&detail.ID, &detail.TemplateID, &detail.ContactID, &detail.TrackingID, &detail.SentAt,
@@ -165,7 +165,7 @@ func GetEmailSendDetailForUser(id, userID int64) (EmailSendDetail, error) {
 		return EmailSendDetail{}, err
 	}
 	var owner int64
-	err = db.DB.QueryRow(`SELECT COALESCE(user_id, 0) FROM email_sends WHERE id = ?`, id).Scan(&owner)
+	err = db.QueryRow(`SELECT COALESCE(user_id, 0) FROM email_sends WHERE id = ?`, id).Scan(&owner)
 	if err != nil {
 		return EmailSendDetail{}, err
 	}

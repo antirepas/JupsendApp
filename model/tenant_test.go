@@ -1,20 +1,13 @@
 package model
 
 import (
-	"database/sql"
 	"testing"
 
 	"emailtracker.com/db"
 )
 
 func TestTenantIsolationCampaign(t *testing.T) {
-	mem, err := sql.Open("sqlite", ":memory:")
-	if err != nil {
-		t.Fatal(err)
-	}
-	db.DB = mem
-	db.CreateTables()
-	defer mem.Close()
+	db.OpenTestDB(t)
 
 	u1, err := CreateUser("tenant-a-isolated@test.com", "hash", "http://localhost")
 	if err != nil {
@@ -25,12 +18,13 @@ func TestTenantIsolationCampaign(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = db.DB.Exec(`INSERT INTO template (name, subject, body, user_id) VALUES ('t', 's', 'b', ?)`, u1)
+	var templateID int64
+	err = db.QueryRow(`INSERT INTO template (name, subject, body, user_id) VALUES ('t', 's', 'b', ?) RETURNING id`, u1).Scan(&templateID)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	id1, err := CreateCampaign(u1, "A campaign", 1, 0, "bulk", 0)
+	id1, err := CreateCampaign(u1, "A campaign", templateID, 0, "bulk", 0)
 	if err != nil {
 		t.Fatalf("create campaign: %v", err)
 	}

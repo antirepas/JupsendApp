@@ -17,7 +17,7 @@ type ContactSuppression struct {
 
 func IsContactSuppressed(contactID int64) (bool, error) {
 	var n int
-	err := db.DB.QueryRow(`SELECT COUNT(*) FROM contact_suppressions WHERE contact_id=?`, contactID).Scan(&n)
+	err := db.QueryRow(`SELECT COUNT(*) FROM contact_suppressions WHERE contact_id=?`, contactID).Scan(&n)
 	return n > 0, err
 }
 
@@ -26,20 +26,25 @@ func SuppressContact(contactID int64, reason, source string, smtpAccountID int64
 	if smtpAccountID > 0 {
 		accID = smtpAccountID
 	}
-	_, err := db.DB.Exec(`
-		INSERT OR REPLACE INTO contact_suppressions (contact_id, reason, source_message, smtp_account_id, created_at)
+	_, err := db.Exec(`
+		INSERT INTO contact_suppressions (contact_id, reason, source_message, smtp_account_id, created_at)
 		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT (contact_id) DO UPDATE SET
+			reason = EXCLUDED.reason,
+			source_message = EXCLUDED.source_message,
+			smtp_account_id = EXCLUDED.smtp_account_id,
+			created_at = EXCLUDED.created_at
 	`, contactID, reason, source, accID, time.Now())
 	return err
 }
 
 func RemoveSuppression(contactID int64) error {
-	_, err := db.DB.Exec(`DELETE FROM contact_suppressions WHERE contact_id=?`, contactID)
+	_, err := db.Exec(`DELETE FROM contact_suppressions WHERE contact_id=?`, contactID)
 	return err
 }
 
 func ListSuppressions(userID int64) ([]ContactSuppression, error) {
-	rows, err := db.DB.Query(`
+	rows, err := db.Query(`
 		SELECT cs.contact_id, COALESCE(c.email,''), cs.reason, cs.source_message,
 			COALESCE(cs.smtp_account_id, 0), cs.created_at
 		FROM contact_suppressions cs
@@ -66,7 +71,7 @@ func FilterSuppressedContactIDs(userID int64, contactIDs []int64) ([]int64, []in
 	if len(contactIDs) == 0 {
 		return nil, nil, nil
 	}
-	rows, err := db.DB.Query(`
+	rows, err := db.Query(`
 		SELECT cs.contact_id FROM contact_suppressions cs
 		INNER JOIN contact c ON c.id = cs.contact_id
 		WHERE c.user_id = ?

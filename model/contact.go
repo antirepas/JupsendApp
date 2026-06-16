@@ -29,7 +29,7 @@ type ContactListItem struct {
 func (c *Contact) SaveContact(userID int64, variables []ContactVariables) (int64, error) {
 	query := `INSERT INTO contact (email, user_id) VALUES (?, ?) RETURNING id`
 
-	row := db.DB.QueryRow(query, c.Email, userID)
+	row := db.QueryRow(query, c.Email, userID)
 	var contactID int64
 	err := row.Scan(&contactID)
 	if err != nil {
@@ -37,7 +37,7 @@ func (c *Contact) SaveContact(userID int64, variables []ContactVariables) (int64
 	}
 	query = `INSERT INTO contact_variables (key, value, contact_id) VALUES (?, ?, ?)`
 	for _, v := range variables {
-		_, err = db.DB.Exec(query, v.Key, v.Value, contactID)
+		_, err = db.Exec(query, v.Key, v.Value, contactID)
 		if err != nil {
 			return 0, err
 		}
@@ -48,14 +48,14 @@ func (c *Contact) SaveContact(userID int64, variables []ContactVariables) (int64
 
 func GetContact(contactId int64) (Contact, []ContactVariables, error) {
 	query := `SELECT id, COALESCE(user_id, 0), email FROM contact WHERE id = ?`
-	row := db.DB.QueryRow(query, contactId)
+	row := db.QueryRow(query, contactId)
 	var c Contact
 	err := row.Scan(&c.ID, &c.UserID, &c.Email)
 	if err != nil {
 		return Contact{}, nil, err
 	}
 	query = `SELECT key, value FROM contact_variables WHERE contact_id = ?`
-	rows, err := db.DB.Query(query, contactId)
+	rows, err := db.Query(query, contactId)
 	if err != nil {
 		return Contact{}, nil, err
 	}
@@ -85,7 +85,7 @@ func GetContactForUser(contactId, userID int64) (Contact, []ContactVariables, er
 }
 
 func ListContacts(userID int64) ([]ContactListItem, error) {
-	rows, err := db.DB.Query(`SELECT id, email FROM contact WHERE user_id = ? ORDER BY id DESC`, userID)
+	rows, err := db.Query(`SELECT id, email FROM contact WHERE user_id = ? ORDER BY id DESC`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +98,7 @@ func ListContacts(userID int64) ([]ContactListItem, error) {
 			return nil, err
 		}
 
-		varRows, err := db.DB.Query(
+		varRows, err := db.Query(
 			`SELECT key, value FROM contact_variables WHERE contact_id = ?`, item.ID,
 		)
 		if err != nil {
@@ -123,7 +123,7 @@ func DeleteContact(id, userID int64) error {
 	if _, _, err := GetContactForUser(id, userID); err != nil {
 		return err
 	}
-	_, err := db.DB.Exec(`DELETE FROM contact WHERE id = ?`, id)
+	_, err := db.Exec(`DELETE FROM contact WHERE id = ?`, id)
 	return err
 }
 
@@ -131,11 +131,11 @@ func UpdateContact(id, userID int64, email string, variables []ContactVariables)
 	if _, _, err := GetContactForUser(id, userID); err != nil {
 		return err
 	}
-	_, err := db.DB.Exec(`UPDATE contact SET email = ? WHERE id = ?`, email, id)
+	_, err := db.Exec(`UPDATE contact SET email = ? WHERE id = ?`, email, id)
 	if err != nil {
 		return err
 	}
-	_, err = db.DB.Exec(`DELETE FROM contact_variables WHERE contact_id = ?`, id)
+	_, err = db.Exec(`DELETE FROM contact_variables WHERE contact_id = ?`, id)
 	if err != nil {
 		return err
 	}
@@ -143,7 +143,7 @@ func UpdateContact(id, userID int64, email string, variables []ContactVariables)
 		if v.Key == "" {
 			continue
 		}
-		_, err = db.DB.Exec(
+		_, err = db.Exec(
 			`INSERT INTO contact_variables (key, value, contact_id) VALUES (?, ?, ?)`,
 			v.Key, v.Value, id,
 		)
@@ -155,7 +155,7 @@ func UpdateContact(id, userID int64, email string, variables []ContactVariables)
 }
 
 func FindOrCreateContact(userID int64, email string, variables []ContactVariables) (int64, error) {
-	row := db.DB.QueryRow(`SELECT id FROM contact WHERE email = ? AND user_id = ?`, email, userID)
+	row := db.QueryRow(`SELECT id FROM contact WHERE email = ? AND user_id = ?`, email, userID)
 	var id int64
 	err := row.Scan(&id)
 	if err == nil {
@@ -167,7 +167,7 @@ func FindOrCreateContact(userID int64, email string, variables []ContactVariable
 }
 
 func FindContactByEmail(userID int64, email string) (Contact, error) {
-	row := db.DB.QueryRow(`SELECT id, COALESCE(user_id, 0), email FROM contact WHERE email = ? AND user_id = ?`, email, userID)
+	row := db.QueryRow(`SELECT id, COALESCE(user_id, 0), email FROM contact WHERE email = ? AND user_id = ?`, email, userID)
 	var c Contact
 	err := row.Scan(&c.ID, &c.UserID, &c.Email)
 	return c, err

@@ -30,7 +30,7 @@ func CreateWorkflowInstance(versionID, contactID, campaignID int64, entryNodeKey
 	if campaignID > 0 {
 		camp = campaignID
 	}
-	row := db.DB.QueryRow(`
+	row := db.QueryRow(`
 		INSERT INTO workflow_instances (
 			workflow_version_id, contact_id, campaign_id, current_node_key, status, context_json
 		) VALUES (?, ?, ?, ?, 'active', '{}') RETURNING id
@@ -41,7 +41,7 @@ func CreateWorkflowInstance(versionID, contactID, campaignID int64, entryNodeKey
 }
 
 func GetWorkflowInstance(id int64) (WorkflowInstance, error) {
-	row := db.DB.QueryRow(`
+	row := db.QueryRow(`
 		SELECT id, workflow_version_id, contact_id, campaign_id, current_node_key, status,
 			next_wake_at, waiting_for_event, started_at, completed_at, context_json
 		FROM workflow_instances WHERE id = ?
@@ -71,7 +71,7 @@ func GetWorkflowInstance(id int64) (WorkflowInstance, error) {
 }
 
 func ListInstancesForCampaign(campaignID int64) ([]WorkflowInstance, error) {
-	rows, err := db.DB.Query(`
+	rows, err := db.Query(`
 		SELECT id, workflow_version_id, contact_id, campaign_id, current_node_key, status,
 			next_wake_at, waiting_for_event, started_at, completed_at, context_json
 		FROM workflow_instances WHERE campaign_id = ?
@@ -85,7 +85,7 @@ func ListInstancesForCampaign(campaignID int64) ([]WorkflowInstance, error) {
 }
 
 func ListInstancesForWorkflow(workflowID int64) ([]WorkflowInstance, error) {
-	rows, err := db.DB.Query(`
+	rows, err := db.Query(`
 		SELECT wi.id, wi.workflow_version_id, wi.contact_id, wi.campaign_id, wi.current_node_key, wi.status,
 			wi.next_wake_at, wi.waiting_for_event, wi.started_at, wi.completed_at, wi.context_json
 		FROM workflow_instances wi
@@ -136,7 +136,7 @@ func ClaimDueInstances(limit int) ([]int64, error) {
 	expires := time.Now().Add(2 * time.Minute)
 	now := time.Now()
 
-	rows, err := db.DB.Query(`
+	rows, err := db.Query(`
 		SELECT id FROM workflow_instances
 		WHERE status IN ('active', 'waiting')
 		  AND (lock_expires_at IS NULL OR lock_expires_at < ?)
@@ -156,7 +156,7 @@ func ClaimDueInstances(limit int) ([]int64, error) {
 	for rows.Next() {
 		var id int64
 		if rows.Scan(&id) == nil {
-			res, err := db.DB.Exec(`
+			res, err := db.Exec(`
 				UPDATE workflow_instances SET lock_token = ?, lock_expires_at = ?
 				WHERE id = ? AND (lock_expires_at IS NULL OR lock_expires_at < ?)
 			`, token, expires, id, now)
@@ -175,7 +175,7 @@ func ClaimInstance(instanceID int64) (bool, error) {
 	token := uuid.New().String()
 	expires := time.Now().Add(2 * time.Minute)
 	now := time.Now()
-	res, err := db.DB.Exec(`
+	res, err := db.Exec(`
 		UPDATE workflow_instances SET lock_token = ?, lock_expires_at = ?
 		WHERE id = ? AND status IN ('active', 'waiting')
 		  AND (lock_expires_at IS NULL OR lock_expires_at < ?)
@@ -188,7 +188,7 @@ func ClaimInstance(instanceID int64) (bool, error) {
 }
 
 func ReleaseInstanceLock(instanceID int64) {
-	_, _ = db.DB.Exec(`UPDATE workflow_instances SET lock_token = NULL, lock_expires_at = NULL WHERE id = ?`, instanceID)
+	_, _ = db.Exec(`UPDATE workflow_instances SET lock_token = NULL, lock_expires_at = NULL WHERE id = ?`, instanceID)
 }
 
 func UpdateInstanceState(inst WorkflowInstance) error {
@@ -203,7 +203,7 @@ func UpdateInstanceState(inst WorkflowInstance) error {
 	if inst.WaitingForEvent != "" {
 		waiting = inst.WaitingForEvent
 	}
-	_, err := db.DB.Exec(`
+	_, err := db.Exec(`
 		UPDATE workflow_instances SET
 			current_node_key = ?, status = ?, next_wake_at = ?, waiting_for_event = ?,
 			completed_at = ?, context_json = ?, lock_token = NULL, lock_expires_at = NULL
@@ -213,7 +213,7 @@ func UpdateInstanceState(inst WorkflowInstance) error {
 }
 
 func WakeInstancesForContactEvent(contactID int64, eventType string) ([]int64, error) {
-	rows, err := db.DB.Query(`
+	rows, err := db.Query(`
 		SELECT id FROM workflow_instances
 		WHERE contact_id = ? AND status = 'waiting' AND waiting_for_event = ?
 	`, contactID, eventType)
@@ -227,7 +227,7 @@ func WakeInstancesForContactEvent(contactID int64, eventType string) ([]int64, e
 	for rows.Next() {
 		var id int64
 		if rows.Scan(&id) == nil {
-			_, _ = db.DB.Exec(`
+			_, _ = db.Exec(`
 				UPDATE workflow_instances SET next_wake_at = ?, status = 'active', waiting_for_event = NULL WHERE id = ?
 			`, now, id)
 			ids = append(ids, id)
@@ -240,7 +240,7 @@ func CreateExecution(instanceID int64, nodeKey, executionKey, status, outputJSON
 	if outputJSON == "" {
 		outputJSON = "{}"
 	}
-	row := db.DB.QueryRow(`
+	row := db.QueryRow(`
 		INSERT INTO workflow_executions (instance_id, node_key, execution_key, status, output_json, error_message, finished_at)
 		VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
 		ON CONFLICT(execution_key) DO NOTHING
@@ -249,14 +249,14 @@ func CreateExecution(instanceID int64, nodeKey, executionKey, status, outputJSON
 	var id int64
 	err := row.Scan(&id)
 	if err != nil {
-		err = db.DB.QueryRow(`SELECT id FROM workflow_executions WHERE execution_key = ?`, executionKey).Scan(&id)
+		err = db.QueryRow(`SELECT id FROM workflow_executions WHERE execution_key = ?`, executionKey).Scan(&id)
 	}
 	return id, err
 }
 
 func ExecutionExists(executionKey string) (bool, error) {
 	var id int64
-	err := db.DB.QueryRow(`SELECT id FROM workflow_executions WHERE execution_key = ?`, executionKey).Scan(&id)
+	err := db.QueryRow(`SELECT id FROM workflow_executions WHERE execution_key = ?`, executionKey).Scan(&id)
 	if err != nil {
 		return false, nil
 	}
@@ -279,7 +279,7 @@ func SetInstanceContext(inst *WorkflowInstance, ctx map[string]interface{}) erro
 }
 
 func GetExecutionsForInstance(instanceID int64) ([]WorkflowExecution, error) {
-	rows, err := db.DB.Query(`
+	rows, err := db.Query(`
 		SELECT id, instance_id, node_key, execution_key, status, started_at, finished_at, error_message, output_json
 		FROM workflow_executions WHERE instance_id = ? ORDER BY id ASC
 	`, instanceID)
@@ -317,7 +317,7 @@ type WorkflowExecution struct {
 }
 
 func CancelInstance(instanceID int64) error {
-	_, err := db.DB.Exec(`
+	_, err := db.Exec(`
 		UPDATE workflow_instances SET status = 'cancelled', completed_at = CURRENT_TIMESTAMP,
 			lock_token = NULL, lock_expires_at = NULL WHERE id = ? AND status IN ('active', 'waiting')
 	`, instanceID)
@@ -325,7 +325,7 @@ func CancelInstance(instanceID int64) error {
 }
 
 func CountInstancesByStatus(workflowID int64) (map[string]int, error) {
-	rows, err := db.DB.Query(`
+	rows, err := db.Query(`
 		SELECT wi.status, COUNT(*) FROM workflow_instances wi
 		INNER JOIN workflow_versions wv ON wv.id = wi.workflow_version_id
 		WHERE wv.workflow_id = ? GROUP BY wi.status
@@ -348,7 +348,7 @@ func CountInstancesByStatus(workflowID int64) (map[string]int, error) {
 
 func CountInstancesAtNode(versionID int64, nodeKey string) (int, error) {
 	var n int
-	err := db.DB.QueryRow(`
+	err := db.QueryRow(`
 		SELECT COUNT(*) FROM workflow_instances WHERE workflow_version_id = ? AND current_node_key = ? AND status IN ('active', 'waiting')
 	`, versionID, nodeKey).Scan(&n)
 	return n, err

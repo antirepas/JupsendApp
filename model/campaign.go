@@ -93,7 +93,7 @@ func CreateCampaign(userID int64, name string, templateAID, templateBID int64, e
 	if workflowVersionID > 0 {
 		wfVer = workflowVersionID
 	}
-	row := db.DB.QueryRow(
+	row := db.QueryRow(
 		`INSERT INTO campaigns (name, template_a_id, template_b_id, execution_mode, workflow_version_id, user_id) VALUES (?, ?, ?, ?, ?, ?) RETURNING id`,
 		name, templateAID, bID, executionMode, wfVer, userID,
 	)
@@ -116,7 +116,7 @@ func ListCampaigns(userID int64) ([]CampaignListItem, error) {
 		WHERE c.user_id = ?
 		ORDER BY c.created_at DESC
 	`
-	rows, err := db.DB.Query(query, userID)
+	rows, err := db.Query(query, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -141,7 +141,7 @@ func ListCampaigns(userID int64) ([]CampaignListItem, error) {
 }
 
 func GetCampaign(id int64) (Campaign, error) {
-	row := db.DB.QueryRow(`
+	row := db.QueryRow(`
 		SELECT id, COALESCE(user_id, 0), name, template_a_id, template_b_id, status, created_at, scheduled_at,
 			COALESCE(execution_mode, 'bulk'), COALESCE(workflow_version_id, 0), COALESCE(is_sending, 0)
 		FROM campaigns WHERE id = ?
@@ -150,7 +150,7 @@ func GetCampaign(id int64) (Campaign, error) {
 }
 
 func GetCampaignForUser(id, userID int64) (Campaign, error) {
-	row := db.DB.QueryRow(`
+	row := db.QueryRow(`
 		SELECT id, COALESCE(user_id, 0), name, template_a_id, template_b_id, status, created_at, scheduled_at,
 			COALESCE(execution_mode, 'bulk'), COALESCE(workflow_version_id, 0), COALESCE(is_sending, 0)
 		FROM campaigns WHERE id = ? AND user_id = ?
@@ -226,7 +226,7 @@ func getVariantStats(campaignID int64, variant string, templateID int64) (Varian
 		LEFT JOIN email_events ee ON ee.email_send_id = es.id
 		WHERE es.campaign_id = ? AND es.variant = ?
 	`
-	row := db.DB.QueryRow(query, campaignID, variant)
+	row := db.QueryRow(query, campaignID, variant)
 	var stats VariantStats
 	stats.Variant = variant
 	stats.TemplateID = templateID
@@ -248,7 +248,7 @@ func GetCampaignContacts(campaignID int64) ([]CampaignContactItem, error) {
 		WHERE cc.campaign_id = ?
 		ORDER BY cc.contact_id ASC
 	`
-	rows, err := db.DB.Query(query, campaignID)
+	rows, err := db.Query(query, campaignID)
 	if err != nil {
 		return nil, err
 	}
@@ -260,7 +260,7 @@ func GetCampaignContacts(campaignID int64) ([]CampaignContactItem, error) {
 		if err := rows.Scan(&item.ID, &item.Email); err != nil {
 			return nil, err
 		}
-		varRows, err := db.DB.Query(`SELECT key, value FROM contact_variables WHERE contact_id = ?`, item.ID)
+		varRows, err := db.Query(`SELECT key, value FROM contact_variables WHERE contact_id = ?`, item.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -280,7 +280,7 @@ func GetCampaignContacts(campaignID int64) ([]CampaignContactItem, error) {
 }
 
 func GetCampaignContactIDs(campaignID int64) ([]int64, error) {
-	rows, err := db.DB.Query(`SELECT contact_id FROM campaign_contacts WHERE campaign_id = ? ORDER BY contact_id ASC`, campaignID)
+	rows, err := db.Query(`SELECT contact_id FROM campaign_contacts WHERE campaign_id = ? ORDER BY contact_id ASC`, campaignID)
 	if err != nil {
 		return nil, err
 	}
@@ -298,8 +298,8 @@ func GetCampaignContactIDs(campaignID int64) ([]int64, error) {
 
 func AddContactsToCampaign(campaignID int64, contactIDs []int64) error {
 	for _, cid := range contactIDs {
-		_, err := db.DB.Exec(
-			`INSERT OR IGNORE INTO campaign_contacts (campaign_id, contact_id) VALUES (?, ?)`,
+		_, err := db.Exec(
+			`INSERT INTO campaign_contacts (campaign_id, contact_id) VALUES (?, ?) ON CONFLICT DO NOTHING`,
 			campaignID, cid,
 		)
 		if err != nil {
@@ -310,17 +310,17 @@ func AddContactsToCampaign(campaignID int64, contactIDs []int64) error {
 }
 
 func MarkCampaignSent(id int64) error {
-	_, err := db.DB.Exec(`UPDATE campaigns SET status = 'sent', scheduled_at = NULL, is_sending = 0 WHERE id = ?`, id)
+	_, err := db.Exec(`UPDATE campaigns SET status = 'sent', scheduled_at = NULL, is_sending = 0 WHERE id = ?`, id)
 	return err
 }
 
 func MarkCampaignSending(id int64) error {
-	_, err := db.DB.Exec(`UPDATE campaigns SET is_sending = 1 WHERE id = ?`, id)
+	_, err := db.Exec(`UPDATE campaigns SET is_sending = 1 WHERE id = ?`, id)
 	return err
 }
 
 func ScheduleCampaign(id int64, at time.Time) error {
-	result, err := db.DB.Exec(
+	result, err := db.Exec(
 		`UPDATE campaigns SET scheduled_at = ? WHERE id = ? AND status = 'draft'`,
 		at, id,
 	)
@@ -335,7 +335,7 @@ func ScheduleCampaign(id int64, at time.Time) error {
 }
 
 func ClearCampaignSchedule(id int64) error {
-	_, err := db.DB.Exec(
+	_, err := db.Exec(
 		`UPDATE campaigns SET scheduled_at = NULL WHERE id = ? AND status = 'draft'`,
 		id,
 	)
@@ -343,7 +343,7 @@ func ClearCampaignSchedule(id int64) error {
 }
 
 func GetDueScheduledCampaignIDs() ([]int64, error) {
-	rows, err := db.DB.Query(
+	rows, err := db.Query(
 		`SELECT id, scheduled_at FROM campaigns WHERE status = 'draft' AND scheduled_at IS NOT NULL AND COALESCE(is_sending, 0) = 0`,
 	)
 	if err != nil {
@@ -391,7 +391,7 @@ func DeleteCampaign(id, userID int64) error {
 	if _, err := GetCampaignForUser(id, userID); err != nil {
 		return err
 	}
-	tx, err := db.DB.Begin()
+	tx, err := db.Begin()
 	if err != nil {
 		return err
 	}

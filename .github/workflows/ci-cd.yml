@@ -18,6 +18,22 @@ jobs:
   test:
     name: Test & Build
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: emailtracker
+          POSTGRES_PASSWORD: emailtracker
+          POSTGRES_DB: emailtracker_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U emailtracker -d emailtracker_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      TEST_DATABASE_URL: postgres://emailtracker:emailtracker@localhost:5432/emailtracker_test?sslmode=disable
     steps:
       - name: Checkout
         uses: actions/checkout@v4

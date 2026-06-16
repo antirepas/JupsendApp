@@ -41,7 +41,7 @@ func main() {
 	server.Use(sessions.Sessions("emailtracker_session", store))
 
 	db.Prepare()
-	defer db.DB.Close()
+	defer db.Close()
 
 	engine := routes.InitWorkflowEngine()
 	routes.StartCampaignScheduler()

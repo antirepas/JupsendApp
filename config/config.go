@@ -8,9 +8,10 @@ import (
 )
 
 var (
-	Port       string
-	BaseURL    string
-	SMTPHost   string
+	Port          string
+	BaseURL       string
+	DatabaseURL   string
+	SMTPHost      string
 	SMTPPort   string
 	SMTPUser   string
 	SMTPPass   string
@@ -31,6 +32,7 @@ func Reload() {
 func reloadFromEnv() {
 	Port = envOr("PORT", "8080")
 	BaseURL = strings.TrimRight(strings.TrimSpace(envOr("BASE_URL", "http://localhost:8080")), "/")
+	DatabaseURL = strings.TrimSpace(os.Getenv("DATABASE_URL"))
 	SMTPHost = envOr("SMTP_HOST", "smtp.gmail.com")
 	SMTPPort = envOr("SMTP_PORT", "587")
 	SMTPUser = strings.TrimSpace(os.Getenv("SMTP_USER"))

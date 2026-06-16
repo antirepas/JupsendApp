@@ -40,14 +40,14 @@ type DailyStat struct {
 
 func resolveEmailSendID(trackingID string) int64 {
 	var emailSendID int64
-	err := db.DB.QueryRow(
+	err := db.QueryRow(
 		`SELECT id FROM email_sends WHERE tracking_id = ?`, trackingID,
 	).Scan(&emailSendID)
 	if err == nil {
 		return emailSendID
 	}
 
-	err = db.DB.QueryRow(
+	err = db.QueryRow(
 		`SELECT email_send_id FROM tracked_links WHERE tracking_id = ?`, trackingID,
 	).Scan(&emailSendID)
 	if err == nil {
@@ -66,7 +66,7 @@ func StoreEvent(trackingID, eventType, userAgent, ip string) error {
 		INSERT INTO email_events (email_send_id, tracking_id, event_type, user_agent, ip_address, created_at)
 		VALUES (?, ?, ?, ?, ?, ?)
 	`
-	_, err := db.DB.Exec(query, sendID, trackingID, eventType, userAgent, ip, time.Now())
+	_, err := db.Exec(query, sendID, trackingID, eventType, userAgent, ip, time.Now())
 	return err
 }
 
@@ -77,7 +77,7 @@ func GetEventsForSend(emailSendID int64) ([]EventRecord, error) {
 		WHERE email_send_id = ?
 		ORDER BY created_at DESC
 	`
-	rows, err := db.DB.Query(query, emailSendID)
+	rows, err := db.Query(query, emailSendID)
 	if err != nil {
 		return nil, err
 	}
@@ -98,12 +98,12 @@ func GetEventsForSend(emailSendID int64) ([]EventRecord, error) {
 func GetDashboardStats(userID int64) (DashboardStats, error) {
 	var stats DashboardStats
 
-	err := db.DB.QueryRow(`SELECT COUNT(*) FROM email_sends WHERE user_id = ?`, userID).Scan(&stats.TotalSends)
+	err := db.QueryRow(`SELECT COUNT(*) FROM email_sends WHERE user_id = ?`, userID).Scan(&stats.TotalSends)
 	if err != nil {
 		return stats, err
 	}
 
-	err = db.DB.QueryRow(`
+	err = db.QueryRow(`
 		SELECT COUNT(*) FROM email_events ee
 		INNER JOIN email_sends es ON es.id = ee.email_send_id
 		WHERE ee.event_type = 'open' AND es.user_id = ?
@@ -112,7 +112,7 @@ func GetDashboardStats(userID int64) (DashboardStats, error) {
 		return stats, err
 	}
 
-	err = db.DB.QueryRow(`
+	err = db.QueryRow(`
 		SELECT COUNT(*) FROM email_events ee
 		INNER JOIN email_sends es ON es.id = ee.email_send_id
 		WHERE ee.event_type = 'click' AND es.user_id = ?
@@ -137,7 +137,7 @@ func GetRecentEvents(userID int64, limit int) ([]EventRecord, error) {
 		ORDER BY ee.created_at DESC
 		LIMIT ?
 	`
-	rows, err := db.DB.Query(query, userID, limit)
+	rows, err := db.Query(query, userID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -163,7 +163,7 @@ func GetDailyStats(userID int64, days int) ([]DailyStat, error) {
 		GROUP BY date(sent_at)
 		ORDER BY day
 	`
-	rows, err := db.DB.Query(query, userID, days)
+	rows, err := db.Query(query, userID, days)
 	if err != nil {
 		return nil, err
 	}
@@ -186,7 +186,7 @@ func GetDailyStats(userID int64, days int) ([]DailyStat, error) {
 		WHERE ee.event_type = 'open' AND es.user_id = ? AND ee.created_at >= datetime('now', '-' || ? || ' days')
 		GROUP BY date(ee.created_at)
 	`
-	openRows, err := db.DB.Query(openQuery, userID, days)
+	openRows, err := db.Query(openQuery, userID, days)
 	if err != nil {
 		return nil, err
 	}
@@ -221,13 +221,13 @@ type EntityCounts struct {
 
 func GetEntityCounts(userID int64) (EntityCounts, error) {
 	var c EntityCounts
-	if err := db.DB.QueryRow(`SELECT COUNT(*) FROM template WHERE user_id = ?`, userID).Scan(&c.Templates); err != nil {
+	if err := db.QueryRow(`SELECT COUNT(*) FROM template WHERE user_id = ?`, userID).Scan(&c.Templates); err != nil {
 		return c, err
 	}
-	if err := db.DB.QueryRow(`SELECT COUNT(*) FROM contact WHERE user_id = ?`, userID).Scan(&c.Contacts); err != nil {
+	if err := db.QueryRow(`SELECT COUNT(*) FROM contact WHERE user_id = ?`, userID).Scan(&c.Contacts); err != nil {
 		return c, err
 	}
-	if err := db.DB.QueryRow(`SELECT COUNT(*) FROM campaigns WHERE user_id = ?`, userID).Scan(&c.Campaigns); err != nil {
+	if err := db.QueryRow(`SELECT COUNT(*) FROM campaigns WHERE user_id = ?`, userID).Scan(&c.Campaigns); err != nil {
 		return c, err
 	}
 	return c, nil

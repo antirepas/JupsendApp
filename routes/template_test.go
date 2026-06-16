@@ -40,7 +40,7 @@ func TestSaveTemplate_BadJSON(t *testing.T) {
 
 func TestSaveTemplate_Success(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	db.Prepare()
+	db.OpenTestDB(t)
 
 	payload := ST{
 		T: model.Template{

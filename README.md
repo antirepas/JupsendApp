@@ -1,6 +1,6 @@
 # Email Tracker
 
-Email Tracker is a self-hosted email outreach and analytics application built with Go, Gin, SQLite, and server-rendered HTML templates styled with Tailwind CSS. It lets you create reusable email templates with `{{variable}}` placeholders, manage a contact database with per-recipient personalization fields (including bulk import via Excel or pasted rows), and send individual emails or multi-contact **campaigns** over SMTP (e.g. Gmail). Campaigns support optional **A/B testing** by alternating two templates across contacts, can be sent immediately or **scheduled** for a specific date and time (a background job checks every 30 seconds and sends when due), and include a detailed management view that shows how each contact’s variables map to their assigned variant plus rendered subject/body previews. Every outbound message is tracked: opens are recorded via an embedded tracking pixel and clicks via rewritten links that redirect through the app before landing on the original URL. A web dashboard summarizes sends, opens, clicks, and rates over time with charts and recent activity; dedicated **campaign analytics** pages add engagement funnels, variant comparisons, per-contact timelines, hourly activity, link performance, and variable coverage metrics. Templates, contacts, and campaigns can be created and deleted from the UI (campaign templates are fixed after creation), and a small JSON API remains available for programmatic template, contact, and send operations. Tracking requires `BASE_URL` to point at your public server address (e.g. ngrok or a production domain) so email clients can load pixels and click redirects correctly.
+Email Tracker is a self-hosted email outreach and analytics application built with Go, Gin, PostgreSQL, and server-rendered HTML templates styled with Tailwind CSS.
 
 ## Features
 
@@ -14,37 +14,69 @@ Email Tracker is a self-hosted email outreach and analytics application built wi
 ## Prerequisites
 
 - Go 1.25+
-- SMTP credentials (Gmail app password or other provider)
+- PostgreSQL 16+ (local Docker Compose, or hosted e.g. [Supabase](https://supabase.com))
+- SMTP credentials configured per user in Settings after sign-up
 
 ## Setup
 
+### Local development (Docker Postgres)
+
 1. Clone the repository and navigate to the project directory.
 
-2. Create a `.env` file:
+2. Start PostgreSQL and the app:
+
+```bash
+docker compose up --build
+```
+
+3. Or run Postgres only and start the app locally:
+
+```bash
+docker compose up postgres -d
+```
+
+4. Create a `.env` file:
 
 ```env
 PORT=8080
 BASE_URL=http://localhost:8080
 SESSION_SECRET=change-me-to-a-long-random-string
+DATABASE_URL=postgres://emailtracker:emailtracker@localhost:5432/emailtracker?sslmode=disable
 ```
 
-SMTP credentials are configured per user in **Settings** after sign-up (not in `.env`).
-
-Legacy `.env` SMTP variables (`SMTP_HOST`, `SMTP_USER`, etc.) are optional fallbacks for `BASE_URL` only; they no longer bootstrap a global sending account.
-
-3. **Important:** If you have an existing `my.db` from a previous version, delete it before first run unless you want to claim legacy data on first signup (orphan rows are assigned to the first registered user).
-
-```bash
-rm my.db   # Windows: del my.db
-```
-
-4. Run the server:
+5. Run the server:
 
 ```bash
 go run .
 ```
 
-5. Open [http://localhost:8080/signup](http://localhost:8080/signup) to create an account, then configure SMTP and tracking URL in **Settings**.
+6. Open [http://localhost:8080/signup](http://localhost:8080/signup) to create an account, then configure SMTP and tracking URL in **Settings**.
+
+### Production (DigitalOcean VPS + Supabase)
+
+Keep the app on your VPS; use Supabase for managed PostgreSQL with Table Editor, SQL metrics, and backups.
+
+1. Create a [Supabase](https://supabase.com) project.
+2. In **Project Settings → Database**, copy the **Connection pooling** URI (port `6543`, host `*.pooler.supabase.com`).
+3. Add to `/opt/emailtracker/.env` on your droplet:
+
+```env
+DATABASE_URL=postgres://postgres.[project-ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres?sslmode=require
+SESSION_SECRET=your-production-secret
+BASE_URL=https://your-public-url
+```
+
+4. Deploy/restart the app container. Schema tables are created automatically on first connect.
+
+**Supabase SQL examples** (SQL Editor):
+
+```sql
+SELECT COUNT(*) FROM users;
+SELECT status, COUNT(*) FROM send_jobs GROUP BY status;
+SELECT COUNT(*) FROM email_sends WHERE sent_at > NOW() - INTERVAL '7 days';
+```
+
+Supabase Auth is **not** used by this app — only PostgreSQL hosting.
 
 ## Authentication
 
@@ -209,7 +241,7 @@ go test ./...
 ```
 ├── auth/            # Password hashing and session helpers
 ├── config/          # Environment configuration
-├── db/              # SQLite setup and schema
+├── db/              # PostgreSQL setup and schema
 ├── model/           # Data models and queries
 ├── outbound/        # Queue, worker, router, IMAP bounces
 ├── routes/          # HTTP handlers (web + API)
@@ -226,6 +258,8 @@ go test ./...
 | `PORT` | Server port | `8080` |
 | `BASE_URL` | Default tracking base URL (per-user override in Settings) | `http://localhost:8080` |
 | `SESSION_SECRET` | Cookie signing secret for sessions | — (random in dev) |
+| `DATABASE_URL` | PostgreSQL connection string (required) | — |
+| `TEST_DATABASE_URL` | Postgres URL for integration tests | same as local compose test DB |
 | `OUTBOUND_WORKER_INTERVAL` | Outbound worker seconds | `8` |
 | `IMAP_POLL_INTERVAL` | IMAP bounce poll seconds | `180` |
 | `OUTBOUND_BATCH_SIZE` | Jobs per worker batch | `10` |

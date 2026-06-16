@@ -30,7 +30,7 @@ func GetWorkflowNodeStats(versionID int64) ([]WorkflowNodeStat, error) {
 		}
 		if n.NodeType == "action_send_email" {
 			var sends int
-			_ = db.DB.QueryRow(`
+			_ = db.QueryRow(`
 				SELECT COUNT(*) FROM workflow_executions we
 				INNER JOIN workflow_instances wi ON wi.id = we.instance_id
 				WHERE wi.workflow_version_id = ? AND we.node_key = ? AND we.status = 'succeeded'
