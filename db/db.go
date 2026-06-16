@@ -18,7 +18,7 @@ func Prepare() {
 	}
 
 	var err error
-	DB, err = sql.Open("pgx", config.DatabaseURL)
+	DB, err = sql.Open("pgx", pgxConnectURL(config.DatabaseURL))
 	if err != nil {
 		log.Fatal(err)
 	}

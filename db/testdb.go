@@ -20,7 +20,7 @@ func TestDatabaseURL() string {
 
 func OpenTestDB(t *testing.T) {
 	t.Helper()
-	conn, err := sql.Open("pgx", TestDatabaseURL())
+	conn, err := sql.Open("pgx", pgxConnectURL(TestDatabaseURL()))
 	if err != nil {
 		t.Skipf("postgres unavailable: %v", err)
 	}

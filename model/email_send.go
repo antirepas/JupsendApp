@@ -100,7 +100,7 @@ func ListEmailSends(userID int64) ([]EmailSendListItem, error) {
 		LEFT JOIN contact c ON c.id = es.contact_id
 		LEFT JOIN email_events ee ON ee.email_send_id = es.id OR ee.tracking_id = es.tracking_id
 		WHERE es.user_id = ?
-		GROUP BY es.id
+		GROUP BY es.id, es.template_id, es.contact_id, es.tracking_id, es.sent_at, es.delivery_status, t.name, c.email
 		ORDER BY es.sent_at DESC
 	`
 	rows, err := db.Query(query, userID)
@@ -138,7 +138,7 @@ func GetEmailSendDetail(id int64) (EmailSendDetail, error) {
 		LEFT JOIN contact c ON c.id = es.contact_id
 		LEFT JOIN email_events ee ON ee.email_send_id = es.id OR ee.tracking_id = es.tracking_id
 		WHERE es.id = ?
-		GROUP BY es.id
+		GROUP BY es.id, es.template_id, es.contact_id, es.tracking_id, es.sent_at, es.delivery_status, t.name, c.email
 	`
 	row := db.QueryRow(query, id)
 	var detail EmailSendDetail

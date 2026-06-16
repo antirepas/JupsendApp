@@ -157,10 +157,10 @@ func GetRecentEvents(userID int64, limit int) ([]EventRecord, error) {
 
 func GetDailyStats(userID int64, days int) ([]DailyStat, error) {
 	query := `
-		SELECT date(sent_at) as day, COUNT(*) as sends
+		SELECT (sent_at)::date as day, COUNT(*) as sends
 		FROM email_sends
-		WHERE user_id = ? AND sent_at >= datetime('now', '-' || ? || ' days')
-		GROUP BY date(sent_at)
+		WHERE user_id = ? AND sent_at >= CURRENT_TIMESTAMP - (? * INTERVAL '1 day')
+		GROUP BY (sent_at)::date
 		ORDER BY day
 	`
 	rows, err := db.Query(query, userID, days)
@@ -180,11 +180,11 @@ func GetDailyStats(userID int64, days int) ([]DailyStat, error) {
 	}
 
 	openQuery := `
-		SELECT date(ee.created_at) as day, COUNT(*) as opens
+		SELECT (ee.created_at)::date as day, COUNT(*) as opens
 		FROM email_events ee
 		INNER JOIN email_sends es ON es.id = ee.email_send_id
-		WHERE ee.event_type = 'open' AND es.user_id = ? AND ee.created_at >= datetime('now', '-' || ? || ' days')
-		GROUP BY date(ee.created_at)
+		WHERE ee.event_type = 'open' AND es.user_id = ? AND ee.created_at >= CURRENT_TIMESTAMP - (? * INTERVAL '1 day')
+		GROUP BY (ee.created_at)::date
 	`
 	openRows, err := db.Query(openQuery, userID, days)
 	if err != nil {

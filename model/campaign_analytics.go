@@ -244,7 +244,7 @@ func getContactEngagement(campaignID int64, contactIDs []int64, hasB bool, templ
 		FROM email_sends es
 		LEFT JOIN email_events ee ON ee.email_send_id = es.id OR ee.tracking_id = es.tracking_id
 		WHERE es.campaign_id = ?
-		GROUP BY es.id
+		GROUP BY es.id, es.contact_id, es.variant, es.sent_at
 	`, campaignID)
 	if err == nil {
 		defer rows.Close()
@@ -311,8 +311,8 @@ func getContactEmail(contactID int64) (int64, string, error) {
 func getCampaignDailyStats(campaignID int64) []CampaignDailyStat {
 	sendMap := map[string]int{}
 	rows, _ := db.Query(`
-		SELECT date(sent_at), COUNT(*) FROM email_sends
-		WHERE campaign_id = ? GROUP BY date(sent_at)
+		SELECT (sent_at)::date, COUNT(*) FROM email_sends
+		WHERE campaign_id = ? GROUP BY (sent_at)::date
 	`, campaignID)
 	if rows != nil {
 		defer rows.Close()
@@ -327,10 +327,10 @@ func getCampaignDailyStats(campaignID int64) []CampaignDailyStat {
 
 	openMap := map[string]int{}
 	openRows, _ := db.Query(`
-		SELECT date(ee.created_at), COUNT(*) FROM email_events ee
+		SELECT (ee.created_at)::date, COUNT(*) FROM email_events ee
 		INNER JOIN email_sends es ON es.id = ee.email_send_id
 		WHERE es.campaign_id = ? AND ee.event_type = 'open'
-		GROUP BY date(ee.created_at)
+		GROUP BY (ee.created_at)::date
 	`, campaignID)
 	if openRows != nil {
 		defer openRows.Close()
@@ -345,10 +345,10 @@ func getCampaignDailyStats(campaignID int64) []CampaignDailyStat {
 
 	clickMap := map[string]int{}
 	clickRows, _ := db.Query(`
-		SELECT date(ee.created_at), COUNT(*) FROM email_events ee
+		SELECT (ee.created_at)::date, COUNT(*) FROM email_events ee
 		INNER JOIN email_sends es ON es.id = ee.email_send_id
 		WHERE es.campaign_id = ? AND ee.event_type = 'click'
-		GROUP BY date(ee.created_at)
+		GROUP BY (ee.created_at)::date
 	`, campaignID)
 	if clickRows != nil {
 		defer clickRows.Close()
@@ -386,11 +386,11 @@ func getCampaignDailyStats(campaignID int64) []CampaignDailyStat {
 
 func getCampaignHourlyStats(campaignID int64, eventType string) []HourlyStat {
 	rows, err := db.Query(`
-		SELECT CAST(strftime('%H', ee.created_at) AS INTEGER), COUNT(*)
+		SELECT CAST(EXTRACT(HOUR FROM ee.created_at) AS INTEGER), COUNT(*)
 		FROM email_events ee
 		INNER JOIN email_sends es ON es.id = ee.email_send_id
 		WHERE es.campaign_id = ? AND ee.event_type = ?
-		GROUP BY strftime('%H', ee.created_at)
+		GROUP BY EXTRACT(HOUR FROM ee.created_at)
 	`, campaignID, eventType)
 	if err != nil {
 		return nil
