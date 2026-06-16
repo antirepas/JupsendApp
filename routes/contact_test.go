@@ -3,9 +3,11 @@ package routes
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"emailtracker.com/db"
 	"emailtracker.com/model"
@@ -38,20 +40,22 @@ func TestSaveContacts_Integration(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db.OpenTestDB(t)
 
-	_, err := db.Exec("DELETE FROM contact_variables")
+	userID, err := model.CreateUser(
+		fmt.Sprintf("contact-test-%d@test.com", time.Now().UnixNano()),
+		"hash",
+		"http://localhost",
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = db.Exec("DELETE FROM contact")
-	if err != nil {
-		t.Fatal(err)
-	}
+
+	email := fmt.Sprintf("save-contact-%d@example.com", time.Now().UnixNano())
 
 	payload := SC{
 		CS: []model.Contact{
 			{
 				ID:    1,
-				Email: "test@example.com",
+				Email: email,
 			},
 		},
 		CVS: []model.ContactVariables{
@@ -74,7 +78,7 @@ func TestSaveContacts_Integration(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/contacts", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
 	ctx.Request = req
-	setTestUser(ctx, 1)
+	setTestUser(ctx, userID)
 
 	SaveContacts(ctx)
 
@@ -83,7 +87,7 @@ func TestSaveContacts_Integration(t *testing.T) {
 	}
 
 	var count int
-	err = db.QueryRow("SELECT COUNT(*) FROM contact WHERE email = ?", "test@example.com").Scan(&count)
+	err = db.QueryRow("SELECT COUNT(*) FROM contact WHERE email = ? AND user_id = ?", email, userID).Scan(&count)
 	if err != nil {
 		t.Fatal(err)
 	}
