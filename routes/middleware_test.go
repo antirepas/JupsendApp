@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"emailtracker.com/auth"
+	"emailtracker.com/config"
 	"emailtracker.com/db"
 	"emailtracker.com/model"
 	"github.com/gin-contrib/sessions"
@@ -71,4 +72,37 @@ func TestRequireSubscriptionRedirectsUnsubscribed(t *testing.T) {
 	if okW.Code != http.StatusOK {
 		t.Fatalf("expected 200 with active subscription, got %d", okW.Code)
 	}
+}
+
+func TestRequireSubscriptionAllowsAdminEmail(t *testing.T) {
+	db.OpenTestDB(t)
+
+	adminEmail := fmt.Sprintf("admin-%d@test.com", time.Now().UnixNano())
+	config.AdminEmails = map[string]struct{}{strings.ToLower(adminEmail): {}}
+
+	hash, _ := auth.HashPassword("password123")
+	userID, err := model.CreateUser(adminEmail, hash, "http://localhost:8080")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	r := subscriptionTestRouter()
+	sessReq := httptest.NewRequest(http.MethodGet, "/", nil)
+	sessW := httptest.NewRecorder()
+	c2, _ := gin.CreateTestContext(sessW)
+	c2.Request = sessReq
+	store := cookie.NewStore([]byte("test-session-secret"))
+	sessions.Sessions("emailtracker_session", store)(c2)
+	auth.SetUserSession(c2, userID)
+	cookieHeader := sessW.Header().Get("Set-Cookie")
+
+	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	req.Header.Set("Cookie", cookieHeader)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected admin to access app, got %d", w.Code)
+	}
+
+	config.AdminEmails = nil
 }

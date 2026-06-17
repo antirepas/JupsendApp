@@ -18,6 +18,7 @@ type User struct {
 	WhopMembershipID   string
 	WhopMemberID       string
 	SubscriptionEndsAt *time.Time
+	IsAdmin            bool
 	CreatedAt          time.Time
 }
 
@@ -32,9 +33,11 @@ func CreateUser(email, passwordHash, baseURL string) (int64, error) {
 	if baseURL == "" {
 		baseURL = config.BaseURL
 	}
+	email = strings.TrimSpace(strings.ToLower(email))
+	isAdmin := config.IsAdminEmail(email)
 	row := db.QueryRow(`
-		INSERT INTO users (email, password_hash, base_url) VALUES (?, ?, ?) RETURNING id
-	`, strings.TrimSpace(strings.ToLower(email)), passwordHash, strings.TrimRight(baseURL, "/"))
+		INSERT INTO users (email, password_hash, base_url, is_admin) VALUES (?, ?, ?, ?) RETURNING id
+	`, email, passwordHash, strings.TrimRight(baseURL, "/"), isAdmin)
 	var id int64
 	err := row.Scan(&id)
 	return id, err
@@ -44,7 +47,7 @@ func GetUserByEmail(email string) (User, error) {
 	row := db.QueryRow(`
 		SELECT id, email, password_hash, COALESCE(base_url, ''),
 			COALESCE(subscription_status, 'none'), COALESCE(whop_membership_id, ''), COALESCE(whop_member_id, ''),
-			subscription_ends_at, created_at
+			subscription_ends_at, is_admin, created_at
 		FROM users WHERE email = ?
 	`, strings.TrimSpace(strings.ToLower(email)))
 	return scanUser(row)
@@ -54,7 +57,7 @@ func GetUserByID(id int64) (User, error) {
 	row := db.QueryRow(`
 		SELECT id, email, password_hash, COALESCE(base_url, ''),
 			COALESCE(subscription_status, 'none'), COALESCE(whop_membership_id, ''), COALESCE(whop_member_id, ''),
-			subscription_ends_at, created_at
+			subscription_ends_at, is_admin, created_at
 		FROM users WHERE id = ?
 	`, id)
 	return scanUser(row)
@@ -64,7 +67,7 @@ func scanUser(row interface{ Scan(...interface{}) error }) (User, error) {
 	var u User
 	var ends sql.NullTime
 	err := row.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.BaseURL,
-		&u.SubscriptionStatus, &u.WhopMembershipID, &u.WhopMemberID, &ends, &u.CreatedAt)
+		&u.SubscriptionStatus, &u.WhopMembershipID, &u.WhopMemberID, &ends, &u.IsAdmin, &u.CreatedAt)
 	if ends.Valid {
 		t := ends.Time
 		u.SubscriptionEndsAt = &t
@@ -96,6 +99,31 @@ func UserHasActiveSubscription(u User) bool {
 		return u.SubscriptionStatus != SubStatusNone && u.SubscriptionStatus != SubStatusCancelled
 	}
 	return false
+}
+
+func UserIsAdmin(u User) bool {
+	return u.IsAdmin || config.IsAdminEmail(u.Email)
+}
+
+func UserHasAppAccess(u User) bool {
+	return UserIsAdmin(u) || UserHasActiveSubscription(u)
+}
+
+func SetUserAdmin(userID int64, admin bool) error {
+	_, err := db.Exec(`UPDATE users SET is_admin = ? WHERE id = ?`, admin, userID)
+	return err
+}
+
+func SyncAdminEmailsFromConfig() {
+	for email := range config.AdminEmails {
+		u, err := GetUserByEmail(email)
+		if err != nil {
+			continue
+		}
+		if !u.IsAdmin {
+			_ = SetUserAdmin(u.ID, true)
+		}
+	}
 }
 
 func UpdateUserSubscription(userID int64, status, membershipID, memberID string, endsAt *time.Time) error {

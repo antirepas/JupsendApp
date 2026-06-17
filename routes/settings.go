@@ -27,7 +27,7 @@ func SettingsPage(c *gin.Context) {
 		"account":        acc,
 		"gmailConnected": acc.IsGoogleOAuth(),
 		"gmailConfigured": googleoauth.IsConfigured(),
-		"subscribed":     model.UserHasActiveSubscription(user),
+		"subscribed":     model.UserHasAppAccess(user),
 		"success":        c.Query("success"),
 		"error":          c.Query("error"),
 	})

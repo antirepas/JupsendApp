@@ -7,6 +7,7 @@ import (
 
 	"emailtracker.com/config"
 	"emailtracker.com/db"
+	"emailtracker.com/model"
 	"emailtracker.com/outbound"
 	"emailtracker.com/routes"
 	"github.com/gin-contrib/sessions"
@@ -46,6 +47,7 @@ func main() {
 	engine := routes.InitWorkflowEngine()
 	routes.StartCampaignScheduler()
 	routes.StartWorkflowScheduler(engine)
+	model.SyncAdminEmailsFromConfig()
 	outbound.StartWorker()
 	outbound.StartIMAPPoller()
 	routes.RegisterRoutes(server)

@@ -22,12 +22,13 @@ func BillingPage(c *gin.Context) {
 		return
 	}
 	c.HTML(http.StatusOK, "billing.html", gin.H{
-		"title":    "Billing",
-		"active":   "billing",
-		"user":     user,
-		"subscribed": model.UserHasActiveSubscription(user),
-		"success":  c.Query("success"),
-		"error":    c.Query("error"),
+		"title":      "Billing",
+		"active":     "billing",
+		"user":       user,
+		"subscribed": model.UserHasAppAccess(user),
+		"isAdmin":    model.UserIsAdmin(user),
+		"success":    c.Query("success"),
+		"error":      c.Query("error"),
 	})
 }
 

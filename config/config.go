@@ -26,6 +26,7 @@ var (
 	WhopCompanyID         string
 	WhopPlanID            string
 	WhopProductID         string
+	AdminEmails           map[string]struct{}
 )
 
 func Load() {
@@ -60,6 +61,26 @@ func reloadFromEnv() {
 	WhopCompanyID = strings.TrimSpace(os.Getenv("WHOP_COMPANY_ID"))
 	WhopPlanID = strings.TrimSpace(os.Getenv("WHOP_PLAN_ID"))
 	WhopProductID = strings.TrimSpace(os.Getenv("WHOP_PRODUCT_ID"))
+	AdminEmails = parseEmailList(os.Getenv("ADMIN_EMAILS"))
+}
+
+func parseEmailList(raw string) map[string]struct{} {
+	out := make(map[string]struct{})
+	for _, part := range strings.Split(raw, ",") {
+		e := strings.TrimSpace(strings.ToLower(part))
+		if e != "" {
+			out[e] = struct{}{}
+		}
+	}
+	return out
+}
+
+func IsAdminEmail(email string) bool {
+	if len(AdminEmails) == 0 {
+		return false
+	}
+	_, ok := AdminEmails[strings.TrimSpace(strings.ToLower(email))]
+	return ok
 }
 
 func normalizeAppPassword(password string) string {

@@ -15,7 +15,9 @@
 <div class="card space-y-4">
     <h3 class="card-title">Subscription status</h3>
     <p class="text-sm text-slate-600">Signed in as <strong>{{.user.Email}}</strong></p>
-    {{if .subscribed}}
+    {{if .isAdmin}}
+    <p class="text-green-700 font-medium">Admin — full app access without a subscription.</p>
+    {{else if .subscribed}}
     <p class="text-green-700 font-medium">Active — full app access is enabled.</p>
     {{else}}
     <p class="text-amber-700">No active subscription. Subscribe to unlock campaigns, contacts, sends, and workflows.</p>

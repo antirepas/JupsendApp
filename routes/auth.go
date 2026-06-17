@@ -37,6 +37,7 @@ func LoginSubmit(c *gin.Context) {
 		return
 	}
 	auth.SetUserSession(c, user.ID)
+	_ = model.SetUserAdmin(user.ID, config.IsAdminEmail(user.Email))
 	c.Redirect(http.StatusFound, safeNext(next))
 }
 
@@ -72,6 +73,9 @@ func SignupSubmit(c *gin.Context) {
 	}
 	_ = model.AssignOrphanDataToUser(userID)
 	_ = model.CreateDefaultSMTPAccountForUser(userID)
+	if config.IsAdminEmail(email) {
+		_ = model.SetUserAdmin(userID, true)
+	}
 
 	auth.SetUserSession(c, userID)
 	c.Redirect(http.StatusFound, "/settings/billing?success=Welcome%21+Choose+a+plan+to+unlock+the+app")

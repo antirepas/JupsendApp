@@ -70,7 +70,7 @@ func RequireSubscription() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		if model.UserHasActiveSubscription(user) {
+		if model.UserHasAppAccess(user) {
 			c.Set("user", user)
 			c.Next()
 			return

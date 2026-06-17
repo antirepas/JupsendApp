@@ -136,7 +136,13 @@ Full app access requires an active Whop subscription. After signup, users land o
 
 Checkout metadata includes `user_id` so webhooks can match the app account. Email matching is a fallback only.
 
-For **local development without Whop**, activate a test user manually:
+For **local development without Whop**, either set admin emails (recommended):
+
+```env
+ADMIN_EMAILS=you@example.com
+```
+
+Or activate a test user manually:
 
 ```sql
 UPDATE users SET subscription_status = 'active' WHERE email = 'you@example.com';
@@ -336,6 +342,7 @@ go test ./...
 | `WHOP_COMPANY_ID` | Whop company ID | — |
 | `WHOP_PLAN_ID` | Whop plan ID (`plan_...`) for checkout | — |
 | `WHOP_PRODUCT_ID` | Whop product ID (`prod_...`) alternative to plan ID | — |
+| `ADMIN_EMAILS` | Comma-separated emails with full app access (no subscription) | — |
 | `TEST_DATABASE_URL` | Postgres URL for integration tests | same as local compose test DB |
 | `OUTBOUND_WORKER_INTERVAL` | Outbound worker seconds | `8` |
 | `IMAP_POLL_INTERVAL` | IMAP bounce poll seconds | `180` |
