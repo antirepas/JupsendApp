@@ -60,3 +60,7 @@ func RequireUserID(c *gin.Context) (int64, bool) {
 func isAPI(c *gin.Context) bool {
 	return len(c.Request.URL.Path) >= 8 && c.Request.URL.Path[:8] == "/api/v1/"
 }
+
+func IsAPI(c *gin.Context) bool {
+	return isAPI(c)
+}

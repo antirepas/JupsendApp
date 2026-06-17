@@ -3,6 +3,8 @@ package util
 import (
 	"fmt"
 	"net/smtp"
+
+	"emailtracker.com/googleoauth"
 )
 
 type SMTPConfig struct {
@@ -40,7 +42,22 @@ func (s *EmailSender) Send(to, subject, plainBody, htmlBody string) error {
 }
 
 func (s *EmailSender) SendWithMeta(to, subject, plainBody, htmlBody string, meta SendMeta) error {
-	auth := smtp.PlainAuth("", s.Config.Username, s.Config.Password, s.Config.Host)
+	return s.SendWithMetaAuth(to, subject, plainBody, htmlBody, meta, nil)
+}
+
+func (s *EmailSender) SendWithMetaOAuth(to, subject, plainBody, htmlBody string, meta SendMeta, accessToken string) error {
+	auth := googleoauth.SMTPAuth(s.Config.From, accessToken)
+	return s.sendWithAuth(to, subject, plainBody, htmlBody, meta, auth)
+}
+
+func (s *EmailSender) SendWithMetaAuth(to, subject, plainBody, htmlBody string, meta SendMeta, auth smtp.Auth) error {
+	if auth == nil {
+		auth = smtp.PlainAuth("", s.Config.Username, s.Config.Password, s.Config.Host)
+	}
+	return s.sendWithAuth(to, subject, plainBody, htmlBody, meta, auth)
+}
+
+func (s *EmailSender) sendWithAuth(to, subject, plainBody, htmlBody string, meta SendMeta, auth smtp.Auth) error {
 
 	boundary := "my-boundary-123"
 

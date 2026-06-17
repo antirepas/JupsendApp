@@ -44,11 +44,20 @@ func executeJob(job model.SendJob, account model.SMTPAccount) error {
 	}
 	sender := util.NewEmailSender(account.SMTPHost, account.SMTPPort, account.SMTPUser, account.SMTPPassword, from)
 	messageID := fmt.Sprintf("<%s@emailtracker>", trackID)
-	err = sender.SendWithMeta(contact.Email, newSubject, plainBody, replacedLinksBody, util.SendMeta{
+	meta := util.SendMeta{
 		MessageID:          messageID,
 		EmailTrackerSendID: fmt.Sprintf("%d", emailSendID),
 		FromName:           account.FromName,
-	})
+	}
+	if account.IsGoogleOAuth() {
+		token, err := model.GmailAccessToken(account)
+		if err != nil {
+			return fmt.Errorf("gmail oauth: %w", err)
+		}
+		err = sender.SendWithMetaOAuth(contact.Email, newSubject, plainBody, replacedLinksBody, meta, token)
+	} else {
+		err = sender.SendWithMeta(contact.Email, newSubject, plainBody, replacedLinksBody, meta)
+	}
 	if err != nil {
 		return err
 	}

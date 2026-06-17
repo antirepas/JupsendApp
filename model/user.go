@@ -10,12 +10,23 @@ import (
 )
 
 type User struct {
-	ID           int64
-	Email        string
-	PasswordHash string
-	BaseURL      string
-	CreatedAt    time.Time
+	ID                 int64
+	Email              string
+	PasswordHash       string
+	BaseURL            string
+	SubscriptionStatus string
+	WhopMembershipID   string
+	WhopMemberID       string
+	SubscriptionEndsAt *time.Time
+	CreatedAt          time.Time
 }
+
+const (
+	SubStatusNone      = "none"
+	SubStatusActive    = "active"
+	SubStatusPastDue   = "past_due"
+	SubStatusCancelled = "cancelled"
+)
 
 func CreateUser(email, passwordHash, baseURL string) (int64, error) {
 	if baseURL == "" {
@@ -31,21 +42,33 @@ func CreateUser(email, passwordHash, baseURL string) (int64, error) {
 
 func GetUserByEmail(email string) (User, error) {
 	row := db.QueryRow(`
-		SELECT id, email, password_hash, COALESCE(base_url, ''), created_at FROM users WHERE email = ?
+		SELECT id, email, password_hash, COALESCE(base_url, ''),
+			COALESCE(subscription_status, 'none'), COALESCE(whop_membership_id, ''), COALESCE(whop_member_id, ''),
+			subscription_ends_at, created_at
+		FROM users WHERE email = ?
 	`, strings.TrimSpace(strings.ToLower(email)))
 	return scanUser(row)
 }
 
 func GetUserByID(id int64) (User, error) {
 	row := db.QueryRow(`
-		SELECT id, email, password_hash, COALESCE(base_url, ''), created_at FROM users WHERE id = ?
+		SELECT id, email, password_hash, COALESCE(base_url, ''),
+			COALESCE(subscription_status, 'none'), COALESCE(whop_membership_id, ''), COALESCE(whop_member_id, ''),
+			subscription_ends_at, created_at
+		FROM users WHERE id = ?
 	`, id)
 	return scanUser(row)
 }
 
 func scanUser(row interface{ Scan(...interface{}) error }) (User, error) {
 	var u User
-	err := row.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.BaseURL, &u.CreatedAt)
+	var ends sql.NullTime
+	err := row.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.BaseURL,
+		&u.SubscriptionStatus, &u.WhopMembershipID, &u.WhopMemberID, &ends, &u.CreatedAt)
+	if ends.Valid {
+		t := ends.Time
+		u.SubscriptionEndsAt = &t
+	}
 	return u, err
 }
 
@@ -63,6 +86,36 @@ func UpdateUserPassword(userID int64, passwordHash string) error {
 func UpdateUserBaseURL(userID int64, baseURL string) error {
 	_, err := db.Exec(`UPDATE users SET base_url = ? WHERE id = ?`, strings.TrimRight(strings.TrimSpace(baseURL), "/"), userID)
 	return err
+}
+
+func UserHasActiveSubscription(u User) bool {
+	if u.SubscriptionStatus == SubStatusActive {
+		return true
+	}
+	if u.SubscriptionEndsAt != nil && u.SubscriptionEndsAt.After(time.Now()) {
+		return u.SubscriptionStatus != SubStatusNone && u.SubscriptionStatus != SubStatusCancelled
+	}
+	return false
+}
+
+func UpdateUserSubscription(userID int64, status, membershipID, memberID string, endsAt *time.Time) error {
+	var ends interface{}
+	if endsAt != nil {
+		ends = *endsAt
+	}
+	_, err := db.Exec(`
+		UPDATE users SET subscription_status = ?, whop_membership_id = ?, whop_member_id = ?, subscription_ends_at = ?
+		WHERE id = ?
+	`, status, membershipID, memberID, ends, userID)
+	return err
+}
+
+func UpdateUserSubscriptionByEmail(email, status, membershipID, memberID string, endsAt *time.Time) error {
+	u, err := GetUserByEmail(email)
+	if err != nil {
+		return err
+	}
+	return UpdateUserSubscription(u.ID, status, membershipID, memberID, endsAt)
 }
 
 func UserBaseURL(userID int64) string {

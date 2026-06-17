@@ -8,15 +8,23 @@ import (
 )
 
 var (
-	Port          string
-	BaseURL       string
-	DatabaseURL   string
-	SMTPHost      string
-	SMTPPort   string
-	SMTPUser   string
-	SMTPPass   string
-	SMTPFrom   string
-	SessionSecret string
+	Port                  string
+	BaseURL               string
+	DatabaseURL           string
+	SMTPHost              string
+	SMTPPort              string
+	SMTPUser              string
+	SMTPPass              string
+	SMTPFrom              string
+	SessionSecret         string
+	TokenEncryptionKey    string
+	GoogleClientID        string
+	GoogleClientSecret    string
+	GoogleOAuthRedirectURI string
+	WhopAPIKey            string
+	WhopWebhookSecret     string
+	WhopCompanyID         string
+	WhopPlanID            string
 )
 
 func Load() {
@@ -42,6 +50,14 @@ func reloadFromEnv() {
 		SMTPFrom = SMTPUser
 	}
 	SessionSecret = envOr("SESSION_SECRET", "")
+	TokenEncryptionKey = strings.TrimSpace(os.Getenv("TOKEN_ENCRYPTION_KEY"))
+	GoogleClientID = strings.TrimSpace(os.Getenv("GOOGLE_CLIENT_ID"))
+	GoogleClientSecret = strings.TrimSpace(os.Getenv("GOOGLE_CLIENT_SECRET"))
+	GoogleOAuthRedirectURI = strings.TrimSpace(os.Getenv("GOOGLE_OAUTH_REDIRECT_URI"))
+	WhopAPIKey = strings.TrimSpace(os.Getenv("WHOP_API_KEY"))
+	WhopWebhookSecret = strings.TrimSpace(os.Getenv("WHOP_WEBHOOK_SECRET"))
+	WhopCompanyID = strings.TrimSpace(os.Getenv("WHOP_COMPANY_ID"))
+	WhopPlanID = strings.TrimSpace(os.Getenv("WHOP_PLAN_ID"))
 }
 
 func normalizeAppPassword(password string) string {

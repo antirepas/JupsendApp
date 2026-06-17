@@ -6,7 +6,7 @@ Email Tracker is a self-hosted email outreach and analytics application built wi
 
 - **Email templates** with `{{variable}}` personalization
 - **Contact management** with per-contact variables
-- **Email sending** via SMTP with HTML + plain-text multipart messages
+- **Email sending** via Gmail OAuth (XOAUTH2 SMTP + IMAP bounces)
 - **Open tracking** via 1x1 tracking pixel
 - **Click tracking** with automatic link rewriting and redirect
 - **Dashboard** with stats, charts, and event timelines
@@ -15,7 +15,8 @@ Email Tracker is a self-hosted email outreach and analytics application built wi
 
 - Go 1.25+
 - PostgreSQL 16+ (local Docker Compose, or hosted e.g. [Supabase](https://supabase.com))
-- SMTP credentials configured per user in Settings after sign-up
+- Google Cloud OAuth client (Gmail send + IMAP) — see [Gmail OAuth](#gmail-oauth)
+- Whop subscription (optional in dev; required for full app access in production) — see [Whop billing](#whop-billing)
 
 ## Setup
 
@@ -50,7 +51,7 @@ DATABASE_URL=postgres://emailtracker:emailtracker@localhost:5432/emailtracker?ss
 go run .
 ```
 
-6. Open [http://localhost:8080/signup](http://localhost:8080/signup) to create an account, then configure SMTP and tracking URL in **Settings**.
+6. Open [http://localhost:8080/signup](http://localhost:8080/signup) to create an account, then subscribe under **Billing** and connect Gmail in **Settings**.
 
 ### Production (DigitalOcean VPS + Supabase)
 
@@ -80,12 +81,74 @@ Supabase Auth is **not** used by this app — only PostgreSQL hosting.
 
 ## Authentication
 
-- **Sign up** (`/signup`) — email + password (8+ characters). Each account is fully isolated (templates, contacts, campaigns, sends).
+- **Sign up** (`/signup`) — email + password (8+ characters). Redirects to **Billing** to choose a plan.
 - **Login** (`/login`) / **Logout** (sidebar).
 - Sessions use a signed HTTP-only cookie; set `SESSION_SECRET` in production (if unset, a random dev secret is generated and sessions reset on restart).
-- **Settings** (`/settings`) — change password, per-user `BASE_URL` for tracking links/pixels, and your single SMTP+IMAP sending profile (rate limits and warmup).
+- **Settings** (`/settings`) — change password, per-user `BASE_URL`, connect Gmail (OAuth), send limits and warmup. Available without an active subscription.
+- **Billing** (`/settings/billing`) — Whop checkout and subscription status. Required for dashboard, campaigns, contacts, sends, and workflows.
 
-Protected routes redirect to login; JSON API routes under `/api/v1/*` return `401` when unauthenticated. Tracking endpoints (`/api/v1/track/*`) remain public.
+Protected routes redirect to login; unsubscribed users are redirected to billing. JSON API routes under `/api/v1/*` return `401` when unauthenticated and `402` when subscription is inactive. Tracking endpoints (`/api/v1/track/*`) and the Whop webhook remain public.
+
+## Gmail OAuth
+
+Each user connects Gmail under **Settings → Connect Gmail**. Manual SMTP/IMAP password fields are no longer used.
+
+### Google Cloud setup
+
+1. Create a project in [Google Cloud Console](https://console.cloud.google.com/).
+2. Enable the **Gmail API**.
+3. Configure the **OAuth consent screen** (External). Add scope `https://mail.google.com/` plus `openid`, `email`, `profile`.
+4. Create **OAuth client ID** (Web application).
+5. Add authorized redirect URI: `https://your-domain.com/settings/gmail/callback` (must match `GOOGLE_OAUTH_REDIRECT_URI`).
+
+> The `mail.google.com` scope is restricted. Test users work in development; production requires Google app verification.
+
+### Env vars
+
+| Variable | Description |
+|----------|-------------|
+| `GOOGLE_CLIENT_ID` | OAuth client ID |
+| `GOOGLE_CLIENT_SECRET` | OAuth client secret |
+| `GOOGLE_OAUTH_REDIRECT_URI` | Callback URL, e.g. `https://your-domain.com/settings/gmail/callback` |
+| `TOKEN_ENCRYPTION_KEY` | Optional 32-byte key for encrypting refresh tokens at rest (falls back to `SESSION_SECRET`) |
+
+Refresh tokens are encrypted in PostgreSQL before storage.
+
+## Whop billing
+
+Full app access requires an active Whop subscription. After signup, users land on **Billing** to checkout. Webhooks update `subscription_status` on the user record.
+
+### Whop dashboard setup
+
+1. Create a plan in [Whop](https://whop.com) and note the plan ID (`plan_...`).
+2. Under **Developer → Webhooks**, add endpoint: `https://your-domain.com/api/v1/webhooks/whop`
+3. Copy the webhook secret (`whsec_...`).
+
+### Env vars
+
+| Variable | Description |
+|----------|-------------|
+| `WHOP_API_KEY` | Company API key |
+| `WHOP_WEBHOOK_SECRET` | Webhook signing secret (`whsec_...`) |
+| `WHOP_COMPANY_ID` | Company ID (`biz_...`) |
+| `WHOP_PLAN_ID` | Plan ID for checkout |
+
+Checkout metadata includes `user_id` so webhooks can match the app account. Email matching is a fallback only.
+
+For **local development without Whop**, activate a test user manually:
+
+```sql
+UPDATE users SET subscription_status = 'active' WHERE email = 'you@example.com';
+```
+
+### Subscription gate
+
+| Allowed without subscription | Requires active subscription |
+|------------------------------|------------------------------|
+| Login, signup, logout | Dashboard, templates, contacts |
+| Settings, Gmail OAuth | Campaigns, sends, workflows |
+| Billing, Whop webhook | JSON API CRUD/send |
+| `/api/v1/track/*` | |
 
 ## Usage
 
@@ -97,7 +160,8 @@ Protected routes redirect to login; JSON API routes under `/api/v1/*` return `40
 - **Templates** — create/edit HTML email templates with variables
 - **Contacts** — add recipients with personalization fields
 - **Sends** — view send history, send new emails, inspect per-email events
-- **Settings** — account password, tracking URL, SMTP/IMAP profile
+- **Settings** — account password, tracking URL, Gmail OAuth, send limits
+- **Billing** — subscription status and Whop checkout
 - **Suppressions** — bounced/suppressed contacts
 
 ### API Endpoints
@@ -141,10 +205,11 @@ Requires session auth (login first) or use the same cookie from the browser.
 
 Email sends go through a **SQLite-backed job queue** processed by a background worker (not inline SMTP).
 
-### Single SMTP profile per user
+### Gmail OAuth profile per user
 
-- Configure SMTP and IMAP under **Settings** (one sending profile per account).
-- The outbound worker uses the logged-in user's account when enqueueing; rate limits and warmup apply per profile.
+- Connect Gmail under **Settings** (one sending profile per account).
+- Outbound worker uses XOAUTH2 for SMTP; IMAP bounce polling uses the same OAuth token.
+- Rate limits and warmup apply per profile.
 
 ### Rate limits & warmup (defaults per account)
 
@@ -161,7 +226,7 @@ Transient SMTP errors are retried with backoff (1m, 5m, 15m, 60m), up to 5 attem
 
 ### Bounces (IMAP)
 
-Your Settings IMAP profile polls for bounces (Mailer-Daemon, DSN, `X-Failed-Recipients`). Matches correlate via `X-EmailTracker-Send-ID` on outbound mail. Suppressed contacts are skipped on enqueue.
+Your connected Gmail account is polled via IMAP for bounces (Mailer-Daemon, DSN, `X-Failed-Recipients`). Matches correlate via `X-EmailTracker-Send-ID` on outbound mail. Suppressed contacts are skipped on enqueue.
 
 ### Env knobs
 
@@ -242,10 +307,12 @@ go test ./...
 ├── auth/            # Password hashing and session helpers
 ├── config/          # Environment configuration
 ├── db/              # PostgreSQL setup and schema
+├── googleoauth/     # Gmail OAuth, token encryption, XOAUTH2
 ├── model/           # Data models and queries
 ├── outbound/        # Queue, worker, router, IMAP bounces
 ├── routes/          # HTTP handlers (web + API)
 ├── templates/       # Go HTML templates (dashboard UI)
+├── whop/            # Whop checkout and webhook verification
 ├── static/          # CSS assets
 ├── util/            # SMTP, templating, tracking helpers
 └── main.go
@@ -258,7 +325,15 @@ go test ./...
 | `PORT` | Server port | `8080` |
 | `BASE_URL` | Default tracking base URL (per-user override in Settings) | `http://localhost:8080` |
 | `SESSION_SECRET` | Cookie signing secret for sessions | — (random in dev) |
+| `TOKEN_ENCRYPTION_KEY` | Encrypt OAuth refresh tokens at rest | falls back to `SESSION_SECRET` |
 | `DATABASE_URL` | PostgreSQL connection string (required) | — |
+| `GOOGLE_CLIENT_ID` | Gmail OAuth client ID | — |
+| `GOOGLE_CLIENT_SECRET` | Gmail OAuth client secret | — |
+| `GOOGLE_OAUTH_REDIRECT_URI` | Gmail OAuth callback URL | — |
+| `WHOP_API_KEY` | Whop API key for checkout | — |
+| `WHOP_WEBHOOK_SECRET` | Whop webhook HMAC secret | — |
+| `WHOP_COMPANY_ID` | Whop company ID | — |
+| `WHOP_PLAN_ID` | Whop plan ID for subscriptions | — |
 | `TEST_DATABASE_URL` | Postgres URL for integration tests | same as local compose test DB |
 | `OUTBOUND_WORKER_INTERVAL` | Outbound worker seconds | `8` |
 | `IMAP_POLL_INTERVAL` | IMAP bounce poll seconds | `180` |

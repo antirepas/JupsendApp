@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"emailtracker.com/googleoauth"
 	"emailtracker.com/model"
 	"github.com/emersion/go-imap"
 	"github.com/emersion/go-imap/client"
@@ -27,7 +28,10 @@ func pollAllAccounts() {
 		return
 	}
 	for _, acc := range accounts {
-		if acc.Status != "active" || acc.IMAPHost == "" || acc.IMAPUser == "" {
+		if acc.Status != "active" || acc.IMAPHost == "" {
+			continue
+		}
+		if !acc.IsGoogleOAuth() && acc.IMAPUser == "" {
 			continue
 		}
 		if err := pollAccountBounces(acc); err != nil {
@@ -44,12 +48,26 @@ func pollAccountBounces(acc model.SMTPAccount) error {
 	}
 	defer c.Logout()
 
-	pass := acc.IMAPPassword
-	if pass == "" {
-		pass = acc.SMTPPassword
-	}
-	if err := c.Login(acc.IMAPUser, pass); err != nil {
-		return err
+	if acc.IsGoogleOAuth() {
+		token, err := model.GmailAccessToken(acc)
+		if err != nil {
+			return err
+		}
+		email := acc.GoogleEmail
+		if email == "" {
+			email = acc.IMAPUser
+		}
+		if err := c.Authenticate(googleoauth.IMAPAuth(email, token)); err != nil {
+			return err
+		}
+	} else {
+		pass := acc.IMAPPassword
+		if pass == "" {
+			pass = acc.SMTPPassword
+		}
+		if err := c.Login(acc.IMAPUser, pass); err != nil {
+			return err
+		}
 	}
 
 	mbox, err := c.Select("INBOX", false)

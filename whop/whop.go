@@ -1,0 +1,129 @@
+package whop
+
+import (
+	"bytes"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
+
+	"emailtracker.com/config"
+)
+
+const apiBase = "https://api.whop.com/api/v1"
+
+type CheckoutResponse struct {
+	PurchaseURL string `json:"purchase_url"`
+}
+
+func CreateCheckout(userID int64, redirectURL string) (string, error) {
+	if config.WhopAPIKey == "" || config.WhopCompanyID == "" || config.WhopPlanID == "" {
+		return "", fmt.Errorf("whop not configured")
+	}
+	body := map[string]interface{}{
+		"company_id":   config.WhopCompanyID,
+		"plan_id":      config.WhopPlanID,
+		"redirect_url": redirectURL,
+		"metadata": map[string]string{
+			"user_id": strconv.FormatInt(userID, 10),
+		},
+	}
+	raw, _ := json.Marshal(body)
+	req, err := http.NewRequest(http.MethodPost, apiBase+"/checkout_configurations", bytes.NewReader(raw))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+config.WhopAPIKey)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 300 {
+		return "", fmt.Errorf("whop checkout %d: %s", resp.StatusCode, string(respBody))
+	}
+	var out struct {
+		PurchaseURL string `json:"purchase_url"`
+	}
+	if err := json.Unmarshal(respBody, &out); err != nil {
+		return "", err
+	}
+	if out.PurchaseURL == "" {
+		return "", fmt.Errorf("empty purchase_url from whop")
+	}
+	return out.PurchaseURL, nil
+}
+
+type WebhookEvent struct {
+	Type      string          `json:"type"`
+	Data      json.RawMessage `json:"data"`
+	Timestamp string          `json:"timestamp"`
+}
+
+type MembershipData struct {
+	ID                 string `json:"id"`
+	Status             string `json:"status"`
+	Member             *struct {
+		ID string `json:"id"`
+	} `json:"member"`
+	User *struct {
+		Email string `json:"email"`
+	} `json:"user"`
+	Metadata           map[string]interface{} `json:"metadata"`
+	RenewalPeriodEnd   *time.Time             `json:"renewal_period_end"`
+	Valid              bool                   `json:"valid"`
+}
+
+func VerifyWebhookSignature(body []byte, headers http.Header) bool {
+	secret := config.WhopWebhookSecret
+	if secret == "" {
+		return false
+	}
+	secret = strings.TrimPrefix(secret, "whsec_")
+	msgID := headers.Get("webhook-id")
+	ts := headers.Get("webhook-timestamp")
+	sig := headers.Get("webhook-signature")
+	if msgID == "" || ts == "" || sig == "" {
+		return false
+	}
+	payload := msgID + "." + ts + "." + string(body)
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(payload))
+	expected := base64.StdEncoding.EncodeToString(mac.Sum(nil))
+	for _, part := range strings.Split(sig, " ") {
+		part = strings.TrimPrefix(part, "v1,")
+		if hmac.Equal([]byte(part), []byte(expected)) {
+			return true
+		}
+	}
+	return sig == expected
+}
+
+func ParseMembershipActivated(data json.RawMessage) (MembershipData, error) {
+	var m MembershipData
+	err := json.Unmarshal(data, &m)
+	return m, err
+}
+
+func UserIDFromMetadata(meta map[string]interface{}) int64 {
+	if meta == nil {
+		return 0
+	}
+	switch v := meta["user_id"].(type) {
+	case string:
+		id, _ := strconv.ParseInt(v, 10, 64)
+		return id
+	case float64:
+		return int64(v)
+	default:
+		return 0
+	}
+}

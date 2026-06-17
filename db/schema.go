@@ -9,6 +9,10 @@ func runSchema() {
 			email TEXT NOT NULL UNIQUE,
 			password_hash TEXT NOT NULL,
 			base_url TEXT DEFAULT '',
+			subscription_status TEXT NOT NULL DEFAULT 'none',
+			whop_membership_id TEXT DEFAULT '',
+			whop_member_id TEXT DEFAULT '',
+			subscription_ends_at TIMESTAMPTZ,
 			created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 		)`,
 
@@ -205,6 +209,11 @@ func runSchema() {
 			sends_today INTEGER NOT NULL DEFAULT 0,
 			sends_today_reset_at DATE,
 			last_send_at TIMESTAMPTZ,
+			auth_type TEXT NOT NULL DEFAULT '',
+			oauth_refresh_token TEXT DEFAULT '',
+			oauth_access_token TEXT DEFAULT '',
+			oauth_expiry TIMESTAMPTZ,
+			google_email TEXT DEFAULT '',
 			created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 		)`,
@@ -254,4 +263,5 @@ func runSchema() {
 			log.Fatalf("schema: %v\nstmt: %s", err, stmt)
 		}
 	}
+	runAlterSchema()
 }

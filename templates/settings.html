@@ -8,9 +8,10 @@
 <main class="flex-1 overflow-y-auto">
 <div class="max-w-3xl mx-auto p-8">
 <h2 class="text-2xl font-bold text-slate-900 mb-2">Settings</h2>
-<p class="text-slate-500 text-sm mb-6">Account, tracking URL, and your single sending profile.</p>
+<p class="text-slate-500 text-sm mb-6">Account, Gmail connection, tracking URL, and send limits.</p>
 {{if .success}}<div class="alert-success mb-6">{{.success}}</div>{{end}}
 {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
+{{if not .subscribed}}<div class="alert-error mb-6">Your subscription is inactive. <a href="/settings/billing" class="underline font-medium">Subscribe to unlock the app</a>.</div>{{end}}
 
 <form method="POST" action="/settings" class="space-y-8">
 <div class="card space-y-4">
@@ -34,27 +35,23 @@
 </div>
 
 <div class="card space-y-4">
-    <h3 class="card-title">Sending (SMTP + IMAP)</h3>
-    <div class="grid grid-cols-2 gap-4">
-        <div><label class="form-label">SMTP host</label><input name="smtp_host" class="form-input" value="{{if .account.SMTPHost}}{{.account.SMTPHost}}{{else}}smtp.gmail.com{{end}}"></div>
-        <div><label class="form-label">SMTP port</label><input name="smtp_port" class="form-input" value="{{if .account.SMTPPort}}{{.account.SMTPPort}}{{else}}587{{end}}"></div>
-    </div>
-    <div class="grid grid-cols-2 gap-4">
-        <div><label class="form-label">SMTP user</label><input name="smtp_user" class="form-input" value="{{.account.SMTPUser}}"></div>
-        <div><label class="form-label">SMTP password</label><input name="smtp_password" type="password" class="form-input" placeholder="Leave blank to keep"></div>
-    </div>
-    <div class="grid grid-cols-2 gap-4">
-        <div><label class="form-label">From email</label><input name="from_email" class="form-input" value="{{.account.FromEmail}}"></div>
-        <div><label class="form-label">From name</label><input name="from_name" class="form-input" value="{{.account.FromName}}"></div>
-    </div>
-    <div class="grid grid-cols-2 gap-4">
-        <div><label class="form-label">IMAP host</label><input name="imap_host" class="form-input" value="{{if .account.IMAPHost}}{{.account.IMAPHost}}{{else}}imap.gmail.com{{end}}"></div>
-        <div><label class="form-label">IMAP port</label><input name="imap_port" class="form-input" value="{{if .account.IMAPPort}}{{.account.IMAPPort}}{{else}}993{{end}}"></div>
-    </div>
-    <div class="grid grid-cols-2 gap-4">
-        <div><label class="form-label">IMAP user</label><input name="imap_user" class="form-input" value="{{.account.IMAPUser}}"></div>
-        <div><label class="form-label">IMAP password</label><input name="imap_password" type="password" class="form-input" placeholder="Leave blank to keep"></div>
-    </div>
+    <h3 class="card-title">Gmail</h3>
+    {{if .gmailConnected}}
+<p class="text-sm text-slate-600">Connected as <strong>{{.account.GoogleEmail}}</strong></p>
+<div class="grid grid-cols-2 gap-4">
+    <div><label class="form-label">From name</label><input name="from_name" class="form-input" value="{{.account.FromName}}"></div>
+</div>
+{{else if .gmailConfigured}}
+    <p class="text-sm text-slate-600">Connect your Gmail account to send email and detect bounces via IMAP.</p>
+    <a href="/settings/gmail/connect" class="btn-primary inline-flex">Connect Gmail</a>
+    {{else}}
+    <p class="text-sm text-amber-700">Gmail OAuth is not configured on this server. Set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and GOOGLE_OAUTH_REDIRECT_URI.</p>
+    {{end}}
+</div>
+
+{{if .gmailConnected}}
+<div class="card space-y-4">
+    <h3 class="card-title">Sending limits</h3>
     <div class="grid grid-cols-3 gap-4">
         <div><label class="form-label">Daily limit</label><input name="daily_limit" type="number" class="form-input" value="{{if .account.DailyLimit}}{{.account.DailyLimit}}{{else}}50{{end}}"></div>
         <div><label class="form-label">Per minute</label><input name="per_minute_limit" type="number" class="form-input" value="{{if .account.PerMinuteLimit}}{{.account.PerMinuteLimit}}{{else}}2{{end}}"></div>
@@ -70,9 +67,15 @@
         <div><label class="form-label">Increment / day</label><input name="warmup_increment_per_day" type="number" class="form-input" value="{{if .account.WarmupIncrementPerDay}}{{.account.WarmupIncrementPerDay}}{{else}}5{{end}}"></div>
     </div>
 </div>
+{{end}}
 
 <button type="submit" class="btn-primary">Save settings</button>
 </form>
+{{if .gmailConnected}}
+<form method="POST" action="/settings/gmail/disconnect" class="mt-4">
+    <button type="submit" class="btn-secondary">Disconnect Gmail</button>
+</form>
+{{end}}
 </div>
 </main>
 </div>

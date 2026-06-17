@@ -42,8 +42,8 @@ func TestSignupLoginLogout(t *testing.T) {
 	if w.Code != http.StatusFound {
 		t.Fatalf("signup expected redirect, got %d %s", w.Code, w.Body.String())
 	}
-	if !strings.Contains(w.Header().Get("Location"), "/settings") {
-		t.Fatalf("expected redirect to settings, got %s", w.Header().Get("Location"))
+	if !strings.Contains(w.Header().Get("Location"), "/settings/billing") {
+		t.Fatalf("expected redirect to billing, got %s", w.Header().Get("Location"))
 	}
 
 	logout := httptest.NewRequest(http.MethodPost, "/logout", nil)

@@ -74,7 +74,7 @@ func SignupSubmit(c *gin.Context) {
 	_ = model.CreateDefaultSMTPAccountForUser(userID)
 
 	auth.SetUserSession(c, userID)
-	c.Redirect(http.StatusFound, "/settings?success=Welcome%21+Configure+SMTP+and+tracking+URL")
+	c.Redirect(http.StatusFound, "/settings/billing?success=Welcome%21+Choose+a+plan+to+unlock+the+app")
 }
 
 func Logout(c *gin.Context) {

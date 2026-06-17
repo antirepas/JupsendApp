@@ -13,6 +13,7 @@ func RegisterRoutes(server *gin.Engine) {
 		"templates/auth_login.html",
 		"templates/auth_signup.html",
 		"templates/settings.html",
+		"templates/billing.html",
 		"templates/dashboard.html",
 		"templates/templates_list.html",
 		"templates/templates_form.html",
@@ -45,14 +46,25 @@ func RegisterRoutes(server *gin.Engine) {
 	v1.HEAD("/track/open/:id", TrackOpen)
 	v1.GET("/track/click/:id", TrackClick)
 	v1.HEAD("/track/click/:id", TrackClick)
+	v1.POST("/webhooks/whop", WhopWebhook)
+
+	settings := server.Group("/")
+	settings.Use(RequireAuth())
+	{
+		settings.GET("/settings", SettingsPage)
+		settings.POST("/settings", UpdateSettings)
+		settings.POST("/settings/base-url", UpdateBaseURL)
+		settings.GET("/settings/billing", BillingPage)
+		settings.POST("/settings/billing/checkout", BillingCheckout)
+		settings.GET("/settings/gmail/connect", GmailConnect)
+		settings.GET("/settings/gmail/callback", GmailCallback)
+		settings.POST("/settings/gmail/disconnect", GmailDisconnect)
+	}
 
 	authd := server.Group("/")
-	authd.Use(RequireAuth())
+	authd.Use(RequireAuth(), RequireSubscription())
 	{
 		authd.GET("/", Dashboard)
-		authd.GET("/settings", SettingsPage)
-		authd.POST("/settings", UpdateSettings)
-		authd.POST("/settings/base-url", UpdateBaseURL)
 		authd.GET("/test-pixel", TestTrackingPixel)
 
 		authd.GET("/templates", ListTemplatesPage)
@@ -104,7 +116,7 @@ func RegisterRoutes(server *gin.Engine) {
 	}
 
 	api := server.Group("/api/v1")
-	api.Use(RequireAuth())
+	api.Use(RequireAuth(), RequireSubscription())
 	{
 		api.POST("/template", SaveTemplate)
 		api.POST("/contact", SaveContacts)
