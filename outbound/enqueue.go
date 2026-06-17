@@ -23,6 +23,10 @@ type EnqueueInput struct {
 }
 
 func EnqueueSend(input EnqueueInput) (int64, int64, error) {
+	if _, err := model.GetSendReadyAccountForUser(input.UserID); err != nil {
+		return 0, 0, err
+	}
+
 	suppressed, err := model.IsContactSuppressed(input.ContactID)
 	if err != nil {
 		return 0, 0, err

@@ -25,6 +25,7 @@ var (
 	WhopWebhookSecret     string
 	WhopCompanyID         string
 	WhopPlanID            string
+	WhopProductID         string
 )
 
 func Load() {
@@ -58,6 +59,7 @@ func reloadFromEnv() {
 	WhopWebhookSecret = strings.TrimSpace(os.Getenv("WHOP_WEBHOOK_SECRET"))
 	WhopCompanyID = strings.TrimSpace(os.Getenv("WHOP_COMPANY_ID"))
 	WhopPlanID = strings.TrimSpace(os.Getenv("WHOP_PLAN_ID"))
+	WhopProductID = strings.TrimSpace(os.Getenv("WHOP_PRODUCT_ID"))
 }
 
 func normalizeAppPassword(password string) string {

@@ -30,9 +30,12 @@ func NextRateLimitDelay(accounts []model.SMTPAccount) time.Duration {
 		if acc.Status != "active" {
 			continue
 		}
-		if !accountUnderDailyCap(acc) {
-			continue
+	if !accountUnderDailyCap(acc) {
+		if minWait == 0 {
+			minWait = nextMidnight()
 		}
+		continue
+	}
 		if !accountUnderMinuteLimit(acc) {
 			if minWait == 0 || 30*time.Second < minWait {
 				minWait = 30 * time.Second

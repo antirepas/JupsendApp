@@ -14,6 +14,7 @@ var workerMu sync.Mutex
 func StartWorker() {
 	LoadConfig()
 	go func() {
+		runWorkerBatch()
 		ticker := time.NewTicker(WorkerInterval)
 		for range ticker.C {
 			runWorkerBatch()
@@ -38,15 +39,18 @@ func runWorkerBatch() {
 			continue
 		}
 
-		account, err := model.GetActiveSMTPAccountForUser(job.UserID)
+		account, err := resolveSendAccount(job.UserID)
 		if err != nil {
-			_ = model.RescheduleSendJob(job.ID, time.Now().Add(5*time.Minute), "no SMTP account configured for user")
+			log.Printf("outbound job %d: %v", job.ID, err)
+			failJobConfiguration(job, err)
 			continue
 		}
-		userAccounts := []model.SMTPAccount{account}
 
 		if !AccountCanSendNow(account) {
-			delay := NextRateLimitDelay(userAccounts)
+			delay := rateLimitDelay(account)
+			if delay < 5*time.Second {
+				delay = 5 * time.Second
+			}
 			_ = model.RescheduleSendJob(job.ID, time.Now().Add(delay), "rate limited: waiting for account capacity")
 			continue
 		}
@@ -59,6 +63,12 @@ func runWorkerBatch() {
 
 		job, err = model.GetSendJob(jobID)
 		if err != nil {
+			continue
+		}
+
+		account, err = resolveSendAccount(job.UserID)
+		if err != nil {
+			failJobConfiguration(job, err)
 			continue
 		}
 

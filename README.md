@@ -131,7 +131,8 @@ Full app access requires an active Whop subscription. After signup, users land o
 | `WHOP_API_KEY` | Company API key |
 | `WHOP_WEBHOOK_SECRET` | Webhook signing secret (`whsec_...`) |
 | `WHOP_COMPANY_ID` | Company ID (`biz_...`) |
-| `WHOP_PLAN_ID` | Plan ID for checkout |
+| `WHOP_PLAN_ID` | Plan ID for checkout (`plan_...`) |
+| `WHOP_PRODUCT_ID` | Product ID (`prod_...`) if you don't have a plan ID — app fetches the plan automatically |
 
 Checkout metadata includes `user_id` so webhooks can match the app account. Email matching is a fallback only.
 
@@ -333,7 +334,8 @@ go test ./...
 | `WHOP_API_KEY` | Whop API key for checkout | — |
 | `WHOP_WEBHOOK_SECRET` | Whop webhook HMAC secret | — |
 | `WHOP_COMPANY_ID` | Whop company ID | — |
-| `WHOP_PLAN_ID` | Whop plan ID for subscriptions | — |
+| `WHOP_PLAN_ID` | Whop plan ID (`plan_...`) for checkout | — |
+| `WHOP_PRODUCT_ID` | Whop product ID (`prod_...`) alternative to plan ID | — |
 | `TEST_DATABASE_URL` | Postgres URL for integration tests | same as local compose test DB |
 | `OUTBOUND_WORKER_INTERVAL` | Outbound worker seconds | `8` |
 | `IMAP_POLL_INTERVAL` | IMAP bounce poll seconds | `180` |

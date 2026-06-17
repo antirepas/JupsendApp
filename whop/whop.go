@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -23,12 +24,16 @@ type CheckoutResponse struct {
 }
 
 func CreateCheckout(userID int64, redirectURL string) (string, error) {
-	if config.WhopAPIKey == "" || config.WhopCompanyID == "" || config.WhopPlanID == "" {
-		return "", fmt.Errorf("whop not configured")
+	if config.WhopAPIKey == "" || config.WhopCompanyID == "" {
+		return "", fmt.Errorf("whop not configured: set WHOP_API_KEY and WHOP_COMPANY_ID")
+	}
+	planID, err := resolvePlanID()
+	if err != nil {
+		return "", err
 	}
 	body := map[string]interface{}{
-		"company_id":   config.WhopCompanyID,
-		"plan_id":      config.WhopPlanID,
+		"mode":         "payment",
+		"plan_id":      planID,
 		"redirect_url": redirectURL,
 		"metadata": map[string]string{
 			"user_id": strconv.FormatInt(userID, 10),
@@ -48,7 +53,7 @@ func CreateCheckout(userID int64, redirectURL string) (string, error) {
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 300 {
-		return "", fmt.Errorf("whop checkout %d: %s", resp.StatusCode, string(respBody))
+		return "", fmt.Errorf("whop checkout %d: %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
 	}
 	var out struct {
 		PurchaseURL string `json:"purchase_url"`
@@ -60,6 +65,59 @@ func CreateCheckout(userID int64, redirectURL string) (string, error) {
 		return "", fmt.Errorf("empty purchase_url from whop")
 	}
 	return out.PurchaseURL, nil
+}
+
+func resolvePlanID() (string, error) {
+	planID := strings.TrimSpace(config.WhopPlanID)
+	productID := strings.TrimSpace(config.WhopProductID)
+
+	if strings.HasPrefix(planID, "prod_") {
+		productID = planID
+		planID = ""
+	}
+	if planID != "" && strings.HasPrefix(planID, "plan_") {
+		return planID, nil
+	}
+	if planID != "" && !strings.HasPrefix(planID, "plan_") {
+		return "", fmt.Errorf("WHOP_PLAN_ID must start with plan_ (got %q). Use WHOP_PRODUCT_ID for prod_ IDs", planID)
+	}
+	if productID == "" {
+		return "", fmt.Errorf("set WHOP_PLAN_ID (plan_...) or WHOP_PRODUCT_ID (prod_...)")
+	}
+	return firstPlanForProduct(config.WhopCompanyID, productID)
+}
+
+func firstPlanForProduct(companyID, productID string) (string, error) {
+	q := url.Values{}
+	q.Set("account_id", companyID)
+	q.Set("product_ids", productID)
+	q.Set("first", "1")
+	req, err := http.NewRequest(http.MethodGet, apiBase+"/plans?"+q.Encode(), nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+config.WhopAPIKey)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 300 {
+		return "", fmt.Errorf("whop list plans %d: %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
+	}
+	var out struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(respBody, &out); err != nil {
+		return "", err
+	}
+	if len(out.Data) == 0 || out.Data[0].ID == "" {
+		return "", fmt.Errorf("no plan found for product %s — create a pricing plan on that product in Whop", productID)
+	}
+	return out.Data[0].ID, nil
 }
 
 type WebhookEvent struct {

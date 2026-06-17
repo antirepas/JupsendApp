@@ -58,6 +58,10 @@ func GmailCallback(c *gin.Context) {
 		c.Redirect(http.StatusFound, "/settings?error=Could+not+complete+Gmail+connection")
 		return
 	}
+	if tok.RefreshToken == "" {
+		c.Redirect(http.StatusFound, "/settings?error=Google+did+not+return+a+refresh+token.+Revoke+app+access+in+Google+Account+and+try+again")
+		return
+	}
 	encRefresh, err := googleoauth.Encrypt(tok.RefreshToken)
 	if err != nil {
 		c.Redirect(http.StatusFound, "/settings?error=Could+not+store+Gmail+token")

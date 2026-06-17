@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -38,13 +39,17 @@ func BillingCheckout(c *gin.Context) {
 	}
 	base := model.UserBaseURL(userID)
 	redirectURL := strings.TrimRight(base, "/") + "/settings/billing?success=1"
-	url, err := whop.CreateCheckout(userID, redirectURL)
+	purchaseURL, err := whop.CreateCheckout(userID, redirectURL)
 	if err != nil {
 		log.Printf("whop checkout: %v", err)
-		c.Redirect(http.StatusFound, "/settings/billing?error=Could+not+start+checkout")
+		msg := err.Error()
+		if len(msg) > 180 {
+			msg = msg[:180]
+		}
+		c.Redirect(http.StatusFound, "/settings/billing?error="+url.QueryEscape(msg))
 		return
 	}
-	c.Redirect(http.StatusFound, url)
+	c.Redirect(http.StatusFound, purchaseURL)
 }
 
 func WhopWebhook(c *gin.Context) {
