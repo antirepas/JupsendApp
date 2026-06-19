@@ -2,7 +2,7 @@
 <!DOCTYPE html>
 <html lang="en" class="h-full">
 <head>{{template "head" .}}</head>
-<body class="h-full bg-slate-50 text-slate-800">
+<body class="h-full bg-ivory text-charcoal">
 <div class="flex h-full">
 {{template "sidebar" .}}
 <main class="flex-1 overflow-y-auto">
@@ -126,17 +126,6 @@
     {{end}}
 </div>
 
-{{if .mergedVars}}
-<div class="card mb-6">
-    <h3 class="card-title">Import variable columns</h3>
-    <p class="text-sm text-slate-600 mb-3">When pasting or uploading contacts, use these columns (merged from both templates):</p>
-    <div class="flex flex-wrap gap-2">
-        <span class="badge badge-blue">email</span>
-        {{range .mergedVars}}<span class="badge badge-gray">{{.}}</span>{{end}}
-    </div>
-</div>
-{{end}}
-
 <div class="card overflow-hidden mb-6">
     <h3 class="card-title">Contacts &amp; personalized previews ({{len .contactRows}})</h3>
     {{if .contactRows}}
@@ -200,39 +189,45 @@
 
 <div class="card mb-6">
     <h3 class="card-title">Add contacts</h3>
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div>
-            <p class="text-sm font-medium text-slate-700 mb-2">Select existing</p>
-            <form method="POST" action="/campaigns/{{.campaign.ID}}/contacts" class="space-y-2">
-                <div class="max-h-48 overflow-y-auto border border-slate-200 rounded-lg p-2 space-y-1">
-                    {{range .allContacts}}
-                    <label class="flex items-center gap-2 text-sm p-1 hover:bg-slate-50 rounded">
-                        <input type="checkbox" name="contact_ids" value="{{.ID}}">
-                        <span>{{.Email}}</span>
-                    </label>
-                    {{else}}
-                    <p class="text-slate-400 text-sm">No contacts yet.</p>
-                    {{end}}
-                </div>
-                <button type="submit" class="btn-primary text-sm">Add selected</button>
-            </form>
-        </div>
-        <div>
-            <p class="text-sm font-medium text-slate-700 mb-2">Quick paste</p>
-            <form method="POST" action="/campaigns/{{.campaign.ID}}/paste" class="space-y-2">
-                <textarea name="paste" rows="6" class="form-input text-sm font-mono" placeholder="email,name,company&#10;john@example.com,John,Acme"></textarea>
-                <p class="form-hint">One per line: email or email,var1,var2 matching template variables</p>
-                <button type="submit" class="btn-primary text-sm">Import pasted</button>
-            </form>
-        </div>
-        <div>
-            <p class="text-sm font-medium text-slate-700 mb-2">Excel upload</p>
-            <form method="POST" action="/campaigns/{{.campaign.ID}}/upload" enctype="multipart/form-data" class="space-y-2">
-                <input type="file" name="file" class="form-input" accept=".xlsx,.xls" required>
-                <a href="/campaigns/{{.campaign.ID}}/sample" class="text-sm text-brand-600 font-medium">Download sample</a>
-                <button type="submit" class="btn-primary text-sm">Upload Excel</button>
-            </form>
-        </div>
+    <div class="flex gap-1 border-b border-gray-200 mb-4" id="contact-tabs">
+        <button type="button" class="tab-btn {{if .allContacts}}active{{end}}" data-tab="select">Select existing</button>
+        <button type="button" class="tab-btn {{if not .allContacts}}active{{end}}" data-tab="paste">Paste</button>
+        <button type="button" class="tab-btn" data-tab="upload">Upload Excel</button>
+    </div>
+    <div id="tab-select" class="contact-tab-panel {{if not .allContacts}}hidden{{end}}">
+        <form method="POST" action="/campaigns/{{.campaign.ID}}/contacts" class="space-y-2">
+            <div class="max-h-48 overflow-y-auto border border-gray-200 rounded-lg p-2 space-y-1">
+                {{range .allContacts}}
+                <label class="flex items-center gap-2 text-sm p-1 hover:bg-ivory rounded">
+                    <input type="checkbox" name="contact_ids" value="{{.ID}}">
+                    <span>{{.Email}}</span>
+                </label>
+                {{else}}
+                <p class="text-gray-400 text-sm">No contacts yet — use Paste or Upload.</p>
+                {{end}}
+            </div>
+            <button type="submit" class="btn-primary text-sm">Add selected</button>
+        </form>
+    </div>
+    <div id="tab-paste" class="contact-tab-panel {{if .allContacts}}hidden{{end}}">
+        {{if .mergedVars}}
+        <p class="text-sm text-gray-600 mb-2">Columns: <span class="badge badge-gray">email</span> {{range .mergedVars}}<span class="badge badge-gray">{{.}}</span>{{end}}</p>
+        {{end}}
+        <form method="POST" action="/campaigns/{{.campaign.ID}}/paste" class="space-y-2">
+            <textarea name="paste" rows="6" class="form-input text-sm font-mono" placeholder="email,name,company&#10;john@example.com,John,Acme"></textarea>
+            <p class="form-hint">One per line: email or email,var1,var2 matching template variables</p>
+            <button type="submit" class="btn-primary text-sm">Import pasted</button>
+        </form>
+    </div>
+    <div id="tab-upload" class="contact-tab-panel hidden">
+        {{if .mergedVars}}
+        <p class="text-sm text-gray-600 mb-2">Columns: <span class="badge badge-gray">email</span> {{range .mergedVars}}<span class="badge badge-gray">{{.}}</span>{{end}}</p>
+        {{end}}
+        <form method="POST" action="/campaigns/{{.campaign.ID}}/upload" enctype="multipart/form-data" class="space-y-2">
+            <input type="file" name="file" class="form-input" accept=".xlsx,.xls" required>
+            <a href="/campaigns/{{.campaign.ID}}/sample" class="text-sm text-brand-600 font-medium">Download sample</a>
+            <button type="submit" class="btn-primary text-sm">Upload Excel</button>
+        </form>
     </div>
 </div>
 </div>
@@ -243,6 +238,15 @@ document.querySelectorAll('.preview-toggle').forEach(btn => {
     btn.addEventListener('click', () => {
         const row = document.getElementById(btn.dataset.target);
         if (row) row.classList.toggle('hidden');
+    });
+});
+document.querySelectorAll('#contact-tabs .tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('#contact-tabs .tab-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        document.querySelectorAll('.contact-tab-panel').forEach(p => p.classList.add('hidden'));
+        const panel = document.getElementById('tab-' + btn.dataset.tab);
+        if (panel) panel.classList.remove('hidden');
     });
 });
 </script>

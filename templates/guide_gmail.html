@@ -1,0 +1,49 @@
+{{define "guide_gmail.html"}}
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>{{template "head" .}}</head>
+<body class="h-full bg-ivory text-charcoal">
+<div class="flex h-full">
+{{template "sidebar" .}}
+<main class="flex-1 overflow-y-auto">
+<div class="max-w-3xl mx-auto p-8 guide-prose">
+<a href="/" class="text-sm text-brand-600 font-medium">← Dashboard</a>
+<h2 class="text-2xl font-bold text-charcoal mt-2 mb-1">{{.pageTitle}}</h2>
+<p class="text-gray-500 text-sm mb-8">{{.subtitle}}</p>
+
+<div class="card mb-6 space-y-4">
+    <h3 class="font-semibold text-charcoal">Why connect Gmail?</h3>
+    <p class="text-sm text-gray-600 leading-relaxed">jupsend sends outreach through your Gmail account (not a shared SMTP password). Opens and clicks are tracked via your jupsend domain, while delivery uses Google's servers — better deliverability and fewer auth issues.</p>
+    <ul class="text-sm text-gray-600 list-disc list-inside space-y-1">
+        <li>Send campaigns and one-off emails from your address</li>
+        <li>Automatic bounce detection via IMAP (failed addresses get suppressed)</li>
+        <li>Rate limits and warmup to protect your sender reputation</li>
+    </ul>
+</div>
+
+<div class="card mb-6 space-y-4">
+    <h3 class="font-semibold text-charcoal">Step-by-step</h3>
+    <ol class="space-y-4 text-sm text-gray-600">
+        <li class="flex gap-3"><span class="onboarding-step-num shrink-0">1</span><span>Go to <a href="/settings" class="text-brand-600 font-medium">Settings</a> and find the <strong>Gmail</strong> section.</span></li>
+        <li class="flex gap-3"><span class="onboarding-step-num shrink-0">2</span><span>Click <strong>Connect Gmail</strong>. You'll be redirected to Google to sign in and approve access.</span></li>
+        <li class="flex gap-3"><span class="onboarding-step-num shrink-0">3</span><span>Grant permission for Gmail send + read (used only for bounces, not browsing your inbox).</span></li>
+        <li class="flex gap-3"><span class="onboarding-step-num shrink-0">4</span><span>After redirect back, Settings will show your connected email. Set your <strong>From name</strong> and adjust send limits if needed, then click <strong>Save settings</strong>.</span></li>
+    </ol>
+</div>
+
+<div class="card mb-6 space-y-3">
+    <h3 class="font-semibold text-charcoal">Tips</h3>
+    <p class="text-sm text-gray-600">Start with low daily limits (warmup is on by default) and increase gradually. If Google asks for app verification in production, test users can connect during development.</p>
+    <p class="text-sm text-gray-600">To disconnect, use <strong>Disconnect Gmail</strong> in Settings — tokens are removed from jupsend immediately.</p>
+</div>
+
+<div class="flex gap-3">
+    <a href="/settings" class="btn-primary">Open Settings</a>
+    <a href="/" class="btn-secondary">Back to dashboard</a>
+</div>
+</div>
+</main>
+</div>
+</body>
+</html>
+{{end}}

@@ -4,12 +4,23 @@ module.exports = {
   theme: {
     extend: {
       colors: {
+        charcoal: {
+          DEFAULT: "#111827",
+          light: "#1F2937",
+        },
+        ivory: {
+          DEFAULT: "#FAFAF8",
+        },
+        emerald: {
+          DEFAULT: "#10B981",
+          dark: "#059669",
+        },
         brand: {
-          50: "#eff6ff",
-          100: "#dbeafe",
-          500: "#3b82f6",
-          600: "#2563eb",
-          700: "#1d4ed8",
+          50: "#ecfdf5",
+          100: "#d1fae5",
+          500: "#10B981",
+          600: "#059669",
+          700: "#047857",
         },
       },
     },

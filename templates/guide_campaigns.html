@@ -1,0 +1,45 @@
+{{define "guide_campaigns.html"}}
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>{{template "head" .}}</head>
+<body class="h-full bg-ivory text-charcoal">
+<div class="flex h-full">
+{{template "sidebar" .}}
+<main class="flex-1 overflow-y-auto">
+<div class="max-w-3xl mx-auto p-8 guide-prose">
+<a href="/" class="text-sm text-brand-600 font-medium">← Dashboard</a>
+<h2 class="text-2xl font-bold text-charcoal mt-2 mb-1">{{.pageTitle}}</h2>
+<p class="text-gray-500 text-sm mb-8">{{.subtitle}}</p>
+
+<div class="card mb-6 space-y-4">
+    <h3 class="font-semibold text-charcoal">Campaign flow</h3>
+    <p class="text-sm text-gray-600 leading-relaxed">A campaign ties together a template (or A/B pair), a list of contacts, and a send action. jupsend queues emails, respects your Gmail rate limits, and records opens and clicks per contact on your dashboard.</p>
+</div>
+
+<div class="card mb-6 space-y-4">
+    <h3 class="font-semibold text-charcoal">Step-by-step</h3>
+    <ol class="space-y-4 text-sm text-gray-600">
+        <li class="flex gap-3"><span class="onboarding-step-num shrink-0">1</span><span><strong>Connect Gmail</strong> in Settings (required before any send).</span></li>
+        <li class="flex gap-3"><span class="onboarding-step-num shrink-0">2</span><span>Create at least one <a href="/templates/new" class="text-brand-600 font-medium">template</a>. Optionally add Template B for A/B testing.</span></li>
+        <li class="flex gap-3"><span class="onboarding-step-num shrink-0">3</span><span><a href="/campaigns/new" class="text-brand-600 font-medium">Create a campaign</a> — pick Template A (and B if you want).</span></li>
+        <li class="flex gap-3"><span class="onboarding-step-num shrink-0">4</span><span>On the campaign page, add contacts: select existing, paste rows, or upload Excel. Variable columns must match your template.</span></li>
+        <li class="flex gap-3"><span class="onboarding-step-num shrink-0">5</span><span>Review personalized previews, then <strong>Send now</strong> or schedule for later.</span></li>
+        <li class="flex gap-3"><span class="onboarding-step-num shrink-0">6</span><span>Watch the dashboard <strong>Contact activity</strong> feed and campaign analytics for opens, clicks, and bounces.</span></li>
+    </ol>
+</div>
+
+<div class="card mb-6 space-y-3">
+    <h3 class="font-semibold text-charcoal">A/B assignment</h3>
+    <p class="text-sm text-gray-600">Contacts alternate between Variant A and B (when Template B exists). Compare performance under campaign analytics after sending.</p>
+</div>
+
+<div class="flex gap-3">
+    <a href="/campaigns/new" class="btn-primary">Create campaign</a>
+    <a href="/" class="btn-secondary">Back to dashboard</a>
+</div>
+</div>
+</main>
+</div>
+</body>
+</html>
+{{end}}

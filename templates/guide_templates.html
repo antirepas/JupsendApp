@@ -1,0 +1,48 @@
+{{define "guide_templates.html"}}
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>{{template "head" .}}</head>
+<body class="h-full bg-ivory text-charcoal">
+<div class="flex h-full">
+{{template "sidebar" .}}
+<main class="flex-1 overflow-y-auto">
+<div class="max-w-3xl mx-auto p-8 guide-prose">
+<a href="/" class="text-sm text-brand-600 font-medium">← Dashboard</a>
+<h2 class="text-2xl font-bold text-charcoal mt-2 mb-1">{{.pageTitle}}</h2>
+<p class="text-gray-500 text-sm mb-8">{{.subtitle}}</p>
+
+<div class="card mb-6 space-y-4">
+    <h3 class="font-semibold text-charcoal">What is a template?</h3>
+    <p class="text-sm text-gray-600 leading-relaxed">A template is the email your contacts receive: subject line + HTML body. Use placeholders like <code class="text-xs bg-gray-100 px-1 rounded">{{"{{name}}"}}</code> or <code class="text-xs bg-gray-100 px-1 rounded">{{"{{company}}"}}</code> — jupsend replaces them with each contact's data when sending.</p>
+</div>
+
+<div class="card mb-6 space-y-4">
+    <h3 class="font-semibold text-charcoal">Creating a template</h3>
+    <ol class="space-y-3 text-sm text-gray-600 list-decimal list-inside">
+        <li>Open <a href="/templates" class="text-brand-600 font-medium">Templates</a> → <strong>New template</strong>.</li>
+        <li>Enter a name (internal label), subject, and HTML body.</li>
+        <li>List variable names you'll use (e.g. <code class="text-xs bg-gray-100 px-1">name</code>, <code class="text-xs bg-gray-100 px-1">company</code>) — one per line in the variables field.</li>
+        <li>Add links in the body normally; jupsend rewrites them for click tracking automatically.</li>
+    </ol>
+    <p class="text-sm text-gray-600">Example subject: <code class="text-xs bg-gray-100 px-1">Quick question for {{"{{name}}"}} at {{"{{company}}"}}</code></p>
+</div>
+
+<div class="card mb-6 space-y-3">
+    <h3 class="font-semibold text-charcoal">Best practices</h3>
+    <ul class="text-sm text-gray-600 list-disc list-inside space-y-1">
+        <li>Keep one clear call-to-action link per email</li>
+        <li>Match variables to columns when importing contacts (paste or Excel)</li>
+        <li>Use Template A / B in campaigns to A/B test two versions</li>
+    </ul>
+</div>
+
+<div class="flex gap-3">
+    <a href="/templates/new" class="btn-primary">Create template</a>
+    <a href="/" class="btn-secondary">Back to dashboard</a>
+</div>
+</div>
+</main>
+</div>
+</body>
+</html>
+{{end}}

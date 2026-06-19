@@ -2,11 +2,18 @@
 <!DOCTYPE html>
 <html lang="en" class="h-full">
 <head>{{template "head" .}}</head>
-<body class="h-full bg-slate-50 text-slate-800">
+<body class="h-full bg-ivory text-charcoal">
 <div class="min-h-full flex items-center justify-center p-6">
 <div class="card w-full max-w-md">
-    <h1 class="text-2xl font-bold text-slate-900 mb-2">Create account</h1>
-    <p class="text-slate-500 text-sm mb-6">Each account has its own contacts, campaigns, and SMTP settings.</p>
+    <div class="flex items-center gap-3 mb-6">
+        <img src="/static/img/logo.png" alt="jupsend" class="auth-logo">
+        <div>
+            <h1 class="text-xl font-bold text-charcoal">jupsend</h1>
+            <p class="text-gray-500 text-xs">Email outreach</p>
+        </div>
+    </div>
+    <h2 class="text-lg font-semibold text-charcoal mb-1">Create account</h2>
+    <p class="text-gray-500 text-sm mb-6">Your contacts, campaigns, and Gmail connection in one place.</p>
     {{if .error}}<div class="alert-error mb-4">{{.error}}</div>{{end}}
     <form method="POST" action="/signup" class="space-y-4">
         <div>
@@ -23,7 +30,7 @@
         </div>
         <button type="submit" class="btn-primary w-full justify-center">Create account</button>
     </form>
-    <p class="text-sm text-slate-500 mt-6 text-center">Already have an account? <a href="/login" class="text-brand-600 font-medium">Sign in</a></p>
+    <p class="text-sm text-gray-500 mt-6 text-center">Already have an account? <a href="/login" class="text-brand-600 font-medium">Sign in</a></p>
 </div>
 </div>
 </body>

@@ -2,116 +2,180 @@
 <!DOCTYPE html>
 <html lang="en" class="h-full">
 <head>{{template "head" .}}</head>
-<body class="h-full bg-slate-50 text-slate-800">
+<body class="h-full bg-ivory text-charcoal">
 <div class="flex h-full">
 {{template "sidebar" .}}
 <main class="flex-1 overflow-y-auto">
 <div class="max-w-6xl mx-auto p-8">
-<div class="mb-8">
-    <h2 class="text-2xl font-bold text-slate-900">Dashboard</h2>
-    <p class="text-slate-500 mt-1">Overview of your email outreach performance</p>
-</div>
-
 {{if .success}}<div class="alert-success mb-6">{{.success}}</div>{{end}}
 {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
 
+{{if .isEmpty}}
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="card lg:col-span-2">
+        <h2 class="text-2xl font-bold text-charcoal mb-2">Welcome{{if .user.Email}}, {{.user.Email}}{{end}}</h2>
+        <p class="text-gray-500 text-sm mb-6 max-w-lg">You're set up on jupsend. Connect Gmail, create a template, and launch your first campaign to start tracking opens and clicks.</p>
+        {{if not .gmailConnected}}
+        <div class="alert-error mb-4 text-sm">Gmail is not connected yet. <a href="/guides/gmail" class="underline font-medium">Follow the Gmail setup guide</a> before sending.</div>
+        {{end}}
+        <a href="/campaigns/new" class="btn-primary">Create campaign</a>
+    </div>
+    <div class="card bg-gradient-to-br from-emerald to-emerald-dark text-charcoal p-8 flex flex-col justify-center">
+        <p class="font-semibold text-lg mb-4">Track opens &amp; link clicks per contact</p>
+        <ul class="feature-highlight-list opacity-90">
+            <li>See exactly who opened each send</li>
+            <li>Track which links each contact clicked</li>
+            <li>Review activity by campaign on your dashboard</li>
+        </ul>
+    </div>
+</div>
+
+<div class="card mt-6">
+    <h3 class="card-title">3 steps to get started</h3>
+    <p class="text-sm text-gray-500 mb-6">Follow these guides, then launch your first outreach.</p>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <a href="/guides/gmail" class="onboarding-step group hover:bg-ivory rounded-lg transition-colors">
+            <span class="onboarding-step-num">1</span>
+            <p class="font-semibold text-charcoal group-hover:text-brand-600">Connect Gmail</p>
+            <p class="text-xs text-gray-500 mt-1">OAuth send + bounce detection</p>
+        </a>
+        <a href="/guides/templates" class="onboarding-step group hover:bg-ivory rounded-lg transition-colors">
+            <span class="onboarding-step-num">2</span>
+            <p class="font-semibold text-charcoal group-hover:text-brand-600">Create a template</p>
+            <p class="text-xs text-gray-500 mt-1">Subject, body, variables</p>
+        </a>
+        <a href="/guides/campaigns" class="onboarding-step group hover:bg-ivory rounded-lg transition-colors">
+            <span class="onboarding-step-num">3</span>
+            <p class="font-semibold text-charcoal group-hover:text-brand-600">Launch a campaign</p>
+            <p class="text-xs text-gray-500 mt-1">Add contacts and send</p>
+        </a>
+    </div>
+</div>
+
+<div class="mt-6">
+    <h3 class="text-sm font-semibold text-charcoal mb-3">Learn how jupsend works</h3>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <a href="/guides/gmail" class="help-card">
+            <span class="help-card-label">Guide</span>
+            <div>
+                <p class="font-semibold text-charcoal">How to connect Gmail</p>
+                <p class="text-sm text-gray-500 mt-0.5">OAuth steps, permissions, and send limits</p>
+            </div>
+        </a>
+        <a href="/guides/campaigns" class="help-card">
+            <span class="help-card-label">Guide</span>
+            <div>
+                <p class="font-semibold text-charcoal">How campaigns work</p>
+                <p class="text-sm text-gray-500 mt-0.5">Templates, contacts, A/B sends, analytics</p>
+            </div>
+        </a>
+        <a href="/guides/templates" class="help-card">
+            <span class="help-card-label">Guide</span>
+            <div>
+                <p class="font-semibold text-charcoal">How templates work</p>
+                <p class="text-sm text-gray-500 mt-0.5">Variables, HTML body, click tracking</p>
+            </div>
+        </a>
+        <a href="/guides/workflows" class="help-card">
+            <span class="help-card-label">Guide</span>
+            <div>
+                <p class="font-semibold text-charcoal">How workflows work</p>
+                <p class="text-sm text-gray-500 mt-0.5">Follow-ups, delays, open/click branches</p>
+            </div>
+        </a>
+    </div>
+</div>
+
+{{else}}
+<div class="mb-8">
+    <h2 class="text-2xl font-bold text-charcoal">Dashboard</h2>
+    <p class="text-gray-500 mt-1 text-sm">Overview of your outreach performance</p>
+</div>
+
 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
     <div class="stat-card">
-        <p class="stat-label">Total Sent</p>
+        <p class="stat-label">Total sent</p>
         <p class="stat-value">{{.stats.TotalSends}}</p>
     </div>
     <div class="stat-card">
         <p class="stat-label">Opens</p>
-        <p class="stat-value text-blue-600">{{.stats.TotalOpens}}</p>
-        <p class="text-sm text-slate-500 mt-1">{{printf "%.1f" .stats.OpenRate}}% open rate</p>
+        <p class="stat-value text-brand-600">{{.stats.TotalOpens}}</p>
+        <p class="text-sm text-gray-500 mt-1">{{printf "%.1f" .stats.OpenRate}}% open rate</p>
     </div>
     <div class="stat-card">
         <p class="stat-label">Clicks</p>
-        <p class="stat-value text-emerald-600">{{.stats.TotalClicks}}</p>
-        <p class="text-sm text-slate-500 mt-1">{{printf "%.1f" .stats.ClickRate}}% click rate</p>
+        <p class="stat-value text-brand-600">{{.stats.TotalClicks}}</p>
+        <p class="text-sm text-gray-500 mt-1">{{printf "%.1f" .stats.ClickRate}}% click rate</p>
     </div>
     <div class="stat-card">
         <p class="stat-label">In database</p>
-        <p class="text-sm text-slate-700 mt-2">{{.counts.Templates}} templates · {{.counts.Contacts}} contacts · {{.counts.Campaigns}} campaigns</p>
+        <p class="text-sm text-gray-700 mt-2">{{.counts.Templates}} templates · {{.counts.Contacts}} contacts · {{.counts.Campaigns}} campaigns</p>
     </div>
 </div>
 
 <div class="card mb-8">
-    <h3 class="card-title">Quick actions</h3>
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <a href="/campaigns/new" class="btn-secondary justify-center">New campaign</a>
-        <a href="/templates/new" class="btn-secondary justify-center">New template</a>
-        <a href="/contacts/new" class="btn-secondary justify-center">New contact</a>
-        <a href="/sends/new" class="btn-secondary justify-center">Send email</a>
-        <a href="/campaigns" class="btn-secondary justify-center">All campaigns</a>
-        <a href="/templates" class="btn-secondary justify-center">All templates</a>
-        <a href="/contacts" class="btn-secondary justify-center">All contacts</a>
-        <a href="/sends" class="btn-secondary justify-center">All sends</a>
-    </div>
-</div>
-
-<div class="card mb-8">
-    <h3 class="card-title">Tracking setup</h3>
-    {{if .trackingWarning}}
-    <div class="alert-error mb-3">{{.trackingWarning}}</div>
-    {{end}}
-    <p class="text-sm text-slate-600 mb-3">Open/click tracking uses this public URL in emails. It must be reachable from mail clients (not blocked by a tunnel warning page).</p>
-    <p class="text-sm font-mono bg-slate-100 p-2 rounded mb-3">{{.baseURL}}</p>
-    <p class="text-sm text-slate-600 mb-3">Configure SMTP and tracking in <a href="/settings" class="text-brand-600 font-medium">Settings</a>.</p>
-    <form method="POST" action="/settings/base-url" class="flex gap-2 mb-3">
-        <input type="url" name="base_url" class="form-input flex-1" placeholder="https://your-domain.com" value="{{.baseURL}}">
-        <button type="submit" class="btn-primary">Update URL</button>
-    </form>
-    <div class="flex gap-3 text-sm">
-        <a href="/test-pixel" class="text-brand-600 font-medium">Test tracking pixel</a>
-        <span class="text-slate-400">|</span>
-        <span class="text-slate-500">Gmail blocks images until recipient clicks "Display images"</span>
-    </div>
-</div>
-
-<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-    <div class="card lg:col-span-2">
-        <h3 class="card-title">Sends vs Opens (14 days)</h3>
-        <canvas id="statsChart" height="120"></canvas>
-    </div>
-    <div class="card">
-        <h3 class="card-title">Recent Activity</h3>
-        <div class="space-y-3">
-            {{if .recentEvents}}
-            {{range .recentEvents}}
-            <div class="flex items-start gap-3 py-2 border-b border-slate-100 last:border-0">
-                <span class="badge {{if eq .EventType "open"}}badge-blue{{else if eq .EventType "click"}}badge-green{{else}}badge-gray{{end}}">{{.EventType}}</span>
-                <div class="flex-1 min-w-0">
-                    <p class="text-sm text-slate-700 truncate">Send #{{.EmailSendID}}</p>
-                    <p class="text-xs text-slate-400">{{.CreatedAt.Format "Jan 2, 15:04"}}</p>
-                </div>
-            </div>
-            {{end}}
-            {{else}}
-            <p class="text-slate-400 text-sm">No activity yet.</p>
-            {{end}}
-        </div>
-    </div>
-</div>
-
-{{if .campaigns}}
-<div class="card mt-6">
-    <h3 class="card-title">Recent campaigns</h3>
+    <h3 class="card-title">Contact activity</h3>
+    <p class="text-sm text-gray-500 mb-4">Who opened your emails or clicked links</p>
+    {{if .contactActivity}}
+    <div class="overflow-x-auto">
     <table class="data-table">
-        <thead><tr><th>Name</th><th>Status</th><th>Contacts</th><th></th></tr></thead>
+        <thead>
+            <tr>
+                <th>Contact</th>
+                <th>Event</th>
+                <th>Details</th>
+                <th>Campaign</th>
+                <th>When</th>
+            </tr>
+        </thead>
         <tbody>
-        {{range .campaigns}}
-        <tr>
-            <td class="font-medium">{{.Name}}</td>
-            <td><span class="badge {{if eq .DisplayStatus "sent"}}badge-green{{else if eq .DisplayStatus "scheduled"}}badge-amber{{else if eq .DisplayStatus "sending"}}badge-blue{{else}}badge-gray{{end}}">{{.DisplayStatus}}</span></td>
-            <td>{{.ContactCount}}</td>
-            <td class="text-right"><a href="/campaigns/{{.ID}}" class="text-brand-600 text-sm">View</a></td>
-        </tr>
-        {{end}}
+            {{range .contactActivity}}
+            <tr>
+                <td class="font-medium">
+                    <a href="/contacts/{{.ContactID}}/edit" class="text-brand-600 hover:underline">{{.ContactEmail}}</a>
+                </td>
+                <td>
+                    <span class="badge {{if eq .EventType "open"}}badge-green{{else}}badge-blue{{end}}">{{.EventType}}</span>
+                </td>
+                <td class="text-sm text-gray-600 max-w-xs truncate">
+                    {{if eq .EventType "click"}}{{if .LinkURL}}{{.LinkURL}}{{else}}—{{end}}{{else}}Opened email{{end}}
+                </td>
+                <td class="text-sm text-gray-500">{{if .CampaignName}}{{.CampaignName}}{{else}}—{{end}}</td>
+                <td class="text-sm text-gray-400 whitespace-nowrap">{{.CreatedAt.Format "Jan 2, 15:04"}}</td>
+            </tr>
+            {{end}}
         </tbody>
     </table>
+    </div>
+    {{else}}
+    <p class="text-gray-400 text-sm py-4">No opens or clicks yet. Send a campaign to see contact activity here.</p>
+    {{end}}
 </div>
-{{end}}
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="card">
+        <h3 class="card-title">Sends vs opens (14 days)</h3>
+        <canvas id="statsChart" height="140"></canvas>
+    </div>
+    {{if .campaigns}}
+    <div class="card">
+        <h3 class="card-title">Recent campaigns</h3>
+        <table class="data-table">
+            <thead><tr><th>Name</th><th>Status</th><th>Contacts</th><th></th></tr></thead>
+            <tbody>
+            {{range .campaigns}}
+            <tr>
+                <td class="font-medium">{{.Name}}</td>
+                <td><span class="badge {{if eq .DisplayStatus "sent"}}badge-green{{else if eq .DisplayStatus "scheduled"}}badge-amber{{else if eq .DisplayStatus "sending"}}badge-blue{{else}}badge-gray{{end}}">{{.DisplayStatus}}</span></td>
+                <td>{{.ContactCount}}</td>
+                <td class="text-right"><a href="/campaigns/{{.ID}}" class="text-brand-600 text-sm">View</a></td>
+            </tr>
+            {{end}}
+            </tbody>
+        </table>
+    </div>
+    {{end}}
+</div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
@@ -128,8 +192,8 @@
         data: {
             labels: labels.length ? labels : ['No data'],
             datasets: [
-                { label: 'Sends', data: sendsData.length ? sendsData : [0], backgroundColor: '#94a3b8' },
-                { label: 'Opens', data: opensData.length ? opensData : [0], backgroundColor: '#3b82f6' }
+                { label: 'Sends', data: sendsData.length ? sendsData : [0], backgroundColor: '#9CA3AF' },
+                { label: 'Opens', data: opensData.length ? opensData : [0], backgroundColor: '#10B981' }
             ]
         },
         options: {
@@ -139,6 +203,7 @@
         }
     });
 </script>
+{{end}}
 </div>
 </main>
 </div>

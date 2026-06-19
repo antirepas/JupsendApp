@@ -2,13 +2,14 @@
 <!DOCTYPE html>
 <html lang="en" class="h-full">
 <head>{{template "head" .}}</head>
-<body class="h-full bg-slate-50 text-slate-800">
+<body class="h-full bg-ivory text-charcoal">
 <div class="flex h-full">
 {{template "sidebar" .}}
 <main class="flex-1 overflow-y-auto">
 <div class="max-w-2xl mx-auto p-8">
-<h2 class="text-2xl font-bold text-slate-900 mb-2">Billing</h2>
-<p class="text-slate-500 text-sm mb-6">Manage your Email Tracker subscription.</p>
+<a href="/settings" class="text-sm text-brand-600 font-medium">← Settings</a>
+<h2 class="text-2xl font-bold text-charcoal mb-2 mt-2">Billing</h2>
+<p class="text-gray-500 text-sm mb-6">Manage your jupsend subscription.</p>
 {{if .success}}<div class="alert-success mb-6">Subscription updated. You can now use the full app.</div>{{end}}
 {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
 

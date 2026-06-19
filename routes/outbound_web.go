@@ -8,17 +8,19 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+const suppressionsPath = "/contacts/suppressions"
+
 func ListSuppressionsPage(ctx *gin.Context) {
 	userID := mustUserID(ctx)
 	items, err := model.ListSuppressions(userID)
 	if err != nil {
-		ctx.HTML(http.StatusInternalServerError, "error.html", gin.H{"title": "Error", "active": "suppressions", "error": "Failed to load suppressions"})
+		ctx.HTML(http.StatusInternalServerError, "error.html", gin.H{"title": "Error", "active": "contacts", "error": "Failed to load suppressions"})
 		return
 	}
 	contacts, _ := model.ListContacts(userID)
 	ctx.HTML(http.StatusOK, "suppressions_list.html", gin.H{
 		"title":        "Suppressions",
-		"active":       "suppressions",
+		"active":       "contacts",
 		"suppressions": items,
 		"contacts":     contacts,
 		"success":      ctx.Query("success"),
@@ -26,15 +28,24 @@ func ListSuppressionsPage(ctx *gin.Context) {
 	})
 }
 
+func RedirectSuppressions(ctx *gin.Context) {
+	q := ctx.Request.URL.RawQuery
+	dest := suppressionsPath
+	if q != "" {
+		dest += "?" + q
+	}
+	ctx.Redirect(http.StatusFound, dest)
+}
+
 func AddSuppressionWeb(ctx *gin.Context) {
 	userID := mustUserID(ctx)
 	contactID, err := strconv.ParseInt(ctx.PostForm("contact_id"), 10, 64)
 	if err != nil {
-		ctx.Redirect(http.StatusFound, "/suppressions?error=Invalid+contact")
+		ctx.Redirect(http.StatusFound, suppressionsPath+"?error=Invalid+contact")
 		return
 	}
 	if _, _, err := model.GetContactForUser(contactID, userID); err != nil {
-		ctx.Redirect(http.StatusFound, "/suppressions?error=Contact+not+found")
+		ctx.Redirect(http.StatusFound, suppressionsPath+"?error=Contact+not+found")
 		return
 	}
 	reason := ctx.PostForm("reason")
@@ -42,25 +53,25 @@ func AddSuppressionWeb(ctx *gin.Context) {
 		reason = "manual"
 	}
 	if err := model.SuppressContact(contactID, reason, "manual", 0); err != nil {
-		ctx.Redirect(http.StatusFound, "/suppressions?error=Failed+to+suppress")
+		ctx.Redirect(http.StatusFound, suppressionsPath+"?error=Failed+to+suppress")
 		return
 	}
-	ctx.Redirect(http.StatusFound, "/suppressions?success=Contact+suppressed")
+	ctx.Redirect(http.StatusFound, suppressionsPath+"?success=Contact+suppressed")
 }
 
 func RemoveSuppressionWeb(ctx *gin.Context) {
 	userID := mustUserID(ctx)
 	contactID, err := strconv.ParseInt(ctx.Param("contact_id"), 10, 64)
 	if err != nil {
-		ctx.Redirect(http.StatusFound, "/suppressions?error=Invalid+contact")
+		ctx.Redirect(http.StatusFound, suppressionsPath+"?error=Invalid+contact")
 		return
 	}
 	if _, _, err := model.GetContactForUser(contactID, userID); err != nil {
-		ctx.Redirect(http.StatusFound, "/suppressions?error=Contact+not+found")
+		ctx.Redirect(http.StatusFound, suppressionsPath+"?error=Contact+not+found")
 		return
 	}
 	_ = model.RemoveSuppression(contactID)
-	ctx.Redirect(http.StatusFound, "/suppressions?success=Suppression+removed")
+	ctx.Redirect(http.StatusFound, suppressionsPath+"?success=Suppression+removed")
 }
 
 func GetSendJobsAPI(ctx *gin.Context) {

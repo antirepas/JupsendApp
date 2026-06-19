@@ -155,6 +155,47 @@ func GetRecentEvents(userID int64, limit int) ([]EventRecord, error) {
 	return events, nil
 }
 
+type ContactActivityItem struct {
+	ContactID    int64
+	ContactEmail string
+	SendID       int64
+	EventType    string
+	LinkURL      string
+	CampaignName string
+	CreatedAt    time.Time
+}
+
+func GetRecentContactActivity(userID int64, limit int) ([]ContactActivityItem, error) {
+	query := `
+		SELECT c.id, c.email, es.id, ee.event_type,
+			COALESCE(tl.original_url, ''), COALESCE(camp.name, ''), ee.created_at
+		FROM email_events ee
+		INNER JOIN email_sends es ON es.id = ee.email_send_id
+		INNER JOIN contact c ON c.id = es.contact_id
+		LEFT JOIN tracked_links tl ON tl.tracking_id = ee.tracking_id AND ee.event_type = 'click'
+		LEFT JOIN campaigns camp ON camp.id = es.campaign_id
+		WHERE es.user_id = ?
+		ORDER BY ee.created_at DESC
+		LIMIT ?
+	`
+	rows, err := db.Query(query, userID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []ContactActivityItem
+	for rows.Next() {
+		var item ContactActivityItem
+		if err := rows.Scan(&item.ContactID, &item.ContactEmail, &item.SendID, &item.EventType,
+			&item.LinkURL, &item.CampaignName, &item.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, nil
+}
+
 func GetDailyStats(userID int64, days int) ([]DailyStat, error) {
 	query := `
 		SELECT (sent_at)::date as day, COUNT(*) as sends

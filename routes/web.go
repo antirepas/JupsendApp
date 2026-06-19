@@ -16,10 +16,6 @@ func Dashboard(ctx *gin.Context) {
 	userID := mustUserID(ctx)
 	config.Reload()
 	user, _ := model.GetUserByID(userID)
-	baseURL := user.BaseURL
-	if baseURL == "" {
-		baseURL = config.BaseURL
-	}
 
 	stats, err := model.GetDashboardStats(userID)
 	if err != nil {
@@ -28,7 +24,7 @@ func Dashboard(ctx *gin.Context) {
 		return
 	}
 
-	recent, err := model.GetRecentEvents(userID, 10)
+	contactActivity, err := model.GetRecentContactActivity(userID, 25)
 	if err != nil {
 		log.Print(err)
 	}
@@ -41,18 +37,22 @@ func Dashboard(ctx *gin.Context) {
 	counts, _ := model.GetEntityCounts(userID)
 	campaigns, _ := model.ListCampaigns(userID)
 
+	acc, _ := model.GetSMTPAccountByUserID(userID)
+	isEmpty := stats.TotalSends == 0 && counts.Campaigns == 0
+
 	ctx.HTML(http.StatusOK, "dashboard.html", gin.H{
-		"title":            "Dashboard",
-		"active":           "dashboard",
-		"stats":            stats,
-		"recentEvents":     recent,
-		"dailyStats":       daily,
-		"counts":           counts,
-		"campaigns":        campaigns,
-		"baseURL":          baseURL,
-		"trackingWarning":  config.TrackingWarning(baseURL),
-		"success":          ctx.Query("success"),
-		"error":            ctx.Query("error"),
+		"title":           "Dashboard",
+		"active":          "dashboard",
+		"user":            user,
+		"stats":           stats,
+		"contactActivity": contactActivity,
+		"dailyStats":      daily,
+		"counts":          counts,
+		"campaigns":       campaigns,
+		"isEmpty":         isEmpty,
+		"gmailConnected":  acc.IsGoogleOAuth(),
+		"success":         ctx.Query("success"),
+		"error":           ctx.Query("error"),
 	})
 }
 

@@ -1,0 +1,47 @@
+{{define "guide_workflows.html"}}
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>{{template "head" .}}</head>
+<body class="h-full bg-ivory text-charcoal">
+<div class="flex h-full">
+{{template "sidebar" .}}
+<main class="flex-1 overflow-y-auto">
+<div class="max-w-3xl mx-auto p-8 guide-prose">
+<a href="/" class="text-sm text-brand-600 font-medium">← Dashboard</a>
+<h2 class="text-2xl font-bold text-charcoal mt-2 mb-1">{{.pageTitle}}</h2>
+<p class="text-gray-500 text-sm mb-8">{{.subtitle}}</p>
+
+<div class="card mb-6 space-y-4">
+    <h3 class="font-semibold text-charcoal">What workflows do</h3>
+    <p class="text-sm text-gray-600 leading-relaxed">Workflows run multi-step sequences for each contact: send an email, wait, branch on whether they opened or clicked, send a follow-up, and stop. Use them when a single campaign isn't enough — e.g. reminder if no open after 3 days.</p>
+</div>
+
+<div class="card mb-6 space-y-4">
+    <h3 class="font-semibold text-charcoal">Building a workflow</h3>
+    <ol class="space-y-3 text-sm text-gray-600 list-decimal list-inside">
+        <li>Create templates for each step first (same as campaigns).</li>
+        <li>Go to <a href="/workflows/new" class="text-brand-600 font-medium">Workflows → New</a> and open the visual builder.</li>
+        <li>Drag nodes: <strong>Send email</strong>, <strong>Wait</strong>, <strong>Condition</strong> (opened? clicked?), <strong>End</strong>.</li>
+        <li>Connect nodes with edges; set template and delay on each action node.</li>
+        <li>Enroll contacts via the workflow (or tie to campaigns where supported).</li>
+    </ol>
+</div>
+
+<div class="card mb-6 space-y-3">
+    <h3 class="font-semibold text-charcoal">When to use workflows vs campaigns</h3>
+    <ul class="text-sm text-gray-600 list-disc list-inside space-y-1">
+        <li><strong>Campaign</strong> — one blast to a list, track aggregate results</li>
+        <li><strong>Workflow</strong> — timed follow-ups and conditional branches per contact</li>
+    </ul>
+</div>
+
+<div class="flex gap-3">
+    <a href="/workflows/new" class="btn-primary">Create workflow</a>
+    <a href="/" class="btn-secondary">Back to dashboard</a>
+</div>
+</div>
+</main>
+</div>
+</body>
+</html>
+{{end}}

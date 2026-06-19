@@ -2,22 +2,21 @@
 <!DOCTYPE html>
 <html lang="en" class="h-full">
 <head>{{template "head" .}}</head>
-<body class="h-full bg-slate-50 text-slate-800">
+<body class="h-full bg-ivory text-charcoal">
 <div class="flex h-full">
 {{template "sidebar" .}}
 <main class="flex-1 overflow-y-auto">
 <div class="max-w-6xl mx-auto p-8">
-<div class="flex items-center justify-between mb-8">
-    <div>
-        <h2 class="text-2xl font-bold text-slate-900">Suppressions</h2>
-        <p class="text-slate-500 mt-1">Contacts blocked from outbound sends (bounces, manual)</p>
-    </div>
+<div class="mb-8">
+    <a href="/contacts" class="text-sm text-brand-600 font-medium">← Contacts</a>
+    <h2 class="text-2xl font-bold text-charcoal mt-2">Suppressions</h2>
+    <p class="text-gray-500 mt-1 text-sm">Contacts blocked from outbound sends (bounces, manual)</p>
 </div>
 {{if .success}}<div class="alert-success mb-6">{{.success}}</div>{{end}}
 {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
 <div class="card mb-6">
     <h3 class="card-title">Add manual suppression</h3>
-    <form method="POST" action="/suppressions" class="flex flex-wrap gap-3 items-end">
+    <form method="POST" action="/contacts/suppressions" class="flex flex-wrap gap-3 items-end">
         <div class="flex-1 min-w-[200px]">
             <label class="form-label">Contact</label>
             <select name="contact_id" class="form-input" required>
@@ -46,10 +45,10 @@
             <tr>
                 <td class="font-medium">{{.ContactEmail}}</td>
                 <td><span class="badge badge-gray">{{.Reason}}</span></td>
-                <td class="text-sm text-slate-500">{{.SourceMessage}}</td>
-                <td class="text-sm text-slate-500">{{.CreatedAt.Format "Jan 2, 2006"}}</td>
+                <td class="text-sm text-gray-500">{{.SourceMessage}}</td>
+                <td class="text-sm text-gray-500">{{.CreatedAt.Format "Jan 2, 2006"}}</td>
                 <td class="text-right">
-                    <form method="POST" action="/suppressions/{{.ContactID}}/remove" class="inline">
+                    <form method="POST" action="/contacts/suppressions/{{.ContactID}}/remove" class="inline">
                         <button type="submit" class="text-red-600 text-sm">Remove</button>
                     </form>
                 </td>

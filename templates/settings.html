@@ -2,32 +2,36 @@
 <!DOCTYPE html>
 <html lang="en" class="h-full">
 <head>{{template "head" .}}</head>
-<body class="h-full bg-slate-50 text-slate-800">
+<body class="h-full bg-ivory text-charcoal">
 <div class="flex h-full">
 {{template "sidebar" .}}
 <main class="flex-1 overflow-y-auto">
 <div class="max-w-3xl mx-auto p-8">
-<h2 class="text-2xl font-bold text-slate-900 mb-2">Settings</h2>
-<p class="text-slate-500 text-sm mb-6">Account, Gmail connection, tracking URL, and send limits.</p>
+<h2 class="text-2xl font-bold text-charcoal mb-2">Settings</h2>
+<p class="text-gray-500 text-sm mb-6">Account, Gmail, billing, and send limits.</p>
 {{if .success}}<div class="alert-success mb-6">{{.success}}</div>{{end}}
 {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
 {{if not .subscribed}}<div class="alert-error mb-6">Your subscription is inactive. <a href="/settings/billing" class="underline font-medium">Subscribe to unlock the app</a>.</div>{{end}}
 
-<form method="POST" action="/settings" class="space-y-8">
+<div class="flex gap-4 mb-6 text-sm">
+    <a href="/settings/billing" class="text-brand-600 font-medium hover:underline">Billing &amp; subscription</a>
+</div>
+
+<form method="POST" action="/settings" class="space-y-6">
 <div class="card space-y-4">
     <h3 class="card-title">Account</h3>
-    <p class="text-sm text-slate-600">Signed in as <strong>{{.user.Email}}</strong></p>
+    <p class="text-sm text-gray-600">Signed in as <strong>{{.user.Email}}</strong></p>
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div><label class="form-label">Current password</label><input type="password" name="current_password" class="form-input"></div>
         <div><label class="form-label">New password</label><input type="password" name="new_password" class="form-input" minlength="8"></div>
         <div><label class="form-label">Confirm new</label><input type="password" name="confirm_password" class="form-input" minlength="8"></div>
     </div>
-    <p class="text-xs text-slate-500">Leave password fields blank to keep your current password.</p>
+    <p class="text-xs text-gray-500">Leave password fields blank to keep your current password.</p>
 </div>
 
 <div class="card space-y-4">
     <h3 class="card-title">Tracking</h3>
-    <p class="text-sm text-slate-600">Public URL used in open/click tracking for your emails.</p>
+    <p class="text-sm text-gray-600">Optional override for open/click URLs. Defaults to your deployed domain.</p>
     <div>
         <label class="form-label">BASE_URL</label>
         <input type="url" name="base_url" class="form-input" value="{{.user.BaseURL}}" placeholder="https://your-domain.com">
@@ -37,15 +41,16 @@
 <div class="card space-y-4">
     <h3 class="card-title">Gmail</h3>
     {{if .gmailConnected}}
-<p class="text-sm text-slate-600">Connected as <strong>{{.account.GoogleEmail}}</strong></p>
-<div class="grid grid-cols-2 gap-4">
-    <div><label class="form-label">From name</label><input name="from_name" class="form-input" value="{{.account.FromName}}"></div>
-</div>
-{{else if .gmailConfigured}}
-    <p class="text-sm text-slate-600">Connect your Gmail account to send email and detect bounces via IMAP.</p>
+    <p class="text-sm text-gray-600">Connected as <strong>{{.account.GoogleEmail}}</strong></p>
+    <div class="grid grid-cols-2 gap-4">
+        <div><label class="form-label">From name</label><input name="from_name" class="form-input" value="{{.account.FromName}}"></div>
+    </div>
+    {{else if .gmailConfigured}}
+    <p class="text-sm text-gray-600">Connect your Gmail account to send email and detect bounces via IMAP.</p>
     <a href="/settings/gmail/connect" class="btn-primary inline-flex">Connect Gmail</a>
+    <p class="text-xs text-gray-500">Need help? Read the <a href="/guides/gmail" class="text-brand-600 font-medium">Gmail setup guide</a>.</p>
     {{else}}
-    <p class="text-sm text-amber-700">Gmail OAuth is not configured on this server. Set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and GOOGLE_OAUTH_REDIRECT_URI.</p>
+    <p class="text-sm text-amber-700">Gmail OAuth is not configured on this server.</p>
     {{end}}
 </div>
 
@@ -69,13 +74,30 @@
 </div>
 {{end}}
 
-<button type="submit" class="btn-primary">Save settings</button>
+<div class="card settings-form-actions">
+    <p class="text-sm text-gray-500">Save account, tracking, and send limit changes.</p>
+    <button type="submit" class="btn-primary shrink-0">Save settings</button>
+</div>
 </form>
+
 {{if .gmailConnected}}
-<form method="POST" action="/settings/gmail/disconnect" class="mt-4">
-    <button type="submit" class="btn-secondary">Disconnect Gmail</button>
+<form method="POST" action="/settings/gmail/disconnect" class="mt-6">
+    <div class="card flex flex-wrap items-center justify-between gap-4">
+        <div>
+            <h3 class="text-sm font-semibold text-charcoal">Disconnect Gmail</h3>
+            <p class="text-xs text-gray-500 mt-1">Stop sending from this account until you connect again.</p>
+        </div>
+        <button type="submit" class="btn-secondary shrink-0">Disconnect Gmail</button>
+    </div>
 </form>
 {{end}}
+
+<div class="card mt-6 space-y-3">
+    <h3 class="card-title">Account actions</h3>
+    <form method="POST" action="/logout">
+        <button type="submit" class="btn-secondary text-red-600 hover:bg-red-50">Log out</button>
+    </form>
+</div>
 </div>
 </main>
 </div>

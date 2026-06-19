@@ -31,6 +31,10 @@ func RegisterRoutes(server *gin.Engine) {
 		"templates/workflows_builder.html",
 		"templates/workflows_analytics.html",
 		"templates/suppressions_list.html",
+		"templates/guide_gmail.html",
+		"templates/guide_templates.html",
+		"templates/guide_campaigns.html",
+		"templates/guide_workflows.html",
 		"templates/error.html",
 	)
 	server.Static("/static", "./static")
@@ -59,6 +63,11 @@ func RegisterRoutes(server *gin.Engine) {
 		settings.GET("/settings/gmail/connect", GmailConnect)
 		settings.GET("/settings/gmail/callback", GmailCallback)
 		settings.POST("/settings/gmail/disconnect", GmailDisconnect)
+
+		settings.GET("/guides/gmail", GuideGmail)
+		settings.GET("/guides/templates", GuideTemplates)
+		settings.GET("/guides/campaigns", GuideCampaigns)
+		settings.GET("/guides/workflows", GuideWorkflows)
 	}
 
 	authd := server.Group("/")
@@ -76,6 +85,9 @@ func RegisterRoutes(server *gin.Engine) {
 
 		authd.GET("/contacts", ListContactsPage)
 		authd.GET("/contacts/new", NewContactPage)
+		authd.GET("/contacts/suppressions", ListSuppressionsPage)
+		authd.POST("/contacts/suppressions", AddSuppressionWeb)
+		authd.POST("/contacts/suppressions/:contact_id/remove", RemoveSuppressionWeb)
 		authd.GET("/contacts/:id/edit", EditContactPage)
 		authd.POST("/contacts", CreateContact)
 		authd.POST("/contacts/:id", UpdateContact)
@@ -84,6 +96,10 @@ func RegisterRoutes(server *gin.Engine) {
 		authd.GET("/contacts/paste", func(c *gin.Context) { c.Redirect(http.StatusFound, "/contacts") })
 		authd.GET("/contacts/upload/sample/:id", DownloadContactSample)
 		authd.POST("/contacts/upload", UploadContacts)
+
+		authd.GET("/suppressions", RedirectSuppressions)
+		authd.POST("/suppressions", AddSuppressionWeb)
+		authd.POST("/suppressions/:contact_id/remove", RemoveSuppressionWeb)
 
 		authd.GET("/workflows", ListWorkflowsPage)
 		authd.GET("/workflows/new", NewWorkflowPage)
@@ -104,10 +120,6 @@ func RegisterRoutes(server *gin.Engine) {
 		authd.POST("/campaigns/:id/upload", UploadCampaignContacts)
 		authd.GET("/campaigns/:id/sample", DownloadCampaignSample)
 		authd.POST("/campaigns/:id/send", SendCampaign)
-
-		authd.GET("/suppressions", ListSuppressionsPage)
-		authd.POST("/suppressions", AddSuppressionWeb)
-		authd.POST("/suppressions/:contact_id/remove", RemoveSuppressionWeb)
 
 		authd.GET("/sends", ListSendsPage)
 		authd.GET("/sends/new", NewSendPage)
