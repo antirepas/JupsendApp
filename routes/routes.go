@@ -1,12 +1,19 @@
 package routes
 
 import (
+	"html/template"
 	"net/http"
 
+	"emailtracker.com/util"
 	"github.com/gin-gonic/gin"
 )
 
 func RegisterRoutes(server *gin.Engine) {
+	server.SetFuncMap(template.FuncMap{
+		"assetURL": func(path string) string {
+			return path + "?v=" + util.StaticAssetVersion()
+		},
+	})
 	server.LoadHTMLFiles(
 		"templates/partials/head.html",
 		"templates/partials/sidebar.html",

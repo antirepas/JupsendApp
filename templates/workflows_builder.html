@@ -96,7 +96,7 @@ const TEMPLATES = [
     {{range .templates}}{ id: {{.ID}}, name: "{{.Name}}" },{{end}}
 ];
 </script>
-<script src="/static/js/workflow-builder.js"></script>
+<script src="{{assetURL "/static/js/workflow-builder.js"}}"></script>
 </body>
 </html>
 {{end}}
