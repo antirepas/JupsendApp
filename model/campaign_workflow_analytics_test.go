@@ -1,6 +1,7 @@
 package model
 
 import (
+	"fmt"
 	"testing"
 
 	"emailtracker.com/db"
@@ -55,7 +56,19 @@ func TestGetCampaignWorkflowAnalyticsRequiresWorkflowCampaign(t *testing.T) {
 
 	wid, _ := CreateWorkflow(userID, "wf", "")
 	w, _ := GetWorkflow(wid)
-	campaignID, _ := CreateCampaign(userID, "WF", templateID, 0, "workflow", w.CurrentVersionID)
+	vid := w.CurrentVersionID
+	_ = SaveWorkflowGraph(vid, GraphSaveInput{
+		Nodes: []WorkflowNodeInput{
+			{NodeKey: "start", NodeType: "trigger_campaign_started", Label: "Start", ConfigJSON: "{}"},
+			{NodeKey: "send", NodeType: "action_send_email", Label: "Outreach", ConfigJSON: fmt.Sprintf(`{"template_id":%d}`, templateID)},
+			{NodeKey: "end", NodeType: "action_end", Label: "End", ConfigJSON: "{}"},
+		},
+		Edges: []WorkflowEdgeInput{
+			{SourceNodeKey: "start", TargetNodeKey: "send", EdgeType: "default"},
+			{SourceNodeKey: "send", TargetNodeKey: "end", EdgeType: "default"},
+		},
+	})
+	campaignID, _ := CreateCampaign(userID, "WF", templateID, 0, "workflow", vid)
 	c := Contact{Email: "wf-analytics-contact@test.com"}
 	cid, _ := c.SaveContact(userID, nil)
 	_ = AddContactsToCampaign(campaignID, []int64{cid})

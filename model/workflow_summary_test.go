@@ -1,6 +1,7 @@
 package model
 
 import (
+	"fmt"
 	"testing"
 
 	"emailtracker.com/db"
@@ -9,6 +10,10 @@ import (
 func TestSummarizeWorkflowSteps(t *testing.T) {
 	db.OpenTestDB(t)
 	userID, _ := CreateUser("wf-sum@test.com", "hash", "http://localhost")
+	var templateID int64
+	if err := db.QueryRow(`INSERT INTO template (name, subject, body, user_id) VALUES ('Outreach template','s','b', ?) RETURNING id`, userID).Scan(&templateID); err != nil {
+		t.Fatal(err)
+	}
 	wid, _ := CreateWorkflow(userID, "summary test", "")
 	w, _ := GetWorkflow(wid)
 	vid := w.CurrentVersionID
@@ -16,7 +21,7 @@ func TestSummarizeWorkflowSteps(t *testing.T) {
 	_ = SaveWorkflowGraph(vid, GraphSaveInput{
 		Nodes: []WorkflowNodeInput{
 			{NodeKey: "start", NodeType: "trigger_campaign_started", Label: "Start", ConfigJSON: "{}"},
-			{NodeKey: "send", NodeType: "action_send_email", Label: "First email", ConfigJSON: `{"template_id":1}`},
+			{NodeKey: "send", NodeType: "action_send_email", Label: "First email", ConfigJSON: fmt.Sprintf(`{"template_id":%d}`, templateID)},
 			{NodeKey: "wait", NodeType: "action_wait", Label: "Wait 3 days", ConfigJSON: `{"duration_seconds":259200}`},
 			{NodeKey: "end", NodeType: "action_end", Label: "End", ConfigJSON: "{}"},
 		},
@@ -31,7 +36,7 @@ func TestSummarizeWorkflowSteps(t *testing.T) {
 	if len(steps) != 2 {
 		t.Fatalf("expected 2 summary steps, got %v", steps)
 	}
-	if steps[0] != "First email: Template #1" {
+	if steps[0] != "First email: Outreach template" {
 		t.Fatalf("unexpected first step: %q", steps[0])
 	}
 	if steps[1] != "Wait 3 days" {
