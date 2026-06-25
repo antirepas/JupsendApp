@@ -19,6 +19,7 @@ type User struct {
 	WhopMemberID       string
 	SubscriptionEndsAt *time.Time
 	IsAdmin            bool
+	SendCooldownDays   int
 	CreatedAt          time.Time
 }
 
@@ -47,7 +48,7 @@ func GetUserByEmail(email string) (User, error) {
 	row := db.QueryRow(`
 		SELECT id, email, password_hash, COALESCE(base_url, ''),
 			COALESCE(subscription_status, 'none'), COALESCE(whop_membership_id, ''), COALESCE(whop_member_id, ''),
-			subscription_ends_at, is_admin, created_at
+			subscription_ends_at, is_admin, COALESCE(send_cooldown_days, 30), created_at
 		FROM users WHERE email = ?
 	`, strings.TrimSpace(strings.ToLower(email)))
 	return scanUser(row)
@@ -57,7 +58,7 @@ func GetUserByID(id int64) (User, error) {
 	row := db.QueryRow(`
 		SELECT id, email, password_hash, COALESCE(base_url, ''),
 			COALESCE(subscription_status, 'none'), COALESCE(whop_membership_id, ''), COALESCE(whop_member_id, ''),
-			subscription_ends_at, is_admin, created_at
+			subscription_ends_at, is_admin, COALESCE(send_cooldown_days, 30), created_at
 		FROM users WHERE id = ?
 	`, id)
 	return scanUser(row)
@@ -67,7 +68,7 @@ func scanUser(row interface{ Scan(...interface{}) error }) (User, error) {
 	var u User
 	var ends sql.NullTime
 	err := row.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.BaseURL,
-		&u.SubscriptionStatus, &u.WhopMembershipID, &u.WhopMemberID, &ends, &u.IsAdmin, &u.CreatedAt)
+		&u.SubscriptionStatus, &u.WhopMembershipID, &u.WhopMemberID, &ends, &u.IsAdmin, &u.SendCooldownDays, &u.CreatedAt)
 	if ends.Valid {
 		t := ends.Time
 		u.SubscriptionEndsAt = &t

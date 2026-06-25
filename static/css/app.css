@@ -286,6 +286,12 @@
     color: #6B7280;
     border-bottom: 2px solid transparent;
     transition: all 0.15s;
+    display: inline-block;
+    text-decoration: none;
+}
+
+.bulk-action-bar {
+    background: #FAFAF8;
 }
 
 .tab-btn:hover {

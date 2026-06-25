@@ -39,6 +39,16 @@
 </div>
 
 <div class="card space-y-4">
+    <h3 class="card-title">Send policy</h3>
+    <p class="text-sm text-gray-600">Contacts are skipped at send time if suppressed, emailed within the cooldown window, or already on another draft/scheduled/sending campaign.</p>
+    <div class="max-w-xs">
+        <label class="form-label">Send cooldown (days)</label>
+        <input name="send_cooldown_days" type="number" class="form-input" min="0" value="{{if .user.SendCooldownDays}}{{.user.SendCooldownDays}}{{else}}30{{end}}">
+        <p class="text-xs text-gray-500 mt-1">Set to 0 to disable cooldown (active-campaign rule still applies).</p>
+    </div>
+</div>
+
+<div class="card space-y-4">
     <h3 class="card-title">Gmail</h3>
     {{if .gmailConnected}}
     <p class="text-sm text-gray-600">Connected as <strong>{{.account.GoogleEmail}}</strong></p>

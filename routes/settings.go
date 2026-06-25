@@ -95,6 +95,9 @@ func UpdateSettings(c *gin.Context) {
 		return
 	}
 
+	cooldown, _ := strconv.Atoi(c.PostForm("send_cooldown_days"))
+	_ = model.UpdateUserSendCooldownDays(userID, cooldown)
+
 	c.Redirect(http.StatusFound, "/settings?success=Settings+saved")
 }
 

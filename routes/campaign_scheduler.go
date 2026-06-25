@@ -33,11 +33,11 @@ func runDueScheduledCampaigns() {
 		if err != nil {
 			continue
 		}
-		sent, failed, err := launchCampaign(campaign.UserID, id)
+		result, err := launchCampaign(campaign.UserID, id)
 		if err != nil {
 			log.Printf("scheduler: campaign %d: %v", id, err)
 			continue
 		}
-		log.Printf("scheduler: campaign %d launched (%d ok, %d failed)", id, sent, failed)
+		log.Printf("scheduler: campaign %d launched (%d queued, %d skipped)", id, result.Queued, result.Skipped)
 	}
 }

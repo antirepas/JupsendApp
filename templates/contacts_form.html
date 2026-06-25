@@ -8,30 +8,49 @@
 <main class="flex-1 overflow-y-auto">
 <div class="max-w-6xl mx-auto p-8">
 <div class="mb-8">
-    <h2 class="text-2xl font-bold text-slate-900">{{if .isEdit}}Edit Contact{{else}}New Contact{{end}}</h2>
-    <p class="text-slate-500 mt-1">Add a recipient with personalization variables</p>
+    <a href="/contacts" class="text-sm text-brand-600 font-medium">← Contacts</a>
+    <h2 class="text-2xl font-bold text-charcoal mt-2">{{if .isEdit}}Edit contact{{else}}New contact{{end}}</h2>
+    <p class="text-gray-500 mt-1 text-sm">Add a recipient with personalization variables</p>
 </div>
 
 {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
 
 <div class="card max-w-2xl">
-    <form method="POST" action="{{if .isEdit}}/contacts/{{.contact.ID}}{{else}}/contacts{{end}}" class="space-y-5">
+    <form method="POST" action="{{if .isEdit}}/contacts/{{.contact.ID}}{{else}}/contacts{{end}}" class="space-y-5" id="contact-form">
         <div>
             <label class="form-label">Email</label>
             <input type="email" name="email" class="form-input" required placeholder="recipient@example.com" value="{{if .isEdit}}{{.contact.Email}}{{end}}">
         </div>
+        {{if .templates}}
+        <div>
+            <label class="form-label">Template (optional — pre-fill variable fields)</label>
+            <select id="template-picker" class="form-input" onchange="applyTemplateVars(this)">
+                <option value="">Free-form variables</option>
+                {{range .templates}}
+                <option value="{{.ID}}" data-vars="{{range $i, $v := .Variables}}{{if $i}}|{{end}}{{$v}}{{end}}" {{if eq $.templateID .ID}}selected{{end}}>{{.Name}}</option>
+                {{end}}
+            </select>
+        </div>
+        {{end}}
         <div>
             <label class="form-label">Variables</label>
             <div id="variables-container" class="space-y-2">
                 {{if .isEdit}}
                 {{range .vars}}
-                <div class="flex gap-2">
+                <div class="flex gap-2 var-row">
                     <input type="text" name="var_key" class="form-input" placeholder="Key" value="{{.Key}}">
                     <input type="text" name="var_value" class="form-input" placeholder="Value" value="{{.Value}}">
                 </div>
                 {{end}}
+                {{else if .templateVars}}
+                {{range .templateVars}}
+                <div class="flex gap-2 var-row">
+                    <input type="text" name="var_key" class="form-input" value="{{.}}" readonly>
+                    <input type="text" name="var_value" class="form-input" placeholder="Value for {{.}}">
+                </div>
+                {{end}}
                 {{else}}
-                <div class="flex gap-2">
+                <div class="flex gap-2 var-row">
                     <input type="text" name="var_key" class="form-input" placeholder="Key (e.g. name)">
                     <input type="text" name="var_value" class="form-input" placeholder="Value (e.g. John)">
                 </div>
@@ -40,7 +59,7 @@
             <button type="button" onclick="addVariableRow()" class="text-sm text-brand-600 hover:text-brand-700 mt-2 font-medium">+ Add variable</button>
         </div>
         <div class="flex gap-3 pt-2">
-            <button type="submit" class="btn-primary">{{if .isEdit}}Save Changes{{else}}Create Contact{{end}}</button>
+            <button type="submit" class="btn-primary">{{if .isEdit}}Save changes{{else}}Create contact{{end}}</button>
             <a href="/contacts" class="btn-secondary">Cancel</a>
         </div>
     </form>
@@ -52,9 +71,25 @@
 function addVariableRow() {
     const container = document.getElementById('variables-container');
     const row = document.createElement('div');
-    row.className = 'flex gap-2';
+    row.className = 'flex gap-2 var-row';
     row.innerHTML = '<input type="text" name="var_key" class="form-input" placeholder="Key"><input type="text" name="var_value" class="form-input" placeholder="Value">';
     container.appendChild(row);
+}
+function applyTemplateVars(select) {
+    const opt = select.options[select.selectedIndex];
+    const container = document.getElementById('variables-container');
+    container.innerHTML = '';
+    if (!opt.value) {
+        addVariableRow();
+        return;
+    }
+    const vars = (opt.dataset.vars || '').split('|').filter(Boolean);
+    vars.forEach(v => {
+        const row = document.createElement('div');
+        row.className = 'flex gap-2 var-row';
+        row.innerHTML = '<input type="text" name="var_key" class="form-input" value="' + v + '" readonly><input type="text" name="var_value" class="form-input" placeholder="Value for ' + v + '">';
+        container.appendChild(row);
+    });
 }
 </script>
 </body>

@@ -19,6 +19,7 @@ type Campaign struct {
 	ScheduledAt        *time.Time
 	ExecutionMode      string
 	WorkflowVersionID  int64
+	ContactListID      int64
 }
 
 type CampaignListItem struct {
@@ -143,7 +144,8 @@ func ListCampaigns(userID int64) ([]CampaignListItem, error) {
 func GetCampaign(id int64) (Campaign, error) {
 	row := db.QueryRow(`
 		SELECT id, COALESCE(user_id, 0), name, template_a_id, template_b_id, status, created_at, scheduled_at,
-			COALESCE(execution_mode, 'bulk'), COALESCE(workflow_version_id, 0), COALESCE(is_sending, 0)
+			COALESCE(execution_mode, 'bulk'), COALESCE(workflow_version_id, 0), COALESCE(is_sending, 0),
+			COALESCE(contact_list_id, 0)
 		FROM campaigns WHERE id = ?
 	`, id)
 	return scanCampaignRow(row)
@@ -152,7 +154,8 @@ func GetCampaign(id int64) (Campaign, error) {
 func GetCampaignForUser(id, userID int64) (Campaign, error) {
 	row := db.QueryRow(`
 		SELECT id, COALESCE(user_id, 0), name, template_a_id, template_b_id, status, created_at, scheduled_at,
-			COALESCE(execution_mode, 'bulk'), COALESCE(workflow_version_id, 0), COALESCE(is_sending, 0)
+			COALESCE(execution_mode, 'bulk'), COALESCE(workflow_version_id, 0), COALESCE(is_sending, 0),
+			COALESCE(contact_list_id, 0)
 		FROM campaigns WHERE id = ? AND user_id = ?
 	`, id, userID)
 	return scanCampaignRow(row)
@@ -163,13 +166,17 @@ func scanCampaignRow(row interface{ Scan(...interface{}) error }) (Campaign, err
 	var bID sql.NullInt64
 	var scheduled sql.NullTime
 	var isSending int
+	var listID sql.NullInt64
 	err := row.Scan(&c.ID, &c.UserID, &c.Name, &c.TemplateAID, &bID, &c.Status, &c.CreatedAt, &scheduled,
-		&c.ExecutionMode, &c.WorkflowVersionID, &isSending)
+		&c.ExecutionMode, &c.WorkflowVersionID, &isSending, &listID)
 	if err != nil {
 		return Campaign{}, err
 	}
 	if bID.Valid {
 		c.TemplateBID = bID.Int64
+	}
+	if listID.Valid {
+		c.ContactListID = listID.Int64
 	}
 	c.ScheduledAt = scanScheduledAt(scheduled)
 	c.IsSending = isSending == 1

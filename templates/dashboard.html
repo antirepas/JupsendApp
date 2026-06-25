@@ -132,7 +132,7 @@
             {{range .contactActivity}}
             <tr>
                 <td class="font-medium">
-                    <a href="/contacts/{{.ContactID}}/edit" class="text-brand-600 hover:underline">{{.ContactEmail}}</a>
+                    <a href="/contacts/{{.ContactID}}" class="text-brand-600 hover:underline">{{.ContactEmail}}</a>
                 </td>
                 <td>
                     <span class="badge {{if eq .EventType "open"}}badge-green{{else}}badge-blue{{end}}">{{.EventType}}</span>

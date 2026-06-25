@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -151,32 +152,70 @@ func UpdateTemplate(ctx *gin.Context) {
 
 func ListContactsPage(ctx *gin.Context) {
 	userID := mustUserID(ctx)
-	contacts, err := model.ListContacts(userID)
+	tab := ctx.DefaultQuery("tab", "all")
+	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
+	listID, _ := strconv.ParseInt(ctx.Query("list"), 10, 64)
+
+	filter := model.ContactListFilter{
+		Query:    ctx.Query("q"),
+		ListID:   listID,
+		Sort:     ctx.DefaultQuery("sort", "newest"),
+		Page:     page,
+		PageSize: 50,
+	}
+	contactPage, err := model.ListContactsFiltered(userID, filter)
 	if err != nil {
 		log.Print(err)
 		ctx.HTML(http.StatusInternalServerError, "error.html", gin.H{"title": "Error", "active": "contacts", "error": "Failed to load contacts"})
 		return
 	}
 
-	templates, err := model.ListTemplates(userID)
-	if err != nil {
-		log.Print(err)
-	}
+	templates, _ := model.ListTemplates(userID)
+	lists, _ := model.ListContactLists(userID)
+	suppressions, _ := model.ListSuppressions(userID)
+	allContacts, _ := model.ListContacts(userID)
+
+	prevPage := page - 1
+	nextPage := page + 1
+	hasPrev := page > 1
+	hasNext := page < contactPage.TotalPages
 
 	ctx.HTML(http.StatusOK, "contacts_list.html", gin.H{
-		"title":     "Contacts",
-		"active":    "contacts",
-		"contacts":  contacts,
-		"templates": templates,
-		"success":   ctx.Query("success"),
-		"error":     ctx.Query("error"),
+		"title":        "Contacts",
+		"active":       "contacts",
+		"tab":          tab,
+		"contacts":     contactPage.Items,
+		"allContacts":  allContacts,
+		"contactPage":  contactPage,
+		"templates":    templates,
+		"lists":        lists,
+		"suppressions": suppressions,
+		"filterQ":      filter.Query,
+		"filterList":   listID,
+		"filterSort":   filter.Sort,
+		"prevPage":     prevPage,
+		"nextPage":     nextPage,
+		"hasPrev":      hasPrev,
+		"hasNext":      hasNext,
+		"success":      ctx.Query("success"),
+		"error":        ctx.Query("error"),
 	})
 }
 
 func NewContactPage(ctx *gin.Context) {
+	userID := mustUserID(ctx)
+	templates, _ := model.ListTemplates(userID)
+	templateID, _ := strconv.ParseInt(ctx.Query("template_id"), 10, 64)
+	var templateVars []string
+	if templateID > 0 {
+		_, templateVars, _ = model.GetTemplateByID(templateID, userID)
+	}
 	ctx.HTML(http.StatusOK, "contacts_form.html", gin.H{
-		"title":  "New Contact",
-		"active": "contacts",
+		"title":        "New Contact",
+		"active":       "contacts",
+		"templates":    templates,
+		"templateID":   templateID,
+		"templateVars": templateVars,
 	})
 }
 
@@ -211,22 +250,88 @@ func CreateContact(ctx *gin.Context) {
 func PasteContactsQuick(ctx *gin.Context) {
 	userID := mustUserID(ctx)
 	paste := ctx.PostForm("paste")
-	lines := strings.Split(paste, "\n")
-	added := 0
-	for _, line := range lines {
-		email := strings.TrimSpace(line)
-		if !strings.Contains(email, "@") {
-			continue
+	listID, _ := strconv.ParseInt(ctx.PostForm("list_id"), 10, 64)
+	templateID, _ := strconv.ParseInt(ctx.PostForm("template_id"), 10, 64)
+
+	var varKeys []string
+	if templateID > 0 {
+		_, vars, err := model.GetTemplateByID(templateID, userID)
+		if err == nil {
+			varKeys = vars
 		}
-		_, err := model.FindOrCreateContact(userID, email, nil)
-		if err != nil {
-			log.Print(err)
-			continue
-		}
-		added++
 	}
-	msg := fmt.Sprintf("Added %d contacts", added)
-	ctx.Redirect(http.StatusFound, "/contacts?success="+msg)
+
+	result, err := model.ImportContactRows(userID, parseImportRowsFromPaste(paste, varKeys), listID)
+	if err != nil {
+		ctx.Redirect(http.StatusFound, "/contacts?tab=import&error=Import+failed")
+		return
+	}
+	msg := model.FormatImportResultMessage(result)
+	ctx.Redirect(http.StatusFound, "/contacts?tab=import&success="+url.QueryEscape(msg))
+}
+
+func BulkDeleteContacts(ctx *gin.Context) {
+	userID := mustUserID(ctx)
+	ids := parseContactIDs(ctx)
+	n, _ := model.BulkDeleteContacts(userID, ids)
+	msg := fmt.Sprintf("Deleted %d contacts", n)
+	ctx.Redirect(http.StatusFound, "/contacts?success="+url.QueryEscape(msg))
+}
+
+func ContactDetailPage(ctx *gin.Context) {
+	userID := mustUserID(ctx)
+	id, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
+	if err != nil {
+		ctx.Redirect(http.StatusFound, "/contacts?error=Invalid+contact")
+		return
+	}
+	summary, err := model.GetContactSummary(userID, id)
+	if err != nil {
+		ctx.Redirect(http.StatusFound, "/contacts?error=Contact+not+found")
+		return
+	}
+	allLists, _ := model.ListContactLists(userID)
+	memberIDs := make(map[int64]bool)
+	for _, l := range summary.Lists {
+		memberIDs[l.ID] = true
+	}
+	type listMembership struct {
+		List   model.ContactList
+		Member bool
+	}
+	var listMemberships []listMembership
+	for _, l := range allLists {
+		listMemberships = append(listMemberships, listMembership{List: l, Member: memberIDs[l.ID]})
+	}
+	ctx.HTML(http.StatusOK, "contact_detail.html", gin.H{
+		"title":           summary.Contact.Email,
+		"active":          "contacts",
+		"summary":         summary,
+		"listMemberships": listMemberships,
+		"success":         ctx.Query("success"),
+		"error":           ctx.Query("error"),
+	})
+}
+
+func UpdateContactLists(ctx *gin.Context) {
+	userID := mustUserID(ctx)
+	contactID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
+	if err != nil {
+		ctx.Redirect(http.StatusFound, "/contacts?error=Invalid+contact")
+		return
+	}
+	var listIDs []int64
+	for _, s := range ctx.PostFormArray("list_ids") {
+		id, err := strconv.ParseInt(s, 10, 64)
+		if err == nil {
+			listIDs = append(listIDs, id)
+		}
+	}
+	if err := model.SetContactLists(userID, contactID, listIDs); err != nil {
+		ctx.Redirect(http.StatusFound, "/contacts/"+strconv.FormatInt(contactID, 10)+"?error=Could+not+update+lists")
+		return
+	}
+	ctx.Redirect(http.StatusFound, "/contacts/"+strconv.FormatInt(contactID, 10)+"?success=Lists+updated")
 }
 
 func ListSendsPage(ctx *gin.Context) {

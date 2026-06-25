@@ -19,6 +19,7 @@ func RegisterRoutes(server *gin.Engine) {
 		"templates/templates_form.html",
 		"templates/contacts_list.html",
 		"templates/contacts_form.html",
+		"templates/contact_detail.html",
 		"templates/sends_list.html",
 		"templates/send_form.html",
 		"templates/sends_detail.html",
@@ -88,14 +89,22 @@ func RegisterRoutes(server *gin.Engine) {
 		authd.GET("/contacts/suppressions", ListSuppressionsPage)
 		authd.POST("/contacts/suppressions", AddSuppressionWeb)
 		authd.POST("/contacts/suppressions/:contact_id/remove", RemoveSuppressionWeb)
-		authd.GET("/contacts/:id/edit", EditContactPage)
-		authd.POST("/contacts", CreateContact)
-		authd.POST("/contacts/:id", UpdateContact)
-		authd.POST("/contacts/:id/delete", DeleteContact)
+		authd.POST("/contacts/lists", CreateContactList)
+		authd.POST("/contacts/lists/:id/rename", RenameContactList)
+		authd.POST("/contacts/lists/:id/delete", DeleteContactList)
+		authd.POST("/contacts/lists/:id/members", AddListMembers)
+		authd.POST("/contacts/lists/:id/members/:contact_id/remove", RemoveListMember)
+		authd.POST("/contacts/bulk-delete", BulkDeleteContacts)
 		authd.POST("/contacts/paste", PasteContactsQuick)
 		authd.GET("/contacts/paste", func(c *gin.Context) { c.Redirect(http.StatusFound, "/contacts") })
 		authd.GET("/contacts/upload/sample/:id", DownloadContactSample)
 		authd.POST("/contacts/upload", UploadContacts)
+		authd.GET("/contacts/:id/edit", EditContactPage)
+		authd.GET("/contacts/:id", ContactDetailPage)
+		authd.POST("/contacts/:id/lists", UpdateContactLists)
+		authd.POST("/contacts", CreateContact)
+		authd.POST("/contacts/:id", UpdateContact)
+		authd.POST("/contacts/:id/delete", DeleteContact)
 
 		authd.GET("/suppressions", RedirectSuppressions)
 		authd.POST("/suppressions", AddSuppressionWeb)
@@ -116,6 +125,8 @@ func RegisterRoutes(server *gin.Engine) {
 		authd.GET("/campaigns/:id/analytics", CampaignAnalyticsPage)
 		authd.GET("/campaigns/:id", CampaignDetailPage)
 		authd.POST("/campaigns/:id/contacts", AddCampaignContacts)
+		authd.POST("/campaigns/:id/add-list", AddCampaignList)
+		authd.POST("/campaigns/:id/refresh-list", RefreshCampaignList)
 		authd.POST("/campaigns/:id/paste", PasteCampaignContacts)
 		authd.POST("/campaigns/:id/upload", UploadCampaignContacts)
 		authd.GET("/campaigns/:id/sample", DownloadCampaignSample)

@@ -46,18 +46,21 @@ func EditContactPage(ctx *gin.Context) {
 		ctx.HTML(http.StatusBadRequest, "error.html", gin.H{"title": "Error", "active": "contacts", "error": "Invalid contact ID"})
 		return
 	}
-	c, vars, err := model.GetContactForUser(id, mustUserID(ctx))
+	userID := mustUserID(ctx)
+	c, vars, err := model.GetContactForUser(id, userID)
 	if err != nil {
 		ctx.HTML(http.StatusNotFound, "error.html", gin.H{"title": "Error", "active": "contacts", "error": "Contact not found"})
 		return
 	}
+	templates, _ := model.ListTemplates(userID)
 	ctx.HTML(http.StatusOK, "contacts_form.html", gin.H{
-		"title":   "Edit Contact",
-		"active":  "contacts",
-		"isEdit":  true,
-		"contact": c,
-		"vars":    vars,
-		"error":   ctx.Query("error"),
+		"title":     "Edit Contact",
+		"active":    "contacts",
+		"isEdit":    true,
+		"contact":   c,
+		"vars":      vars,
+		"templates": templates,
+		"error":     ctx.Query("error"),
 	})
 }
 
@@ -88,7 +91,7 @@ func UpdateContact(ctx *gin.Context) {
 		ctx.Redirect(http.StatusFound, "/contacts/"+strconv.FormatInt(id, 10)+"/edit?error=Failed+to+update")
 		return
 	}
-	ctx.Redirect(http.StatusFound, "/contacts?success=Contact+updated")
+	ctx.Redirect(http.StatusFound, "/contacts/"+strconv.FormatInt(id, 10)+"?success=Contact+updated")
 }
 
 func DeleteCampaign(ctx *gin.Context) {

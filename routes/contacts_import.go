@@ -1,7 +1,6 @@
 package routes
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 	"net/url"
@@ -38,56 +37,46 @@ func DownloadContactSample(ctx *gin.Context) {
 }
 
 func UploadContacts(ctx *gin.Context) {
+	userID := mustUserID(ctx)
 	templateID, err := strconv.ParseInt(ctx.PostForm("template_id"), 10, 64)
 	if err != nil {
-		ctx.Redirect(http.StatusFound, "/contacts?error=Invalid+template+selected")
+		ctx.Redirect(http.StatusFound, "/contacts?tab=import&error=Invalid+template+selected")
 		return
 	}
 
-	template, vars, err := model.GetTemplateByID(templateID, mustUserID(ctx))
+	_, vars, err := model.GetTemplateByID(templateID, userID)
 	if err != nil {
-		ctx.Redirect(http.StatusFound, "/contacts?error=Template+not+found")
+		ctx.Redirect(http.StatusFound, "/contacts?tab=import&error=Template+not+found")
 		return
 	}
+
+	listID, _ := strconv.ParseInt(ctx.PostForm("list_id"), 10, 64)
 
 	file, err := ctx.FormFile("file")
 	if err != nil {
-		ctx.Redirect(http.StatusFound, "/contacts?error=No+file+uploaded")
+		ctx.Redirect(http.StatusFound, "/contacts?tab=import&error=No+file+uploaded")
 		return
 	}
 
 	src, err := file.Open()
 	if err != nil {
-		ctx.Redirect(http.StatusFound, "/contacts?error=Could+not+read+uploaded+file")
+		ctx.Redirect(http.StatusFound, "/contacts?tab=import&error=Could+not+read+uploaded+file")
 		return
 	}
 	defer src.Close()
 
 	rows, err := util.ParseContactsExcel(src, vars)
 	if err != nil {
-		ctx.Redirect(http.StatusFound, "/contacts?error="+url.QueryEscape(err.Error()))
+		ctx.Redirect(http.StatusFound, "/contacts?tab=import&error="+url.QueryEscape(err.Error()))
 		return
 	}
 
-	imported := 0
-	for _, row := range rows {
-		var cvs []model.ContactVariables
-		for _, key := range vars {
-			cvs = append(cvs, model.ContactVariables{
-				Key:   key,
-				Value: row.Variables[key],
-			})
-		}
-
-		cid, err := model.FindOrCreateContact(mustUserID(ctx), row.Email, cvs)
-		if err != nil {
-			log.Print(err)
-			continue
-		}
-		imported++
-		_ = cid
+	result, err := model.ImportContactRows(userID, parseImportRowsFromExcel(rows, vars), listID)
+	if err != nil {
+		ctx.Redirect(http.StatusFound, "/contacts?tab=import&error=Import+failed")
+		return
 	}
 
-	msg := fmt.Sprintf("Imported %d contacts for template %s", imported, template.Name)
-	ctx.Redirect(http.StatusFound, "/contacts?success="+url.QueryEscape(msg))
+	msg := model.FormatImportResultMessage(result)
+	ctx.Redirect(http.StatusFound, "/contacts?tab=import&success="+url.QueryEscape(msg))
 }

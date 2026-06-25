@@ -125,6 +125,46 @@ func ListEmailSends(userID int64) ([]EmailSendListItem, error) {
 	return items, nil
 }
 
+func ListEmailSendsForContact(userID, contactID int64, limit int) ([]EmailSendListItem, error) {
+	if limit < 1 {
+		limit = 10
+	}
+	query := `
+		SELECT
+			es.id, es.template_id, es.contact_id, es.tracking_id, es.sent_at,
+			COALESCE(t.name, ''), COALESCE(c.email, ''),
+			COALESCE(SUM(CASE WHEN ee.event_type = 'open' THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN ee.event_type = 'click' THEN 1 ELSE 0 END), 0),
+			COALESCE(es.delivery_status, 'sent')
+		FROM email_sends es
+		LEFT JOIN template t ON t.id = es.template_id
+		LEFT JOIN contact c ON c.id = es.contact_id
+		LEFT JOIN email_events ee ON ee.email_send_id = es.id OR ee.tracking_id = es.tracking_id
+		WHERE es.user_id = ? AND es.contact_id = ?
+		GROUP BY es.id, es.template_id, es.contact_id, es.tracking_id, es.sent_at, es.delivery_status, t.name, c.email
+		ORDER BY es.sent_at DESC
+		LIMIT ?
+	`
+	rows, err := db.Query(query, userID, contactID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []EmailSendListItem
+	for rows.Next() {
+		var item EmailSendListItem
+		if err := rows.Scan(
+			&item.ID, &item.TemplateID, &item.ContactID, &item.TrackingID, &item.SentAt,
+			&item.TemplateName, &item.ContactEmail,
+			&item.OpenCount, &item.ClickCount, &item.DeliveryStatus,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, nil
+}
+
 func GetEmailSendDetail(id int64) (EmailSendDetail, error) {
 	query := `
 		SELECT

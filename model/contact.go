@@ -2,6 +2,9 @@ package model
 
 import (
 	"database/sql"
+	"math"
+	"strings"
+	"time"
 
 	"emailtracker.com/db"
 )
@@ -21,9 +24,39 @@ type ContactVariables struct {
 }
 
 type ContactListItem struct {
-	ID        int64
-	Email     string
-	Variables []ContactVariables
+	ID          int64
+	Email       string
+	Variables   []ContactVariables
+	CreatedAt   time.Time
+	Suppressed  bool
+	ListNames      []string
+	VarPreview     string
+	ExtraVarCount  int
+}
+
+type ContactListFilter struct {
+	Query    string
+	ListID   int64
+	Sort     string // newest, email
+	Page     int
+	PageSize int
+}
+
+type ContactListPage struct {
+	Items      []ContactListItem
+	Total      int
+	Page       int
+	PageSize   int
+	TotalPages int
+}
+
+type ContactSummary struct {
+	Contact    Contact
+	Variables  []ContactVariables
+	Lists      []ContactList
+	Suppressed bool
+	RecentSends []EmailSendListItem
+	Campaigns  []string
 }
 
 func (c *Contact) SaveContact(userID int64, variables []ContactVariables) (int64, error) {
@@ -85,38 +118,167 @@ func GetContactForUser(contactId, userID int64) (Contact, []ContactVariables, er
 }
 
 func ListContacts(userID int64) ([]ContactListItem, error) {
-	rows, err := db.Query(`SELECT id, email FROM contact WHERE user_id = ? ORDER BY id DESC`, userID)
+	page, err := ListContactsFiltered(userID, ContactListFilter{Page: 1, PageSize: 100000})
 	if err != nil {
 		return nil, err
+	}
+	return page.Items, nil
+}
+
+func ListContactsFiltered(userID int64, f ContactListFilter) (ContactListPage, error) {
+	if f.Page < 1 {
+		f.Page = 1
+	}
+	if f.PageSize < 1 {
+		f.PageSize = 50
+	}
+	if f.PageSize > 200 {
+		f.PageSize = 200
+	}
+
+	where := []string{"c.user_id = ?"}
+	args := []interface{}{userID}
+
+	if f.ListID > 0 {
+		where = append(where, `c.id IN (SELECT contact_id FROM contact_list_members WHERE list_id = ?)`)
+		args = append(args, f.ListID)
+	}
+	if q := strings.TrimSpace(f.Query); q != "" {
+		where = append(where, "LOWER(c.email) LIKE ?")
+		args = append(args, "%"+strings.ToLower(q)+"%")
+	}
+
+	whereSQL := strings.Join(where, " AND ")
+
+	var total int
+	countQ := `SELECT COUNT(*) FROM contact c WHERE ` + whereSQL
+	if err := db.QueryRow(countQ, args...).Scan(&total); err != nil {
+		return ContactListPage{}, err
+	}
+
+	order := "c.id DESC"
+	if f.Sort == "email" {
+		order = "LOWER(c.email) ASC"
+	}
+
+	offset := (f.Page - 1) * f.PageSize
+	listQ := `
+		SELECT c.id, c.email, COALESCE(c.created_at, CURRENT_TIMESTAMP),
+			EXISTS(SELECT 1 FROM contact_suppressions cs WHERE cs.contact_id = c.id)
+		FROM contact c
+		WHERE ` + whereSQL + `
+		ORDER BY ` + order + `
+		LIMIT ? OFFSET ?`
+	listArgs := append(append([]interface{}{}, args...), f.PageSize, offset)
+
+	rows, err := db.Query(listQ, listArgs...)
+	if err != nil {
+		return ContactListPage{}, err
 	}
 	defer rows.Close()
 
 	var items []ContactListItem
+	var contactIDs []int64
 	for rows.Next() {
 		var item ContactListItem
-		if err := rows.Scan(&item.ID, &item.Email); err != nil {
-			return nil, err
+		if err := rows.Scan(&item.ID, &item.Email, &item.CreatedAt, &item.Suppressed); err != nil {
+			return ContactListPage{}, err
 		}
+		contactIDs = append(contactIDs, item.ID)
+		items = append(items, item)
+	}
 
-		varRows, err := db.Query(
-			`SELECT key, value FROM contact_variables WHERE contact_id = ?`, item.ID,
-		)
+	listMap, _ := GetListIDsForContacts(userID, contactIDs)
+	for i := range items {
+		for _, l := range listMap[items[i].ID] {
+			items[i].ListNames = append(items[i].ListNames, l.Name)
+		}
+		varRows, err := db.Query(`SELECT key, value FROM contact_variables WHERE contact_id = ?`, items[i].ID)
 		if err != nil {
-			return nil, err
+			continue
 		}
 		for varRows.Next() {
 			var cv ContactVariables
 			if err := varRows.Scan(&cv.Key, &cv.Value); err != nil {
 				varRows.Close()
-				return nil, err
+				break
 			}
-			cv.ContactID = item.ID
-			item.Variables = append(item.Variables, cv)
+			cv.ContactID = items[i].ID
+			items[i].Variables = append(items[i].Variables, cv)
 		}
 		varRows.Close()
-		items = append(items, item)
+		if len(items[i].Variables) > 0 {
+			parts := []string{}
+			for j, cv := range items[i].Variables {
+				if j >= 2 {
+					items[i].ExtraVarCount = len(items[i].Variables) - 2
+					break
+				}
+				parts = append(parts, cv.Key+"="+cv.Value)
+			}
+			items[i].VarPreview = strings.Join(parts, ", ")
+		}
 	}
-	return items, nil
+
+	totalPages := int(math.Ceil(float64(total) / float64(f.PageSize)))
+	if totalPages < 1 {
+		totalPages = 1
+	}
+
+	return ContactListPage{
+		Items:      items,
+		Total:      total,
+		Page:       f.Page,
+		PageSize:   f.PageSize,
+		TotalPages: totalPages,
+	}, nil
+}
+
+func BulkDeleteContacts(userID int64, ids []int64) (int, error) {
+	deleted := 0
+	for _, id := range ids {
+		if err := DeleteContact(id, userID); err == nil {
+			deleted++
+		}
+	}
+	return deleted, nil
+}
+
+func GetContactSummary(userID, contactID int64) (ContactSummary, error) {
+	c, vars, err := GetContactForUser(contactID, userID)
+	if err != nil {
+		return ContactSummary{}, err
+	}
+	lists, _ := GetListsForContact(userID, contactID)
+	suppressed, _ := IsContactSuppressed(contactID)
+
+	sends, _ := ListEmailSendsForContact(userID, contactID, 10)
+
+	campaignRows, _ := db.Query(`
+		SELECT DISTINCT camp.name FROM campaign_contacts cc
+		INNER JOIN campaigns camp ON camp.id = cc.campaign_id
+		WHERE cc.contact_id = ? AND camp.user_id = ?
+		ORDER BY camp.name
+	`, contactID, userID)
+	var campaigns []string
+	if campaignRows != nil {
+		for campaignRows.Next() {
+			var name string
+			if err := campaignRows.Scan(&name); err == nil {
+				campaigns = append(campaigns, name)
+			}
+		}
+		campaignRows.Close()
+	}
+
+	return ContactSummary{
+		Contact:     c,
+		Variables:   vars,
+		Lists:       lists,
+		Suppressed:  suppressed,
+		RecentSends: sends,
+		Campaigns:   campaigns,
+	}, nil
 }
 
 func DeleteContact(id, userID int64) error {

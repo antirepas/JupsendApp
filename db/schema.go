@@ -34,7 +34,21 @@ func runSchema() {
 		`CREATE TABLE IF NOT EXISTS contact (
 			id BIGSERIAL PRIMARY KEY,
 			user_id BIGINT REFERENCES users(id),
-			email TEXT
+			email TEXT,
+			created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+		)`,
+
+		`CREATE TABLE IF NOT EXISTS contact_lists (
+			id BIGSERIAL PRIMARY KEY,
+			user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			name TEXT NOT NULL,
+			created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+		)`,
+
+		`CREATE TABLE IF NOT EXISTS contact_list_members (
+			list_id BIGINT NOT NULL REFERENCES contact_lists(id) ON DELETE CASCADE,
+			contact_id BIGINT NOT NULL REFERENCES contact(id) ON DELETE CASCADE,
+			PRIMARY KEY (list_id, contact_id)
 		)`,
 
 		`CREATE TABLE IF NOT EXISTS contact_variables (
@@ -55,7 +69,8 @@ func runSchema() {
 			scheduled_at TIMESTAMPTZ,
 			workflow_version_id BIGINT,
 			execution_mode TEXT DEFAULT 'bulk',
-			is_sending SMALLINT DEFAULT 0
+			is_sending SMALLINT DEFAULT 0,
+			contact_list_id BIGINT REFERENCES contact_lists(id) ON DELETE SET NULL
 		)`,
 
 		`CREATE TABLE IF NOT EXISTS campaign_contacts (
@@ -257,6 +272,9 @@ func runSchema() {
 		`CREATE INDEX IF NOT EXISTS idx_send_jobs_status_sched ON send_jobs(status, scheduled_at)`,
 		`CREATE INDEX IF NOT EXISTS idx_send_jobs_campaign ON send_jobs(campaign_id, status)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_smtp_accounts_user ON smtp_accounts(user_id) WHERE user_id IS NOT NULL`,
+		`CREATE INDEX IF NOT EXISTS idx_contact_user_email ON contact(user_id, email)`,
+		`CREATE INDEX IF NOT EXISTS idx_contact_list_members_contact ON contact_list_members(contact_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_email_sends_user_contact_sent ON email_sends(user_id, contact_id, sent_at)`,
 	}
 
 	for _, stmt := range stmts {

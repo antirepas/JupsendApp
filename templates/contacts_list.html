@@ -7,90 +7,257 @@
 {{template "sidebar" .}}
 <main class="flex-1 overflow-y-auto">
 <div class="max-w-6xl mx-auto p-8">
-<div class="flex items-center justify-between mb-8">
+<div class="flex items-center justify-between mb-6">
     <div>
         <h2 class="text-2xl font-bold text-charcoal">Contacts</h2>
-        <p class="text-gray-500 mt-1">Manage recipients and their personalization data · <a href="/contacts/suppressions" class="text-gray-400 hover:text-brand-600">Suppressions</a></p>
+        <p class="text-gray-500 mt-1 text-sm">Manage recipients, lists, and imports</p>
     </div>
-    <a href="/contacts/new" class="btn-primary">New Contact</a>
+    <a href="/contacts/new" class="btn-primary">New contact</a>
 </div>
 
-{{if .success}}
-<div class="alert-success mb-6">{{.success}}</div>
-{{end}}
-{{if .error}}
-<div class="alert-error mb-6">{{.error}}</div>
-{{end}}
+{{if .success}}<div class="alert-success mb-6">{{.success}}</div>{{end}}
+{{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
 
-<div class="card mb-6">
-    <h3 class="card-title">Quick add contacts</h3>
-    <p class="text-sm text-slate-500 mb-3">Paste one email per line — duplicates are skipped.</p>
-    <form method="POST" action="/contacts/paste" class="flex gap-3">
-        <textarea name="paste" rows="4" class="form-input flex-1 text-sm font-mono" placeholder="alice@example.com&#10;bob@example.com"></textarea>
-        <button type="submit" class="btn-primary shrink-0">Add contacts</button>
-    </form>
+<div class="flex gap-1 border-b border-gray-200 mb-6" id="contacts-tabs">
+    <a href="/contacts?tab=all" class="tab-btn {{if or (eq .tab "all") (eq .tab "")}}active{{end}}">All contacts</a>
+    <a href="/contacts?tab=import" class="tab-btn {{if eq .tab "import"}}active{{end}}">Import</a>
+    <a href="/contacts?tab=lists" class="tab-btn {{if eq .tab "lists"}}active{{end}}">Lists</a>
+    <a href="/contacts?tab=suppressions" class="tab-btn {{if eq .tab "suppressions"}}active{{end}}">Suppressions</a>
 </div>
 
-<div class="card mb-6">
-    <h3 class="card-title">Import from Excel</h3>
-  {{if .templates}}
-    <p class="text-sm text-slate-500 mb-4">Select a template to see which columns your spreadsheet needs. The first row must be headers matching the template variables.</p>
-
-    <form method="POST" action="/contacts/upload" enctype="multipart/form-data" class="space-y-4">
-        <div>
-            <label class="form-label">Template</label>
-            <select name="template_id" id="import-template" class="form-input" required onchange="updateImportPreview()">
-                <option value="">Select a template...</option>
-                {{range .templates}}
-                <option value="{{.ID}}" data-vars="{{range $i, $v := .Variables}}{{if $i}},{{end}}{{$v}}{{end}}">{{.Name}}</option>
+{{if or (eq .tab "all") (eq .tab "")}}
+<div class="card mb-4">
+    <form method="GET" action="/contacts" class="flex flex-wrap gap-3 items-end">
+        <input type="hidden" name="tab" value="all">
+        <div class="flex-1 min-w-[180px]">
+            <label class="form-label">Search email</label>
+            <input type="search" name="q" class="form-input" value="{{.filterQ}}" placeholder="alice@example.com">
+        </div>
+        <div class="min-w-[160px]">
+            <label class="form-label">List</label>
+            <select name="list" class="form-input">
+                <option value="">All lists</option>
+                {{range .lists}}
+                <option value="{{.ID}}" {{if eq $.filterList .ID}}selected{{end}}>{{.Name}} ({{.MemberCount}})</option>
                 {{end}}
             </select>
         </div>
-
-        <div id="import-preview" class="hidden rounded-lg border border-slate-200 bg-slate-50 p-4">
-            <p class="text-sm font-medium text-slate-700 mb-2">Required spreadsheet columns</p>
-            <div id="import-columns" class="flex flex-wrap gap-2 mb-3"></div>
-            <p class="text-xs text-slate-500 mb-3">Row 1 = headers. Column names are case-insensitive. <strong>email</strong> is always required.</p>
-            <a id="sample-download" href="#" class="text-sm text-brand-600 hover:text-brand-700 font-medium">Download sample spreadsheet</a>
+        <div class="min-w-[140px]">
+            <label class="form-label">Sort</label>
+            <select name="sort" class="form-input">
+                <option value="newest" {{if eq .filterSort "newest"}}selected{{end}}>Newest</option>
+                <option value="email" {{if eq .filterSort "email"}}selected{{end}}>Email A–Z</option>
+            </select>
         </div>
-
-        <div>
-            <label class="form-label">Excel file (.xlsx)</label>
-            <input type="file" name="file" class="form-input" accept=".xlsx,.xls" required>
-        </div>
-
-        <button type="submit" class="btn-primary">Upload &amp; Import</button>
+        <button type="submit" class="btn-secondary">Filter</button>
     </form>
-  {{else}}
-    <p class="text-sm text-slate-500">Create a <a href="/templates/new" class="text-brand-600 underline">template</a> first to import contacts with the correct columns.</p>
-  {{end}}
 </div>
 
+<form method="POST" action="/contacts/bulk-delete" id="bulk-form">
 <div class="card overflow-hidden">
     {{if .contacts}}
+    <div class="bulk-action-bar px-4 py-2 border-b border-gray-100 flex items-center gap-3 text-sm">
+        <label class="flex items-center gap-2"><input type="checkbox" id="select-all-page"> Select page</label>
+        <button type="submit" class="text-red-600 font-medium" onclick="return confirm('Delete selected contacts?');">Delete selected</button>
+        <span class="text-gray-400">{{.contactPage.Total}} total</span>
+    </div>
     <table class="data-table">
         <thead>
             <tr>
+                <th class="w-10"></th>
                 <th>Email</th>
+                <th>Lists</th>
                 <th>Variables</th>
                 <th class="text-right">Actions</th>
             </tr>
         </thead>
         <tbody>
             {{range .contacts}}
-            <tr>
-                <td class="font-medium">{{.Email}}</td>
-                <td>
-                    {{if .Variables}}
-                    {{range .Variables}}<span class="badge badge-gray mr-1">{{.Key}}={{.Value}}</span>{{end}}
-                    {{else}}
-                    <span class="text-slate-400">—</span>
-                    {{end}}
+            <tr class="contact-row">
+                <td><input type="checkbox" name="contact_ids" value="{{.ID}}" class="contact-cb"></td>
+                <td class="font-medium">
+                    <a href="/contacts/{{.ID}}" class="text-brand-600 hover:underline">{{.Email}}</a>
+                    {{if .Suppressed}}<span class="badge badge-red ml-1">suppressed</span>{{end}}
+                </td>
+                <td class="text-sm">
+                    {{if .ListNames}}
+                    {{range .ListNames}}<span class="badge badge-gray mr-1">{{.}}</span>{{end}}
+                    {{else}}<span class="text-gray-400">—</span>{{end}}
+                </td>
+                <td class="text-sm text-gray-600">
+                    {{if .VarPreview}}{{.VarPreview}}{{if gt .ExtraVarCount 0}} <span class="text-gray-400">+{{.ExtraVarCount}} more</span>{{end}}
+                    {{else}}<span class="text-gray-400">—</span>{{end}}
                 </td>
                 <td class="text-right space-x-3">
                     <a href="/contacts/{{.ID}}/edit" class="text-brand-600 text-sm font-medium">Edit</a>
-                    <form method="POST" action="/contacts/{{.ID}}/delete" class="inline" onsubmit="return confirm('Delete this contact?');">
-                        <button type="submit" class="text-red-600 text-sm font-medium">Delete</button>
+                </td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+    {{if gt .contactPage.TotalPages 1}}
+    <div class="flex items-center justify-between px-4 py-3 border-t border-gray-100 text-sm">
+        <span class="text-gray-500">Page {{.contactPage.Page}} of {{.contactPage.TotalPages}}</span>
+        <div class="flex gap-2">
+            {{if .hasPrev}}
+            <a href="/contacts?tab=all&page={{.prevPage}}&q={{.filterQ}}&list={{.filterList}}&sort={{.filterSort}}" class="btn-secondary text-xs">Previous</a>
+            {{end}}
+            {{if .hasNext}}
+            <a href="/contacts?tab=all&page={{.nextPage}}&q={{.filterQ}}&list={{.filterList}}&sort={{.filterSort}}" class="btn-secondary text-xs">Next</a>
+            {{end}}
+        </div>
+    </div>
+    {{end}}
+    {{else}}
+    <div class="empty-state">
+        <p>No contacts match your filters.</p>
+        <a href="/contacts/new" class="btn-primary mt-4">Add contact</a>
+    </div>
+    {{end}}
+</div>
+</form>
+{{end}}
+
+{{if eq .tab "import"}}
+<div class="card mb-6">
+    <h3 class="card-title">Paste contacts</h3>
+    <p class="text-sm text-gray-500 mb-3">One per line: <code class="text-xs bg-gray-100 px-1 rounded">email</code> or <code class="text-xs bg-gray-100 px-1 rounded">email,name,company</code> (use template below for columns).</p>
+    <form method="POST" action="/contacts/paste" class="space-y-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+                <label class="form-label">Template (column guide)</label>
+                <select name="template_id" id="paste-template" class="form-input" onchange="updatePastePreview()">
+                    <option value="">Email only</option>
+                    {{range .templates}}
+                    <option value="{{.ID}}" data-vars="{{range $i, $v := .Variables}}{{if $i}},{{end}}{{$v}}{{end}}">{{.Name}}</option>
+                    {{end}}
+                </select>
+            </div>
+            <div>
+                <label class="form-label">Add to list (optional)</label>
+                <select name="list_id" class="form-input">
+                    <option value="">No list</option>
+                    {{range .lists}}
+                    <option value="{{.ID}}">{{.Name}}</option>
+                    {{end}}
+                </select>
+            </div>
+        </div>
+        <div id="paste-preview" class="hidden text-sm text-gray-600"></div>
+        <textarea name="paste" rows="6" class="form-input font-mono text-sm" placeholder="email,name,company&#10;john@example.com,John,Acme"></textarea>
+        <button type="submit" class="btn-primary">Import pasted contacts</button>
+    </form>
+</div>
+
+<div class="card">
+    <h3 class="card-title">Import from Excel</h3>
+    {{if .templates}}
+    <form method="POST" action="/contacts/upload" enctype="multipart/form-data" class="space-y-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+                <label class="form-label">Template</label>
+                <select name="template_id" id="import-template" class="form-input" required onchange="updateImportPreview()">
+                    <option value="">Select a template...</option>
+                    {{range .templates}}
+                    <option value="{{.ID}}" data-vars="{{range $i, $v := .Variables}}{{if $i}},{{end}}{{$v}}{{end}}">{{.Name}}</option>
+                    {{end}}
+                </select>
+            </div>
+            <div>
+                <label class="form-label">Add to list (optional)</label>
+                <select name="list_id" class="form-input">
+                    <option value="">No list</option>
+                    {{range .lists}}
+                    <option value="{{.ID}}">{{.Name}}</option>
+                    {{end}}
+                </select>
+            </div>
+        </div>
+        <div id="import-preview" class="hidden rounded-lg border border-gray-200 bg-gray-50 p-4">
+            <p class="text-sm font-medium text-gray-700 mb-2">Required columns</p>
+            <div id="import-columns" class="flex flex-wrap gap-2 mb-3"></div>
+            <a id="sample-download" href="#" class="text-sm text-brand-600 font-medium">Download sample spreadsheet</a>
+        </div>
+        <div>
+            <label class="form-label">Excel file (.xlsx)</label>
+            <input type="file" name="file" class="form-input" accept=".xlsx,.xls" required>
+        </div>
+        <button type="submit" class="btn-primary">Upload &amp; import</button>
+    </form>
+    {{else}}
+    <p class="text-sm text-gray-500">Create a <a href="/templates/new" class="text-brand-600 underline">template</a> first for column-guided import.</p>
+    {{end}}
+</div>
+{{end}}
+
+{{if eq .tab "lists"}}
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+    {{range .lists}}
+    <div class="card">
+        <div class="flex items-start justify-between gap-2">
+            <div>
+                <a href="/contacts?list={{.ID}}" class="font-semibold text-charcoal hover:text-brand-600">{{.Name}}</a>
+                <p class="text-sm text-gray-500 mt-1">{{.MemberCount}} contacts</p>
+            </div>
+            <form method="POST" action="/contacts/lists/{{.ID}}/delete" onsubmit="return confirm('Delete this list? Contacts are kept.');">
+                <button type="submit" class="text-red-600 text-xs font-medium">Delete</button>
+            </form>
+        </div>
+        <form method="POST" action="/contacts/lists/{{.ID}}/rename" class="flex gap-2 mt-3">
+            <input type="text" name="name" class="form-input text-sm flex-1" value="{{.Name}}" required>
+            <button type="submit" class="btn-secondary text-sm">Rename</button>
+        </form>
+    </div>
+    {{else}}
+    <div class="card md:col-span-2 empty-state"><p>No lists yet. Create one below.</p></div>
+    {{end}}
+</div>
+<div class="card max-w-md">
+    <h3 class="card-title">New list</h3>
+    <form method="POST" action="/contacts/lists" class="flex gap-2">
+        <input type="text" name="name" class="form-input flex-1" placeholder="Q1 SaaS leads" required>
+        <button type="submit" class="btn-primary">Create</button>
+    </form>
+</div>
+{{end}}
+
+{{if eq .tab "suppressions"}}
+<div class="card mb-6">
+    <h3 class="card-title">Add manual suppression</h3>
+    <form method="POST" action="/contacts/suppressions" class="flex flex-wrap gap-3 items-end">
+        <div class="flex-1 min-w-[200px]">
+            <label class="form-label">Contact</label>
+            <select name="contact_id" class="form-input" required>
+                <option value="">Select contact…</option>
+                {{range .allContacts}}
+                <option value="{{.ID}}">{{.Email}}</option>
+                {{end}}
+            </select>
+        </div>
+        <div>
+            <label class="form-label">Reason</label>
+            <select name="reason" class="form-input">
+                <option value="manual">manual</option>
+                <option value="complaint">complaint</option>
+            </select>
+        </div>
+        <button type="submit" class="btn-primary">Suppress</button>
+    </form>
+</div>
+<div class="card overflow-hidden">
+    {{if .suppressions}}
+    <table class="data-table">
+        <thead><tr><th>Contact</th><th>Reason</th><th>Source</th><th>Since</th><th></th></tr></thead>
+        <tbody>
+            {{range .suppressions}}
+            <tr>
+                <td class="font-medium">{{.ContactEmail}}</td>
+                <td><span class="badge badge-gray">{{.Reason}}</span></td>
+                <td class="text-sm text-gray-500">{{.SourceMessage}}</td>
+                <td class="text-sm text-gray-500">{{.CreatedAt.Format "Jan 2, 2006"}}</td>
+                <td class="text-right">
+                    <form method="POST" action="/contacts/suppressions/{{.ContactID}}/remove" class="inline">
+                        <button type="submit" class="text-brand-600 text-sm">Remove</button>
                     </form>
                 </td>
             </tr>
@@ -98,36 +265,39 @@
         </tbody>
     </table>
     {{else}}
-    <div class="empty-state">
-        <p>No contacts yet.</p>
-        <a href="/contacts/new" class="btn-primary mt-4">Add your first contact</a>
-    </div>
+    <p class="text-gray-400 text-sm py-6 text-center">No suppressions.</p>
     {{end}}
 </div>
+{{end}}
+
 </div>
 </main>
 </div>
 <script>
+document.getElementById('select-all-page')?.addEventListener('change', function() {
+    document.querySelectorAll('.contact-cb').forEach(cb => { cb.checked = this.checked; });
+});
 function updateImportPreview() {
     const select = document.getElementById('import-template');
     const preview = document.getElementById('import-preview');
     const columns = document.getElementById('import-columns');
     const sampleLink = document.getElementById('sample-download');
+    if (!select) return;
     const option = select.options[select.selectedIndex];
-
-    if (!option || !option.value) {
-        preview.classList.add('hidden');
-        return;
-    }
-
+    if (!option || !option.value) { preview?.classList.add('hidden'); return; }
     const vars = option.dataset.vars ? option.dataset.vars.split(',').filter(Boolean) : [];
-    const allCols = ['email'].concat(vars);
-
-    columns.innerHTML = allCols.map(col =>
-        `<span class="badge badge-blue">${col}</span>`
-    ).join('');
-
+    columns.innerHTML = ['email'].concat(vars).map(c => `<span class="badge badge-blue">${c}</span>`).join('');
     sampleLink.href = '/contacts/upload/sample/' + option.value;
+    preview.classList.remove('hidden');
+}
+function updatePastePreview() {
+    const select = document.getElementById('paste-template');
+    const preview = document.getElementById('paste-preview');
+    if (!select || !preview) return;
+    const option = select.options[select.selectedIndex];
+    if (!option || !option.value) { preview.classList.add('hidden'); return; }
+    const vars = option.dataset.vars ? option.dataset.vars.split(',').filter(Boolean) : [];
+    preview.textContent = 'Columns: email' + (vars.length ? ', ' + vars.join(', ') : '');
     preview.classList.remove('hidden');
 }
 </script>

@@ -2,15 +2,17 @@ package outbound
 
 import (
 	"fmt"
+	"strings"
 
 	"emailtracker.com/model"
 	"emailtracker.com/util"
 )
 
 type EnqueueResult struct {
-	Queued  int
-	Skipped int
-	JobIDs  []int64
+	Queued          int
+	Skipped         int
+	SkippedReasons  map[string]int
+	JobIDs          []int64
 }
 
 type EnqueueInput struct {
@@ -69,11 +71,14 @@ func EnqueueSend(input EnqueueInput) (int64, int64, error) {
 }
 
 func EnqueueCampaignContacts(userID, campaignID int64, contactIDs []int64, templateForContact func(contactID int64, index int) (templateID int64, variant string)) (EnqueueResult, error) {
-	allowed, skipped, err := model.FilterSuppressedContactIDs(userID, contactIDs)
+	allowed, skippedReasons, err := model.FilterSendEligible(userID, campaignID, contactIDs)
 	if err != nil {
 		return EnqueueResult{}, err
 	}
-	result := EnqueueResult{Skipped: len(skipped)}
+	result := EnqueueResult{
+		Skipped:        len(skippedReasons),
+		SkippedReasons: model.CountSkipReasons(skippedReasons),
+	}
 	for i, contactID := range allowed {
 		templateID, variant := templateForContact(contactID, i)
 		_, _, err := EnqueueSend(EnqueueInput{
@@ -84,6 +89,10 @@ func EnqueueCampaignContacts(userID, campaignID int64, contactIDs []int64, templ
 			Variant:    variant,
 		})
 		if err != nil {
+			result.Skipped++
+			if strings.Contains(err.Error(), "suppressed") {
+				result.SkippedReasons[model.SkipReasonSuppressed]++
+			}
 			continue
 		}
 		result.Queued++

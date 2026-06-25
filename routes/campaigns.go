@@ -95,6 +95,7 @@ func CampaignDetailPage(ctx *gin.Context) {
 	campaign, _ := model.GetCampaignForUser(id, userID)
 	contactIDs, _ := model.GetCampaignContactIDs(id)
 	allContacts, _ := model.ListContacts(userID)
+	contactLists, _ := model.ListContactLists(userID)
 	mergedVars, _ := model.MergeTemplateVariables(userID, []int64{detail.TemplateAID, detail.TemplateBID})
 
 	templateA := templatePreviewView(userID, detail.TemplateAID)
@@ -116,6 +117,8 @@ func CampaignDetailPage(ctx *gin.Context) {
 		"active":           "campaigns",
 		"campaign":         detail,
 		"allContacts":      allContacts,
+		"contactLists":     contactLists,
+		"linkedListID":     campaign.ContactListID,
 		"variables":        strings.Join(mergedVars, ","),
 		"templateA":        templateA,
 		"templateB":        templateB,
@@ -192,7 +195,7 @@ func PasteCampaignContacts(ctx *gin.Context) {
 		for _, key := range vars {
 			cvs = append(cvs, model.ContactVariables{Key: key, Value: row.Variables[key]})
 		}
-		cid, err := model.FindOrCreateContact(mustUserID(ctx), row.Email, cvs)
+		_, cid, err := model.UpsertContact(mustUserID(ctx), row.Email, cvs)
 		if err != nil {
 			continue
 		}
@@ -246,7 +249,7 @@ func UploadCampaignContacts(ctx *gin.Context) {
 		for _, key := range vars {
 			cvs = append(cvs, model.ContactVariables{Key: key, Value: row.Variables[key]})
 		}
-		cid, err := model.FindOrCreateContact(mustUserID(ctx), row.Email, cvs)
+		_, cid, err := model.UpsertContact(mustUserID(ctx), row.Email, cvs)
 		if err != nil {
 			continue
 		}
@@ -268,14 +271,21 @@ func SendCampaign(ctx *gin.Context) {
 		return
 	}
 
-	sent, failed, err := launchCampaign(mustUserID(ctx), campaignID)
+	result, err := launchCampaign(mustUserID(ctx), campaignID)
 	if err != nil {
 		log.Print(err)
 		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error="+url.QueryEscape(err.Error()))
 		return
 	}
 
-	msg := fmt.Sprintf("Campaign queued: %d emails queued, %d suppressed", sent, failed)
+	msg := fmt.Sprintf("Campaign queued: %d emails", result.Queued)
+	if result.Skipped > 0 {
+		if b := model.FormatSkipBreakdown(result.SkippedReasons); b != "" {
+			msg += fmt.Sprintf(", %d skipped (%s)", result.Skipped, b)
+		} else {
+			msg += fmt.Sprintf(", %d skipped", result.Skipped)
+		}
+	}
 	ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?success="+url.QueryEscape(msg))
 }
 
@@ -324,21 +334,21 @@ func CancelCampaignSchedule(ctx *gin.Context) {
 	ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?success=Schedule+cancelled")
 }
 
-func executeCampaignSend(userID, campaignID int64) (queued, skipped int, err error) {
+func executeCampaignSend(userID, campaignID int64) (outbound.EnqueueResult, error) {
 	campaign, err := model.GetCampaignForUser(campaignID, userID)
 	if err != nil {
-		return 0, 0, fmt.Errorf("campaign not found")
+		return outbound.EnqueueResult{}, fmt.Errorf("campaign not found")
 	}
 	if campaign.Status == "sent" {
-		return 0, 0, fmt.Errorf("campaign already sent")
+		return outbound.EnqueueResult{}, fmt.Errorf("campaign already sent")
 	}
 	if campaign.IsSending {
-		return 0, 0, fmt.Errorf("campaign is already sending")
+		return outbound.EnqueueResult{}, fmt.Errorf("campaign is already sending")
 	}
 
 	contactIDs, err := model.GetCampaignContactIDs(campaignID)
 	if err != nil || len(contactIDs) == 0 {
-		return 0, 0, fmt.Errorf("no contacts in campaign")
+		return outbound.EnqueueResult{}, fmt.Errorf("no contacts in campaign")
 	}
 
 	hasB := campaign.TemplateBID > 0
@@ -352,29 +362,34 @@ func executeCampaignSend(userID, campaignID int64) (queued, skipped int, err err
 		return templateID, variant
 	})
 	if err != nil {
-		return 0, 0, err
+		return outbound.EnqueueResult{}, err
 	}
 
-	if result.Queued == 0 && result.Skipped == len(contactIDs) {
-		return 0, result.Skipped, fmt.Errorf("all contacts are suppressed")
+	if result.Queued == 0 && result.Skipped >= len(contactIDs) {
+		b := model.FormatSkipBreakdown(result.SkippedReasons)
+		if b != "" {
+			return result, fmt.Errorf("all contacts skipped (%s)", b)
+		}
+		return result, fmt.Errorf("all contacts skipped")
 	}
 
 	if err := model.MarkCampaignSending(campaignID); err != nil {
-		return result.Queued, result.Skipped, err
+		return result, err
 	}
-	return result.Queued, result.Skipped, nil
+	return result, nil
 }
 
-func launchCampaign(userID, campaignID int64) (queued, skipped int, err error) {
+func launchCampaign(userID, campaignID int64) (outbound.EnqueueResult, error) {
 	campaign, err := model.GetCampaignForUser(campaignID, userID)
 	if err != nil {
-		return 0, 0, fmt.Errorf("campaign not found")
+		return outbound.EnqueueResult{}, fmt.Errorf("campaign not found")
 	}
 	if campaign.Status == "sent" {
-		return 0, 0, fmt.Errorf("campaign already sent")
+		return outbound.EnqueueResult{}, fmt.Errorf("campaign already sent")
 	}
 	if campaign.ExecutionMode == "workflow" && campaign.WorkflowVersionID > 0 {
-		return startWorkflowCampaign(campaignID, campaign)
+		sent, failed, err := startWorkflowCampaign(campaignID, campaign)
+		return outbound.EnqueueResult{Queued: sent, Skipped: failed}, err
 	}
 	return executeCampaignSend(userID, campaignID)
 }
