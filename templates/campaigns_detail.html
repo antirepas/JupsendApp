@@ -11,21 +11,23 @@
     <div>
         <a href="/campaigns" class="text-sm text-brand-600 font-medium">← Campaigns</a>
         <h2 class="text-2xl font-bold text-slate-900 mt-2">{{.campaign.Name}}</h2>
-        <p class="text-slate-500 mt-1">{{.campaign.ContactCount}} contacts ·
-            <span class="badge {{if eq .campaign.DisplayStatus "sent"}}badge-green{{else if eq .campaign.DisplayStatus "scheduled"}}badge-amber{{else if eq .campaign.DisplayStatus "sending"}}badge-blue{{else}}badge-gray{{end}}">{{.campaign.DisplayStatus}}</span>
-            {{if .campaign.ScheduledAt}}<span class="text-sm text-slate-500 ml-2">· sends {{.campaign.ScheduledAt.Format "Jan 2, 2006 15:04"}}</span>{{end}}
+        <p class="text-slate-500 mt-1">
+            {{.campaign.ContactCount}} contacts ·
+            {{if .isWorkflow}}<span class="badge badge-violet">Workflow</span>{{else}}<span class="badge badge-blue">One-time</span>{{end}}
+            <span class="badge {{if eq .campaign.DisplayStatus "sent"}}badge-green{{else if eq .campaign.DisplayStatus "scheduled"}}badge-amber{{else if eq .campaign.DisplayStatus "sending"}}badge-blue{{else}}badge-gray{{end}} ml-1">{{.campaign.DisplayStatus}}</span>
+            {{if .campaign.ScheduledAt}}<span class="text-sm text-slate-500 ml-2">· {{if .isWorkflow}}starts{{else}}sends{{end}} {{.campaign.ScheduledAt.Format "Jan 2, 2006 15:04"}}</span>{{end}}
         </p>
     </div>
     <div class="flex gap-3 items-center flex-wrap justify-end">
-        <a href="/campaigns/{{.campaign.ID}}/analytics" class="btn-secondary">Campaign analytics</a>
+        <a href="/campaigns/{{.campaign.ID}}/analytics" class="btn-secondary">{{if .isWorkflow}}Workflow analytics{{else}}Campaign analytics{{end}}</a>
         <form method="POST" action="/campaigns/{{.campaign.ID}}/delete" onsubmit="return confirm('Delete this campaign?');">
             <button type="submit" class="btn-secondary text-red-600">Delete</button>
         </form>
         {{if gt .campaign.ContactCount 0}}
         {{if ne .campaign.DisplayStatus "sent"}}
         {{if ne .campaign.DisplayStatus "sending"}}
-        <form method="POST" action="/campaigns/{{.campaign.ID}}/send" onsubmit="return confirm('Send to all {{.campaign.ContactCount}} contacts now?');">
-            <button type="submit" class="btn-primary">Send now</button>
+        <form method="POST" action="/campaigns/{{.campaign.ID}}/send" onsubmit="return confirm('{{if .isWorkflow}}Start workflow for{{else}}Send to{{end}} all {{.campaign.ContactCount}} contacts now?');">
+            <button type="submit" class="btn-primary">{{if .isWorkflow}}Start workflow{{else}}Send now{{end}}</button>
         </form>
         {{end}}
         {{end}}
@@ -37,6 +39,7 @@
 {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
 
 {{if eq .campaign.DisplayStatus "sending"}}
+{{if not .isWorkflow}}
 <div class="card mb-6 border-l-4 border-blue-500">
     <h3 class="font-semibold text-slate-900 mb-2">Outbound queue progress</h3>
     <p class="text-sm text-slate-600 mb-2">
@@ -48,29 +51,123 @@
     <p class="text-xs text-slate-500">Jobs are processed by the background outbound worker. This page refreshes on reload.</p>
 </div>
 {{end}}
+{{end}}
 
 {{if ne .campaign.DisplayStatus "sent"}}
 {{if gt .campaign.ContactCount 0}}
 <div class="card mb-6">
-    <h3 class="card-title">Schedule send</h3>
+    <h3 class="card-title">{{if .isWorkflow}}Schedule workflow start{{else}}Schedule send{{end}}</h3>
     {{if .campaign.ScheduledAt}}
-    <p class="text-sm text-slate-600 mb-3">Scheduled for <strong>{{.campaign.ScheduledAt.Format "Monday, Jan 2, 2006 at 15:04"}}</strong> (your local time). The server checks every 30 seconds and sends automatically.</p>
+    <p class="text-sm text-slate-600 mb-3">Scheduled for <strong>{{.campaign.ScheduledAt.Format "Monday, Jan 2, 2006 at 15:04"}}</strong> (your local time). The server checks every 30 seconds and {{if .isWorkflow}}starts the workflow{{else}}sends{{end}} automatically.</p>
     <form method="POST" action="/campaigns/{{.campaign.ID}}/cancel-schedule" class="mb-4">
         <button type="submit" class="btn-secondary text-red-600">Cancel schedule</button>
     </form>
     {{else}}
-    <p class="text-sm text-slate-600 mb-3">Pick a date and time to send this campaign automatically.</p>
+    <p class="text-sm text-slate-600 mb-3">Pick a date and time to {{if .isWorkflow}}start this workflow{{else}}send this campaign{{end}} automatically.</p>
     {{end}}
     <form method="POST" action="/campaigns/{{.campaign.ID}}/schedule" class="flex flex-wrap gap-3 items-end">
         <div class="flex-1 min-w-[200px]">
             <label class="form-label">Date &amp; time</label>
             <input type="datetime-local" name="scheduled_at" class="form-input" required value="{{.scheduledAtLocal}}">
         </div>
-        <button type="submit" class="btn-primary">{{if .campaign.ScheduledAt}}Update schedule{{else}}Schedule campaign{{end}}</button>
+        <button type="submit" class="btn-primary">{{if .campaign.ScheduledAt}}Update schedule{{else}}{{if .isWorkflow}}Schedule workflow{{else}}Schedule campaign{{end}}{{end}}</button>
     </form>
 </div>
 {{end}}
 {{end}}
+
+{{if .isWorkflow}}
+<div class="workflow-header-compact">
+    <h3>{{.workflowInfo.WorkflowName}}</h3>
+    <a href="/workflows/{{.workflowInfo.WorkflowID}}/edit" class="text-brand-600 text-sm font-medium">Edit workflow</a>
+</div>
+
+<div class="workflow-explainer">
+    <h3>How this workflow runs</h3>
+    <p>When you launch this campaign, each contact gets their own copy of the workflow below. Steps run automatically — you don't need to do anything per contact.</p>
+    <ul>
+        <li><strong>Send</strong> — an email goes out from your connected Gmail account</li>
+        <li><strong>Wait</strong> — the contact pauses until the delay finishes</li>
+        <li><strong>Branch</strong> — the path splits based on opens, clicks, or replies</li>
+        <li><strong>Replies stop the sequence</strong> — remaining steps are cancelled for that contact</li>
+    </ul>
+</div>
+
+{{if .workflowSteps}}
+<div class="card mb-6">
+    <h3 class="card-title">Workflow steps</h3>
+    <p class="text-sm text-slate-500 mb-4">The sequence each contact follows after launch.</p>
+    <div class="workflow-pipeline-wrap">
+        <div class="workflow-pipeline workflow-pipeline--guide">
+            {{range .workflowSteps}}
+            <div class="workflow-step workflow-step--guide workflow-step--{{.NodeType}}">
+                <span class="workflow-step-num">Step {{.StepIndex}}</span>
+                <div class="workflow-step-head">
+                    <div class="workflow-step-icon-ring">
+                        {{if eq .NodeType "action_send_email"}}
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+                        {{else if eq .NodeType "action_wait"}}
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                        {{else if eq .NodeType "condition_engagement"}}
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3v12"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
+                        {{else}}
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m22 4-10 10.01-3-3"/></svg>
+                        {{end}}
+                    </div>
+                    <span class="workflow-step-kind">{{if eq .NodeType "action_send_email"}}Email{{else if eq .NodeType "action_wait"}}Wait{{else if eq .NodeType "condition_engagement"}}Branch{{else}}End{{end}}</span>
+                </div>
+                <p class="workflow-step-label">{{.Label}}</p>
+                {{if .Description}}<p class="workflow-step-desc">{{.Description}}</p>{{end}}
+            </div>
+            {{if ne .StepIndex (len $.workflowSteps)}}<div class="workflow-step-connector">→</div>{{end}}
+            {{end}}
+        </div>
+    </div>
+</div>
+{{end}}
+
+<div class="card overflow-hidden mb-6">
+    <h3 class="card-title">Contacts ({{len .workflowContactRows}})</h3>
+    <p class="text-sm text-slate-500 mb-3">Where each contact is in the workflow. Open <a href="/campaigns/{{.campaign.ID}}/analytics" class="text-brand-600 font-medium">Workflow analytics</a> for step counts and engagement.</p>
+    {{if .workflowContactRows}}
+    <div class="overflow-x-auto">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Email</th>
+                <th>Current step</th>
+                <th>Status</th>
+                <th>Engagement</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .workflowContactRows}}
+            <tr>
+                <td class="text-slate-500">{{.Index}}</td>
+                <td class="font-medium">{{.Email}}</td>
+                <td class="text-sm">{{.CurrentStep}}</td>
+                <td>
+                    <span class="badge {{if eq .InstanceStatus "completed"}}badge-green{{else if eq .InstanceStatus "cancelled"}}badge-red{{else if eq .InstanceStatus "active"}}badge-blue{{else if eq .InstanceStatus "waiting"}}badge-amber{{else}}badge-gray{{end}}">{{.InstanceStatus}}</span>
+                </td>
+                <td class="text-sm text-slate-600">
+                    {{if or (gt .OpenCount 0) (gt .ClickCount 0)}}
+                    {{.OpenCount}} opens · {{.ClickCount}} clicks
+                    {{else}}<span class="text-slate-400">—</span>{{end}}
+                </td>
+                <td>{{if .SendID}}<a href="/sends/{{.SendID}}" class="text-brand-600 text-sm font-medium">Latest send</a>{{end}}</td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+    </div>
+    {{else}}
+    <p class="text-slate-400 text-sm py-4">No contacts yet. Add them below.</p>
+    {{end}}
+</div>
+
+{{else}}
 
 <div class="card mb-6 bg-blue-50 border-blue-100">
     <h3 class="font-semibold text-slate-900 mb-2">How A/B assignment works</h3>
@@ -186,14 +283,17 @@
     <p class="text-slate-400 text-sm py-4">No contacts yet. Add them below.</p>
     {{end}}
 </div>
+{{end}}
 
 <div class="card mb-6">
     <h3 class="card-title">Add contacts</h3>
     <div class="flex gap-1 border-b border-gray-200 mb-4" id="contact-tabs">
         <button type="button" class="tab-btn active" data-tab="list">From list</button>
         <button type="button" class="tab-btn" data-tab="select">Select existing</button>
+        {{if not .isWorkflow}}
         <button type="button" class="tab-btn" data-tab="paste">Paste</button>
         <button type="button" class="tab-btn" data-tab="upload">Upload Excel</button>
+        {{end}}
     </div>
     <div id="tab-list" class="contact-tab-panel">
         {{if .contactLists}}
@@ -233,12 +333,13 @@
                     <span>{{.Email}}</span>
                 </label>
                 {{else}}
-                <p class="text-gray-400 text-sm">No contacts yet — use Paste, Upload, or a List.</p>
+                <p class="text-gray-400 text-sm">No contacts yet — use a list or select existing.</p>
                 {{end}}
             </div>
             <button type="submit" class="btn-primary text-sm">Add selected</button>
         </form>
     </div>
+    {{if not .isWorkflow}}
     <div id="tab-paste" class="contact-tab-panel hidden">
         {{if .mergedVars}}
         <p class="text-sm text-gray-600 mb-2">Columns: <span class="badge badge-gray">email</span> {{range .mergedVars}}<span class="badge badge-gray">{{.}}</span>{{end}}</p>
@@ -259,6 +360,7 @@
             <button type="submit" class="btn-primary text-sm">Upload Excel</button>
         </form>
     </div>
+    {{end}}
 </div>
 </div>
 </main>

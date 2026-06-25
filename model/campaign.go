@@ -23,17 +23,20 @@ type Campaign struct {
 }
 
 type CampaignListItem struct {
-	ID              int64
-	Name            string
-	TemplateAName   string
-	TemplateBName   string
-	Status          string
-	DisplayStatus   string
-	IsSending       bool
-	ContactCount    int
-	CreatedAt       time.Time
-	ScheduledAt     *time.Time
-	SendJobCounts   SendJobCounts
+	ID                int64
+	Name              string
+	TemplateAName     string
+	TemplateBName     string
+	ExecutionMode     string
+	WorkflowName      string
+	WorkflowVersionID int64
+	Status            string
+	DisplayStatus     string
+	IsSending         bool
+	ContactCount      int
+	CreatedAt         time.Time
+	ScheduledAt       *time.Time
+	SendJobCounts     SendJobCounts
 }
 
 type VariantStats struct {
@@ -106,11 +109,15 @@ func CreateCampaign(userID int64, name string, templateAID, templateBID int64, e
 func ListCampaigns(userID int64) ([]CampaignListItem, error) {
 	query := `
 		SELECT c.id, c.name, c.status, c.created_at, c.scheduled_at,
+			COALESCE(c.execution_mode, 'bulk'), COALESCE(c.workflow_version_id, 0),
 			COALESCE(ta.name, ''), COALESCE(tb.name, ''),
+			COALESCE(w.name, ''),
 			COALESCE(cc.cnt, 0), COALESCE(c.is_sending, 0)
 		FROM campaigns c
 		LEFT JOIN template ta ON ta.id = c.template_a_id
 		LEFT JOIN template tb ON tb.id = c.template_b_id
+		LEFT JOIN workflow_versions wv ON wv.id = c.workflow_version_id
+		LEFT JOIN workflows w ON w.id = wv.workflow_id
 		LEFT JOIN (
 			SELECT campaign_id, COUNT(*) as cnt FROM campaign_contacts GROUP BY campaign_id
 		) cc ON cc.campaign_id = c.id
@@ -129,9 +136,14 @@ func ListCampaigns(userID int64) ([]CampaignListItem, error) {
 		var scheduled sql.NullTime
 		var isSending int
 		err := rows.Scan(&item.ID, &item.Name, &item.Status, &item.CreatedAt, &scheduled,
-			&item.TemplateAName, &item.TemplateBName, &item.ContactCount, &isSending)
+			&item.ExecutionMode, &item.WorkflowVersionID,
+			&item.TemplateAName, &item.TemplateBName, &item.WorkflowName,
+			&item.ContactCount, &isSending)
 		if err != nil {
 			return nil, err
+		}
+		if item.ExecutionMode == "" {
+			item.ExecutionMode = "bulk"
 		}
 		item.ScheduledAt = scanScheduledAt(scheduled)
 		item.IsSending = isSending == 1

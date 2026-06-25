@@ -16,6 +16,13 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+type WorkflowPickerItem struct {
+	ID        int64
+	Name      string
+	VersionID int64
+	StepCount int
+}
+
 func ListCampaignsPage(ctx *gin.Context) {
 	userID := mustUserID(ctx)
 	campaigns, err := model.ListCampaigns(userID)
@@ -37,11 +44,20 @@ func NewCampaignPage(ctx *gin.Context) {
 	userID := mustUserID(ctx)
 	templates, _ := model.ListTemplates(userID)
 	workflows, _ := model.GetPublishedWorkflows(userID)
+	var workflowOptions []WorkflowPickerItem
+	for _, w := range workflows {
+		workflowOptions = append(workflowOptions, WorkflowPickerItem{
+			ID:        w.ID,
+			Name:      w.Name,
+			VersionID: w.CurrentVersionID,
+			StepCount: model.CountWorkflowSteps(w.CurrentVersionID),
+		})
+	}
 	ctx.HTML(http.StatusOK, "campaigns_form.html", gin.H{
-		"title":     "New Campaign",
-		"active":    "campaigns",
-		"templates": templates,
-		"workflows": workflows,
+		"title":           "New Campaign",
+		"active":          "campaigns",
+		"templates":       templates,
+		"workflows":       workflowOptions,
 	})
 }
 
@@ -96,39 +112,50 @@ func CampaignDetailPage(ctx *gin.Context) {
 	contactIDs, _ := model.GetCampaignContactIDs(id)
 	allContacts, _ := model.ListContacts(userID)
 	contactLists, _ := model.ListContactLists(userID)
-	mergedVars, _ := model.MergeTemplateVariables(userID, []int64{detail.TemplateAID, detail.TemplateBID})
 
-	templateA := templatePreviewView(userID, detail.TemplateAID)
-	var templateB TemplatePreviewView
-	hasB := detail.TemplateBID > 0
-	if hasB {
-		templateB = templatePreviewView(userID, detail.TemplateBID)
-	}
-
-	contactRows := buildCampaignContactRows(campaign, userID, contactIDs, detail.TemplateAName, detail.TemplateBName)
+	isWorkflow := campaign.ExecutionMode == "workflow" && campaign.WorkflowVersionID > 0
 
 	var scheduledAtLocal string
 	if detail.ScheduledAt != nil {
 		scheduledAtLocal = detail.ScheduledAt.Format("2006-01-02T15:04")
 	}
 
-	ctx.HTML(http.StatusOK, "campaigns_detail.html", gin.H{
+	pageData := gin.H{
 		"title":            detail.Name,
 		"active":           "campaigns",
 		"campaign":         detail,
 		"allContacts":      allContacts,
 		"contactLists":     contactLists,
 		"linkedListID":     campaign.ContactListID,
-		"variables":        strings.Join(mergedVars, ","),
-		"templateA":        templateA,
-		"templateB":        templateB,
-		"hasB":             hasB,
-		"contactRows":      contactRows,
-		"mergedVars":       mergedVars,
 		"scheduledAtLocal": scheduledAtLocal,
 		"success":          ctx.Query("success"),
 		"error":            ctx.Query("error"),
-	})
+		"isWorkflow":       isWorkflow,
+	}
+
+	if isWorkflow {
+		wfInfo, _ := model.GetWorkflowForVersion(campaign.WorkflowVersionID)
+		wfSteps, _ := model.GetCampaignWorkflowStepDisplay(campaign.WorkflowVersionID)
+		pageData["workflowInfo"] = wfInfo
+		pageData["workflowSteps"] = wfSteps
+		pageData["workflowContactRows"] = buildWorkflowCampaignContactRows(campaign, userID, contactIDs)
+	} else {
+		mergedVars, _ := model.MergeTemplateVariables(userID, []int64{detail.TemplateAID, detail.TemplateBID})
+		templateA := templatePreviewView(userID, detail.TemplateAID)
+		var templateB TemplatePreviewView
+		hasB := detail.TemplateBID > 0
+		if hasB {
+			templateB = templatePreviewView(userID, detail.TemplateBID)
+		}
+		pageData["variables"] = strings.Join(mergedVars, ",")
+		pageData["templateA"] = templateA
+		pageData["templateB"] = templateB
+		pageData["hasB"] = hasB
+		pageData["contactRows"] = buildCampaignContactRows(campaign, userID, contactIDs, detail.TemplateAName, detail.TemplateBName)
+		pageData["mergedVars"] = mergedVars
+	}
+
+	ctx.HTML(http.StatusOK, "campaigns_detail.html", pageData)
 }
 
 func CampaignAnalyticsPage(ctx *gin.Context) {
@@ -136,6 +163,28 @@ func CampaignAnalyticsPage(ctx *gin.Context) {
 	id, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
 	if err != nil {
 		ctx.HTML(http.StatusBadRequest, "error.html", gin.H{"title": "Error", "active": "campaigns", "error": "Invalid campaign ID"})
+		return
+	}
+
+	campaign, err := model.GetCampaignForUser(id, userID)
+	if err != nil {
+		log.Print(err)
+		ctx.HTML(http.StatusNotFound, "error.html", gin.H{"title": "Error", "active": "campaigns", "error": "Campaign not found"})
+		return
+	}
+
+	if campaign.ExecutionMode == "workflow" && campaign.WorkflowVersionID > 0 {
+		analytics, err := model.GetCampaignWorkflowAnalytics(id, userID)
+		if err != nil {
+			log.Print(err)
+			ctx.HTML(http.StatusNotFound, "error.html", gin.H{"title": "Error", "active": "campaigns", "error": "Campaign not found"})
+			return
+		}
+		ctx.HTML(http.StatusOK, "campaigns_workflow_analytics.html", gin.H{
+			"title":     analytics.CampaignName + " Analytics",
+			"active":    "campaigns",
+			"analytics": analytics,
+		})
 		return
 	}
 

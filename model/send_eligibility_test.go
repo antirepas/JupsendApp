@@ -130,3 +130,35 @@ func TestFilterSendEligibleActiveCampaign(t *testing.T) {
 		t.Fatalf("eligible=%v skipped=%+v", eligible, skipped)
 	}
 }
+
+func TestFilterSendEligibleInvalidEmail(t *testing.T) {
+	db.OpenTestDB(t)
+	userID, err := CreateUser("invalid-test@example.com", "hash", "http://localhost")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := Contact{Email: "bad@example.com"}
+	cid, err := c.SaveContact(userID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = SetContactEmailStatus(cid, "invalid", "no mx")
+
+	var templateID int64
+	err = db.QueryRow(`INSERT INTO template (name, subject, body, user_id) VALUES ('t','s','b', ?) RETURNING id`, userID).Scan(&templateID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	campaignID, err := CreateCampaign(userID, "Camp", templateID, 0, "bulk", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	eligible, skipped, err := FilterSendEligible(userID, campaignID, []int64{cid})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(eligible) != 0 || len(skipped) != 1 || skipped[0].Reason != SkipReasonInvalidEmail {
+		t.Fatalf("eligible=%v skipped=%+v", eligible, skipped)
+	}
+}

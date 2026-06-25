@@ -1,0 +1,17 @@
+{{define "unsubscribe_confirm.html"}}
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>{{template "head" .}}</head>
+<body class="h-full bg-ivory text-charcoal flex items-center justify-center p-8">
+<div class="max-w-md w-full card text-center">
+    {{if .success}}
+    <h1 class="text-xl font-bold text-charcoal mb-2">You're unsubscribed</h1>
+    <p class="text-gray-600 text-sm">You won't receive further emails from this sender through jupsend.</p>
+    {{else}}
+    <h1 class="text-xl font-bold text-charcoal mb-2">Unsubscribe</h1>
+    <p class="text-red-600 text-sm">{{if .error}}{{.error}}{{else}}Something went wrong.{{end}}</p>
+    {{end}}
+</div>
+</body>
+</html>
+{{end}}

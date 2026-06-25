@@ -13,25 +13,27 @@
 
 <div class="card mb-6 space-y-4">
     <h3 class="font-semibold text-charcoal">What workflows do</h3>
-    <p class="text-sm text-gray-600 leading-relaxed">Workflows run multi-step sequences for each contact: send an email, wait, branch on whether they opened or clicked, send a follow-up, and stop. Use them when a single campaign isn't enough — e.g. reminder if no open after 3 days.</p>
+    <p class="text-sm text-gray-600 leading-relaxed">Workflows define multi-step automation: send, wait, branch on opens/clicks/replies, then follow up. You build them in the visual editor, publish, and attach them to a <strong>campaign</strong> — contacts only enter a workflow when you launch that campaign.</p>
 </div>
 
 <div class="card mb-6 space-y-4">
     <h3 class="font-semibold text-charcoal">Building a workflow</h3>
     <ol class="space-y-3 text-sm text-gray-600 list-decimal list-inside">
-        <li>Create templates for each step first (same as campaigns).</li>
+        <li>Create templates for each email step.</li>
         <li>Go to <a href="/workflows/new" class="text-brand-600 font-medium">Workflows → New</a> and open the visual builder.</li>
-        <li>Drag nodes: <strong>Send email</strong>, <strong>Wait</strong>, <strong>Condition</strong> (opened? clicked?), <strong>End</strong>.</li>
+        <li>Drag nodes: <strong>Send email</strong>, <strong>Wait</strong>, <strong>Condition</strong> (opened? clicked? replied?), <strong>End</strong>.</li>
         <li>Connect nodes with edges; set template and delay on each action node.</li>
-        <li>Enroll contacts via the workflow (or tie to campaigns where supported).</li>
+        <li><strong>Publish</strong> the workflow, then create a campaign and choose <strong>Automated follow-ups</strong> to attach it.</li>
+        <li>Add contacts to the campaign and click <strong>Start workflow</strong>.</li>
     </ol>
 </div>
 
 <div class="card mb-6 space-y-3">
-    <h3 class="font-semibold text-charcoal">When to use workflows vs campaigns</h3>
+    <h3 class="font-semibold text-charcoal">Campaigns vs workflows</h3>
     <ul class="text-sm text-gray-600 list-disc list-inside space-y-1">
-        <li><strong>Campaign</strong> — one blast to a list, track aggregate results</li>
-        <li><strong>Workflow</strong> — timed follow-ups and conditional branches per contact</li>
+        <li><strong>Campaign</strong> — where you add contacts and launch (one-time send or workflow)</li>
+        <li><strong>Workflow</strong> — the automation blueprint (send/wait/branch steps)</li>
+        <li><strong>Individual send</strong> — one email to one contact from the Sends page</li>
     </ul>
 </div>
 

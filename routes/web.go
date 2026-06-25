@@ -9,7 +9,9 @@ import (
 	"strings"
 
 	"emailtracker.com/config"
+	"emailtracker.com/ai"
 	"emailtracker.com/model"
+	"emailtracker.com/util"
 	"github.com/gin-gonic/gin"
 )
 
@@ -75,10 +77,15 @@ func ListTemplatesPage(ctx *gin.Context) {
 }
 
 func NewTemplatePage(ctx *gin.Context) {
+	userID := mustUserID(ctx)
+	senderEmail, defaultSampleJSON := templateBuilderContext(userID)
 	ctx.HTML(http.StatusOK, "templates_form.html", gin.H{
-		"title":  "New Template",
-		"active": "templates",
-		"isNew":  true,
+		"title":             "New Template",
+		"active":            "templates",
+		"isNew":             true,
+		"senderEmail":       senderEmail,
+		"defaultSampleJSON": defaultSampleJSON,
+		"aiEnabled":         ai.Enabled(),
 	})
 }
 
@@ -87,7 +94,7 @@ func CreateTemplate(ctx *gin.Context) {
 	name := ctx.PostForm("name")
 	subject := ctx.PostForm("subject")
 	body := ctx.PostForm("body")
-	variables := parseLines(ctx.PostForm("variables"))
+	variables := util.ExtractTemplateVariables(subject, body)
 
 	t := model.Template{Name: name, Subject: subject, Body: body}
 	tv := make([]model.TemplateVariable, len(variables))
@@ -112,19 +119,22 @@ func EditTemplatePage(ctx *gin.Context) {
 		return
 	}
 
-	t, vars, err := model.GetTemplateByID(id, userID)
+	t, _, err := model.GetTemplateByID(id, userID)
 	if err != nil {
 		log.Print(err)
 		ctx.HTML(http.StatusNotFound, "error.html", gin.H{"title": "Error", "active": "templates", "error": "Template not found"})
 		return
 	}
 
+	senderEmail, defaultSampleJSON := templateBuilderContext(userID)
 	ctx.HTML(http.StatusOK, "templates_form.html", gin.H{
-		"title":     "Edit Template",
-		"active":    "templates",
-		"isNew":     false,
-		"template":  t,
-		"variables": strings.Join(vars, "\n"),
+		"title":             "Edit Template",
+		"active":            "templates",
+		"isNew":             false,
+		"template":          t,
+		"senderEmail":       senderEmail,
+		"defaultSampleJSON": defaultSampleJSON,
+		"aiEnabled":         ai.Enabled(),
 	})
 }
 
@@ -139,7 +149,7 @@ func UpdateTemplate(ctx *gin.Context) {
 	name := ctx.PostForm("name")
 	subject := ctx.PostForm("subject")
 	body := ctx.PostForm("body")
-	variables := parseLines(ctx.PostForm("variables"))
+	variables := util.ExtractTemplateVariables(subject, body)
 
 	err = model.UpdateTemplate(id, userID, name, subject, body, variables)
 	if err != nil {
@@ -157,11 +167,12 @@ func ListContactsPage(ctx *gin.Context) {
 	listID, _ := strconv.ParseInt(ctx.Query("list"), 10, 64)
 
 	filter := model.ContactListFilter{
-		Query:    ctx.Query("q"),
-		ListID:   listID,
-		Sort:     ctx.DefaultQuery("sort", "newest"),
-		Page:     page,
-		PageSize: 50,
+		Query:       ctx.Query("q"),
+		ListID:      listID,
+		Sort:        ctx.DefaultQuery("sort", "newest"),
+		Page:        page,
+		PageSize:    50,
+		RepliedOnly: ctx.Query("replied") == "1",
 	}
 	contactPage, err := model.ListContactsFiltered(userID, filter)
 	if err != nil {
@@ -193,6 +204,7 @@ func ListContactsPage(ctx *gin.Context) {
 		"filterQ":      filter.Query,
 		"filterList":   listID,
 		"filterSort":   filter.Sort,
+		"filterReplied": filter.RepliedOnly,
 		"prevPage":     prevPage,
 		"nextPage":     nextPage,
 		"hasPrev":      hasPrev,

@@ -167,18 +167,28 @@ type ContactActivityItem struct {
 
 func GetRecentContactActivity(userID int64, limit int) ([]ContactActivityItem, error) {
 	query := `
-		SELECT c.id, c.email, es.id, ee.event_type,
-			COALESCE(tl.original_url, ''), COALESCE(camp.name, ''), ee.created_at
-		FROM email_events ee
-		INNER JOIN email_sends es ON es.id = ee.email_send_id
-		INNER JOIN contact c ON c.id = es.contact_id
-		LEFT JOIN tracked_links tl ON tl.tracking_id = ee.tracking_id AND ee.event_type = 'click'
-		LEFT JOIN campaigns camp ON camp.id = es.campaign_id
-		WHERE es.user_id = ?
-		ORDER BY ee.created_at DESC
+		SELECT * FROM (
+			SELECT c.id, c.email, es.id AS send_id, ee.event_type,
+				COALESCE(tl.original_url, '') AS link_url, COALESCE(camp.name, '') AS campaign_name, ee.created_at
+			FROM email_events ee
+			INNER JOIN email_sends es ON es.id = ee.email_send_id
+			INNER JOIN contact c ON c.id = es.contact_id
+			LEFT JOIN tracked_links tl ON tl.tracking_id = ee.tracking_id AND ee.event_type = 'click'
+			LEFT JOIN campaigns camp ON camp.id = es.campaign_id
+			WHERE es.user_id = ?
+			UNION ALL
+			SELECT c.id, c.email, COALESCE(ce.email_send_id, 0), 'reply',
+				'', COALESCE(camp.name, ''), ce.occurred_at
+			FROM contact_events ce
+			INNER JOIN contact c ON c.id = ce.contact_id
+			LEFT JOIN email_sends es ON es.id = ce.email_send_id
+			LEFT JOIN campaigns camp ON camp.id = es.campaign_id
+			WHERE c.user_id = ? AND ce.event_type = 'REPLY'
+		) activity
+		ORDER BY created_at DESC
 		LIMIT ?
 	`
-	rows, err := db.Query(query, userID, limit)
+	rows, err := db.Query(query, userID, userID, limit)
 	if err != nil {
 		return nil, err
 	}

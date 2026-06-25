@@ -97,6 +97,7 @@ func UpdateSettings(c *gin.Context) {
 
 	cooldown, _ := strconv.Atoi(c.PostForm("send_cooldown_days"))
 	_ = model.UpdateUserSendCooldownDays(userID, cooldown)
+	_ = model.UpdateUserIncludeUnsubscribeLink(userID, c.PostForm("include_unsubscribe_link") == "on")
 
 	c.Redirect(http.StatusFound, "/settings?success=Settings+saved")
 }

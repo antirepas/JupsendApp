@@ -28,6 +28,10 @@ func runAlterSchema() {
 			PRIMARY KEY (list_id, contact_id)
 		)`,
 		`ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS contact_list_id BIGINT REFERENCES contact_lists(id) ON DELETE SET NULL`,
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS include_unsubscribe_link BOOLEAN NOT NULL DEFAULT TRUE`,
+		`ALTER TABLE contact ADD COLUMN IF NOT EXISTS email_status TEXT DEFAULT 'unknown'`,
+		`ALTER TABLE contact ADD COLUMN IF NOT EXISTS email_status_reason TEXT DEFAULT ''`,
+		`ALTER TABLE contact ADD COLUMN IF NOT EXISTS replied_at TIMESTAMPTZ`,
 	}
 	for _, stmt := range alters {
 		if _, err := DB.Exec(stmt); err != nil {

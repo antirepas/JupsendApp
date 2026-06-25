@@ -27,6 +27,8 @@ var (
 	WhopPlanID            string
 	WhopProductID         string
 	AdminEmails           map[string]struct{}
+	OpenAIAPIKey          string
+	OpenAIModel           string
 )
 
 func Load() {
@@ -62,6 +64,12 @@ func reloadFromEnv() {
 	WhopPlanID = strings.TrimSpace(os.Getenv("WHOP_PLAN_ID"))
 	WhopProductID = strings.TrimSpace(os.Getenv("WHOP_PRODUCT_ID"))
 	AdminEmails = parseEmailList(os.Getenv("ADMIN_EMAILS"))
+	OpenAIAPIKey = strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
+	OpenAIModel = envOr("OPENAI_MODEL", "gpt-5-nano")
+}
+
+func AIEnabled() bool {
+	return OpenAIAPIKey != ""
 }
 
 func parseEmailList(raw string) map[string]struct{} {

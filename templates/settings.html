@@ -46,6 +46,10 @@
         <input name="send_cooldown_days" type="number" class="form-input" min="0" value="{{if .user.SendCooldownDays}}{{.user.SendCooldownDays}}{{else}}30{{end}}">
         <p class="text-xs text-gray-500 mt-1">Set to 0 to disable cooldown (active-campaign rule still applies).</p>
     </div>
+    <label class="flex items-center gap-2 text-sm">
+        <input type="checkbox" name="include_unsubscribe_link" {{if .user.IncludeUnsubscribeLink}}checked{{end}}>
+        Include unsubscribe link in outbound emails
+    </label>
 </div>
 
 <div class="card space-y-4">

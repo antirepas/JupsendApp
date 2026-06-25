@@ -20,11 +20,18 @@
     <h3 class="font-semibold text-charcoal">Creating a template</h3>
     <ol class="space-y-3 text-sm text-gray-600 list-decimal list-inside">
         <li>Open <a href="/templates" class="text-brand-600 font-medium">Templates</a> → <strong>New template</strong>.</li>
-        <li>Enter a name (internal label), subject, and HTML body.</li>
-        <li>List variable names you'll use (e.g. <code class="text-xs bg-gray-100 px-1">name</code>, <code class="text-xs bg-gray-100 px-1">company</code>) — one per line in the variables field.</li>
-        <li>Add links in the body normally; jupsend rewrites them for click tracking automatically.</li>
+        <li>Enter an internal name and subject line.</li>
+        <li>Write the body in the visual editor — use the toolbar for <strong>bold</strong>, lists, and links.</li>
+        <li>Add personalization with <code class="text-xs bg-gray-100 px-1 rounded">{{"{{name}}"}}</code> placeholders in the subject or body. Variables are detected automatically and shown as chips.</li>
+        <li>Watch the <strong>live preview</strong> on the right; edit sample values to see how placeholders render.</li>
+        <li>Links in the body are rewritten for click tracking when the email is sent.</li>
     </ol>
     <p class="text-sm text-gray-600">Example subject: <code class="text-xs bg-gray-100 px-1">Quick question for {{"{{name}}"}} at {{"{{company}}"}}</code></p>
+</div>
+
+<div class="card mb-6 space-y-3">
+    <h3 class="font-semibold text-charcoal">Optional AI assists</h3>
+    <p class="text-sm text-gray-600 leading-relaxed">When <code class="text-xs bg-gray-100 px-1 rounded">OPENAI_API_KEY</code> is set, the template editor offers subtle suggestions: rewrite short selections, subject line ideas, lint-style hints, a tone check before save, and structural starters for empty drafts. Nothing is changed unless you click to apply it.</p>
 </div>
 
 <div class="card mb-6 space-y-3">

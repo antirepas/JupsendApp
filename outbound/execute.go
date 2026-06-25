@@ -38,6 +38,11 @@ func executeJob(job model.SendJob, account model.SMTPAccount) error {
 	replacedLinksBody := util.RewriteLinksWithBase(newBody, emailSendID, baseURL)
 	plainBody := util.StripHTML(replacedLinksBody)
 
+	if model.UserIncludeUnsubscribeLink(job.UserID) {
+		unsubURL := model.UnsubscribeURL(baseURL, job.UserID, job.ContactID)
+		replacedLinksBody, plainBody = util.InjectUnsubscribeFooter(replacedLinksBody, plainBody, unsubURL)
+	}
+
 	from := account.FromEmail
 	if from == "" {
 		from = account.SMTPUser

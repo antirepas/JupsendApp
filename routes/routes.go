@@ -27,6 +27,7 @@ func RegisterRoutes(server *gin.Engine) {
 		"templates/campaigns_form.html",
 		"templates/campaigns_detail.html",
 		"templates/campaigns_analytics.html",
+		"templates/campaigns_workflow_analytics.html",
 		"templates/workflows_list.html",
 		"templates/workflows_form.html",
 		"templates/workflows_builder.html",
@@ -36,6 +37,7 @@ func RegisterRoutes(server *gin.Engine) {
 		"templates/guide_templates.html",
 		"templates/guide_campaigns.html",
 		"templates/guide_workflows.html",
+		"templates/unsubscribe_confirm.html",
 		"templates/error.html",
 	)
 	server.Static("/static", "./static")
@@ -52,6 +54,7 @@ func RegisterRoutes(server *gin.Engine) {
 	v1.GET("/track/click/:id", TrackClick)
 	v1.HEAD("/track/click/:id", TrackClick)
 	v1.POST("/webhooks/whop", WhopWebhook)
+	v1.GET("/u/:token", UnsubscribePage)
 
 	settings := server.Group("/")
 	settings.Use(RequireAuth())
@@ -79,6 +82,14 @@ func RegisterRoutes(server *gin.Engine) {
 
 		authd.GET("/templates", ListTemplatesPage)
 		authd.GET("/templates/new", NewTemplatePage)
+		authd.POST("/templates/preview", PreviewTemplate)
+		authd.POST("/templates/lint", TemplateLint)
+		authd.POST("/templates/ai/rewrite", TemplateAIRewrite)
+		authd.POST("/templates/ai/subject-alternatives", TemplateAISubjectAlternatives)
+		authd.POST("/templates/ai/personalization-hint", TemplateAIPersonalizationHint)
+		authd.POST("/templates/ai/tone-check", TemplateAIToneCheck)
+		authd.POST("/templates/ai/starters", TemplateAIStarters)
+		authd.POST("/templates/ai/soften-body", TemplateAISoftenBody)
 		authd.POST("/templates", CreateTemplate)
 		authd.GET("/templates/:id/edit", EditTemplatePage)
 		authd.POST("/templates/:id", UpdateTemplate)
@@ -95,6 +106,7 @@ func RegisterRoutes(server *gin.Engine) {
 		authd.POST("/contacts/lists/:id/members", AddListMembers)
 		authd.POST("/contacts/lists/:id/members/:contact_id/remove", RemoveListMember)
 		authd.POST("/contacts/bulk-delete", BulkDeleteContacts)
+		authd.POST("/contacts/validate", ValidateContactsWeb)
 		authd.POST("/contacts/paste", PasteContactsQuick)
 		authd.GET("/contacts/paste", func(c *gin.Context) { c.Redirect(http.StatusFound, "/contacts") })
 		authd.GET("/contacts/upload/sample/:id", DownloadContactSample)

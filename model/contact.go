@@ -24,22 +24,24 @@ type ContactVariables struct {
 }
 
 type ContactListItem struct {
-	ID          int64
-	Email       string
-	Variables   []ContactVariables
-	CreatedAt   time.Time
-	Suppressed  bool
-	ListNames      []string
-	VarPreview     string
-	ExtraVarCount  int
+	ID            int64
+	Email         string
+	Variables     []ContactVariables
+	CreatedAt     time.Time
+	Suppressed    bool
+	RepliedAt     *time.Time
+	ListNames     []string
+	VarPreview    string
+	ExtraVarCount int
 }
 
 type ContactListFilter struct {
-	Query    string
-	ListID   int64
-	Sort     string // newest, email
-	Page     int
-	PageSize int
+	Query       string
+	ListID      int64
+	Sort        string // newest, email
+	Page        int
+	PageSize    int
+	RepliedOnly bool
 }
 
 type ContactListPage struct {
@@ -51,12 +53,13 @@ type ContactListPage struct {
 }
 
 type ContactSummary struct {
-	Contact    Contact
-	Variables  []ContactVariables
-	Lists      []ContactList
-	Suppressed bool
+	Contact     Contact
+	Variables   []ContactVariables
+	Lists       []ContactList
+	Suppressed  bool
+	RepliedAt   *time.Time
 	RecentSends []EmailSendListItem
-	Campaigns  []string
+	Campaigns   []string
 }
 
 func (c *Contact) SaveContact(userID int64, variables []ContactVariables) (int64, error) {
@@ -147,6 +150,9 @@ func ListContactsFiltered(userID int64, f ContactListFilter) (ContactListPage, e
 		where = append(where, "LOWER(c.email) LIKE ?")
 		args = append(args, "%"+strings.ToLower(q)+"%")
 	}
+	if f.RepliedOnly {
+		where = append(where, "c.replied_at IS NOT NULL")
+	}
 
 	whereSQL := strings.Join(where, " AND ")
 
@@ -164,7 +170,8 @@ func ListContactsFiltered(userID int64, f ContactListFilter) (ContactListPage, e
 	offset := (f.Page - 1) * f.PageSize
 	listQ := `
 		SELECT c.id, c.email, COALESCE(c.created_at, CURRENT_TIMESTAMP),
-			EXISTS(SELECT 1 FROM contact_suppressions cs WHERE cs.contact_id = c.id)
+			EXISTS(SELECT 1 FROM contact_suppressions cs WHERE cs.contact_id = c.id),
+			c.replied_at
 		FROM contact c
 		WHERE ` + whereSQL + `
 		ORDER BY ` + order + `
@@ -181,8 +188,13 @@ func ListContactsFiltered(userID int64, f ContactListFilter) (ContactListPage, e
 	var contactIDs []int64
 	for rows.Next() {
 		var item ContactListItem
-		if err := rows.Scan(&item.ID, &item.Email, &item.CreatedAt, &item.Suppressed); err != nil {
+		var replied sql.NullTime
+		if err := rows.Scan(&item.ID, &item.Email, &item.CreatedAt, &item.Suppressed, &replied); err != nil {
 			return ContactListPage{}, err
+		}
+		if replied.Valid {
+			t := replied.Time
+			item.RepliedAt = &t
 		}
 		contactIDs = append(contactIDs, item.ID)
 		items = append(items, item)
@@ -251,6 +263,13 @@ func GetContactSummary(userID, contactID int64) (ContactSummary, error) {
 	}
 	lists, _ := GetListsForContact(userID, contactID)
 	suppressed, _ := IsContactSuppressed(contactID)
+	var replied sql.NullTime
+	_ = db.QueryRow(`SELECT replied_at FROM contact WHERE id = ?`, contactID).Scan(&replied)
+	var repliedAt *time.Time
+	if replied.Valid {
+		t := replied.Time
+		repliedAt = &t
+	}
 
 	sends, _ := ListEmailSendsForContact(userID, contactID, 10)
 
@@ -276,6 +295,7 @@ func GetContactSummary(userID, contactID int64) (ContactSummary, error) {
 		Variables:   vars,
 		Lists:       lists,
 		Suppressed:  suppressed,
+		RepliedAt:   repliedAt,
 		RecentSends: sends,
 		Campaigns:   campaigns,
 	}, nil

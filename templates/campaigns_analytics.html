@@ -23,6 +23,7 @@
     <div class="stat-card"><p class="stat-label">Pending</p><p class="stat-value text-slate-500">{{.analytics.Overview.PendingCount}}</p></div>
     <div class="stat-card"><p class="stat-label">Unique opens</p><p class="stat-value text-blue-600">{{.analytics.Overview.UniqueOpens}}</p><p class="text-xs text-slate-500">{{printf "%.1f" .analytics.Overview.OpenRate}}% rate</p></div>
     <div class="stat-card"><p class="stat-label">Unique clicks</p><p class="stat-value text-emerald-600">{{.analytics.Overview.UniqueClicks}}</p><p class="text-xs text-slate-500">{{printf "%.1f" .analytics.Overview.ClickRate}}% rate</p></div>
+    <div class="stat-card"><p class="stat-label">Replies</p><p class="stat-value text-violet-600">{{.analytics.Overview.ReplyCount}}</p></div>
     <div class="stat-card"><p class="stat-label">Click-to-open</p><p class="stat-value">{{printf "%.1f" .analytics.Overview.ClickToOpenRate}}%</p>{{if .analytics.Overview.AvgMinutesToOpen}}<p class="text-xs text-slate-500">Avg {{printf "%.0f" .analytics.Overview.AvgMinutesToOpen}} min to open</p>{{end}}</div>
 </div>
 
@@ -45,6 +46,11 @@
             <p class="text-3xl font-bold text-emerald-600">{{.analytics.Funnel.Clicked}}</p>
             <p class="text-sm text-slate-600">Clicked</p>
             {{if gt .analytics.Funnel.Opened 0}}<p class="text-xs text-slate-500">{{printf "%.0f" .analytics.Funnel.ClickPctOfOpens}}% of opens</p>{{end}}
+        </div>
+        <span class="text-slate-400 text-2xl">→</span>
+        <div class="text-center px-8 py-4 bg-violet-50 rounded-lg min-w-[120px]">
+            <p class="text-3xl font-bold text-violet-600">{{.analytics.Funnel.Replied}}</p>
+            <p class="text-sm text-slate-600">Replied</p>
         </div>
     </div>
 </div>

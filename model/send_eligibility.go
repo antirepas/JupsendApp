@@ -11,6 +11,7 @@ const (
 	SkipReasonSuppressed     = "suppressed"
 	SkipReasonCooldown       = "cooldown"
 	SkipReasonActiveCampaign = "active_campaign"
+	SkipReasonInvalidEmail   = "invalid_email"
 )
 
 type SkipReason struct {
@@ -108,12 +109,31 @@ func FilterSendEligible(userID, campaignID int64, contactIDs []int64) ([]int64, 
 	}
 	arows.Close()
 
+	invalidSet := make(map[int64]bool)
+	irows, err := db.Query(`
+		SELECT id FROM contact WHERE user_id = ? AND COALESCE(email_status, 'unknown') = 'invalid'
+	`, userID)
+	if err != nil {
+		return nil, nil, err
+	}
+	for irows.Next() {
+		var id int64
+		if err := irows.Scan(&id); err != nil {
+			irows.Close()
+			return nil, nil, err
+		}
+		invalidSet[id] = true
+	}
+	irows.Close()
+
 	var eligible []int64
 	var skipped []SkipReason
 	for _, id := range contactIDs {
 		switch {
 		case suppressedSet[id]:
 			skipped = append(skipped, SkipReason{ContactID: id, Reason: SkipReasonSuppressed})
+		case invalidSet[id]:
+			skipped = append(skipped, SkipReason{ContactID: id, Reason: SkipReasonInvalidEmail})
 		case cooldownSet[id]:
 			skipped = append(skipped, SkipReason{ContactID: id, Reason: SkipReasonCooldown})
 		case activeSet[id]:
@@ -146,6 +166,9 @@ func FormatSkipBreakdown(counts map[string]int) string {
 	}
 	if n := counts[SkipReasonActiveCampaign]; n > 0 {
 		parts = append(parts, formatSkipN(n, "active campaign"))
+	}
+	if n := counts[SkipReasonInvalidEmail]; n > 0 {
+		parts = append(parts, formatSkipN(n, "invalid email"))
 	}
 	if len(parts) == 0 {
 		return ""

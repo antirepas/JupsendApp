@@ -41,6 +41,64 @@ type CampaignContactRowView struct {
 	ClickCount      int
 }
 
+type WorkflowCampaignContactRowView struct {
+	Index          int
+	ID             int64
+	Email          string
+	NodeKey        string
+	InstanceStatus string
+	CurrentStep    string
+	OpenCount      int
+	ClickCount     int
+	HasStarted     bool
+	SendID         int64
+}
+
+func buildWorkflowCampaignContactRows(
+	campaign model.Campaign,
+	userID int64,
+	contactIDs []int64,
+) []WorkflowCampaignContactRowView {
+	instanceMap, _ := model.GetCampaignInstanceMap(campaign.ID)
+	sendMap := map[int64]model.ContactEngagementRow{}
+	analytics, _ := model.GetCampaignAnalytics(campaign.ID, userID)
+	for _, c := range analytics.Contacts {
+		sendMap[c.ContactID] = c
+	}
+
+	var rows []WorkflowCampaignContactRowView
+	for i, cid := range contactIDs {
+		contact, _, err := model.GetContact(cid)
+		if err != nil {
+			continue
+		}
+		row := WorkflowCampaignContactRowView{
+			Index: i + 1,
+			ID:    contact.ID,
+			Email: contact.Email,
+		}
+		if inst, ok := instanceMap[cid]; ok {
+			row.HasStarted = true
+			row.InstanceStatus = inst.Status
+			row.NodeKey = inst.CurrentNodeKey
+			row.CurrentStep = model.NodeLabelForKey(campaign.WorkflowVersionID, inst.CurrentNodeKey)
+		} else {
+			row.InstanceStatus = "not started"
+			row.CurrentStep = "—"
+		}
+		if sent, ok := sendMap[cid]; ok {
+			row.OpenCount = sent.OpenCount
+			row.ClickCount = sent.ClickCount
+			if sent.SendID > 0 {
+				row.SendID = sent.SendID
+				row.HasStarted = true
+			}
+		}
+		rows = append(rows, row)
+	}
+	return rows
+}
+
 func buildCampaignContactRows(
 	campaign model.Campaign,
 	userID int64,

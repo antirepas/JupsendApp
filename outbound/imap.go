@@ -34,41 +34,18 @@ func pollAllAccounts() {
 		if !acc.IsGoogleOAuth() && acc.IMAPUser == "" {
 			continue
 		}
-		if err := pollAccountBounces(acc); err != nil {
+		if err := pollAccount(acc); err != nil {
 			log.Printf("IMAP poll account %d: %v", acc.ID, err)
 		}
 	}
 }
 
-func pollAccountBounces(acc model.SMTPAccount) error {
-	addr := acc.IMAPHost + ":" + acc.IMAPPort
-	c, err := client.DialTLS(addr, nil)
+func pollAccount(acc model.SMTPAccount) error {
+	c, err := dialIMAP(acc)
 	if err != nil {
 		return err
 	}
 	defer c.Logout()
-
-	if acc.IsGoogleOAuth() {
-		token, err := model.GmailAccessToken(acc)
-		if err != nil {
-			return err
-		}
-		email := acc.GoogleEmail
-		if email == "" {
-			email = acc.IMAPUser
-		}
-		if err := c.Authenticate(googleoauth.IMAPAuth(email, token)); err != nil {
-			return err
-		}
-	} else {
-		pass := acc.IMAPPassword
-		if pass == "" {
-			pass = acc.SMTPPassword
-		}
-		if err := c.Login(acc.IMAPUser, pass); err != nil {
-			return err
-		}
-	}
 
 	mbox, err := c.Select("INBOX", false)
 	if err != nil {
@@ -93,7 +70,15 @@ func pollAccountBounces(acc model.SMTPAccount) error {
 		done <- c.Fetch(seqset, items, messages)
 	}()
 
-	var bounceSeqNums []uint32
+	ownEmail := acc.GoogleEmail
+	if ownEmail == "" {
+		ownEmail = acc.IMAPUser
+	}
+	if ownEmail == "" {
+		ownEmail = acc.SMTPUser
+	}
+
+	var seenSeqNums []uint32
 	for msg := range messages {
 		if msg == nil || msg.Envelope == nil {
 			continue
@@ -104,26 +89,77 @@ func pollAccountBounces(acc model.SMTPAccount) error {
 		}
 		subject := msg.Envelope.Subject
 		body := readMessageBody(msg, section)
-		if !IsBounceMessage(fromAddr, subject, body) {
+		inReplyTo := msg.Envelope.InReplyTo
+		if inReplyTo == "" && msg.Envelope.MessageId != "" {
+			inReplyTo = msg.Envelope.MessageId
+		}
+		replyRefs := []string{}
+		if inReplyTo != "" {
+			replyRefs = append(replyRefs, inReplyTo)
+		}
+
+		if IsBounceMessage(fromAddr, subject, body) {
+			handleBounce(acc, fromAddr, subject, body)
+			seenSeqNums = append(seenSeqNums, msg.SeqNum)
 			continue
 		}
-		handleBounce(acc, fromAddr, subject, body)
-		bounceSeqNums = append(bounceSeqNums, msg.SeqNum)
+		if match, ok := MatchReply(acc.UserID, fromAddr, subject, body, replyRefs, ownEmail); ok {
+			handleReply(acc.UserID, match)
+			seenSeqNums = append(seenSeqNums, msg.SeqNum)
+		}
 	}
 
 	if err := <-done; err != nil {
 		return err
 	}
 
-	if len(bounceSeqNums) > 0 {
+	if len(seenSeqNums) > 0 {
 		mark := new(imap.SeqSet)
-		for _, n := range bounceSeqNums {
+		for _, n := range seenSeqNums {
 			mark.AddNum(n)
 		}
 		item := imap.FormatFlagsOp(imap.AddFlags, true)
 		_ = c.Store(mark, item, []interface{}{imap.SeenFlag}, nil)
 	}
 	return nil
+}
+
+func dialIMAP(acc model.SMTPAccount) (*client.Client, error) {
+	addr := acc.IMAPHost + ":" + acc.IMAPPort
+	c, err := client.DialTLS(addr, nil)
+	if err != nil {
+		return nil, err
+	}
+	if acc.IsGoogleOAuth() {
+		token, err := model.GmailAccessToken(acc)
+		if err != nil {
+			c.Logout()
+			return nil, err
+		}
+		email := acc.GoogleEmail
+		if email == "" {
+			email = acc.IMAPUser
+		}
+		if err := c.Authenticate(googleoauth.IMAPAuth(email, token)); err != nil {
+			c.Logout()
+			return nil, err
+		}
+	} else {
+		pass := acc.IMAPPassword
+		if pass == "" {
+			pass = acc.SMTPPassword
+		}
+		if err := c.Login(acc.IMAPUser, pass); err != nil {
+			c.Logout()
+			return nil, err
+		}
+	}
+	return c, nil
+}
+
+// pollAccountBounces kept for tests that may reference it.
+func pollAccountBounces(acc model.SMTPAccount) error {
+	return pollAccount(acc)
 }
 
 func readMessageBody(msg *imap.Message, section *imap.BodySectionName) string {

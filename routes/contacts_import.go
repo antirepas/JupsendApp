@@ -80,3 +80,26 @@ func UploadContacts(ctx *gin.Context) {
 	msg := model.FormatImportResultMessage(result)
 	ctx.Redirect(http.StatusFound, "/contacts?tab=import&success="+url.QueryEscape(msg))
 }
+
+func ValidateContactsWeb(ctx *gin.Context) {
+	userID := mustUserID(ctx)
+	contacts, err := model.ListContacts(userID)
+	if err != nil {
+		ctx.Redirect(http.StatusFound, "/contacts?tab=all&error=Validation+failed")
+		return
+	}
+	validated := 0
+	invalid := 0
+	for _, ctt := range contacts {
+		ok, reason := util.ValidateEmail(ctt.Email)
+		if ok {
+			_ = model.SetContactEmailStatus(ctt.ID, "valid", "")
+			validated++
+		} else {
+			_ = model.SetContactEmailStatus(ctt.ID, "invalid", reason)
+			invalid++
+		}
+	}
+	msg := strconv.Itoa(validated) + " valid, " + strconv.Itoa(invalid) + " invalid"
+	ctx.Redirect(http.StatusFound, "/contacts?tab=all&success="+url.QueryEscape(msg))
+}

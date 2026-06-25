@@ -10,7 +10,7 @@
 <div class="flex items-center justify-between mb-8">
     <div>
         <h2 class="text-2xl font-bold text-slate-900">Campaigns</h2>
-        <p class="text-slate-500 mt-1">A/B test templates and send to multiple contacts</p>
+        <p class="text-slate-500 mt-1">One-time sends or automated follow-ups for a contact list</p>
     </div>
     <a href="/campaigns/new" class="btn-primary">New Campaign</a>
 </div>
@@ -24,8 +24,8 @@
         <thead>
             <tr>
                 <th>Name</th>
-                <th>Template A</th>
-                <th>Template B</th>
+                <th>Type</th>
+                <th>Content</th>
                 <th>Contacts</th>
                 <th>Status</th>
                 <th class="text-right">Actions</th>
@@ -35,8 +35,20 @@
             {{range .campaigns}}
             <tr>
                 <td class="font-medium">{{.Name}}</td>
-                <td>{{.TemplateAName}}</td>
-                <td>{{if .TemplateBName}}{{.TemplateBName}}{{else}}<span class="text-slate-400">—</span>{{end}}</td>
+                <td>
+                    {{if eq .ExecutionMode "workflow"}}
+                    <span class="badge badge-violet">Workflow</span>
+                    {{else}}
+                    <span class="badge badge-blue">One-time</span>
+                    {{end}}
+                </td>
+                <td class="text-sm">
+                    {{if eq .ExecutionMode "workflow"}}
+                    {{if .WorkflowName}}{{.WorkflowName}}{{else}}<span class="text-slate-400">Workflow</span>{{end}}
+                    {{else}}
+                    {{.TemplateAName}}{{if .TemplateBName}} <span class="text-slate-400">+ {{.TemplateBName}}</span>{{end}}
+                    {{end}}
+                </td>
                 <td>{{.ContactCount}}</td>
                 <td><span class="badge {{if eq .DisplayStatus "sent"}}badge-green{{else if eq .DisplayStatus "scheduled"}}badge-amber{{else}}badge-gray{{end}}">{{.DisplayStatus}}</span>
                     {{if .ScheduledAt}}<span class="text-xs text-slate-500 block">{{.ScheduledAt.Format "Jan 2, 15:04"}}</span>{{end}}

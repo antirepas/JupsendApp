@@ -21,7 +21,7 @@ func parseImportRowsFromPaste(paste string, variableKeys []string) []model.Impor
 			}
 		}
 	}
-	return rows
+	return applyEmailValidation(rows)
 }
 
 func parseImportRowsFromExcel(excelRows []util.ContactImportRow, variableKeys []string) []model.ImportContactRow {
@@ -32,6 +32,19 @@ func parseImportRowsFromExcel(excelRows []util.ContactImportRow, variableKeys []
 			vars[k] = r.Variables[k]
 		}
 		rows = append(rows, model.ImportContactRow{Email: r.Email, Variables: vars})
+	}
+	return applyEmailValidation(rows)
+}
+
+func applyEmailValidation(rows []model.ImportContactRow) []model.ImportContactRow {
+	for i := range rows {
+		ok, reason := util.ValidateEmail(rows[i].Email)
+		if ok {
+			rows[i].EmailStatus = "valid"
+		} else {
+			rows[i].EmailStatus = "invalid"
+			rows[i].EmailStatusReason = reason
+		}
 	}
 	return rows
 }

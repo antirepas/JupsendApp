@@ -6,28 +6,38 @@
 <div class="flex h-full">
 {{template "sidebar" .}}
 <main class="flex-1 overflow-y-auto">
-<div class="max-w-6xl mx-auto p-8">
+<div class="max-w-3xl mx-auto p-8">
 <div class="mb-8">
     <h2 class="text-2xl font-bold text-slate-900">New Campaign</h2>
-    <p class="text-slate-500 mt-1">Bulk send with A/B templates, or attach a behavior workflow</p>
+    <p class="text-slate-500 mt-1">Send once to everyone, or run a published workflow when you launch</p>
 </div>
 
 {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
 
-<div class="card max-w-2xl">
-    <form method="POST" action="/campaigns" class="space-y-5" id="campaign-form">
+<div class="card">
+    <form method="POST" action="/campaigns" class="space-y-6" id="campaign-form">
         <div>
             <label class="form-label">Campaign name</label>
-            <input type="text" name="name" class="form-input" required placeholder="Spring outreach test">
+            <input type="text" name="name" class="form-input" required placeholder="Spring outreach">
         </div>
+
         <div>
-            <label class="form-label">Execution mode</label>
-            <select name="execution_mode" id="execution_mode" class="form-input">
-                <option value="bulk">Bulk send (templates A/B)</option>
-                <option value="workflow">Workflow automation</option>
-            </select>
+            <label class="form-label mb-3 block">How should this campaign send?</label>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <label class="campaign-type-card cursor-pointer border-2 border-brand-600 rounded-lg p-4 block" id="card-bulk">
+                    <input type="radio" name="execution_mode" value="bulk" class="sr-only" checked>
+                    <p class="font-semibold text-charcoal">One-time send</p>
+                    <p class="text-sm text-gray-500 mt-1">Pick a template (optional A/B test) and send to all contacts once.</p>
+                </label>
+                <label class="campaign-type-card cursor-pointer border-2 border-gray-200 rounded-lg p-4 block" id="card-workflow">
+                    <input type="radio" name="execution_mode" value="workflow" class="sr-only">
+                    <p class="font-semibold text-charcoal">Automated follow-ups</p>
+                    <p class="text-sm text-gray-500 mt-1">Attach a workflow — sends, waits, and branches run per contact when you launch.</p>
+                </label>
+            </div>
         </div>
-        <div id="bulk-fields">
+
+        <div id="bulk-fields" class="space-y-4">
             <div>
                 <label class="form-label">Template A (variant A)</label>
                 <select name="template_a_id" class="form-input">
@@ -38,7 +48,7 @@
                 </select>
             </div>
             <div>
-                <label class="form-label">Template B (optional)</label>
+                <label class="form-label">Template B (optional A/B)</label>
                 <select name="template_b_id" class="form-input">
                     <option value="">No B variant</option>
                     {{range .templates}}
@@ -47,18 +57,33 @@
                 </select>
             </div>
         </div>
-        <div id="workflow-fields" class="hidden">
-            <label class="form-label">Published workflow</label>
-            <select name="workflow_version_id" class="form-input">
-                <option value="">Select workflow...</option>
+
+        <div id="workflow-fields" class="hidden space-y-3">
+            <p class="text-sm text-gray-600">Launching starts the workflow for every contact on this campaign. Replies automatically stop remaining steps for that contact.</p>
+            {{if .workflows}}
+            <fieldset class="space-y-2">
+                <legend class="form-label">Published workflow</legend>
                 {{range .workflows}}
-                <option value="{{.CurrentVersionID}}">{{.Name}}</option>
+                <label class="flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:bg-ivory cursor-pointer">
+                    <input type="radio" name="workflow_version_id" value="{{.VersionID}}" class="wf-radio" disabled>
+                    <div>
+                        <p class="font-medium text-charcoal">{{.Name}}</p>
+                        <p class="text-xs text-gray-500">{{.StepCount}} steps</p>
+                    </div>
+                </label>
                 {{end}}
-            </select>
-            <p class="form-hint">Create and publish a workflow under Workflows first.</p>
+            </fieldset>
+            {{else}}
+            <div class="p-4 bg-amber-50 border border-amber-100 rounded-lg text-sm">
+                <p class="text-amber-900 font-medium">No published workflows yet</p>
+                <p class="text-amber-800 mt-1">Create a workflow in the builder, add send/wait steps, and publish it. Then return here to attach it to a campaign.</p>
+                <a href="/workflows/new" class="text-brand-600 font-medium mt-2 inline-block">Create workflow →</a>
+            </div>
+            {{end}}
         </div>
-        <div class="flex gap-3">
-            <button type="submit" class="btn-primary">Create Campaign</button>
+
+        <div class="flex gap-3 pt-2">
+            <button type="submit" class="btn-primary">Create campaign</button>
             <a href="/campaigns" class="btn-secondary">Cancel</a>
         </div>
     </form>
@@ -67,20 +92,34 @@
 </main>
 </div>
 <script>
-const mode = document.getElementById('execution_mode');
-const bulk = document.getElementById('bulk-fields');
-const wf = document.getElementById('workflow-fields');
-function toggleMode() {
-    if (mode.value === 'workflow') {
-        bulk.classList.add('hidden');
-        wf.classList.remove('hidden');
+const bulkCard = document.getElementById('card-bulk');
+const wfCard = document.getElementById('card-workflow');
+const bulkFields = document.getElementById('bulk-fields');
+const wfFields = document.getElementById('workflow-fields');
+const bulkRadio = bulkCard.querySelector('input');
+const wfRadio = wfCard.querySelector('input');
+
+function setMode(workflow) {
+    const wfRadios = document.querySelectorAll('.wf-radio');
+    if (workflow) {
+        bulkCard.classList.replace('border-brand-600', 'border-gray-200');
+        wfCard.classList.replace('border-gray-200', 'border-brand-600');
+        bulkFields.classList.add('hidden');
+        wfFields.classList.remove('hidden');
+        wfRadio.checked = true;
+        wfRadios.forEach(r => { r.disabled = false; r.required = true; });
     } else {
-        bulk.classList.remove('hidden');
-        wf.classList.add('hidden');
+        wfCard.classList.replace('border-brand-600', 'border-gray-200');
+        bulkCard.classList.replace('border-gray-200', 'border-brand-600');
+        wfFields.classList.add('hidden');
+        bulkFields.classList.remove('hidden');
+        bulkRadio.checked = true;
+        wfRadios.forEach(r => { r.disabled = true; r.required = false; r.checked = false; });
     }
 }
-mode.addEventListener('change', toggleMode);
-toggleMode();
+bulkCard.addEventListener('click', () => setMode(false));
+wfCard.addEventListener('click', () => setMode(true));
+setMode(false);
 </script>
 </body>
 </html>

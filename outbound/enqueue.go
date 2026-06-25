@@ -37,6 +37,14 @@ func EnqueueSend(input EnqueueInput) (int64, int64, error) {
 		return 0, 0, fmt.Errorf("contact is suppressed")
 	}
 
+	emailStatus, _, err := model.GetContactEmailStatus(input.ContactID)
+	if err != nil {
+		return 0, 0, err
+	}
+	if emailStatus == "invalid" {
+		return 0, 0, fmt.Errorf("contact has invalid email")
+	}
+
 	trackID := fmt.Sprintf("%d", util.GenerateID())
 	emailSendID, err := model.CreateQueuedEmailSend(
 		input.UserID, input.TemplateID, input.ContactID, trackID,

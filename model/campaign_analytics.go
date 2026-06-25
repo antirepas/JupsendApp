@@ -17,6 +17,7 @@ type CampaignOverview struct {
 	UniqueOpens     int
 	TotalClicks     int
 	UniqueClicks    int
+	ReplyCount      int
 	OpenRate        float64
 	ClickRate       float64
 	ClickToOpenRate float64
@@ -84,6 +85,7 @@ type EngagementFunnel struct {
 	Sent            int
 	Opened          int
 	Clicked         int
+	Replied         int
 	OpenPctOfSent   float64
 	ClickPctOfOpens float64
 }
@@ -159,6 +161,7 @@ func GetCampaignAnalytics(campaignID, userID int64) (CampaignAnalytics, error) {
 		Sent:    analytics.Overview.SentCount,
 		Opened:  analytics.Overview.UniqueOpens,
 		Clicked: analytics.Overview.UniqueClicks,
+		Replied: analytics.Overview.ReplyCount,
 	}
 	if analytics.Funnel.Sent > 0 {
 		analytics.Funnel.OpenPctOfSent = float64(analytics.Funnel.Opened) / float64(analytics.Funnel.Sent) * 100
@@ -532,6 +535,12 @@ func fillOverview(a *CampaignAnalytics) {
 		INNER JOIN email_events ee ON (ee.email_send_id = es.id OR ee.tracking_id = es.tracking_id) AND ee.event_type = 'click'
 		WHERE es.campaign_id = ?
 	`, a.CampaignID).Scan(&o.UniqueClicks)
+
+	_ = db.QueryRow(`
+		SELECT COUNT(DISTINCT ce.contact_id) FROM contact_events ce
+		INNER JOIN email_sends es ON es.id = ce.email_send_id
+		WHERE es.campaign_id = ? AND ce.event_type = 'REPLY'
+	`, a.CampaignID).Scan(&o.ReplyCount)
 
 	if o.SentCount > 0 {
 		o.OpenRate = float64(o.UniqueOpens) / float64(o.SentCount) * 100

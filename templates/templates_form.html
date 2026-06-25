@@ -1,45 +1,94 @@
 {{define "templates_form.html"}}
 <!DOCTYPE html>
 <html lang="en" class="h-full">
-<head>{{template "head" .}}</head>
+<head>{{template "head" .}}
+<link href="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.snow.css" rel="stylesheet">
+</head>
 <body class="h-full bg-ivory text-charcoal">
 <div class="flex h-full">
 {{template "sidebar" .}}
 <main class="flex-1 overflow-y-auto">
-<div class="max-w-6xl mx-auto p-8">
-<div class="mb-8">
-    <h2 class="text-2xl font-bold text-slate-900">{{if .isNew}}New Template{{else}}Edit Template{{end}}</h2>
-    <p class="text-slate-500 mt-1">Use {{`{{variable}}`}} placeholders for personalization</p>
+<div class="max-w-7xl mx-auto p-8">
+<div class="mb-6">
+    <a href="/templates" class="text-sm text-brand-600 font-medium">← Templates</a>
+    <h2 class="text-2xl font-bold text-slate-900 mt-2">{{if .isNew}}New template{{else}}Edit template{{end}}</h2>
+    <p class="text-slate-500 mt-1">Write the email your prospects will see. Use <code class="text-xs bg-slate-100 px-1 rounded">{{"{{variable}}"}}</code> for personalization.</p>
 </div>
 
-<div class="card max-w-2xl">
-    <form method="POST" action="{{if .isNew}}/templates{{else}}/templates/{{.template.ID}}{{end}}" class="space-y-5">
-        <div>
-            <label class="form-label">Name</label>
-            <input type="text" name="name" class="form-input" value="{{if .template}}{{.template.Name}}{{end}}" required placeholder="Welcome Email">
+<form id="template-form" method="POST" action="{{if .isNew}}/templates{{else}}/templates/{{.template.ID}}{{end}}" class="template-builder-grid" data-ai-enabled="{{if .aiEnabled}}true{{else}}false{{end}}">
+    <div class="template-editor-column space-y-5">
+        <div class="card">
+            <div>
+                <label class="form-label" for="template-name">Name</label>
+                <input type="text" id="template-name" name="name" class="form-input" value="{{if .template}}{{.template.Name}}{{end}}" required placeholder="Welcome email">
+                <p class="form-hint">Internal label — contacts never see this.</p>
+            </div>
+            <div class="mt-4">
+                <label class="form-label" for="template-subject">Subject</label>
+                <input type="text" id="template-subject" name="subject" class="form-input" value="{{if .template}}{{.template.Subject}}{{end}}" required placeholder="Quick question for {{"{{name}}"}}">
+                <div id="template-subject-nudges" class="template-subject-nudges" hidden></div>
+            </div>
+            <div class="mt-4">
+                <label class="form-label">Body</label>
+                <div class="template-toolbar-wrap">
+                    <div id="template-editor"></div>
+                </div>
+                <textarea id="template-body" name="body" class="hidden" required>{{if .template}}{{.template.Body}}{{end}}</textarea>
+                <div id="template-starters" class="template-starters" hidden></div>
+            </div>
+            <div class="mt-4">
+                <label class="form-label">Variables</label>
+                <div id="template-var-chips" class="template-var-chips"></div>
+            </div>
+            <div id="template-tone-banner" class="template-tone-banner" hidden>
+                <p class="template-tone-banner-text"></p>
+                <div class="template-tone-banner-actions">
+                    <button type="button" class="btn-primary btn-sm" data-tone-action="proceed">Sounds good</button>
+                    <button type="button" class="btn-secondary btn-sm" data-tone-action="soften">Soften</button>
+                </div>
+            </div>
+            <div class="flex gap-3 pt-4 border-t border-slate-100 mt-4">
+                <button type="submit" class="btn-primary">{{if .isNew}}Create template{{else}}Save changes{{end}}</button>
+                <a href="/templates" class="btn-secondary">Cancel</a>
+            </div>
         </div>
-        <div>
-            <label class="form-label">Subject</label>
-            <input type="text" name="subject" class="form-input" value="{{if .template}}{{.template.Subject}}{{end}}" required placeholder="Hello {{`{{name}}`}}">
+    </div>
+
+    <div class="template-preview-column">
+        <div class="template-preview-panel card">
+            <h3 class="card-title">Live preview</h3>
+            <p class="text-sm text-slate-500 mb-4">How this email appears in a prospect's inbox.</p>
+            <div class="template-inbox-mock">
+                <div class="template-inbox-row">
+                    <span class="template-inbox-label">From</span>
+                    <span class="template-inbox-value">{{.senderEmail}}</span>
+                </div>
+                <div class="template-inbox-row">
+                    <span class="template-inbox-label">Subject</span>
+                    <span class="template-inbox-value font-medium" id="preview-subject">{{if .template}}{{.template.Subject}}{{else}}(no subject){{end}}</span>
+                </div>
+            </div>
+            <iframe id="preview-frame" class="template-preview-frame" title="Email preview" sandbox=""></iframe>
+            <div id="template-lint-sidebar" class="template-lint-sidebar" aria-live="polite"></div>
+            <div class="mt-4 pt-4 border-t border-slate-100">
+                <p class="form-label mb-2">Preview sample data</p>
+                <div id="template-sample-fields" class="template-sample-fields"></div>
+            </div>
         </div>
-        <div>
-            <label class="form-label">Body (HTML)</label>
-            <textarea name="body" rows="10" class="form-input font-mono text-sm" required placeholder="<p>Hi {{`{{name}}`}}, welcome!</p>">{{if .template}}{{.template.Body}}{{end}}</textarea>
-        </div>
-        <div>
-            <label class="form-label">Variables (one per line)</label>
-            <textarea name="variables" rows="3" class="form-input" placeholder="name&#10;company">{{if .variables}}{{.variables}}{{end}}</textarea>
-            <p class="form-hint">List variable names used in the template</p>
-        </div>
-        <div class="flex gap-3 pt-2">
-            <button type="submit" class="btn-primary">{{if .isNew}}Create Template{{else}}Save Changes{{end}}</button>
-            <a href="/templates" class="btn-secondary">Cancel</a>
-        </div>
-    </form>
+    </div>
+</form>
+<div id="template-selection-popover" class="template-ai-popover" hidden>
+    <button type="button" data-ai-action="shorten">Shorten</button>
+    <button type="button" data-ai-action="soften">Soften</button>
+    <button type="button" data-ai-action="direct">More direct</button>
+    <button type="button" data-ai-action="grammar">Fix grammar</button>
 </div>
+<script type="application/json" id="template-default-sample">{{.defaultSampleJSON}}</script>
 </div>
 </main>
 </div>
+<script src="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.js"></script>
+<script src="/static/js/template-editor.js"></script>
 </body>
 </html>
 {{end}}

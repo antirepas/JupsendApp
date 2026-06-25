@@ -1,0 +1,283 @@
+{{define "campaigns_workflow_analytics.html"}}
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>{{template "head" .}}</head>
+<body class="h-full bg-ivory text-charcoal">
+<div class="flex h-full">
+{{template "sidebar" .}}
+<main class="flex-1 overflow-y-auto">
+<div class="max-w-7xl mx-auto p-8">
+<div class="flex items-center justify-between mb-8 flex-wrap gap-4">
+    <div>
+        <a href="/campaigns/{{.analytics.CampaignID}}" class="text-sm text-brand-600 font-medium">← {{.analytics.CampaignName}}</a>
+        <h2 class="text-2xl font-bold text-slate-900 mt-2">Workflow analytics</h2>
+        <p class="text-slate-500 mt-1">
+            <span class="badge badge-violet">Workflow</span>
+            {{.analytics.WorkflowName}} · Created {{.analytics.CreatedAt.Format "Jan 2, 2006"}}
+        </p>
+    </div>
+    <span class="badge {{if eq .analytics.Status "sent"}}badge-green{{else if eq .analytics.Status "scheduled"}}badge-amber{{else}}badge-gray{{end}}">{{.analytics.Status}}</span>
+</div>
+
+{{with .analytics.Overview}}
+<div class="workflow-stats-grid">
+    <div class="stat-card"><p class="stat-label">Enrolled</p><p class="stat-value">{{.TotalContacts}}</p></div>
+    <div class="stat-card"><p class="stat-label">Not started</p><p class="stat-value text-gray-500">{{.NotStarted}}</p></div>
+    <div class="stat-card"><p class="stat-label">In progress</p><p class="stat-value text-blue-600">{{.InProgress}}</p></div>
+    <div class="stat-card"><p class="stat-label">Completed</p><p class="stat-value text-emerald-600">{{.Completed}}</p></div>
+    <div class="stat-card"><p class="stat-label">Stopped</p><p class="stat-value text-red-600">{{.Cancelled}}</p></div>
+</div>
+
+<div class="card workflow-status-bar-card mb-6">
+    <h3 class="card-title mb-0">Contact distribution</h3>
+    {{if gt .TotalContacts 0}}
+    <div class="workflow-status-bar">
+        {{if gt .NotStarted 0}}<div class="workflow-status-seg workflow-status-seg-notstarted" style="width: {{printf "%.2f" .NotStartedPct}}%"></div>{{end}}
+        {{if gt .InProgress 0}}<div class="workflow-status-seg workflow-status-seg-progress" style="width: {{printf "%.2f" .InProgressPct}}%"></div>{{end}}
+        {{if gt .Completed 0}}<div class="workflow-status-seg workflow-status-seg-completed" style="width: {{printf "%.2f" .CompletedPct}}%"></div>{{end}}
+        {{if gt .Cancelled 0}}<div class="workflow-status-seg workflow-status-seg-stopped" style="width: {{printf "%.2f" .CancelledPct}}%"></div>{{end}}
+    </div>
+    <div class="workflow-status-legend">
+        <span class="workflow-status-legend-item"><span class="workflow-status-dot workflow-status-seg-notstarted"></span> Not started ({{.NotStarted}})</span>
+        <span class="workflow-status-legend-item"><span class="workflow-status-dot workflow-status-seg-progress"></span> In progress ({{.InProgress}})</span>
+        <span class="workflow-status-legend-item"><span class="workflow-status-dot workflow-status-seg-completed"></span> Completed ({{.Completed}})</span>
+        <span class="workflow-status-legend-item"><span class="workflow-status-dot workflow-status-seg-stopped"></span> Stopped ({{.Cancelled}})</span>
+    </div>
+    {{else}}
+    <p class="text-sm text-slate-500 mt-2">No contacts enrolled yet.</p>
+    {{end}}
+</div>
+{{end}}
+
+<div class="card mb-6">
+    <h3 class="card-title">Step pipeline</h3>
+    <p class="text-sm text-slate-500 mb-4">How contacts are moving through each step of this campaign's workflow.</p>
+    <div class="workflow-pipeline-wrap">
+        <div class="workflow-pipeline">
+            {{with .analytics.Overview}}
+            {{if gt .NotStarted 0}}
+            <div class="workflow-queued-pill">
+                <div class="workflow-step-count">{{.NotStarted}}</div>
+                <div class="workflow-step-count-label">Queued</div>
+            </div>
+            <div class="workflow-step-connector">→</div>
+            {{end}}
+            {{end}}
+            {{range .analytics.Steps}}
+            <div class="workflow-step workflow-step--{{.NodeType}}">
+                <div class="workflow-step-head">
+                    <div class="workflow-step-icon-ring">
+                        {{if eq .NodeType "action_send_email"}}
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+                        {{else if eq .NodeType "action_wait"}}
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                        {{else if eq .NodeType "condition_engagement"}}
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3v12"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
+                        {{else}}
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m22 4-10 10.01-3-3"/></svg>
+                        {{end}}
+                    </div>
+                    <span class="workflow-step-kind">{{if eq .NodeType "action_send_email"}}Email{{else if eq .NodeType "action_wait"}}Wait{{else if eq .NodeType "condition_engagement"}}Branch{{else}}End{{end}}</span>
+                </div>
+                <p class="workflow-step-label">{{.Label}}</p>
+                <div class="workflow-step-metric">
+                    <span class="workflow-step-count">{{.ContactsHere}}</span>
+                    <span class="workflow-step-count-label">here now</span>
+                </div>
+                <div class="workflow-step-bar">
+                    <div class="workflow-step-bar-fill" style="width: {{if gt .BarPercent 0.5}}{{printf "%.1f" .BarPercent}}{{else if gt .ContactsHere 0}}4{{else}}0{{end}}%"></div>
+                </div>
+                <div class="workflow-step-meta">{{.PassedThrough}} passed through</div>
+                {{if eq .NodeType "action_send_email"}}
+                <div class="workflow-step-meta text-blue-600">{{.Opens}} opens · {{printf "%.0f" .OpenRate}}%</div>
+                {{end}}
+                {{if gt .StoppedHere 0}}
+                <div class="workflow-step-meta text-red-500">{{.StoppedHere}} stopped here</div>
+                {{end}}
+            </div>
+            {{if ne .StepIndex (len $.analytics.Steps)}}<div class="workflow-step-connector">→</div>{{end}}
+            {{end}}
+        </div>
+    </div>
+</div>
+
+<div class="card overflow-hidden mb-6">
+    <h3 class="card-title">Step performance</h3>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Step</th>
+                <th>Type</th>
+                <th>Here now</th>
+                <th>Passed through</th>
+                <th>% of enrolled</th>
+                <th>Opens</th>
+                <th>Open rate</th>
+                <th>Stopped</th>
+            </tr>
+        </thead>
+        <tbody>
+        {{range .analytics.Steps}}
+        <tr>
+            <td class="font-medium">{{.Label}}</td>
+            <td class="text-sm text-slate-500">{{if eq .NodeType "action_send_email"}}Send{{else if eq .NodeType "action_wait"}}Wait{{else if eq .NodeType "condition_engagement"}}Branch{{else}}End{{end}}</td>
+            <td>{{.ContactsHere}}</td>
+            <td>{{.PassedThrough}}</td>
+            <td>{{printf "%.0f" .PassedPct}}%</td>
+            <td class="text-blue-600">{{if eq .NodeType "action_send_email"}}{{.Opens}}{{else}}—{{end}}</td>
+            <td>{{if eq .NodeType "action_send_email"}}{{printf "%.0f" .OpenRate}}%{{else}}—{{end}}</td>
+            <td class="text-red-600">{{if gt .StoppedHere 0}}{{.StoppedHere}}{{else}}—{{end}}</td>
+        </tr>
+        {{end}}
+        </tbody>
+    </table>
+</div>
+
+<div class="card workflow-analytics-card mb-6">
+    <h3 class="card-title">Email engagement</h3>
+    <p class="text-sm text-slate-500 mb-4">Aggregate performance across all emails sent by this workflow campaign.</p>
+    <div class="workflow-analytics-rings">
+        <div class="workflow-rate-ring" style="--ring-pct: {{printf "%.1f" .analytics.Engagement.OpenRate}}">
+            <div class="workflow-rate-ring-inner">
+                <span class="workflow-rate-ring-value">{{printf "%.0f" .analytics.Engagement.OpenRate}}%</span>
+                <span class="workflow-rate-ring-label">Open rate</span>
+            </div>
+        </div>
+        <div class="workflow-rate-ring workflow-rate-ring--click" style="--ring-pct: {{printf "%.1f" .analytics.Engagement.ClickRate}}">
+            <div class="workflow-rate-ring-inner">
+                <span class="workflow-rate-ring-value">{{printf "%.0f" .analytics.Engagement.ClickRate}}%</span>
+                <span class="workflow-rate-ring-label">Click rate</span>
+            </div>
+        </div>
+        <div class="workflow-analytics-pills">
+            <div class="workflow-analytics-pill">
+                <span class="workflow-analytics-pill-value">{{.analytics.Engagement.EmailsSent}}</span>
+                <span class="workflow-analytics-pill-label">Emails sent</span>
+            </div>
+            <div class="workflow-analytics-pill">
+                <span class="workflow-analytics-pill-value text-blue-600">{{.analytics.Engagement.UniqueOpens}}</span>
+                <span class="workflow-analytics-pill-label">Unique opens</span>
+            </div>
+            <div class="workflow-analytics-pill">
+                <span class="workflow-analytics-pill-value text-emerald-600">{{.analytics.Engagement.UniqueClicks}}</span>
+                <span class="workflow-analytics-pill-label">Unique clicks</span>
+            </div>
+            <div class="workflow-analytics-pill">
+                <span class="workflow-analytics-pill-value text-violet-600">{{.analytics.Engagement.Replies}}</span>
+                <span class="workflow-analytics-pill-label">Replies</span>
+            </div>
+        </div>
+    </div>
+
+    {{if gt .analytics.Engagement.Funnel.Sent 0}}
+    <div class="workflow-engagement-funnel">
+        <p class="workflow-engagement-funnel-title">Engagement funnel</p>
+        <div class="workflow-funnel-row">
+            <span class="workflow-funnel-label">Sent</span>
+            <div class="workflow-funnel-track"><div class="workflow-funnel-bar workflow-funnel-bar--sent" style="width: 100%"></div></div>
+            <span class="workflow-funnel-count">{{.analytics.Engagement.Funnel.Sent}}</span>
+        </div>
+        <div class="workflow-funnel-row">
+            <span class="workflow-funnel-label">Opened</span>
+            <div class="workflow-funnel-track"><div class="workflow-funnel-bar workflow-funnel-bar--open" style="width: {{printf "%.1f" .analytics.Engagement.Funnel.OpenPctOfSent}}%"></div></div>
+            <span class="workflow-funnel-count">{{.analytics.Engagement.Funnel.Opened}} <span class="workflow-funnel-pct">({{printf "%.0f" .analytics.Engagement.Funnel.OpenPctOfSent}}%)</span></span>
+        </div>
+        <div class="workflow-funnel-row">
+            <span class="workflow-funnel-label">Clicked</span>
+            <div class="workflow-funnel-track"><div class="workflow-funnel-bar workflow-funnel-bar--click" style="width: {{printf "%.1f" .analytics.Engagement.ClickPctOfSent}}%"></div></div>
+            <span class="workflow-funnel-count">{{.analytics.Engagement.Funnel.Clicked}} <span class="workflow-funnel-pct">({{printf "%.0f" .analytics.Engagement.ClickPctOfSent}}%)</span></span>
+        </div>
+        <div class="workflow-funnel-row">
+            <span class="workflow-funnel-label">Replied</span>
+            <div class="workflow-funnel-track"><div class="workflow-funnel-bar workflow-funnel-bar--reply" style="width: {{printf "%.1f" .analytics.Engagement.ReplyPctOfSent}}%"></div></div>
+            <span class="workflow-funnel-count">{{.analytics.Engagement.Funnel.Replied}} <span class="workflow-funnel-pct">({{printf "%.0f" .analytics.Engagement.ReplyPctOfSent}}%)</span></span>
+        </div>
+    </div>
+    {{else}}
+    <p class="text-sm text-slate-500 py-4 text-center">No emails sent yet. Launch the workflow to start collecting engagement data.</p>
+    {{end}}
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <div class="card">
+        <h3 class="card-title">Activity timeline</h3>
+        <canvas id="timelineChart" height="200"></canvas>
+    </div>
+    <div class="card">
+        <h3 class="card-title">Opens &amp; clicks by hour</h3>
+        <canvas id="hourlyChart" height="200"></canvas>
+    </div>
+</div>
+
+<div class="card overflow-hidden mb-8">
+    <h3 class="card-title">Per-contact progress</h3>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Email</th>
+                <th>Current step</th>
+                <th>Status</th>
+                <th>Emails sent</th>
+                <th>Opens</th>
+                <th>Clicks</th>
+                <th>Replied</th>
+            </tr>
+        </thead>
+        <tbody>
+        {{range .analytics.Contacts}}
+        <tr>
+            <td class="font-medium">{{.Email}}</td>
+            <td class="text-sm">{{.CurrentStep}}</td>
+            <td><span class="badge {{if eq .InstanceStatus "completed"}}badge-green{{else if eq .InstanceStatus "cancelled"}}badge-red{{else if eq .InstanceStatus "active"}}badge-blue{{else if eq .InstanceStatus "waiting"}}badge-amber{{else}}badge-gray{{end}}">{{.InstanceStatus}}</span></td>
+            <td>{{.EmailsSent}}</td>
+            <td class="text-blue-600">{{.OpenCount}}</td>
+            <td class="text-emerald-600">{{.ClickCount}}</td>
+            <td>{{if .HasReplied}}<span class="badge badge-violet">Yes</span>{{else}}—{{end}}</td>
+        </tr>
+        {{end}}
+        </tbody>
+    </table>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+const dailyStats = [
+    {{range .analytics.DailyStats}}
+    { date: "{{.Date}}", sends: {{.Sends}}, opens: {{.Opens}}, clicks: {{.Clicks}} },
+    {{end}}
+];
+const hourlyOpens = [{{range .analytics.HourlyOpens}}{{ .Count }},{{end}}];
+const hourlyClicks = [{{range .analytics.HourlyClicks}}{{ .Count }},{{end}}];
+const hourLabels = Array.from({length: 24}, (_, i) => i + ':00');
+
+new Chart(document.getElementById('timelineChart'), {
+    type: 'line',
+    data: {
+        labels: dailyStats.length ? dailyStats.map(d => d.date) : ['No data'],
+        datasets: [
+            { label: 'Sends', data: dailyStats.map(d => d.sends), borderColor: '#94a3b8', tension: 0.3 },
+            { label: 'Opens', data: dailyStats.map(d => d.opens), borderColor: '#3b82f6', tension: 0.3 },
+            { label: 'Clicks', data: dailyStats.map(d => d.clicks), borderColor: '#10b981', tension: 0.3 }
+        ]
+    },
+    options: { responsive: true, plugins: { legend: { position: 'bottom' } }, scales: { y: { beginAtZero: true } } }
+});
+
+new Chart(document.getElementById('hourlyChart'), {
+    type: 'bar',
+    data: {
+        labels: hourLabels,
+        datasets: [
+            { label: 'Opens', data: hourlyOpens, backgroundColor: '#93c5fd' },
+            { label: 'Clicks', data: hourlyClicks, backgroundColor: '#6ee7b7' }
+        ]
+    },
+    options: { responsive: true, plugins: { legend: { position: 'bottom' } }, scales: { y: { beginAtZero: true } } }
+});
+</script>
+</div>
+</main>
+</div>
+</body>
+</html>
+{{end}}
