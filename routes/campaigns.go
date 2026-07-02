@@ -552,27 +552,35 @@ func PromoteCampaignWinner(ctx *gin.Context) {
 		return
 	}
 
-	analytics, err := model.GetCampaignAnalytics(id, userID)
+	campaign, err := model.GetCampaignForUser(id, userID)
 	if err != nil {
 		ctx.Redirect(http.StatusFound, "/campaigns?error=Campaign+not+found")
 		return
 	}
+	if campaign.TemplateBID <= 0 {
+		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(id, 10)+"/analytics?error=No+clear+winner+yet")
+		return
+	}
 
+	winner, _ := model.CampaignABWinner(id)
 	var templateID int64
-	var templateName string
-	switch analytics.ABWinner {
+	switch winner {
 	case "A":
-		templateID = analytics.VariantA.TemplateID
-		templateName = analytics.VariantA.TemplateName
+		templateID = campaign.TemplateAID
 	case "B":
-		templateID = analytics.VariantB.TemplateID
-		templateName = analytics.VariantB.TemplateName
+		templateID = campaign.TemplateBID
 	default:
 		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(id, 10)+"/analytics?error=No+clear+winner+yet")
 		return
 	}
 
-	newName := templateName + " (winner)"
+	tpl, err := model.GetTemplateForUser(templateID, userID)
+	if err != nil {
+		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(id, 10)+"/analytics?error=Failed+to+promote+winner")
+		return
+	}
+
+	newName := tpl.Name + " (winner)"
 	newID, err := model.DuplicateTemplate(userID, templateID, newName)
 	if err != nil {
 		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(id, 10)+"/analytics?error=Failed+to+promote+winner")

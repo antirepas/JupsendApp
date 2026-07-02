@@ -287,6 +287,19 @@ func experimentABSummary(campaignID int64) (winner, method string) {
 	return pickABWinner(a, b, true)
 }
 
+// CampaignABWinner returns the A/B winner for a campaign using send stats only.
+func CampaignABWinner(campaignID int64) (winner, method string) {
+	var hasB bool
+	_ = db.QueryRow(`
+		SELECT template_b_id IS NOT NULL AND template_b_id > 0
+		FROM campaigns WHERE id = ?
+	`, campaignID).Scan(&hasB)
+	if !hasB {
+		return "", ""
+	}
+	return experimentABSummary(campaignID)
+}
+
 func getContactEngagement(campaignID int64, contactIDs []int64, hasB bool, templateAID, templateBID int64, aName, bName string) []ContactEngagementRow {
 	sendMap := map[int64]ContactEngagementRow{}
 	rows, err := db.Query(`

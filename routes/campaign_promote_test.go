@@ -24,18 +24,21 @@ func TestPromoteCampaignWinner(t *testing.T) {
 
 	campaignID, _ := model.CreateCampaign(userID, "Test", templateAID, templateBID, "bulk", 0, "subject", "hypothesis")
 
-	w := httptest.NewRecorder()
-	ctx, _ := gin.CreateTestContext(w)
-	ctx.Request = httptest.NewRequest(http.MethodPost, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"/promote-winner", nil)
-	ctx.Params = gin.Params{{Key: "id", Value: strconv.FormatInt(campaignID, 10)}}
-	setTestUser(ctx, userID)
+	router := gin.New()
+	router.POST("/campaigns/:id/promote-winner", func(c *gin.Context) {
+		setTestUser(c, userID)
+		PromoteCampaignWinner(c)
+	})
 
-	// No sends yet — no winner
-	PromoteCampaignWinner(ctx)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"/promote-winner", nil)
+	router.ServeHTTP(w, req)
+
 	if w.Code != http.StatusFound {
-		t.Fatalf("expected redirect, got %d", w.Code)
+		t.Fatalf("expected redirect, got %d body=%q", w.Code, w.Body.String())
 	}
-	if !strings.Contains(w.Header().Get("Location"), "error=No") {
-		t.Fatalf("location=%s", w.Header().Get("Location"))
+	location := w.Header().Get("Location")
+	if !strings.Contains(location, "error=No") {
+		t.Fatalf("location=%q", location)
 	}
 }
