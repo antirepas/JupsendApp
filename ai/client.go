@@ -135,7 +135,11 @@ func SubjectAlternativesPrompt() string {
 }
 
 func PersonalizationHintPrompt() string {
-	return "Suggest one short, specific personalization tip for this cold email draft. " + preservePlaceholders + " One sentence only, no quotes."
+	return "Suggest one optional improvement for this cold email draft. " +
+		preservePlaceholders + " " +
+		"Do not require specific placeholders like {{company}}. " +
+		"If the draft is already fine, respond with exactly: SKIP. " +
+		"One sentence only, no quotes."
 }
 
 func ToneCheckPrompt() string {

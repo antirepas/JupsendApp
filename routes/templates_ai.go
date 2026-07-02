@@ -133,12 +133,10 @@ func TemplateAIPersonalizationHint(ctx *gin.Context) {
 		return
 	}
 
-	issues := util.LintTemplate(req.Subject, req.Body)
-	for _, issue := range issues {
-		if issue.Code == "partial_personalization" || issue.Code == "no_personalization" {
-			ctx.JSON(http.StatusOK, gin.H{"hint": ""})
-			return
-		}
+	vars := util.ExtractTemplateVariables(req.Subject, req.Body)
+	if len(vars) > 0 {
+		ctx.JSON(http.StatusOK, gin.H{"hint": ""})
+		return
 	}
 
 	userMsg := "Subject: " + req.Subject + "\nBody excerpt: " + truncateRunes(util.StripHTML(req.Body), 300)
@@ -152,7 +150,7 @@ func TemplateAIPersonalizationHint(ctx *gin.Context) {
 		return
 	}
 	out = strings.TrimSpace(out)
-	if out == "" {
+	if out == "" || strings.EqualFold(out, "SKIP") {
 		ctx.JSON(http.StatusOK, gin.H{"hint": ""})
 		return
 	}

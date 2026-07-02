@@ -40,47 +40,30 @@ func LintTemplate(subject, bodyHTML string) []TemplateLintIssue {
 		issues = append(issues, TemplateLintIssue{
 			Level:   "info",
 			Code:    "no_personalization",
-			Message: "No {{variables}} detected",
-			Source:  "rule",
-		})
-	}
-
-	hasName := containsVar(vars, "name")
-	hasCompany := containsVar(vars, "company")
-	if hasName && !hasCompany {
-		issues = append(issues, TemplateLintIssue{
-			Level:   "info",
-			Code:    "partial_personalization",
-			Message: "You're using {{name}} but not {{company}} — consider referencing their company",
-			Source:  "rule",
-		})
-	} else if hasCompany && !hasName {
-		issues = append(issues, TemplateLintIssue{
-			Level:   "info",
-			Code:    "partial_personalization",
-			Message: "You're using {{company}} but not {{name}} — a name often feels more personal",
+			Message: "Tip: a {{name}} placeholder can make cold emails feel more personal",
 			Source:  "rule",
 		})
 	}
 
 	bodyLower := strings.ToLower(bodyHTML)
-	if !strings.Contains(bodyLower, "<a ") && !strings.Contains(bodyLower, "href=") {
+	plain := StripHTML(bodyHTML)
+	hasLink := strings.Contains(bodyLower, "<a ") || strings.Contains(bodyLower, "href=")
+	if !hasLink && len([]rune(plain)) >= 80 && !hasClearAsk(plain) {
 		issues = append(issues, TemplateLintIssue{
 			Level:   "info",
 			Code:    "no_cta",
-			Message: "No clear CTA / link detected",
+			Message: "Tip: a question or link can make your ask clearer — optional for short notes",
 			Source:  "rule",
 		})
 	}
 
-	plain := StripHTML(bodyHTML)
 	if plain != "" {
 		firstLine := firstNonEmptyLine(plain)
 		if len([]rune(firstLine)) > 80 {
 			issues = append(issues, TemplateLintIssue{
 				Level:   "info",
 				Code:    "opener_long",
-				Message: "First line is long — consider a shorter opener",
+				Message: "Tip: a shorter first line can be easier to scan on mobile",
 				Source:  "rule",
 			})
 		}
@@ -102,9 +85,13 @@ func LintTemplate(subject, bodyHTML string) []TemplateLintIssue {
 	return issues
 }
 
-func containsVar(vars []string, key string) bool {
-	for _, v := range vars {
-		if v == key {
+func hasClearAsk(plain string) bool {
+	if strings.Contains(plain, "?") {
+		return true
+	}
+	lower := strings.ToLower(plain)
+	for _, phrase := range []string{"let me know", "open to", "would you", "could we", "schedule", "quick call", "quick chat"} {
+		if strings.Contains(lower, phrase) {
 			return true
 		}
 	}

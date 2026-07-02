@@ -51,6 +51,12 @@
     let lastSubjectForNudges = null;
     let lastFetchedSubject = '';
     let aiHintDismissed = sessionStorage.getItem('template-ai-hint-dismissed') === '1';
+    let dismissedLintCodes = new Set();
+    try {
+        dismissedLintCodes = new Set(JSON.parse(sessionStorage.getItem('template-lint-dismissed') || '[]'));
+    } catch (_) {
+        dismissedLintCodes = new Set();
+    }
     let currentAIHint = '';
     let selectionRange = null;
     let popoverLoading = false;
@@ -197,7 +203,7 @@
     function renderLintSidebar(ruleLint, aiHint) {
         if (!lintSidebar) return;
         lintSidebar.innerHTML = '';
-        const items = Array.isArray(ruleLint) ? ruleLint.slice() : [];
+        const items = (Array.isArray(ruleLint) ? ruleLint : []).filter((issue) => !dismissedLintCodes.has(issue.code));
         if (aiHint && !aiHintDismissed) {
             items.push({
                 level: 'info',
@@ -207,31 +213,36 @@
             });
         }
         if (items.length === 0) {
-            lintSidebar.innerHTML = '<p class="template-lint-empty">No suggestions right now.</p>';
+            lintSidebar.innerHTML = '<p class="template-lint-empty">No tips right now.</p>';
             return;
         }
         const title = document.createElement('p');
         title.className = 'template-lint-title';
-        title.textContent = 'Suggestions';
+        title.textContent = 'Optional tips';
         lintSidebar.appendChild(title);
         const list = document.createElement('ul');
         list.className = 'template-lint-list';
         items.forEach((issue) => {
             const li = document.createElement('li');
             li.className = 'template-lint-item template-lint-' + (issue.level || 'info');
-            li.textContent = issue.message;
-            if (issue.source === 'ai') {
-                const dismiss = document.createElement('button');
-                dismiss.type = 'button';
-                dismiss.className = 'template-lint-dismiss';
-                dismiss.textContent = 'Dismiss';
-                dismiss.addEventListener('click', () => {
+            const msg = document.createElement('span');
+            msg.textContent = issue.message;
+            li.appendChild(msg);
+            const dismiss = document.createElement('button');
+            dismiss.type = 'button';
+            dismiss.className = 'template-lint-dismiss';
+            dismiss.textContent = 'Dismiss';
+            dismiss.addEventListener('click', () => {
+                if (issue.source === 'ai') {
                     aiHintDismissed = true;
                     sessionStorage.setItem('template-ai-hint-dismissed', '1');
-                    renderLintSidebar(ruleLint, '');
-                });
-                li.appendChild(dismiss);
-            }
+                } else if (issue.code) {
+                    dismissedLintCodes.add(issue.code);
+                    sessionStorage.setItem('template-lint-dismissed', JSON.stringify([...dismissedLintCodes]));
+                }
+                renderLintSidebar(ruleLint, issue.source === 'ai' ? '' : aiHint);
+            });
+            li.appendChild(dismiss);
             list.appendChild(li);
         });
         lintSidebar.appendChild(list);
@@ -258,10 +269,9 @@
         }
 
         let aiHint = currentAIHint;
-        const hasRulePersonalization = ruleLint.some((i) =>
-            i.code === 'partial_personalization' || i.code === 'no_personalization'
-        );
-        if (aiEnabled && !aiHintDismissed && !hasRulePersonalization) {
+        const hasVariables = extractVariables().length > 0;
+        const hasRulePersonalization = ruleLint.some((i) => i.code === 'no_personalization');
+        if (aiEnabled && !aiHintDismissed && !hasRulePersonalization && !hasVariables) {
             try {
                 const res = await fetch('/templates/ai/personalization-hint', {
                     method: 'POST',
