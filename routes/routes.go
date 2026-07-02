@@ -25,6 +25,7 @@ func RegisterRoutes(server *gin.Engine) {
 		"templates/templates_list.html",
 		"templates/templates_form.html",
 		"templates/contacts_list.html",
+		"templates/contacts_interested.html",
 		"templates/contacts_form.html",
 		"templates/contact_detail.html",
 		"templates/sends_list.html",
@@ -103,6 +104,7 @@ func RegisterRoutes(server *gin.Engine) {
 		authd.POST("/templates/:id/delete", DeleteTemplate)
 
 		authd.GET("/contacts", ListContactsPage)
+		authd.GET("/contacts/interested", InterestedContactsPage)
 		authd.GET("/contacts/new", NewContactPage)
 		authd.GET("/contacts/suppressions", ListSuppressionsPage)
 		authd.POST("/contacts/suppressions", AddSuppressionWeb)
@@ -142,6 +144,7 @@ func RegisterRoutes(server *gin.Engine) {
 		authd.POST("/campaigns/:id/schedule", ScheduleCampaign)
 		authd.POST("/campaigns/:id/cancel-schedule", CancelCampaignSchedule)
 		authd.GET("/campaigns/:id/analytics", CampaignAnalyticsPage)
+		authd.POST("/campaigns/:id/promote-winner", PromoteCampaignWinner)
 		authd.GET("/campaigns/:id", CampaignDetailPage)
 		authd.POST("/campaigns/:id/contacts", AddCampaignContacts)
 		authd.POST("/campaigns/:id/add-list", AddCampaignList)

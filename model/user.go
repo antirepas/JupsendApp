@@ -21,6 +21,9 @@ type User struct {
 	IsAdmin            bool
 	SendCooldownDays        int
 	IncludeUnsubscribeLink  bool
+	GoalMeetingsPerMonth    int
+	GoalReplyToMeetingPct   int
+	GoalDailySendCap        int
 	CreatedAt               time.Time
 }
 
@@ -49,7 +52,9 @@ func GetUserByEmail(email string) (User, error) {
 	row := db.QueryRow(`
 		SELECT id, email, password_hash, COALESCE(base_url, ''),
 			COALESCE(subscription_status, 'none'), COALESCE(whop_membership_id, ''), COALESCE(whop_member_id, ''),
-			subscription_ends_at, is_admin, COALESCE(send_cooldown_days, 30), COALESCE(include_unsubscribe_link, TRUE), created_at
+			subscription_ends_at, is_admin, COALESCE(send_cooldown_days, 30), COALESCE(include_unsubscribe_link, TRUE),
+			COALESCE(goal_meetings_per_month, 0), COALESCE(goal_reply_to_meeting_pct, 50), COALESCE(goal_daily_send_cap, 0),
+			created_at
 		FROM users WHERE email = ?
 	`, strings.TrimSpace(strings.ToLower(email)))
 	return scanUser(row)
@@ -59,7 +64,9 @@ func GetUserByID(id int64) (User, error) {
 	row := db.QueryRow(`
 		SELECT id, email, password_hash, COALESCE(base_url, ''),
 			COALESCE(subscription_status, 'none'), COALESCE(whop_membership_id, ''), COALESCE(whop_member_id, ''),
-			subscription_ends_at, is_admin, COALESCE(send_cooldown_days, 30), COALESCE(include_unsubscribe_link, TRUE), created_at
+			subscription_ends_at, is_admin, COALESCE(send_cooldown_days, 30), COALESCE(include_unsubscribe_link, TRUE),
+			COALESCE(goal_meetings_per_month, 0), COALESCE(goal_reply_to_meeting_pct, 50), COALESCE(goal_daily_send_cap, 0),
+			created_at
 		FROM users WHERE id = ?
 	`, id)
 	return scanUser(row)
@@ -69,7 +76,8 @@ func scanUser(row interface{ Scan(...interface{}) error }) (User, error) {
 	var u User
 	var ends sql.NullTime
 	err := row.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.BaseURL,
-		&u.SubscriptionStatus, &u.WhopMembershipID, &u.WhopMemberID, &ends, &u.IsAdmin, &u.SendCooldownDays, &u.IncludeUnsubscribeLink, &u.CreatedAt)
+		&u.SubscriptionStatus, &u.WhopMembershipID, &u.WhopMemberID, &ends, &u.IsAdmin, &u.SendCooldownDays, &u.IncludeUnsubscribeLink,
+		&u.GoalMeetingsPerMonth, &u.GoalReplyToMeetingPct, &u.GoalDailySendCap, &u.CreatedAt)
 	if ends.Valid {
 		t := ends.Time
 		u.SubscriptionEndsAt = &t
@@ -154,6 +162,17 @@ func UserBaseURL(userID int64) string {
 		return config.BaseURL
 	}
 	return u.BaseURL
+}
+
+func UpdateUserOutreachGoals(userID int64, meetings, replyPct, dailyCap int) error {
+	if replyPct <= 0 {
+		replyPct = 50
+	}
+	_, err := db.Exec(`
+		UPDATE users SET goal_meetings_per_month = ?, goal_reply_to_meeting_pct = ?, goal_daily_send_cap = ?
+		WHERE id = ?
+	`, meetings, replyPct, dailyCap, userID)
+	return err
 }
 
 func AssignOrphanDataToUser(userID int64) error {

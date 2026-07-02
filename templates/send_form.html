@@ -32,7 +32,7 @@
             <select name="contact_id" class="form-input" required>
                 <option value="">Select a contact...</option>
                 {{range .contacts}}
-                <option value="{{.ID}}">{{.Email}}</option>
+                <option value="{{.ID}}" {{if eq $.preselectedContactID .ID}}selected{{end}}>{{.Email}}</option>
                 {{end}}
             </select>
         </div>

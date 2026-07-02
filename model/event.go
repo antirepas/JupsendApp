@@ -25,17 +25,23 @@ type EventRecord struct {
 }
 
 type DashboardStats struct {
-	TotalSends  int
-	TotalOpens  int
-	TotalClicks int
-	OpenRate    float64
-	ClickRate   float64
+	TotalSends    int
+	TotalOpens    int
+	TotalClicks   int
+	TotalReplies  int
+	OpenRate      float64
+	ClickRate     float64
+	ReplyRate     float64
 }
 
 type DailyStat struct {
-	Date  string
-	Sends int
-	Opens int
+	Date         string
+	Sends        int
+	Opens        int
+	UniqueOpens  int
+	Clicks       int
+	UniqueClicks int
+	Replies      int
 }
 
 func resolveEmailSendID(trackingID string) int64 {
@@ -121,9 +127,19 @@ func GetDashboardStats(userID int64) (DashboardStats, error) {
 		return stats, err
 	}
 
+	err = db.QueryRow(`
+		SELECT COUNT(DISTINCT ce.contact_id) FROM contact_events ce
+		INNER JOIN email_sends es ON es.id = ce.email_send_id
+		WHERE ce.event_type = 'REPLY' AND es.user_id = ?
+	`, userID).Scan(&stats.TotalReplies)
+	if err != nil {
+		return stats, err
+	}
+
 	if stats.TotalSends > 0 {
 		stats.OpenRate = float64(stats.TotalOpens) / float64(stats.TotalSends) * 100
 		stats.ClickRate = float64(stats.TotalClicks) / float64(stats.TotalSends) * 100
+		stats.ReplyRate = float64(stats.TotalReplies) / float64(stats.TotalSends) * 100
 	}
 	return stats, nil
 }
@@ -244,6 +260,7 @@ func GetDailyStats(userID int64, days int) ([]DailyStat, error) {
 	defer openRows.Close()
 
 	openMap := make(map[string]int)
+	uniqueOpenMap := make(map[string]int)
 	for openRows.Next() {
 		var day string
 		var opens int
@@ -253,15 +270,158 @@ func GetDailyStats(userID int64, days int) ([]DailyStat, error) {
 		openMap[day] = opens
 	}
 
+	uniqueOpenQuery := `
+		SELECT (ee.created_at)::date as day, COUNT(DISTINCT es.contact_id) as unique_opens
+		FROM email_events ee
+		INNER JOIN email_sends es ON es.id = ee.email_send_id
+		WHERE ee.event_type = 'open' AND es.user_id = ? AND ee.created_at >= CURRENT_TIMESTAMP - (? * INTERVAL '1 day')
+		GROUP BY (ee.created_at)::date
+	`
+	uniqueOpenRows, err := db.Query(uniqueOpenQuery, userID, days)
+	if err == nil {
+		defer uniqueOpenRows.Close()
+		for uniqueOpenRows.Next() {
+			var day string
+			var n int
+			if uniqueOpenRows.Scan(&day, &n) == nil {
+				uniqueOpenMap[day] = n
+			}
+		}
+	}
+
+	clickMap := make(map[string]int)
+	uniqueClickMap := make(map[string]int)
+	clickQuery := `
+		SELECT (ee.created_at)::date as day, COUNT(*) as clicks
+		FROM email_events ee
+		INNER JOIN email_sends es ON es.id = ee.email_send_id
+		WHERE ee.event_type = 'click' AND es.user_id = ? AND ee.created_at >= CURRENT_TIMESTAMP - (? * INTERVAL '1 day')
+		GROUP BY (ee.created_at)::date
+	`
+	clickRows, err := db.Query(clickQuery, userID, days)
+	if err == nil {
+		defer clickRows.Close()
+		for clickRows.Next() {
+			var day string
+			var n int
+			if clickRows.Scan(&day, &n) == nil {
+				clickMap[day] = n
+			}
+		}
+	}
+
+	uniqueClickQuery := `
+		SELECT (ee.created_at)::date as day, COUNT(DISTINCT es.contact_id) as unique_clicks
+		FROM email_events ee
+		INNER JOIN email_sends es ON es.id = ee.email_send_id
+		WHERE ee.event_type = 'click' AND es.user_id = ? AND ee.created_at >= CURRENT_TIMESTAMP - (? * INTERVAL '1 day')
+		GROUP BY (ee.created_at)::date
+	`
+	uniqueClickRows, err := db.Query(uniqueClickQuery, userID, days)
+	if err == nil {
+		defer uniqueClickRows.Close()
+		for uniqueClickRows.Next() {
+			var day string
+			var n int
+			if uniqueClickRows.Scan(&day, &n) == nil {
+				uniqueClickMap[day] = n
+			}
+		}
+	}
+
+	replyMap := make(map[string]int)
+	replyQuery := `
+		SELECT (ce.created_at)::date as day, COUNT(DISTINCT ce.contact_id) as replies
+		FROM contact_events ce
+		INNER JOIN email_sends es ON es.id = ce.email_send_id
+		WHERE ce.event_type = 'REPLY' AND es.user_id = ? AND ce.created_at >= CURRENT_TIMESTAMP - (? * INTERVAL '1 day')
+		GROUP BY (ce.created_at)::date
+	`
+	replyRows, err := db.Query(replyQuery, userID, days)
+	if err == nil {
+		defer replyRows.Close()
+		for replyRows.Next() {
+			var day string
+			var replies int
+			if replyRows.Scan(&day, &replies) == nil {
+				replyMap[day] = replies
+			}
+		}
+	}
+
+	seen := make(map[string]bool)
+	for day := range sendMap {
+		seen[day] = true
+	}
+	for day := range openMap {
+		seen[day] = true
+	}
+	for day := range uniqueOpenMap {
+		seen[day] = true
+	}
+	for day := range clickMap {
+		seen[day] = true
+	}
+	for day := range uniqueClickMap {
+		seen[day] = true
+	}
+	for day := range replyMap {
+		seen[day] = true
+	}
+
 	var stats []DailyStat
-	for day, sends := range sendMap {
+	for day := range seen {
 		stats = append(stats, DailyStat{
-			Date:  day,
-			Sends: sends,
-			Opens: openMap[day],
+			Date:         day,
+			Sends:        sendMap[day],
+			Opens:        openMap[day],
+			UniqueOpens:  uniqueOpenMap[day],
+			Clicks:       clickMap[day],
+			UniqueClicks: uniqueClickMap[day],
+			Replies:      replyMap[day],
 		})
 	}
-	return stats, nil
+	sortDailyStats(stats)
+	return fillDailyGaps(stats, days), nil
+}
+
+func fillDailyGaps(stats []DailyStat, days int) []DailyStat {
+	if days < 1 {
+		return stats
+	}
+	byDate := make(map[string]DailyStat, len(stats))
+	for _, s := range stats {
+		byDate[normalizeStatDate(s.Date)] = s
+	}
+	out := make([]DailyStat, 0, days)
+	now := time.Now()
+	for i := days - 1; i >= 0; i-- {
+		d := now.AddDate(0, 0, -i).Format("2006-01-02")
+		if s, ok := byDate[d]; ok {
+			s.Date = d
+			out = append(out, s)
+		} else {
+			out = append(out, DailyStat{Date: d})
+		}
+	}
+	return out
+}
+
+func normalizeStatDate(day string) string {
+	if len(day) >= 10 {
+		return day[:10]
+	}
+	return day
+}
+
+func sortDailyStats(stats []DailyStat) {
+	for i := 0; i < len(stats); i++ {
+		for j := i + 1; j < len(stats); j++ {
+			if stats[j].Date < stats[i].Date {
+				stats[i], stats[j] = stats[j], stats[i]
+			}
+		}
+	}
 }
 
 type EntityCounts struct {

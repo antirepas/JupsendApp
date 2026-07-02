@@ -7,8 +7,8 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 
-	"emailtracker.com/config"
 	"emailtracker.com/ai"
 	"emailtracker.com/model"
 	"emailtracker.com/util"
@@ -17,30 +17,78 @@ import (
 
 func Dashboard(ctx *gin.Context) {
 	userID := mustUserID(ctx)
-	config.Reload()
 	user, _ := model.GetUserByID(userID)
 
-	stats, err := model.GetDashboardStats(userID)
-	if err != nil {
-		log.Print(err)
+	var (
+		stats             model.DashboardStats
+		contactActivity   []model.ContactActivityItem
+		daily             []model.DailyStat
+		counts            model.EntityCounts
+		campaigns         []model.CampaignListItem
+		benchmark         model.AccountBenchmark
+		recentExperiments []model.RecentExperiment
+		repliesThisMonth  int
+		interestedCount   int
+		acc               model.SMTPAccount
+		statsErr          error
+	)
+
+	var wg sync.WaitGroup
+	wg.Add(10)
+	go func() {
+		defer wg.Done()
+		stats, statsErr = model.GetDashboardStats(userID)
+	}()
+	go func() {
+		defer wg.Done()
+		contactActivity, _ = model.GetRecentContactActivity(userID, 25)
+	}()
+	go func() {
+		defer wg.Done()
+		daily, _ = model.GetDailyStats(userID, 30)
+	}()
+	go func() {
+		defer wg.Done()
+		counts, _ = model.GetEntityCounts(userID)
+	}()
+	go func() {
+		defer wg.Done()
+		campaigns, _ = model.ListCampaigns(userID)
+	}()
+	go func() {
+		defer wg.Done()
+		benchmark = model.GetAccountBenchmark(userID, 30)
+	}()
+	go func() {
+		defer wg.Done()
+		recentExperiments, _ = model.ListRecentExperiments(userID, 5)
+	}()
+	go func() {
+		defer wg.Done()
+		repliesThisMonth = model.CountRepliesThisMonth(userID)
+	}()
+	go func() {
+		defer wg.Done()
+		interestedCount = model.CountInterestedContacts(userID)
+	}()
+	go func() {
+		defer wg.Done()
+		acc, _ = model.GetSMTPAccountByUserID(userID)
+	}()
+	wg.Wait()
+
+	if statsErr != nil {
+		log.Print(statsErr)
 		ctx.HTML(http.StatusInternalServerError, "error.html", gin.H{"title": "Error", "active": "dashboard", "error": "Failed to load stats"})
 		return
 	}
 
-	contactActivity, err := model.GetRecentContactActivity(userID, 25)
-	if err != nil {
-		log.Print(err)
-	}
+	goalProgress := util.ComputeGoalProgress(util.OutreachGoals{
+		MeetingsPerMonth:  user.GoalMeetingsPerMonth,
+		ReplyToMeetingPct: user.GoalReplyToMeetingPct,
+		DailySendCap:      user.GoalDailySendCap,
+	}, repliesThisMonth)
 
-	daily, err := model.GetDailyStats(userID, 14)
-	if err != nil {
-		log.Print(err)
-	}
-
-	counts, _ := model.GetEntityCounts(userID)
-	campaigns, _ := model.ListCampaigns(userID)
-
-	acc, _ := model.GetSMTPAccountByUserID(userID)
 	isEmpty := stats.TotalSends == 0 && counts.Campaigns == 0
 
 	ctx.HTML(http.StatusOK, "dashboard.html", gin.H{
@@ -53,6 +101,10 @@ func Dashboard(ctx *gin.Context) {
 		"counts":          counts,
 		"campaigns":       campaigns,
 		"isEmpty":         isEmpty,
+		"benchmark":       benchmark,
+		"recentExperiments": recentExperiments,
+		"goalProgress":    goalProgress,
+		"interestedCount": interestedCount,
 		"gmailConnected":  acc.IsGoogleOAuth(),
 		"success":         ctx.Query("success"),
 		"error":           ctx.Query("error"),
@@ -158,6 +210,21 @@ func UpdateTemplate(ctx *gin.Context) {
 		return
 	}
 	ctx.Redirect(http.StatusFound, "/templates?success=Template+updated")
+}
+
+func InterestedContactsPage(ctx *gin.Context) {
+	userID := mustUserID(ctx)
+	contacts, err := model.ListInterestedContacts(userID, 100)
+	if err != nil {
+		log.Print(err)
+		ctx.HTML(http.StatusInternalServerError, "error.html", gin.H{"title": "Error", "active": "contacts", "error": "Failed to load interested contacts"})
+		return
+	}
+	ctx.HTML(http.StatusOK, "contacts_interested.html", gin.H{
+		"title":    "Interested contacts",
+		"active":   "contacts",
+		"contacts": contacts,
+	})
 }
 
 func ListContactsPage(ctx *gin.Context) {
@@ -372,12 +439,14 @@ func NewSendPage(ctx *gin.Context) {
 	if err != nil {
 		log.Print(err)
 	}
+	preselectedContactID, _ := strconv.ParseInt(ctx.Query("contact_id"), 10, 64)
 	ctx.HTML(http.StatusOK, "send_form.html", gin.H{
-		"title":     "Send Email",
-		"active":    "sends",
-		"templates": templates,
-		"contacts":  contacts,
-		"error":     ctx.Query("error"),
+		"title":                "Send Email",
+		"active":               "sends",
+		"templates":            templates,
+		"contacts":             contacts,
+		"preselectedContactID": preselectedContactID,
+		"error":                ctx.Query("error"),
 	})
 }
 

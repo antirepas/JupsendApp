@@ -169,3 +169,16 @@ func DeleteTemplate(id, userID int64) error {
 	_, err := db.Exec(`DELETE FROM template WHERE id = ?`, id)
 	return err
 }
+
+func DuplicateTemplate(userID, sourceID int64, newName string) (int64, error) {
+	t, varKeys, err := GetTemplateByID(sourceID, userID)
+	if err != nil {
+		return 0, err
+	}
+	copy := Template{Name: newName, Subject: t.Subject, Body: t.Body}
+	vars := make([]TemplateVariable, len(varKeys))
+	for i, k := range varKeys {
+		vars[i] = TemplateVariable{Key: k}
+	}
+	return copy.SaveTemplate(userID, vars)
+}

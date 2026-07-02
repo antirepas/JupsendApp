@@ -33,7 +33,7 @@ func TestContactListSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	campaignID, err := CreateCampaign(userID, "List campaign", templateID, 0, "bulk", 0)
+	campaignID, err := CreateCampaign(userID, "List campaign", templateID, 0, "bulk", 0, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +76,7 @@ func TestFilterSendEligibleCooldown(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	campaignID, err := CreateCampaign(userID, "Elig campaign", templateID, 0, "bulk", 0)
+	campaignID, err := CreateCampaign(userID, "Elig campaign", templateID, 0, "bulk", 0, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,7 +109,7 @@ func TestFilterSendEligibleActiveCampaign(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	campA, err := CreateCampaign(userID, "Campaign A", templateID, 0, "bulk", 0)
+	campA, err := CreateCampaign(userID, "Campaign A", templateID, 0, "bulk", 0, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +117,7 @@ func TestFilterSendEligibleActiveCampaign(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	campB, err := CreateCampaign(userID, "Campaign B", templateID, 0, "bulk", 0)
+	campB, err := CreateCampaign(userID, "Campaign B", templateID, 0, "bulk", 0, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,7 +149,7 @@ func TestFilterSendEligibleInvalidEmail(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	campaignID, err := CreateCampaign(userID, "Camp", templateID, 0, "bulk", 0)
+	campaignID, err := CreateCampaign(userID, "Camp", templateID, 0, "bulk", 0, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}

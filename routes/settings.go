@@ -9,6 +9,7 @@ import (
 	"emailtracker.com/auth"
 	"emailtracker.com/googleoauth"
 	"emailtracker.com/model"
+	"emailtracker.com/util"
 	"github.com/gin-gonic/gin"
 )
 
@@ -20,11 +21,17 @@ func SettingsPage(c *gin.Context) {
 		return
 	}
 	acc, _ := model.GetSMTPAccountByUserID(userID)
+	goalsPreview := util.ComputeGoalProgress(util.OutreachGoals{
+		MeetingsPerMonth:  user.GoalMeetingsPerMonth,
+		ReplyToMeetingPct: user.GoalReplyToMeetingPct,
+		DailySendCap:      user.GoalDailySendCap,
+	}, 0)
 	c.HTML(http.StatusOK, "settings.html", gin.H{
 		"title":          "Settings",
 		"active":         "settings",
 		"user":           user,
 		"account":        acc,
+		"goalsPreview":   goalsPreview,
 		"gmailConnected": acc.IsGoogleOAuth(),
 		"gmailConfigured": googleoauth.IsConfigured(),
 		"subscribed":     model.UserHasAppAccess(user),
@@ -98,6 +105,11 @@ func UpdateSettings(c *gin.Context) {
 	cooldown, _ := strconv.Atoi(c.PostForm("send_cooldown_days"))
 	_ = model.UpdateUserSendCooldownDays(userID, cooldown)
 	_ = model.UpdateUserIncludeUnsubscribeLink(userID, c.PostForm("include_unsubscribe_link") == "on")
+
+	meetings, _ := strconv.Atoi(c.PostForm("goal_meetings_per_month"))
+	replyPct, _ := strconv.Atoi(c.PostForm("goal_reply_to_meeting_pct"))
+	dailyCap, _ := strconv.Atoi(c.PostForm("goal_daily_send_cap"))
+	_ = model.UpdateUserOutreachGoals(userID, meetings, replyPct, dailyCap)
 
 	c.Redirect(http.StatusFound, "/settings?success=Settings+saved")
 }

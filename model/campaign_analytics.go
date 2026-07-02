@@ -35,9 +35,11 @@ type VariantAnalytics struct {
 	UniqueOpens        int
 	Clicks             int
 	UniqueClicks       int
+	UniqueReplies      int
 	OpenRate           float64
 	ClickRate          float64
 	ClickToOpenRate    float64
+	ReplyRate          float64
 }
 
 type ContactEngagementRow struct {
@@ -108,7 +110,14 @@ type CampaignAnalytics struct {
 	LinkClicks   []LinkClickStat
 	Funnel       EngagementFunnel
 	VariableCoverage []VariableCoverageStat
-	ABWinner       string
+	ABWinner         string
+	ABWinnerMethod   string
+	ExperimentVariable  string
+	ExperimentHypothesis string
+	CampaignReplyRate   float64
+	ReplyRateDelta      float64
+	IsPersonalBest      bool
+	AccountBenchmark    AccountBenchmark
 }
 
 func GetCampaignAnalytics(campaignID, userID int64) (CampaignAnalytics, error) {
@@ -134,13 +143,15 @@ func GetCampaignAnalytics(campaignID, userID int64) (CampaignAnalytics, error) {
 
 	hasB := c.TemplateBID > 0
 	analytics := CampaignAnalytics{
-		CampaignID:    campaignID,
-		Name:          c.Name,
-		Status:        ComputeDisplayStatus(c.Status, c.ScheduledAt, c.IsSending),
-		CreatedAt:     c.CreatedAt,
-		HasVariantB:   hasB,
-		TemplateAName: aName,
-		TemplateBName: bName,
+		CampaignID:           campaignID,
+		Name:                 c.Name,
+		Status:               ComputeDisplayStatus(c.Status, c.ScheduledAt, c.IsSending),
+		CreatedAt:            c.CreatedAt,
+		HasVariantB:          hasB,
+		TemplateAName:          aName,
+		TemplateBName:          bName,
+		ExperimentVariable:     c.ExperimentVariable,
+		ExperimentHypothesis:   c.ExperimentHypothesis,
 	}
 
 	analytics.Overview.ContactCount = len(contactIDs)
@@ -169,7 +180,17 @@ func GetCampaignAnalytics(campaignID, userID int64) (CampaignAnalytics, error) {
 	if analytics.Funnel.Opened > 0 {
 		analytics.Funnel.ClickPctOfOpens = float64(analytics.Funnel.Clicked) / float64(analytics.Funnel.Opened) * 100
 	}
-	analytics.ABWinner = pickABWinner(analytics.VariantA, analytics.VariantB, hasB)
+	analytics.ABWinner, analytics.ABWinnerMethod = pickABWinner(analytics.VariantA, analytics.VariantB, hasB)
+
+	bench := GetAccountBenchmark(userID, 30)
+	analytics.AccountBenchmark = bench
+	if analytics.Overview.SentCount > 0 {
+		analytics.CampaignReplyRate = float64(analytics.Overview.ReplyCount) / float64(analytics.Overview.SentCount) * 100
+		analytics.ReplyRateDelta = analytics.CampaignReplyRate - bench.ReplyRate
+	}
+	if bench.PersonalBestCampaignID == campaignID || (analytics.CampaignReplyRate > 0 && analytics.CampaignReplyRate >= bench.PersonalBestReplyRate && analytics.Overview.SentCount >= 20) {
+		analytics.IsPersonalBest = true
+	}
 
 	sort.Slice(analytics.DailyStats, func(i, j int) bool {
 		return analytics.DailyStats[i].Date < analytics.DailyStats[j].Date
@@ -197,10 +218,15 @@ func buildVariantAnalytics(variant string, templateID int64, templateName string
 		}
 	}
 
-	row := db.QueryRow(`
+	loadVariantMetrics(campaignID, variant, &va)
+	va.Pending = va.AssignedContacts - va.Sent
+	return va
+}
+
+func loadVariantMetrics(campaignID int64, variant string, va *VariantAnalytics) {
+	_ = db.QueryRow(`
 		SELECT COUNT(*) FROM email_sends WHERE campaign_id = ? AND variant = ?
-	`, campaignID, variant)
-	_ = row.Scan(&va.Sent)
+	`, campaignID, variant).Scan(&va.Sent)
 
 	_ = db.QueryRow(`
 		SELECT
@@ -211,7 +237,6 @@ func buildVariantAnalytics(variant string, templateID int64, templateName string
 		WHERE es.campaign_id = ? AND es.variant = ?
 	`, campaignID, variant).Scan(&va.Opens, &va.Clicks)
 
-	va.Pending = va.AssignedContacts - va.Sent
 	if va.Sent > 0 {
 		va.OpenRate = float64(va.Opens) / float64(va.Sent) * 100
 		va.ClickRate = float64(va.Clicks) / float64(va.Sent) * 100
@@ -232,7 +257,34 @@ func buildVariantAnalytics(variant string, templateID int64, templateName string
 		WHERE es.campaign_id = ? AND es.variant = ?
 	`, campaignID, variant).Scan(&va.UniqueClicks)
 
-	return va
+	_ = db.QueryRow(`
+		SELECT COUNT(DISTINCT ce.contact_id) FROM contact_events ce
+		INNER JOIN email_sends es ON es.id = ce.email_send_id
+		WHERE es.campaign_id = ? AND es.variant = ? AND ce.event_type = 'REPLY'
+	`, campaignID, variant).Scan(&va.UniqueReplies)
+
+	if va.Sent > 0 {
+		va.ReplyRate = float64(va.UniqueReplies) / float64(va.Sent) * 100
+	}
+}
+
+func campaignOverviewCounts(campaignID int64) (sent, replies int) {
+	_ = db.QueryRow(`SELECT COUNT(*) FROM email_sends WHERE campaign_id = ?`, campaignID).Scan(&sent)
+	_ = db.QueryRow(`
+		SELECT COUNT(DISTINCT ce.contact_id) FROM contact_events ce
+		INNER JOIN email_sends es ON es.id = ce.email_send_id
+		WHERE es.campaign_id = ? AND ce.event_type = 'REPLY'
+	`, campaignID).Scan(&replies)
+	return sent, replies
+}
+
+func experimentABSummary(campaignID int64) (winner, method string) {
+	var a, b VariantAnalytics
+	a.Variant = "A"
+	b.Variant = "B"
+	loadVariantMetrics(campaignID, "A", &a)
+	loadVariantMetrics(campaignID, "B", &b)
+	return pickABWinner(a, b, true)
 }
 
 func getContactEngagement(campaignID int64, contactIDs []int64, hasB bool, templateAID, templateBID int64, aName, bName string) []ContactEngagementRow {
@@ -563,27 +615,44 @@ func fillOverview(a *CampaignAnalytics) {
 	}
 }
 
-func pickABWinner(a, b VariantAnalytics, hasB bool) string {
-	if !hasB || a.Sent == 0 && b.Sent == 0 {
-		return ""
+func pickABWinner(a, b VariantAnalytics, hasB bool) (string, string) {
+	if !hasB {
+		return "", ""
 	}
+	if a.Sent == 0 && b.Sent == 0 {
+		return "", ""
+	}
+
+	const minSends = 10
+	if a.Sent >= minSends && b.Sent >= minSends && (a.UniqueReplies > 0 || b.UniqueReplies > 0) {
+		if a.ReplyRate > b.ReplyRate+0.01 {
+			return "A", "reply"
+		}
+		if b.ReplyRate > a.ReplyRate+0.01 {
+			return "B", "reply"
+		}
+		if a.UniqueReplies == b.UniqueReplies && a.UniqueReplies > 0 {
+			return "Tie", "reply"
+		}
+	}
+
 	if a.Sent == 0 || b.Sent == 0 {
 		if a.OpenRate > b.OpenRate {
-			return "A"
+			return "A", "opens"
 		}
 		if b.OpenRate > a.OpenRate {
-			return "B"
+			return "B", "opens"
 		}
-		return "Tie"
+		return "Tie", "opens"
 	}
-	// Score: open rate weighted 60%, click rate 40%
+
 	scoreA := a.OpenRate*0.6 + a.ClickRate*0.4
 	scoreB := b.OpenRate*0.6 + b.ClickRate*0.4
 	if scoreA > scoreB+0.5 {
-		return "A"
+		return "A", "opens"
 	}
 	if scoreB > scoreA+0.5 {
-		return "B"
+		return "B", "opens"
 	}
-	return "Tie"
+	return "Tie", "opens"
 }

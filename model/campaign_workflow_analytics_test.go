@@ -48,7 +48,7 @@ func TestGetCampaignWorkflowAnalyticsRequiresWorkflowCampaign(t *testing.T) {
 	userID, _ := CreateUser("wf-analytics@test.com", "hash", "http://localhost")
 	var templateID int64
 	_ = db.QueryRow(`INSERT INTO template (name, subject, body, user_id) VALUES ('t','s','b', ?) RETURNING id`, userID).Scan(&templateID)
-	bulkID, _ := CreateCampaign(userID, "Bulk", templateID, 0, "bulk", 0)
+	bulkID, _ := CreateCampaign(userID, "Bulk", templateID, 0, "bulk", 0, "", "")
 	_, err := GetCampaignWorkflowAnalytics(bulkID, userID)
 	if err == nil {
 		t.Fatal("expected error for bulk campaign")
@@ -68,7 +68,7 @@ func TestGetCampaignWorkflowAnalyticsRequiresWorkflowCampaign(t *testing.T) {
 			{SourceNodeKey: "send", TargetNodeKey: "end", EdgeType: "default"},
 		},
 	})
-	campaignID, _ := CreateCampaign(userID, "WF", templateID, 0, "workflow", vid)
+	campaignID, _ := CreateCampaign(userID, "WF", templateID, 0, "workflow", vid, "", "")
 	c := Contact{Email: "wf-analytics-contact@test.com"}
 	cid, _ := c.SaveContact(userID, nil)
 	_ = AddContactsToCampaign(campaignID, []int64{cid})

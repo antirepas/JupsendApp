@@ -32,6 +32,12 @@ func runAlterSchema() {
 		`ALTER TABLE contact ADD COLUMN IF NOT EXISTS email_status TEXT DEFAULT 'unknown'`,
 		`ALTER TABLE contact ADD COLUMN IF NOT EXISTS email_status_reason TEXT DEFAULT ''`,
 		`ALTER TABLE contact ADD COLUMN IF NOT EXISTS replied_at TIMESTAMPTZ`,
+		`ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS experiment_variable TEXT DEFAULT ''`,
+		`ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS experiment_hypothesis TEXT DEFAULT ''`,
+		`ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS success_metric TEXT DEFAULT 'reply'`,
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS goal_meetings_per_month INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS goal_reply_to_meeting_pct INTEGER NOT NULL DEFAULT 50`,
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS goal_daily_send_cap INTEGER NOT NULL DEFAULT 0`,
 	}
 	for _, stmt := range alters {
 		if _, err := DB.Exec(stmt); err != nil {

@@ -49,12 +49,32 @@
             </div>
             <div>
                 <label class="form-label">Template B (optional A/B)</label>
-                <select name="template_b_id" class="form-input">
+                <select name="template_b_id" id="template-b-select" class="form-input">
                     <option value="">No B variant</option>
                     {{range .templates}}
                     <option value="{{.ID}}">{{.Name}}</option>
                     {{end}}
                 </select>
+            </div>
+            <div id="experiment-fields" class="hidden p-4 bg-violet-50 border border-violet-100 rounded-lg space-y-4">
+                <div>
+                    <p class="font-semibold text-charcoal text-sm">Run as experiment</p>
+                    <p class="text-xs text-gray-600 mt-1">Winner is decided by <strong>reply rate</strong> once enough sends land (~10+ per variant).</p>
+                </div>
+                <div>
+                    <label class="form-label">What are you testing?</label>
+                    <select name="experiment_variable" class="form-input">
+                        <option value="subject">Subject line</option>
+                        <option value="opener">Opening line</option>
+                        <option value="offer">Offer / value prop</option>
+                        <option value="full_message">Full message</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="form-label">Hypothesis</label>
+                    <textarea name="experiment_hypothesis" class="form-input" rows="2" placeholder="e.g. Hiring-focused subject beats ramp-time subject for ops leaders"></textarea>
+                </div>
             </div>
         </div>
 
@@ -120,6 +140,17 @@ function setMode(workflow) {
 bulkCard.addEventListener('click', () => setMode(false));
 wfCard.addEventListener('click', () => setMode(true));
 setMode(false);
+
+const templateB = document.getElementById('template-b-select');
+const experimentFields = document.getElementById('experiment-fields');
+function toggleExperiment() {
+    if (!templateB || !experimentFields) return;
+    experimentFields.classList.toggle('hidden', !templateB.value);
+}
+if (templateB) {
+    templateB.addEventListener('change', toggleExperiment);
+    toggleExperiment();
+}
 </script>
 </body>
 </html>

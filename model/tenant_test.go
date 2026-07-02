@@ -24,7 +24,7 @@ func TestTenantIsolationCampaign(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	id1, err := CreateCampaign(u1, "A campaign", templateID, 0, "bulk", 0)
+	id1, err := CreateCampaign(u1, "A campaign", templateID, 0, "bulk", 0, "", "")
 	if err != nil {
 		t.Fatalf("create campaign: %v", err)
 	}

@@ -16,6 +16,30 @@
     <span class="badge {{if eq .analytics.Status "sent"}}badge-green{{else if eq .analytics.Status "scheduled"}}badge-amber{{else}}badge-gray{{end}}">{{.analytics.Status}}</span>
 </div>
 
+{{if or .analytics.ExperimentHypothesis .analytics.HasVariantB}}
+<div class="card mb-8 border-l-4 border-violet-500">
+    <h3 class="card-title">Learning</h3>
+    {{if .analytics.ExperimentHypothesis}}<p class="text-sm text-slate-700 mb-2"><span class="font-medium">Hypothesis:</span> {{.analytics.ExperimentHypothesis}}</p>{{end}}
+    {{if .analytics.ExperimentVariable}}<p class="text-xs text-slate-500 mb-3">Testing: {{.analytics.ExperimentVariable}}</p>{{end}}
+    <div class="flex flex-wrap gap-6 items-center">
+        <div>
+            <p class="stat-label">Campaign reply rate</p>
+            <p class="text-2xl font-bold text-violet-600">{{printf "%.1f" .analytics.CampaignReplyRate}}%</p>
+        </div>
+        <div>
+            <p class="stat-label">vs your 30-day avg</p>
+            <p class="text-2xl font-bold {{if gt .analytics.ReplyRateDelta 0.0}}text-emerald-600{{else if lt .analytics.ReplyRateDelta 0.0}}text-red-600{{else}}text-slate-600{{end}}">
+                {{if gt .analytics.ReplyRateDelta 0.0}}+{{end}}{{printf "%.1f" .analytics.ReplyRateDelta}}%
+            </p>
+            <p class="text-xs text-slate-500">Account avg: {{printf "%.1f" .analytics.AccountBenchmark.ReplyRate}}%</p>
+        </div>
+        {{if .analytics.IsPersonalBest}}
+        <span class="badge badge-green">Personal best reply rate</span>
+        {{end}}
+    </div>
+</div>
+{{end}}
+
 <!-- Overview -->
 <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-8">
     <div class="stat-card"><p class="stat-label">Contacts</p><p class="stat-value">{{.analytics.Overview.ContactCount}}</p></div>
@@ -60,13 +84,16 @@
     <div class="card border-l-4 border-blue-500">
         <div class="flex justify-between items-start">
             <h3 class="font-semibold">Variant A — {{.analytics.VariantA.TemplateName}}</h3>
-            {{if eq .analytics.ABWinner "A"}}<span class="badge badge-green">Winner</span>{{end}}
+            {{if eq .analytics.ABWinner "A"}}
+            <span class="badge badge-green">{{if eq .analytics.ABWinnerMethod "reply"}}Winner on replies{{else}}Early signal: opens{{end}}</span>
+            {{end}}
         </div>
         <div class="grid grid-cols-2 gap-4 mt-4 text-sm">
             <div><span class="text-slate-500">Assigned</span><p class="font-bold text-lg">{{.analytics.VariantA.AssignedContacts}}</p></div>
             <div><span class="text-slate-500">Sent / Pending</span><p class="font-bold text-lg">{{.analytics.VariantA.Sent}} / {{.analytics.VariantA.Pending}}</p></div>
             <div><span class="text-slate-500">Opens (unique)</span><p class="font-bold text-lg text-blue-600">{{.analytics.VariantA.UniqueOpens}} <span class="text-xs font-normal">({{printf "%.1f" .analytics.VariantA.OpenRate}}%)</span></p></div>
             <div><span class="text-slate-500">Clicks (unique)</span><p class="font-bold text-lg text-emerald-600">{{.analytics.VariantA.UniqueClicks}} <span class="text-xs font-normal">({{printf "%.1f" .analytics.VariantA.ClickRate}}%)</span></p></div>
+            <div><span class="text-slate-500">Replies (unique)</span><p class="font-bold text-lg text-violet-600">{{.analytics.VariantA.UniqueReplies}} <span class="text-xs font-normal">({{printf "%.1f" .analytics.VariantA.ReplyRate}}%)</span></p></div>
             <div><span class="text-slate-500">Click-to-open</span><p class="font-bold">{{printf "%.1f" .analytics.VariantA.ClickToOpenRate}}%</p></div>
             <div><span class="text-slate-500">Total events</span><p class="font-bold">{{.analytics.VariantA.Opens}} opens · {{.analytics.VariantA.Clicks}} clicks</p></div>
         </div>
@@ -75,7 +102,9 @@
     <div class="card border-l-4 border-violet-500">
         <div class="flex justify-between items-start">
             <h3 class="font-semibold">Variant B — {{.analytics.VariantB.TemplateName}}</h3>
-            {{if eq .analytics.ABWinner "B"}}<span class="badge badge-green">Winner</span>{{end}}
+            {{if eq .analytics.ABWinner "B"}}
+            <span class="badge badge-green">{{if eq .analytics.ABWinnerMethod "reply"}}Winner on replies{{else}}Early signal: opens{{end}}</span>
+            {{end}}
             {{if eq .analytics.ABWinner "Tie"}}<span class="badge badge-gray">Tie</span>{{end}}
         </div>
         <div class="grid grid-cols-2 gap-4 mt-4 text-sm">
@@ -83,12 +112,27 @@
             <div><span class="text-slate-500">Sent / Pending</span><p class="font-bold text-lg">{{.analytics.VariantB.Sent}} / {{.analytics.VariantB.Pending}}</p></div>
             <div><span class="text-slate-500">Opens (unique)</span><p class="font-bold text-lg text-blue-600">{{.analytics.VariantB.UniqueOpens}} <span class="text-xs font-normal">({{printf "%.1f" .analytics.VariantB.OpenRate}}%)</span></p></div>
             <div><span class="text-slate-500">Clicks (unique)</span><p class="font-bold text-lg text-emerald-600">{{.analytics.VariantB.UniqueClicks}} <span class="text-xs font-normal">({{printf "%.1f" .analytics.VariantB.ClickRate}}%)</span></p></div>
+            <div><span class="text-slate-500">Replies (unique)</span><p class="font-bold text-lg text-violet-600">{{.analytics.VariantB.UniqueReplies}} <span class="text-xs font-normal">({{printf "%.1f" .analytics.VariantB.ReplyRate}}%)</span></p></div>
             <div><span class="text-slate-500">Click-to-open</span><p class="font-bold">{{printf "%.1f" .analytics.VariantB.ClickToOpenRate}}%</p></div>
             <div><span class="text-slate-500">Total events</span><p class="font-bold">{{.analytics.VariantB.Opens}} opens · {{.analytics.VariantB.Clicks}} clicks</p></div>
         </div>
     </div>
     {{end}}
 </div>
+
+{{if and .analytics.HasVariantB (or (eq .analytics.ABWinner "A") (eq .analytics.ABWinner "B"))}}
+<div class="card mb-8 bg-emerald-50 border border-emerald-100">
+    <div class="flex flex-wrap items-center justify-between gap-4">
+        <div>
+            <p class="font-semibold text-charcoal">Promote the winner</p>
+            <p class="text-sm text-gray-600 mt-1">Save variant {{.analytics.ABWinner}} as a new template for your next experiment.</p>
+        </div>
+        <form method="POST" action="/campaigns/{{.analytics.CampaignID}}/promote-winner">
+            <button type="submit" class="btn-primary">Promote winner to template</button>
+        </form>
+    </div>
+</div>
+{{end}}
 
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
     <div class="card">

@@ -46,7 +46,7 @@ func TestGetCampaignWorkflowOverview(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	campaignID, err := CreateCampaign(userID, "WF campaign", templateID, 0, "workflow", vid)
+	campaignID, err := CreateCampaign(userID, "WF campaign", templateID, 0, "workflow", vid, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -80,11 +80,13 @@ func CreateCampaign(ctx *gin.Context) {
 		return
 	}
 	templateBID, _ := strconv.ParseInt(ctx.PostForm("template_b_id"), 10, 64)
+	experimentVariable := strings.TrimSpace(ctx.PostForm("experiment_variable"))
+	experimentHypothesis := strings.TrimSpace(ctx.PostForm("experiment_hypothesis"))
 	if executionMode == "workflow" {
 		templateAID = 1 // placeholder for NOT NULL constraint; unused in workflow mode
 	}
 
-	id, err := model.CreateCampaign(userID, name, templateAID, templateBID, executionMode, workflowVersionID)
+	id, err := model.CreateCampaign(userID, name, templateAID, templateBID, executionMode, workflowVersionID, experimentVariable, experimentHypothesis)
 	if err != nil {
 		log.Print(err)
 		ctx.Redirect(http.StatusFound, "/campaigns/new?error=Failed+to+create+campaign")
@@ -540,4 +542,41 @@ func parseContactIDs(ctx *gin.Context) []int64 {
 		}
 	}
 	return ids
+}
+
+func PromoteCampaignWinner(ctx *gin.Context) {
+	userID := mustUserID(ctx)
+	id, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
+	if err != nil {
+		ctx.Redirect(http.StatusFound, "/campaigns?error=Invalid+campaign")
+		return
+	}
+
+	analytics, err := model.GetCampaignAnalytics(id, userID)
+	if err != nil {
+		ctx.Redirect(http.StatusFound, "/campaigns?error=Campaign+not+found")
+		return
+	}
+
+	var templateID int64
+	var templateName string
+	switch analytics.ABWinner {
+	case "A":
+		templateID = analytics.VariantA.TemplateID
+		templateName = analytics.VariantA.TemplateName
+	case "B":
+		templateID = analytics.VariantB.TemplateID
+		templateName = analytics.VariantB.TemplateName
+	default:
+		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(id, 10)+"/analytics?error=No+clear+winner+yet")
+		return
+	}
+
+	newName := templateName + " (winner)"
+	newID, err := model.DuplicateTemplate(userID, templateID, newName)
+	if err != nil {
+		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(id, 10)+"/analytics?error=Failed+to+promote+winner")
+		return
+	}
+	ctx.Redirect(http.StatusFound, "/templates/"+strconv.FormatInt(newID, 10)+"/edit?success=Winner+saved+as+new+template")
 }

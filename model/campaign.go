@@ -8,18 +8,21 @@ import (
 )
 
 type Campaign struct {
-	ID                 int64
-	UserID             int64
-	Name               string
-	TemplateAID        int64
-	TemplateBID        int64
-	Status             string
-	IsSending          bool
-	CreatedAt          time.Time
-	ScheduledAt        *time.Time
-	ExecutionMode      string
-	WorkflowVersionID  int64
-	ContactListID      int64
+	ID                  int64
+	UserID              int64
+	Name                string
+	TemplateAID         int64
+	TemplateBID         int64
+	Status              string
+	IsSending           bool
+	CreatedAt           time.Time
+	ScheduledAt         *time.Time
+	ExecutionMode       string
+	WorkflowVersionID   int64
+	ContactListID       int64
+	ExperimentVariable  string
+	ExperimentHypothesis string
+	SuccessMetric       string
 }
 
 type CampaignListItem struct {
@@ -85,7 +88,7 @@ func scanScheduledAt(n sql.NullTime) *time.Time {
 	return &t
 }
 
-func CreateCampaign(userID int64, name string, templateAID, templateBID int64, executionMode string, workflowVersionID int64) (int64, error) {
+func CreateCampaign(userID int64, name string, templateAID, templateBID int64, executionMode string, workflowVersionID int64, experimentVariable, experimentHypothesis string) (int64, error) {
 	var bID interface{}
 	if templateBID > 0 {
 		bID = templateBID
@@ -97,9 +100,15 @@ func CreateCampaign(userID int64, name string, templateAID, templateBID int64, e
 	if workflowVersionID > 0 {
 		wfVer = workflowVersionID
 	}
+	expVar := ""
+	expHyp := ""
+	if templateBID > 0 {
+		expVar = experimentVariable
+		expHyp = experimentHypothesis
+	}
 	row := db.QueryRow(
-		`INSERT INTO campaigns (name, template_a_id, template_b_id, execution_mode, workflow_version_id, user_id) VALUES (?, ?, ?, ?, ?, ?) RETURNING id`,
-		name, templateAID, bID, executionMode, wfVer, userID,
+		`INSERT INTO campaigns (name, template_a_id, template_b_id, execution_mode, workflow_version_id, user_id, experiment_variable, experiment_hypothesis, success_metric) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'reply') RETURNING id`,
+		name, templateAID, bID, executionMode, wfVer, userID, expVar, expHyp,
 	)
 	var id int64
 	err := row.Scan(&id)
@@ -157,7 +166,8 @@ func GetCampaign(id int64) (Campaign, error) {
 	row := db.QueryRow(`
 		SELECT id, COALESCE(user_id, 0), name, template_a_id, template_b_id, status, created_at, scheduled_at,
 			COALESCE(execution_mode, 'bulk'), COALESCE(workflow_version_id, 0), COALESCE(is_sending, 0),
-			COALESCE(contact_list_id, 0)
+			COALESCE(contact_list_id, 0),
+			COALESCE(experiment_variable, ''), COALESCE(experiment_hypothesis, ''), COALESCE(success_metric, 'reply')
 		FROM campaigns WHERE id = ?
 	`, id)
 	return scanCampaignRow(row)
@@ -167,7 +177,8 @@ func GetCampaignForUser(id, userID int64) (Campaign, error) {
 	row := db.QueryRow(`
 		SELECT id, COALESCE(user_id, 0), name, template_a_id, template_b_id, status, created_at, scheduled_at,
 			COALESCE(execution_mode, 'bulk'), COALESCE(workflow_version_id, 0), COALESCE(is_sending, 0),
-			COALESCE(contact_list_id, 0)
+			COALESCE(contact_list_id, 0),
+			COALESCE(experiment_variable, ''), COALESCE(experiment_hypothesis, ''), COALESCE(success_metric, 'reply')
 		FROM campaigns WHERE id = ? AND user_id = ?
 	`, id, userID)
 	return scanCampaignRow(row)
@@ -180,7 +191,8 @@ func scanCampaignRow(row interface{ Scan(...interface{}) error }) (Campaign, err
 	var isSending int
 	var listID sql.NullInt64
 	err := row.Scan(&c.ID, &c.UserID, &c.Name, &c.TemplateAID, &bID, &c.Status, &c.CreatedAt, &scheduled,
-		&c.ExecutionMode, &c.WorkflowVersionID, &isSending, &listID)
+		&c.ExecutionMode, &c.WorkflowVersionID, &isSending, &listID,
+		&c.ExperimentVariable, &c.ExperimentHypothesis, &c.SuccessMetric)
 	if err != nil {
 		return Campaign{}, err
 	}
