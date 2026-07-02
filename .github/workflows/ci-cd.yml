@@ -54,7 +54,12 @@ jobs:
         run: npm ci && npm run build:css
 
       - name: Verify committed Tailwind CSS is current
-        run: git diff --exit-code static/css/tailwind.css
+        run: |
+          if ! git diff --exit-code static/css/tailwind.css; then
+            echo "::error::static/css/tailwind.css is out of date. Run: npm ci && npm run build:css"
+            echo "Then commit the updated file: git add static/css/tailwind.css"
+            exit 1
+          fi
 
       - name: Download dependencies
         run: go mod download
