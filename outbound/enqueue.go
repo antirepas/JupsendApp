@@ -62,6 +62,7 @@ func EnqueueSend(input EnqueueInput) (int64, int64, error) {
 		Variant:            input.Variant,
 		WorkflowInstanceID: input.WorkflowInstanceID,
 		EmailSendID:        emailSendID,
+		Priority:           sendPriority(input),
 	})
 	if err != nil {
 		return 0, 0, err
@@ -75,7 +76,15 @@ func EnqueueSend(input EnqueueInput) (int64, int64, error) {
 		return 0, 0, err
 	}
 
+	NotifyWorker()
 	return emailSendID, jobID, nil
+}
+
+func sendPriority(input EnqueueInput) int {
+	if input.CampaignID == 0 && input.WorkflowInstanceID == 0 {
+		return PriorityManual
+	}
+	return PriorityCampaign
 }
 
 func EnqueueCampaignContacts(userID, campaignID int64, contactIDs []int64, templateForContact func(contactID int64, index int) (templateID int64, variant string)) (EnqueueResult, error) {

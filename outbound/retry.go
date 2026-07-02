@@ -6,6 +6,7 @@ import (
 )
 
 var backoffSchedule = []time.Duration{
+	15 * time.Second,
 	1 * time.Minute,
 	5 * time.Minute,
 	15 * time.Minute,

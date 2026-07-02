@@ -21,8 +21,9 @@ func TestClassifySMTPError(t *testing.T) {
 }
 
 func TestBackoffForAttempt(t *testing.T) {
-	if BackoffForAttempt(1) != 1*time.Minute {
-		t.Fatalf("got %v", BackoffForAttempt(1))
+	delay := BackoffForAttempt(1)
+	if delay != 15*time.Second {
+		t.Fatalf("got %v", delay)
 	}
 	if BackoffForAttempt(10) != 60*time.Minute {
 		t.Fatalf("got %v", BackoffForAttempt(10))

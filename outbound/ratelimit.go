@@ -84,16 +84,27 @@ func accountSpacingOK(account model.SMTPAccount) bool {
 }
 
 func AccountCanSendNow(account model.SMTPAccount) bool {
+	return accountCanSend(account, true, true)
+}
+
+// AccountCanSendNowForJob applies rate limits. Manual one-off sends skip spacing
+// so a queued test email is not stuck behind campaign throttling.
+func AccountCanSendNowForJob(account model.SMTPAccount, job model.SendJob) bool {
+	checkSpacing := job.Priority < PriorityManual
+	return accountCanSend(account, true, checkSpacing)
+}
+
+func accountCanSend(account model.SMTPAccount, checkMinute, checkSpacing bool) bool {
 	if account.Status != "active" {
 		return false
 	}
 	if !accountUnderDailyCap(account) {
 		return false
 	}
-	if !accountUnderMinuteLimit(account) {
+	if checkMinute && !accountUnderMinuteLimit(account) {
 		return false
 	}
-	if !accountSpacingOK(account) {
+	if checkSpacing && !accountSpacingOK(account) {
 		return false
 	}
 	return true

@@ -28,6 +28,38 @@ func TestAccountCanSendNow(t *testing.T) {
 	}
 }
 
+func TestAccountCanSendNowForJobSkipsSpacingForManual(t *testing.T) {
+	now := time.Now()
+	last := now.Add(-5 * time.Second)
+	acc := model.SMTPAccount{
+		ID:                     1,
+		Status:                 "active",
+		DailyLimit:             50,
+		PerMinuteLimit:         10,
+		MinSecondsBetweenSends: 30,
+		WarmupEnabled:          false,
+		SendsToday:             0,
+		SendsTodayResetAt:      &now,
+		LastSendAt:             &last,
+	}
+	if AccountCanSendNow(acc) {
+		t.Fatal("expected spacing block for normal send")
+	}
+	manual := model.SendJob{Priority: PriorityManual}
+	if !AccountCanSendNowForJob(acc, manual) {
+		t.Fatal("manual send should skip spacing throttle")
+	}
+}
+
+func TestSendPriority(t *testing.T) {
+	if sendPriority(EnqueueInput{CampaignID: 5}) != PriorityCampaign {
+		t.Fatal("campaign send should use campaign priority")
+	}
+	if sendPriority(EnqueueInput{}) != PriorityManual {
+		t.Fatal("one-off send should use manual priority")
+	}
+}
+
 func TestPickAccount(t *testing.T) {
 	now := time.Now()
 	accounts := []model.SMTPAccount{

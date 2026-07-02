@@ -4,13 +4,21 @@ import (
 	"os"
 	"strconv"
 	"time"
+
+	"emailtracker.com/util"
+)
+
+const (
+	PriorityManual   = 10
+	PriorityCampaign = 0
 )
 
 var (
-	WorkerInterval  = 8 * time.Second
+	WorkerInterval   = 3 * time.Second
 	IMAPPollInterval = 3 * time.Minute
-	BatchSize       = 10
-	LockDuration    = 2 * time.Minute
+	BatchSize        = 10
+	LockDuration     = 45 * time.Second
+	SMTPSendTimeout  = 30 * time.Second
 )
 
 func LoadConfig() {
@@ -29,4 +37,15 @@ func LoadConfig() {
 			BatchSize = n
 		}
 	}
+	if v := os.Getenv("OUTBOUND_LOCK_SECONDS"); v != "" {
+		if secs, err := strconv.Atoi(v); err == nil && secs > 0 {
+			LockDuration = time.Duration(secs) * time.Second
+		}
+	}
+	if v := os.Getenv("OUTBOUND_SMTP_TIMEOUT_SECONDS"); v != "" {
+		if secs, err := strconv.Atoi(v); err == nil && secs > 0 {
+			SMTPSendTimeout = time.Duration(secs) * time.Second
+		}
+	}
+	util.DefaultSMTPSendTimeout = SMTPSendTimeout
 }
