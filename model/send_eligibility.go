@@ -72,7 +72,7 @@ func FilterSendEligible(userID, campaignID int64, contactIDs []int64) ([]int64, 
 			SELECT contact_id FROM email_sends
 			WHERE user_id = ? AND contact_id IS NOT NULL
 				AND delivery_status IN ('sent', 'queued')
-				AND sent_at > ?
+				AND COALESCE(sent_at, CURRENT_TIMESTAMP) > ?
 			GROUP BY contact_id
 		`, userID, cutoff)
 		if err != nil {

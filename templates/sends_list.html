@@ -38,7 +38,15 @@
             <tr>
                 <td class="font-medium">{{if .ContactEmail}}{{.ContactEmail}}{{else}}<span class="text-slate-400">Unknown</span>{{end}}</td>
                 <td class="text-slate-600">{{if .TemplateName}}{{.TemplateName}}{{else}}<span class="text-slate-400">Unknown</span>{{end}}</td>
-                <td class="text-slate-500 text-sm">{{.SentAt.Format "Jan 2, 2006 15:04"}}</td>
+                <td class="text-slate-500 text-sm">
+                    {{if eq .DeliveryStatus "queued"}}
+                    <span class="text-slate-400">Queued</span>
+                    {{else if not .SentAt.IsZero}}
+                    {{.SentAt.Format "Jan 2, 2006 15:04"}}
+                    {{else}}
+                    <span class="text-slate-400">—</span>
+                    {{end}}
+                </td>
                 <td>{{.OpenCount}}</td>
                 <td>{{.ClickCount}}</td>
                 <td>

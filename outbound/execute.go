@@ -43,9 +43,9 @@ func executeJob(job model.SendJob, account model.SMTPAccount) error {
 		replacedLinksBody, plainBody = util.InjectUnsubscribeFooter(replacedLinksBody, plainBody, unsubURL)
 	}
 
-	from := account.FromEmail
+	from := account.SenderEmail()
 	if from == "" {
-		from = account.SMTPUser
+		return fmt.Errorf("smtp account %d has no sender email configured", account.ID)
 	}
 	sender := util.NewEmailSender(account.SMTPHost, account.SMTPPort, account.SMTPUser, account.SMTPPassword, from)
 	messageID := fmt.Sprintf("<%s@emailtracker>", trackID)
@@ -66,6 +66,7 @@ func executeJob(job model.SendJob, account model.SMTPAccount) error {
 	if err != nil {
 		return err
 	}
+	log.Printf("outbound: email_send=%d delivered to %s from %s", emailSendID, contact.Email, from)
 
 	if err := model.MarkEmailSendSent(emailSendID, account.ID, job.ID); err != nil {
 		return err

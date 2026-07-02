@@ -26,6 +26,7 @@ type EmailSendListItem struct {
 	OpenCount       int
 	ClickCount      int
 	DeliveryStatus  string
+	DeliveryError   string
 }
 
 type EmailSendDetail struct {
@@ -45,9 +46,8 @@ func CreateQueuedEmailSend(userID, tId, cId int64, trackId string, campaignID in
 	if workflowInstanceID > 0 {
 		instID = workflowInstanceID
 	}
-	now := time.Now()
-	query := `INSERT INTO email_sends (template_id, contact_id, tracking_id, sent_at, campaign_id, variant, workflow_instance_id, delivery_status, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, 'queued', ?) RETURNING id`
-	row := db.QueryRow(query, tId, cId, trackId, now, campID, variant, instID, userID)
+	query := `INSERT INTO email_sends (template_id, contact_id, tracking_id, campaign_id, variant, workflow_instance_id, delivery_status, user_id) VALUES (?, ?, ?, ?, ?, ?, 'queued', ?) RETURNING id`
+	row := db.QueryRow(query, tId, cId, trackId, campID, variant, instID, userID)
 	var id int64
 	err := row.Scan(&id)
 	return id, err
@@ -94,14 +94,16 @@ func ListEmailSends(userID int64) ([]EmailSendListItem, error) {
 			COALESCE(t.name, ''), COALESCE(c.email, ''),
 			COALESCE(SUM(CASE WHEN ee.event_type = 'open' THEN 1 ELSE 0 END), 0),
 			COALESCE(SUM(CASE WHEN ee.event_type = 'click' THEN 1 ELSE 0 END), 0),
-			COALESCE(es.delivery_status, 'sent')
+			COALESCE(es.delivery_status, 'sent'),
+			COALESCE(sj.last_error, '')
 		FROM email_sends es
 		LEFT JOIN template t ON t.id = es.template_id
 		LEFT JOIN contact c ON c.id = es.contact_id
 		LEFT JOIN email_events ee ON ee.email_send_id = es.id OR ee.tracking_id = es.tracking_id
+		LEFT JOIN send_jobs sj ON sj.id = es.send_job_id
 		WHERE es.user_id = ?
-		GROUP BY es.id, es.template_id, es.contact_id, es.tracking_id, es.sent_at, es.delivery_status, t.name, c.email
-		ORDER BY es.sent_at DESC
+		GROUP BY es.id, es.template_id, es.contact_id, es.tracking_id, es.sent_at, es.delivery_status, t.name, c.email, sj.last_error
+		ORDER BY es.id DESC
 	`
 	rows, err := db.Query(query, userID)
 	if err != nil {
@@ -115,7 +117,7 @@ func ListEmailSends(userID int64) ([]EmailSendListItem, error) {
 		err := rows.Scan(
 			&item.ID, &item.TemplateID, &item.ContactID, &item.TrackingID, &item.SentAt,
 			&item.TemplateName, &item.ContactEmail,
-			&item.OpenCount, &item.ClickCount, &item.DeliveryStatus,
+			&item.OpenCount, &item.ClickCount, &item.DeliveryStatus, &item.DeliveryError,
 		)
 		if err != nil {
 			return nil, err
@@ -135,14 +137,16 @@ func ListEmailSendsForContact(userID, contactID int64, limit int) ([]EmailSendLi
 			COALESCE(t.name, ''), COALESCE(c.email, ''),
 			COALESCE(SUM(CASE WHEN ee.event_type = 'open' THEN 1 ELSE 0 END), 0),
 			COALESCE(SUM(CASE WHEN ee.event_type = 'click' THEN 1 ELSE 0 END), 0),
-			COALESCE(es.delivery_status, 'sent')
+			COALESCE(es.delivery_status, 'sent'),
+			COALESCE(sj.last_error, '')
 		FROM email_sends es
 		LEFT JOIN template t ON t.id = es.template_id
 		LEFT JOIN contact c ON c.id = es.contact_id
 		LEFT JOIN email_events ee ON ee.email_send_id = es.id OR ee.tracking_id = es.tracking_id
+		LEFT JOIN send_jobs sj ON sj.id = es.send_job_id
 		WHERE es.user_id = ? AND es.contact_id = ?
-		GROUP BY es.id, es.template_id, es.contact_id, es.tracking_id, es.sent_at, es.delivery_status, t.name, c.email
-		ORDER BY es.sent_at DESC
+		GROUP BY es.id, es.template_id, es.contact_id, es.tracking_id, es.sent_at, es.delivery_status, t.name, c.email, sj.last_error
+		ORDER BY es.id DESC
 		LIMIT ?
 	`
 	rows, err := db.Query(query, userID, contactID, limit)
@@ -156,7 +160,7 @@ func ListEmailSendsForContact(userID, contactID int64, limit int) ([]EmailSendLi
 		if err := rows.Scan(
 			&item.ID, &item.TemplateID, &item.ContactID, &item.TrackingID, &item.SentAt,
 			&item.TemplateName, &item.ContactEmail,
-			&item.OpenCount, &item.ClickCount, &item.DeliveryStatus,
+			&item.OpenCount, &item.ClickCount, &item.DeliveryStatus, &item.DeliveryError,
 		); err != nil {
 			return nil, err
 		}
@@ -172,20 +176,22 @@ func GetEmailSendDetail(id int64) (EmailSendDetail, error) {
 			COALESCE(t.name, ''), COALESCE(c.email, ''),
 			COALESCE(SUM(CASE WHEN ee.event_type = 'open' THEN 1 ELSE 0 END), 0),
 			COALESCE(SUM(CASE WHEN ee.event_type = 'click' THEN 1 ELSE 0 END), 0),
-			COALESCE(es.delivery_status, 'sent')
+			COALESCE(es.delivery_status, 'sent'),
+			COALESCE(sj.last_error, '')
 		FROM email_sends es
 		LEFT JOIN template t ON t.id = es.template_id
 		LEFT JOIN contact c ON c.id = es.contact_id
 		LEFT JOIN email_events ee ON ee.email_send_id = es.id OR ee.tracking_id = es.tracking_id
+		LEFT JOIN send_jobs sj ON sj.id = es.send_job_id
 		WHERE es.id = ?
-		GROUP BY es.id, es.template_id, es.contact_id, es.tracking_id, es.sent_at, es.delivery_status, t.name, c.email
+		GROUP BY es.id, es.template_id, es.contact_id, es.tracking_id, es.sent_at, es.delivery_status, t.name, c.email, sj.last_error
 	`
 	row := db.QueryRow(query, id)
 	var detail EmailSendDetail
 	err := row.Scan(
 		&detail.ID, &detail.TemplateID, &detail.ContactID, &detail.TrackingID, &detail.SentAt,
 		&detail.TemplateName, &detail.ContactEmail,
-		&detail.OpenCount, &detail.ClickCount, &detail.DeliveryStatus,
+		&detail.OpenCount, &detail.ClickCount, &detail.DeliveryStatus, &detail.DeliveryError,
 	)
 	if err != nil {
 		return EmailSendDetail{}, err

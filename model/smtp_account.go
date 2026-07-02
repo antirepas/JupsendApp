@@ -46,6 +46,17 @@ func (a SMTPAccount) IsGoogleOAuth() bool {
 	return a.AuthType == AuthTypeGoogleOAuth && a.OAuthRefreshToken != ""
 }
 
+// SenderEmail returns the address used for SMTP MAIL FROM and OAuth identity.
+func (a SMTPAccount) SenderEmail() string {
+	if a.IsGoogleOAuth() && a.GoogleEmail != "" {
+		return a.GoogleEmail
+	}
+	if a.FromEmail != "" {
+		return a.FromEmail
+	}
+	return a.SMTPUser
+}
+
 func scanSMTPAccount(row interface{ Scan(...interface{}) error }) (SMTPAccount, error) {
 	var a SMTPAccount
 	var userID sql.NullInt64
@@ -191,6 +202,27 @@ func UpsertSMTPAccountForUser(userID int64, a SMTPAccount) error {
 		a.GoogleEmail = existing.GoogleEmail
 		a.SMTPUser = existing.SMTPUser
 		a.IMAPUser = existing.IMAPUser
+		if a.FromEmail == "" {
+			a.FromEmail = existing.FromEmail
+		}
+		if a.SMTPPassword == "" {
+			a.SMTPPassword = existing.SMTPPassword
+		}
+		if a.SMTPHost == "" {
+			a.SMTPHost = existing.SMTPHost
+		}
+		if a.SMTPPort == "" {
+			a.SMTPPort = existing.SMTPPort
+		}
+		if a.IMAPHost == "" {
+			a.IMAPHost = existing.IMAPHost
+		}
+		if a.IMAPPort == "" {
+			a.IMAPPort = existing.IMAPPort
+		}
+		if a.IMAPPassword == "" {
+			a.IMAPPassword = existing.IMAPPassword
+		}
 		return UpdateSMTPAccount(a)
 	}
 	a.UserID = userID
