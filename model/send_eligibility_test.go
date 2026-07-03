@@ -1,6 +1,7 @@
 package model
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -70,8 +71,8 @@ func TestFilterSendEligibleCooldown(t *testing.T) {
 
 	_, err = db.Exec(`
 		INSERT INTO email_sends (user_id, contact_id, template_id, tracking_id, sent_at, delivery_status)
-		VALUES (?, ?, ?, 'track-1', ?, 'sent')
-	`, userID, cid, templateID, time.Now())
+		VALUES (?, ?, ?, ?, ?, 'sent')
+	`, userID, cid, templateID, fmt.Sprintf("track-elig-cooldown-%d", time.Now().UnixNano()), time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}

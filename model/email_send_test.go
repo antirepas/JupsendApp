@@ -1,6 +1,7 @@
 package model
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -22,7 +23,7 @@ func TestTryMarkEmailSendSending(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sendID, err := CreateQueuedEmailSend(userID, templateID, contactID, "track-1", 0, "", 0)
+	sendID, err := CreateQueuedEmailSend(userID, templateID, contactID, fmt.Sprintf("track-sending-%d", time.Now().UnixNano()), 0, "", 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +58,7 @@ func TestListEmailSendsNullSentAt(t *testing.T) {
 	if err := db.QueryRow(`INSERT INTO template (name, subject, body, user_id) VALUES ('t','s','b', ?) RETURNING id`, userID).Scan(&templateID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := CreateQueuedEmailSend(userID, templateID, contactID, "track-null", 0, "", 0); err != nil {
+	if _, err := CreateQueuedEmailSend(userID, templateID, contactID, fmt.Sprintf("track-null-%d", time.Now().UnixNano()), 0, "", 0); err != nil {
 		t.Fatal(err)
 	}
 
@@ -91,7 +92,7 @@ func TestReconcileEmailSendAlreadySent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sendID, err := CreateQueuedEmailSend(userID, templateID, contactID, "track-2", 0, "", 0)
+	sendID, err := CreateQueuedEmailSend(userID, templateID, contactID, fmt.Sprintf("track-reconcile-%d", time.Now().UnixNano()), 0, "", 0)
 	if err != nil {
 		t.Fatal(err)
 	}
