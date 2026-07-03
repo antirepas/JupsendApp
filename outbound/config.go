@@ -17,6 +17,7 @@ var (
 	WorkerInterval   = 3 * time.Second
 	IMAPPollInterval = 3 * time.Minute
 	BatchSize        = 10
+	MaxConcurrent    = 16
 	LockDuration     = 45 * time.Second
 	SMTPSendTimeout  = 30 * time.Second
 )
@@ -35,6 +36,11 @@ func LoadConfig() {
 	if v := os.Getenv("OUTBOUND_BATCH_SIZE"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			BatchSize = n
+		}
+	}
+	if v := os.Getenv("OUTBOUND_MAX_CONCURRENT"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			MaxConcurrent = n
 		}
 	}
 	if v := os.Getenv("OUTBOUND_LOCK_SECONDS"); v != "" {

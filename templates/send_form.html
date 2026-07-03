@@ -9,8 +9,14 @@
 <div class="max-w-6xl mx-auto p-8">
 <div class="mb-8">
     <h2 class="text-2xl font-bold text-slate-900">Send Email</h2>
-    <p class="text-slate-500 mt-1">Choose a template and recipient to send</p>
+    <p class="text-slate-500 mt-1">The email goes to the <strong>contact you pick below</strong>, not automatically to your inbox.</p>
 </div>
+
+{{if .gmailSendBlocked}}
+<div class="alert-error mb-6">{{.gmailSendBlocked}} <a href="/settings" class="underline font-medium">Open Settings</a></div>
+{{else if .gmailEmail}}
+<div class="alert-success mb-6">Connected Gmail: <strong>{{.gmailEmail}}</strong>. To receive the test yourself, keep that address selected as the contact. Also check your Gmail <strong>Sent</strong> folder after sending.</div>
+{{end}}
 
 {{if .error}}
 <div class="alert-error mb-6">{{.error}}</div>

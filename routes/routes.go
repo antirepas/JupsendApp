@@ -50,6 +50,8 @@ func RegisterRoutes(server *gin.Engine) {
 	)
 	server.Static("/static", "./static")
 
+	server.GET("/healthz", Healthz)
+
 	server.GET("/login", RedirectIfAuthed(), LoginPage)
 	server.POST("/login", RedirectIfAuthed(), LoginSubmit)
 	server.GET("/signup", RedirectIfAuthed(), SignupPage)
@@ -168,5 +170,11 @@ func RegisterRoutes(server *gin.Engine) {
 		api.POST("/send", Email_send)
 		api.GET("/send-jobs", GetSendJobsAPI)
 		RegisterWorkflowAPI(api)
+	}
+
+	ops := server.Group("/api/v1/ops")
+	ops.Use(RequireAuth(), RequireAdmin())
+	{
+		ops.GET("/queue", OpsQueue)
 	}
 }

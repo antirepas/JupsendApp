@@ -3,7 +3,6 @@ package outbound
 import (
 	"log"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"emailtracker.com/model"
@@ -11,9 +10,9 @@ import (
 )
 
 var (
-	workerMu    sync.Mutex
-	workerWake  = make(chan struct{}, 1)
-	workerBusy  int32
+	claimMu      sync.Mutex
+	workerWake   = make(chan struct{}, 1)
+	userMutexes  sync.Map
 )
 
 type claimedJob struct {
@@ -46,35 +45,96 @@ func StartWorker() {
 }
 
 func runWorkerBatch() {
-	if !atomic.CompareAndSwapInt32(&workerBusy, 0, 1) {
+	jobs := claimPendingJobs()
+	if len(jobs) == 0 {
 		return
 	}
-	defer atomic.StoreInt32(&workerBusy, 0)
 
-	jobs := claimPendingJobs()
+	sem := make(chan struct{}, MaxConcurrent)
+	var wg sync.WaitGroup
 	for _, item := range jobs {
-		if err := executeJob(item.job, item.account); err != nil {
-			log.Printf("outbound job %d failed: %v", item.job.ID, err)
-			handleJobFailure(item.job, err)
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(item claimedJob) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			runClaimedJob(item)
+		}(item)
+	}
+	wg.Wait()
+}
+
+func runClaimedJob(item claimedJob) {
+	mu := userMutex(item.job.UserID)
+	mu.Lock()
+	defer mu.Unlock()
+
+	account, err := resolveSendAccount(item.job.UserID)
+	if err != nil {
+		log.Printf("outbound job %d: %v", item.job.ID, err)
+		failJobConfiguration(item.job, err)
+		return
+	}
+
+	job, err := model.GetSendJob(item.job.ID)
+	if err != nil || job.Status != "processing" {
+		return
+	}
+
+	if !AccountCanSendNowForJob(account, job) {
+		delay := rateLimitDelayForJob(account, job)
+		if delay < time.Second {
+			delay = time.Second
 		}
+		_ = model.RescheduleSendJob(job.ID, time.Now().Add(delay), "rate limited: waiting for account capacity")
+		return
+	}
+
+	if err := executeJob(job, account); err != nil {
+		log.Printf("outbound job %d failed: %v", job.ID, err)
+		handleJobFailure(job, err)
 	}
 }
 
+func userMutex(userID int64) *sync.Mutex {
+	if v, ok := userMutexes.Load(userID); ok {
+		return v.(*sync.Mutex)
+	}
+	mu := &sync.Mutex{}
+	actual, _ := userMutexes.LoadOrStore(userID, mu)
+	return actual.(*sync.Mutex)
+}
+
 func claimPendingJobs() []claimedJob {
-	workerMu.Lock()
-	defer workerMu.Unlock()
+	claimMu.Lock()
+	defer claimMu.Unlock()
 
-	_ = model.ReleaseStaleJobs()
+	_ = model.ReleaseStaleJobsReconciled()
 
-	ids, err := model.PendingSendJobIDs(BatchSize)
+	limit := BatchSize * 4
+	if limit < MaxConcurrent {
+		limit = MaxConcurrent * 2
+	}
+	ids, err := model.PendingSendJobIDs(limit)
 	if err != nil || len(ids) == 0 {
 		return nil
 	}
 
+	seenUsers := make(map[int64]bool)
 	var claimed []claimedJob
 	for _, jobID := range ids {
+		if len(claimed) >= MaxConcurrent {
+			break
+		}
+
 		job, err := model.GetSendJob(jobID)
 		if err != nil || job.Status != "pending" {
+			continue
+		}
+		if job.UserID == 0 {
+			continue
+		}
+		if seenUsers[job.UserID] {
 			continue
 		}
 
@@ -111,7 +171,26 @@ func claimPendingJobs() []claimedJob {
 			continue
 		}
 
+		seenUsers[job.UserID] = true
 		claimed = append(claimed, claimedJob{job: job, account: account})
 	}
 	return claimed
+}
+
+// filterJobIDsOnePerUser keeps the first job ID for each user_id in candidate order.
+func filterJobIDsOnePerUser(ids []int64, lookup func(int64) (int64, error)) []int64 {
+	seen := make(map[int64]bool)
+	var out []int64
+	for _, id := range ids {
+		userID, err := lookup(id)
+		if err != nil || userID == 0 {
+			continue
+		}
+		if seen[userID] {
+			continue
+		}
+		seen[userID] = true
+		out = append(out, id)
+	}
+	return out
 }

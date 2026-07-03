@@ -27,16 +27,17 @@ func SettingsPage(c *gin.Context) {
 		DailySendCap:      user.GoalDailySendCap,
 	}, 0)
 	c.HTML(http.StatusOK, "settings.html", gin.H{
-		"title":          "Settings",
-		"active":         "settings",
-		"user":           user,
-		"account":        acc,
-		"goalsPreview":   goalsPreview,
-		"gmailConnected": acc.IsGoogleOAuth(),
+		"title":           "Settings",
+		"active":          "settings",
+		"user":            user,
+		"account":         acc,
+		"goalsPreview":    goalsPreview,
+		"gmailConnected":  acc.IsGoogleOAuth(),
 		"gmailConfigured": googleoauth.IsConfigured(),
-		"subscribed":     model.UserHasAppAccess(user),
-		"success":        c.Query("success"),
-		"error":          c.Query("error"),
+		"gmailError":      model.GmailSendBlocked(userID),
+		"subscribed":      model.UserHasAppAccess(user),
+		"success":         c.Query("success"),
+		"error":           c.Query("error"),
 	})
 }
 

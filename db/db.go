@@ -42,6 +42,13 @@ func Close() error {
 	return nil
 }
 
+func Ping() error {
+	if DB == nil {
+		return fmt.Errorf("database not initialized")
+	}
+	return DB.Ping()
+}
+
 func CreateTables() {
 	runSchema()
 }

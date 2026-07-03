@@ -83,3 +83,24 @@ func RequireSubscription() gin.HandlerFunc {
 		c.Abort()
 	}
 }
+
+func RequireAdmin() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userID := mustUserID(c)
+		if userID == 0 {
+			return
+		}
+		user, err := model.GetUserByID(userID)
+		if err != nil || !model.UserIsAdmin(user) {
+			if auth.IsAPI(c) {
+				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"message": "admin access required"})
+				return
+			}
+			c.Redirect(http.StatusFound, "/")
+			c.Abort()
+			return
+		}
+		c.Set("user", user)
+		c.Next()
+	}
+}

@@ -30,6 +30,12 @@ services:
       - .env
     environment:
       DATABASE_URL: postgres://emailtracker:emailtracker@postgres:5432/emailtracker?sslmode=disable
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
 
 volumes:
   pgdata:

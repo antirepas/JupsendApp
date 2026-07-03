@@ -18,6 +18,9 @@
 {{if .success}}
 <div class="alert-success mb-6">{{.success}}</div>
 {{end}}
+{{if .gmailSendBlocked}}
+<div class="alert-error mb-6">{{.gmailSendBlocked}} <a href="/settings" class="underline font-medium">Open Settings</a></div>
+{{end}}
 
 <div class="card overflow-hidden">
     {{if .sends}}
@@ -52,14 +55,19 @@
                 <td>
                     {{if eq .DeliveryStatus "queued"}}
                     <span class="badge badge-amber">Queued</span>
+                    {{else if eq .DeliveryStatus "sending"}}
+                    <span class="badge badge-amber">Sending</span>
                     {{else if eq .DeliveryStatus "failed"}}
-                    <span class="badge badge-gray">Failed</span>
+                    <span class="badge badge-gray" title="{{.DeliveryError}}">Failed</span>
+                    {{if .DeliveryError}}<p class="text-xs text-red-600 mt-1 max-w-xs truncate" title="{{.DeliveryError}}">{{.DeliveryError}}</p>{{end}}
                     {{else if gt .ClickCount 0}}
                     <span class="badge badge-green">Clicked</span>
                     {{else if gt .OpenCount 0}}
                     <span class="badge badge-blue">Opened</span>
-                    {{else}}
+                    {{else if eq .DeliveryStatus "sent"}}
                     <span class="badge badge-gray">Sent</span>
+                    {{else}}
+                    <span class="badge badge-amber">{{.DeliveryStatus}}</span>
                     {{end}}
                 </td>
                 <td class="text-right">

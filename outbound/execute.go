@@ -3,6 +3,7 @@ package outbound
 import (
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"emailtracker.com/model"
@@ -22,6 +23,35 @@ func executeJob(job model.SendJob, account model.SMTPAccount) error {
 	emailSendID := job.EmailSendID
 	if emailSendID == 0 {
 		return fmt.Errorf("missing email_send_id on job")
+	}
+
+	deliveryStatus, err := model.GetEmailSendDeliveryStatus(emailSendID)
+	if err != nil {
+		return fmt.Errorf("email send: %w", err)
+	}
+	switch deliveryStatus {
+	case "sent":
+		if err := model.ReconcileEmailSendAlreadySent(emailSendID, account.ID, job.ID); err != nil {
+			return err
+		}
+		onJobCompleted(job, emailSendID)
+		return nil
+	case "failed":
+		_ = model.FailSendJob(job.ID, "email send already failed", "failed")
+		return nil
+	case "queued":
+		ok, err := model.TryMarkEmailSendSending(emailSendID)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			_ = model.RescheduleSendJob(job.ID, time.Now().Add(15*time.Second), "waiting for send slot")
+			return nil
+		}
+	case "sending":
+		// Continue — this processing job owns the in-flight send.
+	default:
+		return fmt.Errorf("unexpected delivery_status %q", deliveryStatus)
 	}
 
 	detail, err := model.GetEmailSendDetail(emailSendID)
@@ -48,7 +78,7 @@ func executeJob(job model.SendJob, account model.SMTPAccount) error {
 		return fmt.Errorf("smtp account %d has no sender email configured", account.ID)
 	}
 	sender := util.NewEmailSender(account.SMTPHost, account.SMTPPort, account.SMTPUser, account.SMTPPassword, from)
-	messageID := fmt.Sprintf("<%s@emailtracker>", trackID)
+	messageID := fmt.Sprintf("<%s@%s>", trackID, messageIDDomain(from))
 	meta := util.SendMeta{
 		MessageID:          messageID,
 		EmailTrackerSendID: fmt.Sprintf("%d", emailSendID),
@@ -80,6 +110,13 @@ func executeJob(job model.SendJob, account model.SMTPAccount) error {
 	onJobCompleted(job, emailSendID)
 
 	return nil
+}
+
+func messageIDDomain(from string) string {
+	if i := strings.LastIndex(from, "@"); i >= 0 && i < len(from)-1 {
+		return from[i+1:]
+	}
+	return "localhost"
 }
 
 func recordSendContactEvent(contactID, campaignID, workflowInstanceID, emailSendID, templateID int64) {
@@ -162,4 +199,7 @@ func handleJobFailure(job model.SendJob, sendErr error) {
 	delay := BackoffForAttempt(attempts)
 	scheduled := time.Now().Add(delay)
 	_ = model.RetrySendJob(job.ID, attempts, scheduled, sendErr.Error())
+	if emailSendID > 0 {
+		_ = model.ResetEmailSendForRetry(emailSendID)
+	}
 }

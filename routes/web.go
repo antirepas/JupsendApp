@@ -422,10 +422,11 @@ func ListSendsPage(ctx *gin.Context) {
 		return
 	}
 	ctx.HTML(http.StatusOK, "sends_list.html", gin.H{
-		"title":   "Sends",
-		"active":  "sends",
-		"sends":   sends,
-		"success": ctx.Query("success"),
+		"title":            "Sends",
+		"active":           "sends",
+		"sends":            sends,
+		"success":          ctx.Query("success"),
+		"gmailSendBlocked": model.GmailSendBlocked(userID),
 	})
 }
 
@@ -440,12 +441,25 @@ func NewSendPage(ctx *gin.Context) {
 		log.Print(err)
 	}
 	preselectedContactID, _ := strconv.ParseInt(ctx.Query("contact_id"), 10, 64)
+
+	gmailEmail := ""
+	if acc, err := model.GetSMTPAccountByUserID(userID); err == nil && acc.IsGoogleOAuth() {
+		gmailEmail = acc.SenderEmail()
+		if preselectedContactID == 0 && gmailEmail != "" {
+			if id, err := model.FindOrCreateContact(userID, gmailEmail, nil); err == nil {
+				preselectedContactID = id
+			}
+		}
+	}
+
 	ctx.HTML(http.StatusOK, "send_form.html", gin.H{
 		"title":                "Send Email",
 		"active":               "sends",
 		"templates":            templates,
 		"contacts":             contacts,
 		"preselectedContactID": preselectedContactID,
+		"gmailEmail":           gmailEmail,
+		"gmailSendBlocked":     model.GmailSendBlocked(userID),
 		"error":                ctx.Query("error"),
 	})
 }

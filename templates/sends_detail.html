@@ -19,6 +19,10 @@
 
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
     <div class="stat-card">
+        <p class="stat-label">From (Gmail)</p>
+        <p class="text-lg font-semibold">{{if .send.SenderEmail}}{{.send.SenderEmail}}{{else}}<span class="text-slate-400">Not connected</span>{{end}}</p>
+    </div>
+    <div class="stat-card">
         <p class="stat-label">Recipient</p>
         <p class="text-lg font-semibold">{{.send.ContactEmail}}</p>
     </div>
@@ -26,20 +30,32 @@
         <p class="stat-label">Template</p>
         <p class="text-lg font-semibold">{{.send.TemplateName}}</p>
     </div>
-    <div class="stat-card">
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+    <div class="stat-card lg:col-span-3">
         <p class="stat-label">Delivery</p>
         {{if eq .send.DeliveryStatus "queued"}}
         <span class="badge badge-amber">Queued</span>
         <p class="text-xs text-slate-500 mt-2">Waiting to send. It has not reached the recipient yet.</p>
+        {{else if eq .send.DeliveryStatus "sending"}}
+        <span class="badge badge-amber">Sending</span>
+        <p class="text-xs text-slate-500 mt-2">Your mail server is accepting this message now.</p>
         {{else if eq .send.DeliveryStatus "failed"}}
         <span class="badge badge-gray">Failed</span>
         {{if .send.DeliveryError}}<p class="text-xs text-red-600 mt-2">{{.send.DeliveryError}}</p>{{end}}
-        {{else}}
+        {{else if eq .send.DeliveryStatus "sent"}}
         <span class="badge badge-gray">Sent</span>
         {{if not .send.SentAt.IsZero}}
         <p class="text-sm text-slate-600 mt-2">{{.send.SentAt.Format "Jan 2, 2006 15:04"}}</p>
         {{end}}
-        <p class="text-xs text-slate-500 mt-2">Accepted by your mail server and addressed to <strong>{{.send.ContactEmail}}</strong>. Check that inbox (and spam), not your own inbox unless you emailed yourself. A copy may appear in your Gmail <strong>Sent</strong> folder.</p>
+        <p class="text-xs text-slate-500 mt-2">Gmail accepted this message to <strong>{{.send.ContactEmail}}</strong>. If that is not your inbox, you will not see it there — check the recipient mailbox or your Gmail <strong>Sent</strong> folder ({{if .send.SenderEmail}}{{.send.SenderEmail}}{{else}}connected account{{end}}).</p>
+        {{else}}
+        <span class="badge badge-gray">{{.send.DeliveryStatus}}</span>
+        {{if .send.DeliveryError}}<p class="text-xs text-red-600 mt-2">{{.send.DeliveryError}}</p>{{end}}
+        {{end}}
+        {{if .send.JobStatus}}
+        <p class="text-xs text-slate-400 mt-2">Queue job: {{.send.JobStatus}}</p>
         {{end}}
     </div>
 </div>

@@ -2,6 +2,7 @@ package model
 
 import (
 	"database/sql"
+	"strings"
 	"time"
 
 	"emailtracker.com/db"
@@ -178,12 +179,131 @@ func RescheduleSendJob(jobID int64, scheduledAt time.Time, errMsg string) error 
 }
 
 func ReleaseStaleJobs() error {
+	return ReleaseStaleJobsReconciled()
+}
+
+const staleDeliveryUncertainMsg = "delivery uncertain after worker timeout — not retried"
+
+func ReleaseStaleJobsReconciled() error {
 	now := time.Now()
-	_, err := db.Exec(`
-		UPDATE send_jobs SET status='pending', lock_token=NULL, updated_at=?
-		WHERE status='processing' AND lock_expires_at IS NOT NULL AND lock_expires_at < ?
-	`, now, now)
-	return err
+
+	rows, err := db.Query(`
+		SELECT sj.id, COALESCE(es.smtp_account_id, 0), COALESCE(es.delivery_status, 'queued')
+		FROM send_jobs sj
+		LEFT JOIN email_sends es ON es.id = sj.email_send_id
+		WHERE sj.status = 'processing'
+			AND sj.lock_expires_at IS NOT NULL AND sj.lock_expires_at < ?
+	`, now)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var jobID, accountID int64
+		var deliveryStatus string
+		if err := rows.Scan(&jobID, &accountID, &deliveryStatus); err != nil {
+			return err
+		}
+		switch deliveryStatus {
+		case "sent":
+			_ = CompleteSendJob(jobID, accountID)
+		case "sending":
+			var sendID int64
+			_ = db.QueryRow(`SELECT email_send_id FROM send_jobs WHERE id = ?`, jobID).Scan(&sendID)
+			if sendID > 0 {
+				_ = MarkEmailSendFailed(sendID)
+			}
+			_ = FailSendJob(jobID, staleDeliveryUncertainMsg, "dead")
+		default:
+			_, _ = db.Exec(`
+				UPDATE send_jobs SET status='pending', last_error='worker timeout', lock_token=NULL, updated_at=?
+				WHERE id=? AND status='processing'
+			`, now, jobID)
+		}
+	}
+	return rows.Err()
+}
+
+type GlobalSendJobStats struct {
+	Pending                 int
+	Processing              int
+	Dead                    int
+	Failed                  int
+	OldestPendingAgeSeconds int64
+}
+
+func GetGlobalSendJobStats() (GlobalSendJobStats, error) {
+	var stats GlobalSendJobStats
+	row := db.QueryRow(`
+		SELECT
+			COALESCE(SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN status = 'processing' THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN status = 'dead' THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0)
+		FROM send_jobs
+	`)
+	err := row.Scan(&stats.Pending, &stats.Processing, &stats.Dead, &stats.Failed)
+	if err != nil {
+		return stats, err
+	}
+
+	var oldest sql.NullTime
+	err = db.QueryRow(`
+		SELECT MIN(scheduled_at) FROM send_jobs WHERE status = 'pending'
+	`).Scan(&oldest)
+	if err != nil && err != sql.ErrNoRows {
+		return stats, err
+	}
+	if oldest.Valid {
+		age := time.Since(oldest.Time)
+		if age > 0 {
+			stats.OldestPendingAgeSeconds = int64(age.Seconds())
+		}
+	}
+	return stats, nil
+}
+
+func GetSendJobStatsForUsers(userIDs []int64) (GlobalSendJobStats, error) {
+	var stats GlobalSendJobStats
+	if len(userIDs) == 0 {
+		return stats, nil
+	}
+	placeholders := make([]string, len(userIDs))
+	args := make([]interface{}, len(userIDs))
+	for i, id := range userIDs {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	inClause := strings.Join(placeholders, ",")
+	row := db.QueryRow(`
+		SELECT
+			COALESCE(SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN status = 'processing' THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN status = 'dead' THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0)
+		FROM send_jobs WHERE user_id IN (`+inClause+`)
+	`, args...)
+	err := row.Scan(&stats.Pending, &stats.Processing, &stats.Dead, &stats.Failed)
+	if err != nil {
+		return stats, err
+	}
+	oldestArgs := append([]interface{}{}, args...)
+	row = db.QueryRow(`
+		SELECT MIN(scheduled_at) FROM send_jobs
+		WHERE status = 'pending' AND scheduled_at <= CURRENT_TIMESTAMP AND user_id IN (`+inClause+`)
+	`, oldestArgs...)
+	var oldest sql.NullTime
+	if err := row.Scan(&oldest); err != nil && err != sql.ErrNoRows {
+		return stats, err
+	}
+	if oldest.Valid {
+		age := time.Since(oldest.Time)
+		if age > 0 {
+			stats.OldestPendingAgeSeconds = int64(age.Seconds())
+		}
+	}
+	return stats, nil
 }
 
 func PendingSendJobIDs(limit int) ([]int64, error) {

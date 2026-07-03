@@ -11,6 +11,7 @@
 <p class="text-gray-500 text-sm mb-6">Account, Gmail, billing, and send limits.</p>
 {{if .success}}<div class="alert-success mb-6">{{.success}}</div>{{end}}
 {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
+{{if .gmailError}}<div class="alert-error mb-6">{{.gmailError}} <a href="/settings/gmail/connect" class="underline font-medium">Reconnect Gmail</a></div>{{end}}
 {{if not .subscribed}}<div class="alert-error mb-6">Your subscription is inactive. <a href="/settings/billing" class="underline font-medium">Subscribe to unlock the app</a>.</div>{{end}}
 
 <div class="flex gap-4 mb-6 text-sm">

@@ -210,13 +210,16 @@ Requires session auth (login first) or use the same cookie from the browser.
 
 ## Outbound delivery
 
-Email sends go through a **SQLite-backed job queue** processed by a background worker (not inline SMTP).
+Email sends go through a **PostgreSQL-backed job queue** processed by a background worker (not inline SMTP). Delivery states: `queued` → `sending` → `sent` | `failed`.
+
+**Single-instance deployment:** per-minute rate limits are in-process memory. Run one app container for correct throttling until P1 adds shared rate-limit storage.
 
 ### Gmail OAuth profile per user
 
 - Connect Gmail under **Settings** (one sending profile per account).
 - Outbound worker uses XOAUTH2 for SMTP; IMAP bounce polling uses the same OAuth token.
 - Rate limits and warmup apply per profile.
+- If OAuth expires, Settings and the Sends page show a reconnect warning.
 
 ### Rate limits & warmup (defaults per account)
 
@@ -229,7 +232,7 @@ Email sends go through a **SQLite-backed job queue** processed by a background w
 
 ### Retries
 
-Transient SMTP errors are retried with backoff (1m, 5m, 15m, 60m), up to 5 attempts. Permanent errors (e.g. 535 auth, 550 invalid mailbox) fail immediately; some hard bounces auto-suppress the contact.
+Transient SMTP errors are retried with backoff (15s, 1m, 5m, 15m, 60m), up to 5 attempts. Permanent errors (e.g. 535 auth, 550 invalid mailbox) fail immediately; some hard bounces auto-suppress the contact. Stale worker locks reconcile against `email_sends` to avoid blind duplicate retries.
 
 ### Bounces (IMAP)
 
@@ -239,9 +242,21 @@ Your connected Gmail account is polled via IMAP for bounces (Mailer-Daemon, DSN,
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `OUTBOUND_WORKER_INTERVAL` | Worker tick (seconds) | `8` |
+| `OUTBOUND_WORKER_INTERVAL` | Worker tick (seconds) | `3` |
 | `IMAP_POLL_INTERVAL` | IMAP poll tick (seconds) | `180` |
-| `OUTBOUND_BATCH_SIZE` | Jobs claimed per tick | `10` |
+| `OUTBOUND_BATCH_SIZE` | Candidate jobs fetched per tick | `10` |
+| `OUTBOUND_MAX_CONCURRENT` | Max parallel account sends per tick | `16` |
+| `OUTBOUND_LOCK_SECONDS` | Processing lock duration | `45` |
+| `OUTBOUND_SMTP_TIMEOUT_SECONDS` | SMTP dial/send timeout | `30` |
+
+### Health & ops
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/healthz` | none | Liveness; `503` if database unreachable |
+| `GET` | `/api/v1/ops/queue` | admin | Global queue counts + oldest pending age |
+
+External monitors should alert when `dead > 0` or `oldest_pending_age_seconds > 600` on the ops endpoint.
 
 ### API
 
@@ -249,7 +264,26 @@ Your connected Gmail account is polled via IMAP for bounces (Mailer-Daemon, DSN,
 |--------|------|-------------|
 | `GET` | `/api/v1/send-jobs?campaign_id=` | Campaign queue counts (pending/sent/failed/dead) |
 
-## Docker
+## Load testing
+
+Measure outbound worker throughput with a local fake SMTP server (no Gmail):
+
+```bash
+go run ./cmd/loadtest -users 50 -jobs 20 -smtp-delay 30ms
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-users` | 10 | Simulated sender accounts |
+| `-jobs` | 20 | Enqueued sends per user |
+| `-smtp-delay` | 50ms | Simulated SMTP latency per message |
+| `-timeout` | 10m | Max wait for queue drain |
+| `-cleanup` | true | Delete loadtest data when done |
+
+Set `OUTBOUND_MAX_CONCURRENT` to tune parallelism. **Stop the main app** before running — both use the same job queue.
+
+Results show drain time and sends/sec. Real Gmail sending is much slower (~2/min per account by default).
+
 
 ```bash
 docker build -t email-tracker .

@@ -318,16 +318,18 @@ func getContactEngagement(campaignID int64, contactIDs []int64, hasB bool, templ
 		defer rows.Close()
 		for rows.Next() {
 			var row ContactEngagementRow
-			var sentAt time.Time
+			var sentAt sql.NullTime
 			var firstOpen, lastAct sql.NullTime
 			if err := rows.Scan(&row.SendID, &row.ContactID, &row.Variant, &sentAt,
 				&row.OpenCount, &row.ClickCount, &firstOpen, &lastAct); err != nil {
 				continue
 			}
-			row.SentAt = &sentAt
-			if firstOpen.Valid {
+			if sentAt.Valid {
+				row.SentAt = &sentAt.Time
+			}
+			if firstOpen.Valid && sentAt.Valid {
 				row.FirstOpenAt = &firstOpen.Time
-				mins := firstOpen.Time.Sub(sentAt).Minutes()
+				mins := firstOpen.Time.Sub(sentAt.Time).Minutes()
 				if mins >= 0 {
 					row.MinutesToFirstOpen = mins
 				}
