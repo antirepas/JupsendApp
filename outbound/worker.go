@@ -10,9 +10,9 @@ import (
 )
 
 var (
-	claimMu      sync.Mutex
-	workerWake   = make(chan struct{}, 1)
-	userMutexes  sync.Map
+	claimMu     sync.Mutex
+	workerWake  = make(chan struct{}, 1)
+	userMutexes sync.Map
 )
 
 type claimedJob struct {

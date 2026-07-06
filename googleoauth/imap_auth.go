@@ -1,6 +1,11 @@
 package googleoauth
 
-import "github.com/emersion/go-sasl"
+import (
+	"fmt"
+	"strings"
+
+	"github.com/emersion/go-sasl"
+)
 
 type imapXOAuth2Client struct {
 	email string
@@ -8,11 +13,14 @@ type imapXOAuth2Client struct {
 }
 
 func (c *imapXOAuth2Client) Start() (string, []byte, error) {
-	return "XOAUTH2", nil, nil
+	return "XOAUTH2", XOAuth2Payload(c.email, c.token), nil
 }
 
-func (c *imapXOAuth2Client) Next(_ []byte) ([]byte, error) {
-	return []byte(XOAuth2String(c.email, c.token)), nil
+func (c *imapXOAuth2Client) Next(challenge []byte) ([]byte, error) {
+	if len(challenge) > 0 {
+		return nil, fmt.Errorf("oauth2 auth rejected: %s", strings.TrimSpace(string(challenge)))
+	}
+	return nil, nil
 }
 
 func IMAPAuth(email, accessToken string) sasl.Client {

@@ -107,12 +107,30 @@ func EnqueueCampaignContacts(userID, campaignID int64, contactIDs []int64, templ
 		})
 		if err != nil {
 			result.Skipped++
-			if strings.Contains(err.Error(), "suppressed") {
-				result.SkippedReasons[model.SkipReasonSuppressed]++
+			reason := enqueueSkipReason(err)
+			if reason != "" {
+				result.SkippedReasons[reason]++
 			}
 			continue
 		}
 		result.Queued++
 	}
 	return result, nil
+}
+
+func enqueueSkipReason(err error) string {
+	if err == nil {
+		return ""
+	}
+	msg := strings.ToLower(err.Error())
+	switch {
+	case strings.Contains(msg, "suppressed"):
+		return model.SkipReasonSuppressed
+	case strings.Contains(msg, "invalid email"):
+		return model.SkipReasonInvalidEmail
+	case strings.Contains(msg, "gmail"), strings.Contains(msg, "connect gmail"), strings.Contains(msg, "sending profile"):
+		return "gmail_not_ready"
+	default:
+		return "enqueue_error"
+	}
 }

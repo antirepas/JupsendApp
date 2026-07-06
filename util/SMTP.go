@@ -75,6 +75,7 @@ func (s *EmailSender) sendWithAuth(to, subject, plainBody, htmlBody string, meta
 	headers := "From: " + fromHeader + "\r\n" +
 		"To: " + to + "\r\n" +
 		"Subject: " + subject + "\r\n" +
+		"Date: " + time.Now().Format(time.RFC1123Z) + "\r\n" +
 		"MIME-Version: 1.0\r\n" +
 		"Content-Type: multipart/alternative; boundary=\"" + boundary + "\"\r\n"
 

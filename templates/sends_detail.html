@@ -27,8 +27,8 @@
         <p class="text-lg font-semibold">{{.send.ContactEmail}}</p>
     </div>
     <div class="stat-card">
-        <p class="stat-label">Template</p>
-        <p class="text-lg font-semibold">{{.send.TemplateName}}</p>
+        <p class="stat-label">Subject</p>
+        <p class="text-lg font-semibold">{{if .send.TemplateSubject}}{{.send.TemplateSubject}}{{else}}<span class="text-slate-400">—</span>{{end}}</p>
     </div>
 </div>
 
@@ -49,7 +49,7 @@
         {{if not .send.SentAt.IsZero}}
         <p class="text-sm text-slate-600 mt-2">{{.send.SentAt.Format "Jan 2, 2006 15:04"}}</p>
         {{end}}
-        <p class="text-xs text-slate-500 mt-2">Gmail accepted this message to <strong>{{.send.ContactEmail}}</strong>. If that is not your inbox, you will not see it there — check the recipient mailbox or your Gmail <strong>Sent</strong> folder ({{if .send.SenderEmail}}{{.send.SenderEmail}}{{else}}connected account{{end}}).</p>
+        <p class="text-xs text-slate-500 mt-2">Gmail accepted this message to <strong>{{.send.ContactEmail}}</strong>. Search Gmail for subject <strong>{{.send.TemplateSubject}}</strong>. If that is not your inbox, check the recipient mailbox or your Gmail <strong>Sent</strong> folder ({{if .send.SenderEmail}}{{.send.SenderEmail}}{{else}}connected account{{end}}). Also check Spam and Promotions.</p>
         {{else}}
         <span class="badge badge-gray">{{.send.DeliveryStatus}}</span>
         {{if .send.DeliveryError}}<p class="text-xs text-red-600 mt-2">{{.send.DeliveryError}}</p>{{end}}

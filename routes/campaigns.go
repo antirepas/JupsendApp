@@ -421,7 +421,7 @@ func executeCampaignSend(userID, campaignID int64) (outbound.EnqueueResult, erro
 		if b != "" {
 			return result, fmt.Errorf("all contacts skipped (%s)", b)
 		}
-		return result, fmt.Errorf("all contacts skipped")
+		return result, fmt.Errorf("all contacts skipped (%d contacts)", len(contactIDs))
 	}
 
 	if err := model.MarkCampaignSending(campaignID); err != nil {

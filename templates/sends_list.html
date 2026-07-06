@@ -55,6 +55,7 @@
                 <td>
                     {{if eq .DeliveryStatus "queued"}}
                     <span class="badge badge-amber">Queued</span>
+                    {{if .DeliveryError}}<p class="text-xs text-amber-700 mt-1 max-w-xs" title="{{.DeliveryError}}">{{.DeliveryError}}</p>{{end}}
                     {{else if eq .DeliveryStatus "sending"}}
                     <span class="badge badge-amber">Sending</span>
                     {{else if eq .DeliveryStatus "failed"}}

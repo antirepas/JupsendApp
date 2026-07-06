@@ -72,10 +72,12 @@ func TokenSource(refreshToken string) oauth2.TokenSource {
 	return Config().TokenSource(context.Background(), &oauth2.Token{RefreshToken: plain})
 }
 
+func XOAuth2Payload(email, accessToken string) []byte {
+	return []byte("user=" + email + "\x01auth=Bearer " + accessToken + "\x01\x01")
+}
+
 func XOAuth2String(email, accessToken string) string {
-	return base64.StdEncoding.EncodeToString([]byte(
-		"user=" + email + "\x01auth=Bearer " + accessToken + "\x01\x01",
-	))
+	return base64.StdEncoding.EncodeToString(XOAuth2Payload(email, accessToken))
 }
 
 type xoauth2Auth struct {
@@ -84,12 +86,12 @@ type xoauth2Auth struct {
 }
 
 func (a *xoauth2Auth) Start(_ *smtp.ServerInfo) (string, []byte, error) {
-	return "XOAUTH2", []byte{}, nil
+	return "XOAUTH2", XOAuth2Payload(a.email, a.token), nil
 }
 
 func (a *xoauth2Auth) Next(fromServer []byte, more bool) ([]byte, error) {
 	if more {
-		return []byte(XOAuth2String(a.email, a.token)), nil
+		return nil, fmt.Errorf("oauth2 auth rejected: %s", strings.TrimSpace(string(fromServer)))
 	}
 	return nil, nil
 }

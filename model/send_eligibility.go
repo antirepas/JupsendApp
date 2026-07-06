@@ -71,8 +71,8 @@ func FilterSendEligible(userID, campaignID int64, contactIDs []int64) ([]int64, 
 		crows, err := db.Query(`
 			SELECT contact_id FROM email_sends
 			WHERE user_id = ? AND contact_id IS NOT NULL
-				AND delivery_status IN ('sent', 'queued')
-				AND COALESCE(sent_at, CURRENT_TIMESTAMP) > ?
+				AND delivery_status = 'sent'
+				AND sent_at IS NOT NULL AND sent_at > ?
 			GROUP BY contact_id
 		`, userID, cutoff)
 		if err != nil {
@@ -169,6 +169,12 @@ func FormatSkipBreakdown(counts map[string]int) string {
 	}
 	if n := counts[SkipReasonInvalidEmail]; n > 0 {
 		parts = append(parts, formatSkipN(n, "invalid email"))
+	}
+	if n := counts["gmail_not_ready"]; n > 0 {
+		parts = append(parts, formatSkipN(n, "Gmail not connected"))
+	}
+	if n := counts["enqueue_error"]; n > 0 {
+		parts = append(parts, formatSkipN(n, "enqueue error"))
 	}
 	if len(parts) == 0 {
 		return ""
