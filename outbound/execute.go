@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"emailtracker.com/googleoauth"
 	"emailtracker.com/model"
 	"emailtracker.com/util"
 )
@@ -84,19 +85,21 @@ func executeJob(job model.SendJob, account model.SMTPAccount) error {
 		EmailTrackerSendID: fmt.Sprintf("%d", emailSendID),
 		FromName:           account.FromName,
 	}
+	var sendErr error
 	if account.IsGoogleOAuth() {
 		token, err := model.GmailAccessToken(account)
 		if err != nil {
 			return fmt.Errorf("gmail oauth: %w", err)
 		}
-		err = sender.SendWithMetaOAuth(contact.Email, newSubject, plainBody, replacedLinksBody, meta, token)
+		raw := util.BuildMultipartEmail(from, account.FromName, contact.Email, newSubject, plainBody, replacedLinksBody, meta)
+		sendErr = googleoauth.SendRawMessage(token, raw)
 	} else {
-		err = sender.SendWithMeta(contact.Email, newSubject, plainBody, replacedLinksBody, meta)
+		sendErr = sender.SendWithMeta(contact.Email, newSubject, plainBody, replacedLinksBody, meta)
 	}
-	if err != nil {
-		return err
+	if sendErr != nil {
+		return sendErr
 	}
-	log.Printf("outbound: email_send=%d delivered to %s from %s", emailSendID, contact.Email, from)
+	log.Printf("outbound: email_send=%d delivered to %s from %s via %s", emailSendID, contact.Email, from, sendTransport(account))
 
 	if err := model.MarkEmailSendSent(emailSendID, account.ID, job.ID); err != nil {
 		return err
@@ -117,6 +120,13 @@ func messageIDDomain(from string) string {
 		return from[i+1:]
 	}
 	return "localhost"
+}
+
+func sendTransport(account model.SMTPAccount) string {
+	if account.IsGoogleOAuth() {
+		return "gmail-api"
+	}
+	return "smtp"
 }
 
 func recordSendContactEvent(contactID, campaignID, workflowInstanceID, emailSendID, templateID int64) {

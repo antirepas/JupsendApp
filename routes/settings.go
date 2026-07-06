@@ -122,7 +122,7 @@ func SettingsSMTPCheck(c *gin.Context) {
 		c.Redirect(http.StatusFound, "/settings?error="+url.QueryEscape("Gmail SMTP test failed: "+err.Error()))
 		return
 	}
-	c.Redirect(http.StatusFound, "/settings?success="+url.QueryEscape("Gmail SMTP OK from "+from+" (port 465). Sending should work."))
+	c.Redirect(http.StatusFound, "/settings?success="+url.QueryEscape("Gmail API OK for "+from+" — sending uses HTTPS (works on cloud servers)."))
 }
 
 func parseSendingSettingsForm(c *gin.Context) model.SMTPAccount {

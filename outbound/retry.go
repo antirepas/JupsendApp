@@ -31,7 +31,7 @@ func ClassifySMTPError(err error) ErrorClass {
 		"user unknown", "mailbox unavailable", "mailbox not found",
 		"no such user", "address rejected", "recipient address rejected",
 		"does not exist", "invalid mailbox",
-		"connect gmail", "gmail connection", "gmail not connected", "gmail oauth",
+		"gmail api", "gmail oauth", "gmail token", "gmail api unauthorized",
 		"no sending profile",
 	}
 	for _, p := range permanent {

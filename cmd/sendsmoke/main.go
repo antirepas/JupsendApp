@@ -10,6 +10,7 @@ import (
 
 	"emailtracker.com/config"
 	"emailtracker.com/db"
+	"emailtracker.com/googleoauth"
 	"emailtracker.com/model"
 	"emailtracker.com/util"
 )
@@ -42,16 +43,15 @@ func main() {
 	}
 
 	subject := fmt.Sprintf("jupsend smoke test %d", time.Now().Unix())
-	plain := "If you receive this, Gmail SMTP delivery is working from jupsend."
-	html := "<p>If you receive this, Gmail SMTP delivery is working from <strong>jupsend</strong>.</p>"
+	plain := "If you receive this, Gmail delivery is working from jupsend."
+	html := "<p>If you receive this, Gmail delivery is working from <strong>jupsend</strong>.</p>"
 
-	sender := util.NewEmailSender(acc.SMTPHost, acc.SMTPPort, acc.SMTPUser, acc.SMTPPassword, from)
 	meta := util.SendMeta{
 		MessageID: fmt.Sprintf("<smoke-%d@%s>", time.Now().UnixNano(), domain(from)),
 		FromName:  acc.FromName,
 	}
 
-	fmt.Printf("Sending from %s to %s via %s:%s (auth=%s)...\n", from, recipient, acc.SMTPHost, acc.SMTPPort, acc.AuthType)
+	fmt.Printf("Sending from %s to %s (auth=%s)...\n", from, recipient, acc.AuthType)
 
 	var sendErr error
 	if acc.IsGoogleOAuth() {
@@ -60,14 +60,16 @@ func main() {
 			log.Fatalf("oauth token: %v", err)
 		}
 		fmt.Println("OAuth access token refreshed OK")
-		sendErr = sender.SendWithMetaOAuth(recipient, subject, plain, html, meta, token)
+		raw := util.BuildMultipartEmail(from, acc.FromName, recipient, subject, plain, html, meta)
+		sendErr = googleoauth.SendRawMessage(token, raw)
 	} else {
+		sender := util.NewEmailSender(acc.SMTPHost, acc.SMTPPort, acc.SMTPUser, acc.SMTPPassword, from)
 		sendErr = sender.SendWithMeta(recipient, subject, plain, html, meta)
 	}
 	if sendErr != nil {
-		log.Fatalf("SMTP send failed: %v", sendErr)
+		log.Fatalf("send failed: %v", sendErr)
 	}
-	fmt.Println("SMTP accepted the message (250 OK).")
+	fmt.Println("Gmail accepted the message.")
 	fmt.Printf("Check inbox and Gmail Sent for: %s\n", recipient)
 	fmt.Printf("Subject: %s\n", subject)
 }

@@ -6,9 +6,9 @@ import (
 
 	"emailtracker.com/config"
 	"emailtracker.com/db"
+	"emailtracker.com/googleoauth"
 	"emailtracker.com/model"
 	"emailtracker.com/outbound"
-	"emailtracker.com/util"
 	"github.com/gin-gonic/gin"
 )
 
@@ -65,7 +65,7 @@ func runUserSMTPCheck(userID int64) (from string, err error) {
 	if err != nil {
 		return from, err
 	}
-	if err := util.ProbeSMTPAuth(acc.SMTPHost, acc.SMTPPort, from, token); err != nil {
+	if err := googleoauth.ProbeGmailAPI(token); err != nil {
 		return from, err
 	}
 	return from, nil

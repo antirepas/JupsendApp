@@ -68,43 +68,7 @@ func (s *EmailSender) SendWithMetaAuth(to, subject, plainBody, htmlBody string, 
 }
 
 func (s *EmailSender) sendWithAuth(to, subject, plainBody, htmlBody string, meta SendMeta, auth smtp.Auth) error {
-
-	boundary := "my-boundary-123"
-
-	fromHeader := s.Config.From
-	if meta.FromName != "" {
-		fromHeader = fmt.Sprintf("%s <%s>", meta.FromName, s.Config.From)
-	}
-
-	headers := "From: " + fromHeader + "\r\n" +
-		"To: " + to + "\r\n" +
-		"Subject: " + subject + "\r\n" +
-		"Date: " + time.Now().Format(time.RFC1123Z) + "\r\n" +
-		"MIME-Version: 1.0\r\n" +
-		"Content-Type: multipart/alternative; boundary=\"" + boundary + "\"\r\n"
-
-	if meta.MessageID != "" {
-		headers += "Message-ID: " + meta.MessageID + "\r\n"
-	}
-	if meta.EmailTrackerSendID != "" {
-		headers += "X-EmailTracker-Send-ID: " + meta.EmailTrackerSendID + "\r\n"
-	}
-
-	msg := []byte(headers +
-		"\r\n" +
-		"--" + boundary + "\r\n" +
-		"Content-Type: text/plain; charset=\"UTF-8\"\r\n" +
-		"Content-Transfer-Encoding: 8bit\r\n" +
-		"\r\n" +
-		plainBody + "\r\n" +
-		"--" + boundary + "\r\n" +
-		"Content-Type: text/html; charset=\"UTF-8\"\r\n" +
-		"Content-Transfer-Encoding: 8bit\r\n" +
-		"\r\n" +
-		htmlBody + "\r\n" +
-		"--" + boundary + "--\r\n",
-	)
-
+	msg := BuildMultipartEmail(s.Config.From, meta.FromName, to, subject, plainBody, htmlBody, meta)
 	return sendMailWithTimeout(s.Config.Host, s.Config.Port, auth, s.Config.From, []string{to}, msg)
 }
 

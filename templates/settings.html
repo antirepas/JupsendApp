@@ -79,8 +79,8 @@
     <h3 class="card-title">Gmail</h3>
     {{if .gmailConnected}}
     <p class="text-sm text-gray-600">Connected as <strong>{{.account.GoogleEmail}}</strong></p>
-    <p class="text-xs text-gray-500">Uses Gmail SMTP port 465 from the server (works on cloud hosts that block 587).</p>
-    <a href="/settings/smtp-check" class="btn-secondary inline-flex mt-2">Test Gmail SMTP from server</a>
+    <p class="text-xs text-gray-500">Sending uses the Gmail API over HTTPS (not SMTP) so it works on cloud servers that block ports 465/587.</p>
+    <a href="/settings/smtp-check" class="btn-secondary inline-flex mt-2">Test Gmail sending from server</a>
     <div class="grid grid-cols-2 gap-4">
         <div><label class="form-label">From name</label><input name="from_name" class="form-input" value="{{.account.FromName}}"></div>
     </div>
