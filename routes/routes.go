@@ -77,6 +77,7 @@ func RegisterRoutes(server *gin.Engine) {
 		settings.GET("/settings/gmail/connect", GmailConnect)
 		settings.GET("/settings/gmail/callback", GmailCallback)
 		settings.POST("/settings/gmail/disconnect", GmailDisconnect)
+		settings.GET("/settings/smtp-check", SettingsSMTPCheck)
 
 		settings.GET("/guides/gmail", GuideGmail)
 		settings.GET("/guides/templates", GuideTemplates)

@@ -3,6 +3,7 @@ package routes
 import (
 	"log"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -113,6 +114,15 @@ func UpdateSettings(c *gin.Context) {
 	_ = model.UpdateUserOutreachGoals(userID, meetings, replyPct, dailyCap)
 
 	c.Redirect(http.StatusFound, "/settings?success=Settings+saved")
+}
+
+func SettingsSMTPCheck(c *gin.Context) {
+	from, err := runUserSMTPCheck(mustUserID(c))
+	if err != nil {
+		c.Redirect(http.StatusFound, "/settings?error="+url.QueryEscape("Gmail SMTP test failed: "+err.Error()))
+		return
+	}
+	c.Redirect(http.StatusFound, "/settings?success="+url.QueryEscape("Gmail SMTP OK from "+from+" (port 465). Sending should work."))
 }
 
 func parseSendingSettingsForm(c *gin.Context) model.SMTPAccount {

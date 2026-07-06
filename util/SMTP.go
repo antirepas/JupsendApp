@@ -14,6 +14,9 @@ import (
 // DefaultSMTPSendTimeout caps how long a send may block the worker.
 var DefaultSMTPSendTimeout = 30 * time.Second
 
+// ProbeSMTPSendTimeout is used for interactive SMTP checks (must finish before reverse-proxy timeouts).
+var ProbeSMTPSendTimeout = 10 * time.Second
+
 type SMTPConfig struct {
 	Host     string
 	Port     string
@@ -108,20 +111,33 @@ func (s *EmailSender) sendWithAuth(to, subject, plainBody, htmlBody string, meta
 // ProbeSMTPAuth verifies OAuth SMTP login without sending a message.
 func ProbeSMTPAuth(host, port, from, accessToken string) error {
 	auth := googleoauth.SMTPAuth(from, accessToken)
-	return sendMailWithTimeout(host, port, auth, from, nil, nil)
+	return sendMailAttempt(host, port, auth, from, nil, nil, ProbeSMTPSendTimeout)
 }
 
 func sendMailWithTimeout(host, port string, auth smtp.Auth, from string, to []string, msg []byte) error {
-	err := sendMail(host, port, false, auth, from, to, msg)
+	return sendMailAttempt(host, port, auth, from, to, msg, DefaultSMTPSendTimeout)
+}
+
+func sendMailAttempt(host, port string, auth smtp.Auth, from string, to []string, msg []byte, timeout time.Duration) error {
+	if isGmailHost(host) {
+		if err := sendMail(host, "465", true, auth, from, to, msg, timeout); err == nil {
+			return nil
+		}
+	}
+	err := sendMail(host, port, false, auth, from, to, msg, timeout)
 	if err == nil {
 		return nil
 	}
 	if (port == "" || port == "587") && shouldTrySMTP465(err) {
-		if err465 := sendMail(host, "465", true, auth, from, to, msg); err465 == nil {
+		if err465 := sendMail(host, "465", true, auth, from, to, msg, timeout); err465 == nil {
 			return nil
 		}
 	}
 	return err
+}
+
+func isGmailHost(host string) bool {
+	return strings.EqualFold(host, "smtp.gmail.com")
 }
 
 func shouldTrySMTP465(err error) bool {
@@ -135,12 +151,15 @@ func shouldTrySMTP465(err error) bool {
 		strings.Contains(msg, "network is unreachable")
 }
 
-func sendMail(host, port string, implicitTLS bool, auth smtp.Auth, from string, to []string, msg []byte) error {
+func sendMail(host, port string, implicitTLS bool, auth smtp.Auth, from string, to []string, msg []byte, timeout time.Duration) error {
 	if port == "" {
 		port = "587"
 	}
+	if timeout <= 0 {
+		timeout = DefaultSMTPSendTimeout
+	}
 	addr := net.JoinHostPort(host, port)
-	dialer := &net.Dialer{Timeout: DefaultSMTPSendTimeout}
+	dialer := &net.Dialer{Timeout: timeout}
 
 	var conn net.Conn
 	var err error
@@ -154,7 +173,7 @@ func sendMail(host, port string, implicitTLS bool, auth smtp.Auth, from string, 
 	}
 	defer conn.Close()
 
-	_ = conn.SetDeadline(time.Now().Add(DefaultSMTPSendTimeout))
+	_ = conn.SetDeadline(time.Now().Add(timeout))
 
 	client, err := smtp.NewClient(conn, host)
 	if err != nil {

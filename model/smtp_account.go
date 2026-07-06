@@ -143,7 +143,7 @@ func CreateDefaultSMTPAccountForUser(userID int64) error {
 		INSERT INTO smtp_accounts (
 			user_id, name, smtp_host, smtp_port, smtp_user, smtp_password, from_email,
 			status, auth_type, warmup_started_at, sends_today_reset_at, created_at, updated_at
-		) VALUES (?, 'Gmail', 'smtp.gmail.com', '587', '', '', '', 'inactive', '', ?, ?, ?, ?)
+		) VALUES (?, 'Gmail', 'smtp.gmail.com', '465', '', '', '', 'inactive', '', ?, ?, ?, ?)
 	`, userID, now, now.Format("2006-01-02"), now, now)
 	return err
 }
@@ -154,8 +154,8 @@ func SaveGoogleOAuthAccount(userID int64, email, fromName, encRefresh, encAccess
 	warmup := 1
 	if err == nil {
 		_, err = db.Exec(`
-			UPDATE smtp_accounts SET
-				name='Gmail', smtp_host='smtp.gmail.com', smtp_port='587', smtp_user=?, smtp_password='',
+		UPDATE smtp_accounts SET
+			name='Gmail', smtp_host='smtp.gmail.com', smtp_port='465', smtp_user=?, smtp_password='',
 				from_email=?, from_name=?, imap_host='imap.gmail.com', imap_port='993', imap_user=?, imap_password='',
 				auth_type=?, oauth_refresh_token=?, oauth_access_token=?, oauth_expiry=?, google_email=?,
 				status='active', updated_at=?
@@ -169,7 +169,7 @@ func SaveGoogleOAuthAccount(userID int64, email, fromName, encRefresh, encAccess
 			imap_host, imap_port, imap_user, auth_type, oauth_refresh_token, oauth_access_token,
 			oauth_expiry, google_email, status, warmup_enabled, warmup_started_at, sends_today_reset_at,
 			created_at, updated_at
-		) VALUES (?, 'Gmail', 'smtp.gmail.com', '587', ?, ?, ?, 'imap.gmail.com', '993', ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)
+		) VALUES (?, 'Gmail', 'smtp.gmail.com', '465', ?, ?, ?, 'imap.gmail.com', '993', ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)
 	`, userID, email, email, fromName, email, AuthTypeGoogleOAuth, encRefresh, encAccess, expiry, email,
 		warmup, now, now.Format("2006-01-02"), now, now)
 	return err
