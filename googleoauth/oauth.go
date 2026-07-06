@@ -65,11 +65,34 @@ func fetchProfile(ctx context.Context, tok *oauth2.Token) (googleProfile, error)
 }
 
 func TokenSource(refreshToken string) oauth2.TokenSource {
-	plain, err := Decrypt(refreshToken)
+	plain, err := DecryptRefreshToken(refreshToken)
 	if err != nil {
-		plain = refreshToken
+		return oauth2.ReuseTokenSource(nil, &brokenTokenSource{err: err})
 	}
 	return Config().TokenSource(context.Background(), &oauth2.Token{RefreshToken: plain})
+}
+
+type brokenTokenSource struct {
+	err error
+}
+
+func (b *brokenTokenSource) Token() (*oauth2.Token, error) {
+	return nil, b.err
+}
+
+// DecryptRefreshToken decrypts a stored Gmail refresh token or returns a clear error.
+func DecryptRefreshToken(stored string) (string, error) {
+	if stored == "" {
+		return "", fmt.Errorf("gmail refresh token missing")
+	}
+	plain, err := Decrypt(stored)
+	if err != nil {
+		return "", fmt.Errorf("gmail token unreadable on this server — set TOKEN_ENCRYPTION_KEY and reconnect Gmail in Settings")
+	}
+	if plain == "" {
+		return "", fmt.Errorf("gmail refresh token missing")
+	}
+	return plain, nil
 }
 
 func XOAuth2Payload(email, accessToken string) []byte {

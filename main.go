@@ -19,6 +19,11 @@ func main() {
 	config.Load()
 	outbound.LoadConfig()
 
+	if config.TokenEncryptionKey == "" && config.SessionSecret == "" {
+		log.Println("WARNING: TOKEN_ENCRYPTION_KEY not set — Gmail OAuth tokens use a dev-only key; set the same key on production and reconnect Gmail")
+	}
+	log.Printf("emailtracker starting (version=%s)", config.BuildVersion)
+
 	secret := config.SessionSecret
 	if secret == "" {
 		b := make([]byte, 32)

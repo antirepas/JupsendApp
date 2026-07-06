@@ -26,6 +26,13 @@ func TestSMTPAuthInitialResponse(t *testing.T) {
 	}
 }
 
+func TestDecryptRefreshTokenRejectsBadCiphertext(t *testing.T) {
+	_, err := DecryptRefreshToken("not-valid-token")
+	if err == nil {
+		t.Fatal("expected error for undecryptable token")
+	}
+}
+
 func TestEncryptDecrypt(t *testing.T) {
 	enc, err := Encrypt("refresh-secret")
 	if err != nil {

@@ -13,14 +13,7 @@ import (
 )
 
 func deriveKey() []byte {
-	secret := config.TokenEncryptionKey
-	if secret == "" {
-		secret = config.SessionSecret
-	}
-	if secret == "" {
-		secret = "dev-insecure-token-key"
-	}
-	sum := sha256.Sum256([]byte(secret))
+	sum := sha256.Sum256([]byte(config.OAuthTokenKey()))
 	return sum[:]
 }
 

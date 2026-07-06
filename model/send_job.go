@@ -147,7 +147,7 @@ func ClaimSendJob(jobID int64, lockToken string, lockDuration time.Duration) (bo
 func CompleteSendJob(jobID int64, accountID int64) error {
 	now := time.Now()
 	_, err := db.Exec(`
-		UPDATE send_jobs SET status='sent', smtp_account_id=?, lock_token=NULL, updated_at=? WHERE id=?
+		UPDATE send_jobs SET status='sent', smtp_account_id=?, lock_token=NULL, last_error='', updated_at=? WHERE id=?
 	`, accountID, now, jobID)
 	return err
 }

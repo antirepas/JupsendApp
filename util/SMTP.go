@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/smtp"
+	"strings"
 	"time"
 
 	"emailtracker.com/googleoauth"
@@ -104,13 +105,52 @@ func (s *EmailSender) sendWithAuth(to, subject, plainBody, htmlBody string, meta
 	return sendMailWithTimeout(s.Config.Host, s.Config.Port, auth, s.Config.From, []string{to}, msg)
 }
 
+// ProbeSMTPAuth verifies OAuth SMTP login without sending a message.
+func ProbeSMTPAuth(host, port, from, accessToken string) error {
+	auth := googleoauth.SMTPAuth(from, accessToken)
+	return sendMailWithTimeout(host, port, auth, from, nil, nil)
+}
+
 func sendMailWithTimeout(host, port string, auth smtp.Auth, from string, to []string, msg []byte) error {
+	err := sendMail(host, port, false, auth, from, to, msg)
+	if err == nil {
+		return nil
+	}
+	if (port == "" || port == "587") && shouldTrySMTP465(err) {
+		if err465 := sendMail(host, "465", true, auth, from, to, msg); err465 == nil {
+			return nil
+		}
+	}
+	return err
+}
+
+func shouldTrySMTP465(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "timeout") ||
+		strings.Contains(msg, "connection refused") ||
+		strings.Contains(msg, "i/o timeout") ||
+		strings.Contains(msg, "network is unreachable")
+}
+
+func sendMail(host, port string, implicitTLS bool, auth smtp.Auth, from string, to []string, msg []byte) error {
+	if port == "" {
+		port = "587"
+	}
 	addr := net.JoinHostPort(host, port)
 	dialer := &net.Dialer{Timeout: DefaultSMTPSendTimeout}
 
-	conn, err := dialer.Dial("tcp", addr)
+	var conn net.Conn
+	var err error
+	if implicitTLS {
+		conn, err = tls.DialWithDialer(dialer, "tcp", addr, &tls.Config{ServerName: host})
+	} else {
+		conn, err = dialer.Dial("tcp", addr)
+	}
 	if err != nil {
-		return err
+		return fmt.Errorf("smtp dial %s: %w", addr, err)
 	}
 	defer conn.Close()
 
@@ -122,16 +162,22 @@ func sendMailWithTimeout(host, port string, auth smtp.Auth, from string, to []st
 	}
 	defer client.Close()
 
-	if ok, _ := client.Extension("STARTTLS"); ok {
-		if err := client.StartTLS(&tls.Config{ServerName: host}); err != nil {
-			return err
+	if !implicitTLS {
+		if ok, _ := client.Extension("STARTTLS"); ok {
+			if err := client.StartTLS(&tls.Config{ServerName: host}); err != nil {
+				return err
+			}
 		}
 	}
 
 	if auth != nil {
 		if err := client.Auth(auth); err != nil {
-			return err
+			return fmt.Errorf("smtp auth: %w", err)
 		}
+	}
+
+	if msg == nil {
+		return client.Quit()
 	}
 
 	if err := client.Mail(from); err != nil {

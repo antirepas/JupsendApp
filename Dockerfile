@@ -13,6 +13,8 @@ RUN npm run build:css
 
 FROM golang:1.25 AS builder
 
+ARG BUILD_VERSION=dev
+
 WORKDIR /app
 
 COPY go.mod go.sum ./
@@ -21,7 +23,8 @@ RUN go mod download
 COPY . .
 COPY --from=assets /app/static/css/tailwind.css ./static/css/tailwind.css
 
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /emailtracker .
+ARG BUILD_VERSION=dev
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w -X emailtracker.com/config.BuildVersion=${BUILD_VERSION}" -o /emailtracker .
 
 FROM alpine:3.21
 

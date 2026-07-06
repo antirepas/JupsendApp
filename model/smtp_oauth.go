@@ -19,6 +19,9 @@ func GmailAccessToken(acc SMTPAccount) (string, error) {
 			return plain, nil
 		}
 	}
+	if _, err := googleoauth.DecryptRefreshToken(acc.OAuthRefreshToken); err != nil {
+		return "", err
+	}
 	tok, err := googleoauth.TokenSource(acc.OAuthRefreshToken).Token()
 	if err != nil {
 		return "", err

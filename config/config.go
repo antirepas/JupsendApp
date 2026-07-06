@@ -104,3 +104,15 @@ func envOr(key, fallback string) string {
 	}
 	return fallback
 }
+
+// OAuthTokenKey returns the secret used to encrypt Gmail OAuth tokens at rest.
+// Set TOKEN_ENCRYPTION_KEY to the same value on every app instance (local + production).
+func OAuthTokenKey() string {
+	if TokenEncryptionKey != "" {
+		return TokenEncryptionKey
+	}
+	if SessionSecret != "" {
+		return SessionSecret
+	}
+	return "dev-insecure-token-key"
+}

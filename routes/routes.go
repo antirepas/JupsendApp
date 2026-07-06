@@ -169,6 +169,7 @@ func RegisterRoutes(server *gin.Engine) {
 		api.POST("/contact", SaveContacts)
 		api.POST("/send", Email_send)
 		api.GET("/send-jobs", GetSendJobsAPI)
+		api.GET("/smtp-check", OpsSMTPCheck)
 		RegisterWorkflowAPI(api)
 	}
 
