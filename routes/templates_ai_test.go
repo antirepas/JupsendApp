@@ -4,12 +4,17 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"emailtracker.com/ai"
+	"emailtracker.com/auth"
 	"emailtracker.com/config"
+	"emailtracker.com/db"
+	"emailtracker.com/model"
 	"github.com/gin-gonic/gin"
 )
 
@@ -115,6 +120,20 @@ func TestTemplateAIRewriteWhenAIDisabled(t *testing.T) {
 }
 
 func TestTemplateAIRewriteSuccess(t *testing.T) {
+	db.OpenTestDB(t)
+	email := fmt.Sprintf("ai-rewrite-%d@test.com", time.Now().UnixNano())
+	hash, err := auth.HashPassword("password123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	userID, err := model.CreateUser(email, hash, "http://localhost")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := model.ApplyPlanLimitsToUser(userID, model.PlanTierFree); err != nil {
+		t.Fatal(err)
+	}
+
 	gin.SetMode(gin.TestMode)
 	config.OpenAIAPIKey = "test-key"
 	orig := templateAICompleter
@@ -134,7 +153,7 @@ func TestTemplateAIRewriteSuccess(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/templates/ai/rewrite", bytes.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
 	ctx.Request = req
-	setTestUser(ctx, 1)
+	setTestUser(ctx, userID)
 
 	TemplateAIRewrite(ctx)
 	if w.Code != http.StatusOK {

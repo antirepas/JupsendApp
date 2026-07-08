@@ -166,7 +166,8 @@ func setupPredicateFixture(t *testing.T) (userID, instID, sendID int64) {
 	t.Helper()
 	db.OpenTestDB(t)
 	var err error
-	userID, err = model.CreateUser("pred-wait@test.com", "hash", "http://localhost")
+	email := fmt.Sprintf("pred-wait-%d@test.com", time.Now().UnixNano())
+	userID, err = model.CreateUser(email, "hash", "http://localhost")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -186,7 +187,7 @@ func setupPredicateFixture(t *testing.T) (userID, instID, sendID int64) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c := model.Contact{Email: "pred-wait@test.com"}
+	c := model.Contact{Email: email}
 	contactID, err := c.SaveContact(userID, nil)
 	if err != nil {
 		t.Fatal(err)

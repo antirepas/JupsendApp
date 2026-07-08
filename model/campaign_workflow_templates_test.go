@@ -92,8 +92,8 @@ func TestValidateCampaignWorkflowReadyWorkflow(t *testing.T) {
 	_ = SaveWorkflowGraph(vid, GraphSaveInput{
 		Nodes: []WorkflowNodeInput{
 			{NodeKey: "start", NodeType: "trigger_campaign_started", Label: "Start", ConfigJSON: "{}"},
-			{NodeKey: "send1", NodeType: "action_send_email", Label: "Email 1", ConfigJSON: `{"template_id":1}`},
-			{NodeKey: "send2", NodeType: "action_send_email", Label: "Email 2", ConfigJSON: `{"template_id":2}`},
+			{NodeKey: "send1", NodeType: "action_send_email", Label: "Email 1", ConfigJSON: `{}`},
+			{NodeKey: "send2", NodeType: "action_send_email", Label: "Email 2", ConfigJSON: `{}`},
 			{NodeKey: "end", NodeType: "action_end", Label: "End", ConfigJSON: "{}"},
 		},
 		Edges: []WorkflowEdgeInput{

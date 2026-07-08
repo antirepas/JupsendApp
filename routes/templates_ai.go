@@ -53,7 +53,8 @@ func requireAI(ctx *gin.Context) (int64, bool) {
 }
 
 func TemplateAIRewrite(ctx *gin.Context) {
-	if _, ok := requireAI(ctx); !ok {
+	if !ai.Enabled() {
+		ctx.JSON(http.StatusServiceUnavailable, gin.H{"error": "AI not configured"})
 		return
 	}
 	var req templateAIRewriteRequest
@@ -75,6 +76,9 @@ func TemplateAIRewrite(ctx *gin.Context) {
 	case "shorten", "soften", "direct", "grammar":
 	default:
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid action"})
+		return
+	}
+	if _, ok := requireAI(ctx); !ok {
 		return
 	}
 
