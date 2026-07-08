@@ -196,7 +196,8 @@ func setupPredicateFixture(t *testing.T) (userID, instID, sendID int64) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sendID, err = model.CreateQueuedEmailSend(userID, templateID, contactID, "track-wait", campaignID, "", instID)
+	trackID := fmt.Sprintf("track-wait-%d", time.Now().UnixNano())
+	sendID, err = model.CreateQueuedEmailSend(userID, templateID, contactID, trackID, campaignID, "", instID)
 	if err != nil {
 		t.Fatal(err)
 	}
