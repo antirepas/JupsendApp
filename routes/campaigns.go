@@ -70,20 +70,48 @@ func CreateCampaign(ctx *gin.Context) {
 	}
 	workflowVersionID, _ := strconv.ParseInt(ctx.PostForm("workflow_version_id"), 10, 64)
 
-	templateAID, err := strconv.ParseInt(ctx.PostForm("template_a_id"), 10, 64)
-	if executionMode == "bulk" && err != nil {
-		ctx.Redirect(http.StatusFound, "/campaigns/new?error=Select+template+A")
-		return
-	}
-	if executionMode == "workflow" && workflowVersionID == 0 {
-		ctx.Redirect(http.StatusFound, "/campaigns/new?error=Select+a+published+workflow")
-		return
-	}
+	templateAID, _ := strconv.ParseInt(ctx.PostForm("template_a_id"), 10, 64)
 	templateBID, _ := strconv.ParseInt(ctx.PostForm("template_b_id"), 10, 64)
 	experimentVariable := strings.TrimSpace(ctx.PostForm("experiment_variable"))
 	experimentHypothesis := strings.TrimSpace(ctx.PostForm("experiment_hypothesis"))
-	if executionMode == "workflow" {
-		templateAID = 1 // placeholder for NOT NULL constraint; unused in workflow mode
+
+	switch executionMode {
+	case "bulk":
+		if templateAID <= 0 {
+			ctx.Redirect(http.StatusFound, "/campaigns/new?error=Select+template+A")
+			return
+		}
+	case "workflow", "workflow_ab":
+		if workflowVersionID == 0 {
+			ctx.Redirect(http.StatusFound, "/campaigns/new?error=Select+a+published+workflow")
+			return
+		}
+		if executionMode == "workflow_ab" {
+			if templateAID <= 0 || templateBID <= 0 {
+				ctx.Redirect(http.StatusFound, "/campaigns/new?error=Select+template+A+and+B+for+hybrid+A%2FB")
+				return
+			}
+			if experimentHypothesis == "" {
+				ctx.Redirect(http.StatusFound, "/campaigns/new?error=Enter+a+hypothesis+for+the+A%2FB+test")
+				return
+			}
+		} else {
+			// Placeholder for NOT NULL; follow-up templates are mapped on the manage page.
+			if templateAID <= 0 {
+				var err error
+				templateAID, err = model.FirstTemplateIDForUser(userID)
+				if err != nil {
+					ctx.Redirect(http.StatusFound, "/campaigns/new?error=Create+at+least+one+template+first")
+					return
+				}
+			}
+		}
+	default:
+		executionMode = "bulk"
+		if templateAID <= 0 {
+			ctx.Redirect(http.StatusFound, "/campaigns/new?error=Select+template+A")
+			return
+		}
 	}
 
 	id, err := model.CreateCampaign(userID, name, templateAID, templateBID, executionMode, workflowVersionID, experimentVariable, experimentHypothesis)
@@ -92,7 +120,80 @@ func CreateCampaign(ctx *gin.Context) {
 		ctx.Redirect(http.StatusFound, "/campaigns/new?error=Failed+to+create+campaign")
 		return
 	}
+
 	ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(id, 10)+"?success=Campaign+created")
+}
+
+func parseStepTemplatesFromForm(ctx *gin.Context) map[string]int64 {
+	out := make(map[string]int64)
+	for key, values := range ctx.Request.PostForm {
+		if !strings.HasPrefix(key, "step_template[") || !strings.HasSuffix(key, "]") || len(values) == 0 {
+			continue
+		}
+		nodeKey := key[len("step_template[") : len(key)-1]
+		tid, err := strconv.ParseInt(values[0], 10, 64)
+		if err != nil || tid <= 0 {
+			continue
+		}
+		out[nodeKey] = tid
+	}
+	return out
+}
+
+func SaveCampaignWorkflowTemplatesWeb(ctx *gin.Context) {
+	userID := mustUserID(ctx)
+	campaignID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
+	if err != nil {
+		ctx.Redirect(http.StatusFound, "/campaigns?error=Invalid+campaign")
+		return
+	}
+	campaign, err := model.GetCampaignForUser(campaignID, userID)
+	if err != nil {
+		ctx.Redirect(http.StatusFound, "/campaigns?error=Campaign+not+found")
+		return
+	}
+	if campaign.Status == "sent" || campaign.Status == "sending" {
+		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error=Cannot+edit+templates+after+launch")
+		return
+	}
+	if campaign.ExecutionMode != "workflow" && campaign.ExecutionMode != "workflow_ab" {
+		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error=Not+a+workflow+campaign")
+		return
+	}
+
+	stepMappings := parseStepTemplatesFromForm(ctx)
+	stepMappings = model.MergeWorkflowTemplateMappings(campaignID, stepMappings)
+	model.EnrichWorkflowTemplateMappings(campaign.WorkflowVersionID, stepMappings)
+
+	firstKey, err := model.GetFirstSendNodeKey(campaign.WorkflowVersionID)
+	if err != nil {
+		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error=Workflow+has+no+send+steps")
+		return
+	}
+
+	if campaign.ExecutionMode == "workflow_ab" {
+		delete(stepMappings, firstKey)
+	}
+
+	if err := model.ValidateWorkflowStepTemplateMappings(campaign, stepMappings); err != nil {
+		log.Print(err)
+		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error="+url.QueryEscape(err.Error()))
+		return
+	}
+
+	if campaign.ExecutionMode == "workflow" {
+		if err := model.UpdateCampaignTemplates(campaignID, userID, stepMappings[firstKey], 0); err != nil {
+			log.Print(err)
+		}
+	}
+
+	if err := model.SaveCampaignWorkflowTemplates(campaignID, stepMappings); err != nil {
+		log.Print(err)
+		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error=Failed+to+save+template+mappings")
+		return
+	}
+
+	ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?success=Workflow+templates+updated")
 }
 
 func CampaignDetailPage(ctx *gin.Context) {
@@ -110,12 +211,14 @@ func CampaignDetailPage(ctx *gin.Context) {
 		return
 	}
 
-	campaign, _ := model.GetCampaignForUser(id, userID)
-	contactIDs, _ := model.GetCampaignContactIDs(id)
-	allContacts, _ := model.ListContacts(userID)
-	contactLists, _ := model.ListContactLists(userID)
+	pageExtras, err := loadCampaignDetailPageData(userID, detail)
+	if err != nil {
+		log.Print(err)
+		ctx.HTML(http.StatusInternalServerError, "error.html", gin.H{"title": "Error", "active": "campaigns", "error": "Failed to load campaign"})
+		return
+	}
 
-	isWorkflow := campaign.ExecutionMode == "workflow" && campaign.WorkflowVersionID > 0
+	isWorkflow := (detail.ExecutionMode == "workflow" || detail.ExecutionMode == "workflow_ab") && detail.WorkflowVersionID > 0
 
 	var scheduledAtLocal string
 	if detail.ScheduledAt != nil {
@@ -126,9 +229,9 @@ func CampaignDetailPage(ctx *gin.Context) {
 		"title":            detail.Name,
 		"active":           "campaigns",
 		"campaign":         detail,
-		"allContacts":      allContacts,
-		"contactLists":     contactLists,
-		"linkedListID":     campaign.ContactListID,
+		"allContacts":      pageExtras.AllContacts,
+		"contactLists":     pageExtras.ContactLists,
+		"linkedListID":     detail.ContactListID,
 		"scheduledAtLocal": scheduledAtLocal,
 		"success":          ctx.Query("success"),
 		"error":            ctx.Query("error"),
@@ -136,25 +239,37 @@ func CampaignDetailPage(ctx *gin.Context) {
 	}
 
 	if isWorkflow {
-		wfInfo, _ := model.GetWorkflowForVersion(campaign.WorkflowVersionID)
-		wfSteps, _ := model.GetCampaignWorkflowStepDisplay(campaign.WorkflowVersionID)
-		pageData["workflowInfo"] = wfInfo
-		pageData["workflowSteps"] = wfSteps
-		pageData["workflowContactRows"] = buildWorkflowCampaignContactRows(campaign, userID, contactIDs)
-	} else {
-		mergedVars, _ := model.MergeTemplateVariables(userID, []int64{detail.TemplateAID, detail.TemplateBID})
-		templateA := templatePreviewView(userID, detail.TemplateAID)
-		var templateB TemplatePreviewView
-		hasB := detail.TemplateBID > 0
-		if hasB {
-			templateB = templatePreviewView(userID, detail.TemplateBID)
+		canEditMappings := detail.DisplayStatus != "sent" && detail.DisplayStatus != "sending"
+		pageData["workflowInfo"] = pageExtras.WorkflowInfo
+		pageData["workflowGraphTree"] = wrapWorkflowGraphNode(
+			pageExtras.WorkflowGraphTree,
+			canEditMappings,
+			pageExtras.Templates,
+			pageExtras.StepMappings,
+			detail.TemplateAID,
+			detail.TemplateBID,
+		)
+		pageData["workflowStepMappings"] = pageExtras.StepMappings
+		pageData["firstSendNodeKey"] = pageExtras.FirstSendNodeKey
+		pageData["templates"] = pageExtras.Templates
+		pageData["canEditMappings"] = canEditMappings
+		pageData["isWorkflowAB"] = detail.ExecutionMode == "workflow_ab"
+		pageData["experimentVariable"] = detail.ExperimentVariable
+		pageData["experimentHypothesis"] = detail.ExperimentHypothesis
+		pageData["experimentVariableLabel"] = experimentVariableLabel(detail.ExperimentVariable)
+		pageData["workflowContactRows"] = pageExtras.WorkflowContactRows
+		if detail.ExecutionMode == "workflow_ab" {
+			pageData["templateA"] = pageExtras.TemplateA
+			pageData["templateB"] = pageExtras.TemplateB
+			pageData["hasB"] = pageExtras.HasB
 		}
-		pageData["variables"] = strings.Join(mergedVars, ",")
-		pageData["templateA"] = templateA
-		pageData["templateB"] = templateB
-		pageData["hasB"] = hasB
-		pageData["contactRows"] = buildCampaignContactRows(campaign, userID, contactIDs, detail.TemplateAName, detail.TemplateBName)
-		pageData["mergedVars"] = mergedVars
+	} else {
+		pageData["variables"] = campaignDetailVariablesString(pageExtras.MergedVars)
+		pageData["templateA"] = pageExtras.TemplateA
+		pageData["templateB"] = pageExtras.TemplateB
+		pageData["hasB"] = pageExtras.HasB
+		pageData["contactRows"] = pageExtras.ContactRows
+		pageData["mergedVars"] = pageExtras.MergedVars
 	}
 
 	ctx.HTML(http.StatusOK, "campaigns_detail.html", pageData)
@@ -175,8 +290,23 @@ func CampaignAnalyticsPage(ctx *gin.Context) {
 		return
 	}
 
-	if campaign.ExecutionMode == "workflow" && campaign.WorkflowVersionID > 0 {
-		analytics, err := model.GetCampaignWorkflowAnalytics(id, userID)
+	if (campaign.ExecutionMode == "workflow" || campaign.ExecutionMode == "workflow_ab") && campaign.WorkflowVersionID > 0 {
+		if campaign.ExecutionMode == "workflow_ab" && campaign.TemplateBID > 0 {
+			analytics, err := model.GetCampaignHybridAnalyticsFor(campaign, userID)
+			if err != nil {
+				log.Print(err)
+				ctx.HTML(http.StatusNotFound, "error.html", gin.H{"title": "Error", "active": "campaigns", "error": "Campaign not found"})
+				return
+			}
+			ctx.HTML(http.StatusOK, "campaigns_hybrid_analytics.html", gin.H{
+				"title":                    analytics.CampaignName + " Analytics",
+				"active":                   "campaigns",
+				"analytics":                analytics,
+				"experimentVariableLabel":  experimentVariableLabel(campaign.ExperimentVariable),
+			})
+			return
+		}
+		analytics, err := model.GetCampaignWorkflowAnalyticsFor(campaign, userID)
 		if err != nil {
 			log.Print(err)
 			ctx.HTML(http.StatusNotFound, "error.html", gin.H{"title": "Error", "active": "campaigns", "error": "Campaign not found"})
@@ -190,7 +320,7 @@ func CampaignAnalyticsPage(ctx *gin.Context) {
 		return
 	}
 
-	analytics, err := model.GetCampaignAnalytics(id, userID)
+	analytics, err := model.GetCampaignAnalyticsFor(campaign, userID)
 	if err != nil {
 		log.Print(err)
 		ctx.HTML(http.StatusNotFound, "error.html", gin.H{"title": "Error", "active": "campaigns", "error": "Campaign not found"})
@@ -438,7 +568,7 @@ func launchCampaign(userID, campaignID int64) (outbound.EnqueueResult, error) {
 	if campaign.Status == "sent" {
 		return outbound.EnqueueResult{}, fmt.Errorf("campaign already sent")
 	}
-	if campaign.ExecutionMode == "workflow" && campaign.WorkflowVersionID > 0 {
+	if (campaign.ExecutionMode == "workflow" || campaign.ExecutionMode == "workflow_ab") && campaign.WorkflowVersionID > 0 {
 		sent, failed, err := startWorkflowCampaign(campaignID, campaign)
 		return outbound.EnqueueResult{Queued: sent, Skipped: failed}, err
 	}
@@ -446,6 +576,12 @@ func launchCampaign(userID, campaignID int64) (outbound.EnqueueResult, error) {
 }
 
 func startWorkflowCampaign(campaignID int64, campaign model.Campaign) (sent, failed int, err error) {
+	if campaign.ExecutionMode == "workflow" || campaign.ExecutionMode == "workflow_ab" {
+		if err := model.ValidateCampaignWorkflowReady(campaign); err != nil {
+			return 0, 0, err
+		}
+	}
+
 	contactIDs, err := model.GetCampaignContactIDs(campaignID)
 	if err != nil || len(contactIDs) == 0 {
 		return 0, 0, fmt.Errorf("no contacts in campaign")
@@ -456,7 +592,7 @@ func startWorkflowCampaign(campaignID int64, campaign model.Campaign) (sent, fai
 		return 0, 0, fmt.Errorf("workflow has no entry node")
 	}
 
-	hasB := campaign.TemplateBID > 0
+	hasAB := campaign.ExecutionMode == "workflow_ab" && campaign.TemplateBID > 0
 	for i, cid := range contactIDs {
 		instID, err := model.CreateWorkflowInstance(campaign.WorkflowVersionID, cid, campaignID, entry)
 		if err != nil {
@@ -466,10 +602,12 @@ func startWorkflowCampaign(campaignID int64, campaign model.Campaign) (sent, fai
 		inst, _ := model.GetWorkflowInstance(instID)
 		ctxMap := model.GetInstanceContext(&inst)
 		variant := "A"
-		if hasB && i%2 == 1 {
+		if hasAB && i%2 == 1 {
 			variant = "B"
 		}
-		ctxMap["variant"] = variant
+		if hasAB {
+			ctxMap["variant"] = variant
+		}
 		_ = model.SetInstanceContext(&inst, ctxMap)
 		_ = model.UpdateInstanceState(inst)
 
@@ -562,7 +700,7 @@ func PromoteCampaignWinner(ctx *gin.Context) {
 		return
 	}
 
-	winner, _ := model.CampaignABWinner(id)
+	winner, _ := model.CampaignABWinnerFor(campaign)
 	var templateID int64
 	switch winner {
 	case "A":

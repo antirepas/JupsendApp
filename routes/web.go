@@ -11,6 +11,7 @@ import (
 
 	"emailtracker.com/ai"
 	"emailtracker.com/model"
+	"emailtracker.com/outbound"
 	"emailtracker.com/util"
 	"github.com/gin-gonic/gin"
 )
@@ -73,9 +74,14 @@ func Dashboard(ctx *gin.Context) {
 	}()
 	go func() {
 		defer wg.Done()
-		acc, _ = model.GetSMTPAccountByUserID(userID)
+		var err error
+		acc, err = model.GetSMTPAccountByUserID(userID)
+		_ = err
 	}()
 	wg.Wait()
+
+	hasSMTPAccount := acc.ID > 0
+	warmupProgress := outbound.ComputeWarmupProgress(acc, hasSMTPAccount)
 
 	if statsErr != nil {
 		log.Print(statsErr)
@@ -104,8 +110,9 @@ func Dashboard(ctx *gin.Context) {
 		"benchmark":       benchmark,
 		"recentExperiments": recentExperiments,
 		"goalProgress":    goalProgress,
-		"interestedCount": interestedCount,
-		"gmailConnected":  acc.IsGoogleOAuth(),
+		"interestedCount":   interestedCount,
+		"gmailConnected":    acc.IsGoogleOAuth(),
+		"warmupProgress":    warmupProgress,
 		"success":         ctx.Query("success"),
 		"error":           ctx.Query("error"),
 	})

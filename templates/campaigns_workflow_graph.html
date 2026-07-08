@@ -1,0 +1,66 @@
+{{define "wf_graph_node"}}
+<div class="wf-graph-node wf-graph-node--{{.NodeType}}">
+    <div class="wf-graph-card workflow-step workflow-step--guide workflow-step--{{.NodeType}}">
+        {{if or .IsForkBranch .EdgeLabel}}
+        <span class="wf-fork-badge {{if eq .EdgeType "true"}}wf-fork-badge--yes{{else if eq .EdgeType "false"}}wf-fork-badge--no{{end}}">
+            {{if .EdgeLabel}}{{.EdgeLabel}}{{else}}Branch · priority {{.EdgePriority}}{{end}}
+        </span>
+        {{end}}
+        <div class="workflow-step-head">
+            <div class="workflow-step-icon-ring">
+                {{if eq .NodeType "action_send_email"}}
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+                {{else if eq .NodeType "action_wait"}}
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                {{else if eq .NodeType "condition_engagement"}}
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3v12"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
+                {{else}}
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m22 4-10 10.01-3-3"/></svg>
+                {{end}}
+            </div>
+            <span class="workflow-step-kind">{{if eq .NodeType "action_send_email"}}Email{{else if eq .NodeType "action_wait"}}Wait{{else if eq .NodeType "condition_engagement"}}Branch{{else}}End{{end}}</span>
+        </div>
+        <p class="workflow-step-label">{{.Label}}</p>
+        {{if .Description}}<p class="workflow-step-desc">{{.Description}}</p>{{end}}
+
+        {{if eq .NodeType "action_send_email"}}
+            {{if .IsHybridAB}}
+            <p class="wf-graph-template-readonly wf-graph-template-readonly--ab">
+                <strong>A/B first email:</strong> set at campaign creation (see variants above)
+            </p>
+            {{else if .CanEditMappings}}
+            <div class="wf-graph-template-pick">
+                <label class="form-label text-xs">Template for this send</label>
+                {{$node := .}}
+                <select name="step_template[{{$node.NodeKey}}]" class="form-input text-sm" required>
+                    <option value="">Select template...</option>
+                    {{range $node.Templates}}
+                    <option value="{{.ID}}" {{if eq (index $node.StepMappings $node.NodeKey) .ID}}selected{{end}}>{{.Name}}</option>
+                    {{end}}
+                </select>
+            </div>
+            {{else if .TemplateName}}
+            <p class="wf-graph-template-readonly"><strong>Template:</strong> {{.TemplateName}}</p>
+            {{else}}
+            <p class="wf-graph-template-readonly wf-graph-template-readonly--missing"><strong>Template:</strong> not mapped yet</p>
+            {{end}}
+        {{end}}
+    </div>
+
+    {{if .Children}}
+        {{if gt (len .Children) 1}}
+        <div class="wf-graph-forks-label">Paths split here</div>
+        <div class="wf-graph-forks">
+            {{range .Children}}
+            <div class="wf-graph-fork-col">
+                {{template "wf_graph_node" .}}
+            </div>
+            {{end}}
+        </div>
+        {{else}}
+        <div class="wf-graph-connector" aria-hidden="true">↓</div>
+        {{template "wf_graph_node" (index .Children 0)}}
+        {{end}}
+    {{end}}
+</div>
+{{end}}

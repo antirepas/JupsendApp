@@ -83,6 +83,14 @@ func pollAccount(acc model.SMTPAccount) error {
 		if msg == nil || msg.Envelope == nil {
 			continue
 		}
+		if imapMessageSeen(msg) {
+			mid := normalizeMessageID(msg.Envelope.MessageId)
+			if mid != "" {
+				if exists, _ := model.ContactEventExistsByDedupe("imap-msg:" + mid); exists {
+					continue
+				}
+			}
+		}
 		fromAddr := ""
 		if len(msg.Envelope.From) > 0 {
 			fromAddr = msg.Envelope.From[0].Address()
@@ -104,7 +112,7 @@ func pollAccount(acc model.SMTPAccount) error {
 			continue
 		}
 		if match, ok := MatchReply(acc.UserID, fromAddr, subject, body, replyRefs, ownEmail); ok {
-			handleReply(acc.UserID, match)
+			handleReply(acc.UserID, match, msg.Envelope.MessageId)
 			seenSeqNums = append(seenSeqNums, msg.SeqNum)
 		}
 	}
@@ -175,6 +183,15 @@ func readMessageBody(msg *imap.Message, section *imap.BodySectionName) string {
 		return ""
 	}
 	return string(b)
+}
+
+func imapMessageSeen(msg *imap.Message) bool {
+	for _, flag := range msg.Flags {
+		if flag == imap.SeenFlag {
+			return true
+		}
+	}
+	return false
 }
 
 func handleBounce(acc model.SMTPAccount, from, subject, body string) {

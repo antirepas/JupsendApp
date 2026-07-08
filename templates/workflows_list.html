@@ -15,6 +15,7 @@
     <a href="/workflows/new" class="btn-primary">New Workflow</a>
 </div>
 {{if .success}}<div class="alert-success mb-6">{{.success}}</div>{{end}}
+{{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
 <div class="card overflow-hidden">
     {{if .workflows}}
     <table class="data-table">
@@ -28,6 +29,9 @@
             <td class="text-right space-x-3">
                 <a href="/workflows/{{.ID}}/edit" class="text-brand-600 text-sm font-medium">Builder</a>
                 <a href="/workflows/{{.ID}}/analytics" class="text-brand-600 text-sm font-medium">Analytics</a>
+                <form method="POST" action="/workflows/{{.ID}}/delete" class="inline" onsubmit="return confirm('Delete this workflow? Running instances will be stopped and linked campaigns will switch to bulk mode.');">
+                    <button type="submit" class="text-red-600 text-sm font-medium">Delete</button>
+                </form>
             </td>
         </tr>
         {{end}}

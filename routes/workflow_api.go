@@ -11,6 +11,8 @@ import (
 )
 
 func RegisterWorkflowAPI(v1 *gin.RouterGroup) {
+	v1.GET("/workflows/:id/versions/:vid/send-steps", apiListSendSteps)
+	v1.PUT("/campaigns/:id/workflow-templates", apiSaveCampaignWorkflowTemplates)
 	v1.GET("/workflows", apiListWorkflows)
 	v1.POST("/workflows", apiCreateWorkflow)
 	v1.GET("/workflows/:id", apiGetWorkflow)
@@ -23,6 +25,74 @@ func RegisterWorkflowAPI(v1 *gin.RouterGroup) {
 	v1.POST("/events", apiIngestEvent)
 	v1.GET("/contacts/:id/events", apiContactEvents)
 	v1.GET("/workflows/:id/analytics", apiWorkflowAnalytics)
+}
+
+func apiListSendSteps(ctx *gin.Context) {
+	wid, _ := strconv.ParseInt(ctx.Param("id"), 10, 64)
+	vid, _ := strconv.ParseInt(ctx.Param("vid"), 10, 64)
+	if _, err := model.GetWorkflowForUser(wid, mustUserID(ctx)); err != nil {
+		ctx.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+		return
+	}
+	v, err := model.GetWorkflowVersion(vid)
+	if err != nil || v.WorkflowID != wid {
+		ctx.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+		return
+	}
+	steps, err := model.ListSendEmailSteps(vid)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	firstKey, _ := model.GetFirstSendNodeKey(vid)
+	ctx.JSON(http.StatusOK, gin.H{"send_steps": steps, "first_send_node_key": firstKey})
+}
+
+func apiSaveCampaignWorkflowTemplates(ctx *gin.Context) {
+	userID := mustUserID(ctx)
+	campaignID, _ := strconv.ParseInt(ctx.Param("id"), 10, 64)
+	campaign, err := model.GetCampaignForUser(campaignID, userID)
+	if err != nil {
+		ctx.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+		return
+	}
+	if campaign.Status == "sent" || campaign.Status == "sending" {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "cannot edit after launch"})
+		return
+	}
+	var body struct {
+		Templates   map[string]int64 `json:"templates"`
+		TemplateAID int64            `json:"template_a_id"`
+		TemplateBID int64            `json:"template_b_id"`
+	}
+	if err := ctx.ShouldBindJSON(&body); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
+		return
+	}
+	if campaign.ExecutionMode == "workflow_ab" {
+		if body.TemplateAID <= 0 || body.TemplateBID <= 0 {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "template_a_id and template_b_id required for workflow_ab"})
+			return
+		}
+		if err := model.UpdateCampaignTemplates(campaignID, userID, body.TemplateAID, body.TemplateBID); err != nil {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+	} else if len(body.Templates) > 0 {
+		firstKey, err := model.GetFirstSendNodeKey(campaign.WorkflowVersionID)
+		if err == nil && body.Templates[firstKey] > 0 {
+			_ = model.UpdateCampaignTemplates(campaignID, userID, body.Templates[firstKey], 0)
+		}
+	}
+	if err := model.SaveCampaignWorkflowTemplates(campaignID, body.Templates); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := model.ValidateCampaignWorkflowReady(campaign); err != nil {
+		ctx.JSON(http.StatusOK, gin.H{"saved": true, "warning": err.Error()})
+		return
+	}
+	ctx.JSON(http.StatusOK, gin.H{"saved": true})
 }
 
 func apiListWorkflows(ctx *gin.Context) {

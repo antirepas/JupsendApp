@@ -20,10 +20,8 @@ func LoginPage(c *gin.Context) {
 }
 
 func SignupPage(c *gin.Context) {
-	c.HTML(http.StatusOK, "auth_signup.html", gin.H{
-		"title": "Sign up",
-		"error": c.Query("error"),
-	})
+	// Plan-first onboarding: direct users to plan selection.
+	c.Redirect(http.StatusFound, "/signup/free")
 }
 
 func LoginSubmit(c *gin.Context) {
@@ -42,43 +40,8 @@ func LoginSubmit(c *gin.Context) {
 }
 
 func SignupSubmit(c *gin.Context) {
-	email := strings.TrimSpace(c.PostForm("email"))
-	password := c.PostForm("password")
-	confirm := c.PostForm("confirm_password")
-
-	if email == "" || len(password) < 8 {
-		c.Redirect(http.StatusFound, "/signup?error=Email+and+password+(8%2B+chars)+required")
-		return
-	}
-	if password != confirm {
-		c.Redirect(http.StatusFound, "/signup?error=Passwords+do+not+match")
-		return
-	}
-	exists, _ := model.EmailExists(email)
-	if exists {
-		c.Redirect(http.StatusFound, "/signup?error=Email+already+registered")
-		return
-	}
-
-	hash, err := auth.HashPassword(password)
-	if err != nil {
-		c.Redirect(http.StatusFound, "/signup?error=Could+not+create+account")
-		return
-	}
-
-	userID, err := model.CreateUser(email, hash, config.BaseURL)
-	if err != nil {
-		c.Redirect(http.StatusFound, "/signup?error=Could+not+create+account")
-		return
-	}
-	_ = model.AssignOrphanDataToUser(userID)
-	_ = model.CreateDefaultSMTPAccountForUser(userID)
-	if config.IsAdminEmail(email) {
-		_ = model.SetUserAdmin(userID, true)
-	}
-
-	auth.SetUserSession(c, userID)
-	c.Redirect(http.StatusFound, "/settings/billing?success=Welcome%21+Choose+a+plan+to+unlock+the+app")
+	// Email/password signup is disabled in favor of plan-first Google onboarding.
+	c.Redirect(http.StatusFound, "/signup/free?error=Choose+a+plan+and+continue+with+Google")
 }
 
 func Logout(c *gin.Context) {

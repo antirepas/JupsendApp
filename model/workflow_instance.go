@@ -16,6 +16,8 @@ type WorkflowInstance struct {
 	WorkflowVersionID  int64
 	ContactID          int64
 	CampaignID         *int64
+	ForkRootID         *int64
+	BranchPriority    int
 	CurrentNodeKey     string
 	Status             string
 	NextWakeAt         *time.Time
@@ -40,22 +42,50 @@ func CreateWorkflowInstance(versionID, contactID, campaignID int64, entryNodeKey
 	return id, err
 }
 
+func CreateForkedWorkflowInstance(versionID, contactID, campaignID int64, forkRootID int64, currentNodeKey string, contextJSON string, branchPriority int) (int64, error) {
+	var camp interface{}
+	if campaignID > 0 {
+		camp = campaignID
+	}
+	if contextJSON == "" {
+		contextJSON = "{}"
+	}
+	row := db.QueryRow(`
+		INSERT INTO workflow_instances (
+			workflow_version_id, contact_id, campaign_id, fork_root_id, branch_priority,
+			current_node_key, status, context_json
+		) VALUES (?, ?, ?, ?, ?, ?, 'active', ?) RETURNING id
+	`, versionID, contactID, camp, forkRootID, branchPriority, currentNodeKey, contextJSON)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
 func GetWorkflowInstance(id int64) (WorkflowInstance, error) {
 	row := db.QueryRow(`
-		SELECT id, workflow_version_id, contact_id, campaign_id, current_node_key, status,
-			next_wake_at, waiting_for_event, started_at, completed_at, context_json
+		SELECT id, workflow_version_id, contact_id, campaign_id, fork_root_id, branch_priority,
+			current_node_key, status, next_wake_at, waiting_for_event, started_at, completed_at, context_json
 		FROM workflow_instances WHERE id = ?
 	`, id)
 	var inst WorkflowInstance
 	var camp sqlNullInt64
+	var forkRoot sqlNullInt64
+	var branchPriority int
 	var wake, completed sqlNullTime
 	var waiting sql.NullString
-	err := row.Scan(&inst.ID, &inst.WorkflowVersionID, &inst.ContactID, &camp,
-		&inst.CurrentNodeKey, &inst.Status, &wake, &waiting, &inst.StartedAt, &completed, &inst.ContextJSON)
+	err := row.Scan(
+		&inst.ID, &inst.WorkflowVersionID, &inst.ContactID, &camp, &forkRoot, &branchPriority,
+		&inst.CurrentNodeKey, &inst.Status, &wake, &waiting, &inst.StartedAt, &completed, &inst.ContextJSON,
+	)
 	if camp.Valid {
 		v := camp.Int64
 		inst.CampaignID = &v
 	}
+	if forkRoot.Valid {
+		v := forkRoot.Int64
+		inst.ForkRootID = &v
+	}
+	inst.BranchPriority = branchPriority
 	if wake.Valid {
 		t := wake.Time
 		inst.NextWakeAt = &t
@@ -72,8 +102,8 @@ func GetWorkflowInstance(id int64) (WorkflowInstance, error) {
 
 func ListInstancesForCampaign(campaignID int64) ([]WorkflowInstance, error) {
 	rows, err := db.Query(`
-		SELECT id, workflow_version_id, contact_id, campaign_id, current_node_key, status,
-			next_wake_at, waiting_for_event, started_at, completed_at, context_json
+		SELECT id, workflow_version_id, contact_id, campaign_id, fork_root_id, branch_priority,
+			current_node_key, status, next_wake_at, waiting_for_event, started_at, completed_at, context_json
 		FROM workflow_instances WHERE campaign_id = ?
 	`, campaignID)
 	if err != nil {
@@ -86,7 +116,8 @@ func ListInstancesForCampaign(campaignID int64) ([]WorkflowInstance, error) {
 
 func ListInstancesForWorkflow(workflowID int64) ([]WorkflowInstance, error) {
 	rows, err := db.Query(`
-		SELECT wi.id, wi.workflow_version_id, wi.contact_id, wi.campaign_id, wi.current_node_key, wi.status,
+		SELECT wi.id, wi.workflow_version_id, wi.contact_id, wi.campaign_id, wi.fork_root_id, wi.branch_priority,
+			wi.current_node_key, wi.status,
 			wi.next_wake_at, wi.waiting_for_event, wi.started_at, wi.completed_at, wi.context_json
 		FROM workflow_instances wi
 		INNER JOIN workflow_versions wv ON wv.id = wi.workflow_version_id
@@ -105,16 +136,25 @@ func scanInstances(rows interface{ Next() bool; Scan(...interface{}) error }) ([
 	for rows.Next() {
 		var inst WorkflowInstance
 		var camp sqlNullInt64
+		var forkRoot sqlNullInt64
+		var branchPriority int
 		var wake, completed sqlNullTime
 		var waiting sql.NullString
-		if err := rows.Scan(&inst.ID, &inst.WorkflowVersionID, &inst.ContactID, &camp,
-			&inst.CurrentNodeKey, &inst.Status, &wake, &waiting, &inst.StartedAt, &completed, &inst.ContextJSON); err != nil {
+		if err := rows.Scan(
+			&inst.ID, &inst.WorkflowVersionID, &inst.ContactID, &camp, &forkRoot, &branchPriority,
+			&inst.CurrentNodeKey, &inst.Status, &wake, &waiting, &inst.StartedAt, &completed, &inst.ContextJSON,
+		); err != nil {
 			return nil, err
 		}
 		if camp.Valid {
 			v := camp.Int64
 			inst.CampaignID = &v
 		}
+		if forkRoot.Valid {
+			v := forkRoot.Int64
+			inst.ForkRootID = &v
+		}
+		inst.BranchPriority = branchPriority
 		if wake.Valid {
 			t := wake.Time
 			inst.NextWakeAt = &t
@@ -144,7 +184,7 @@ func ClaimDueInstances(limit int) ([]int64, error) {
 		    status = 'active' OR
 		    (status = 'waiting' AND next_wake_at IS NOT NULL AND next_wake_at <= ?)
 		  )
-		ORDER BY COALESCE(next_wake_at, started_at) ASC
+		ORDER BY branch_priority ASC, COALESCE(next_wake_at, started_at) ASC
 		LIMIT ?
 	`, now, now, limit)
 	if err != nil {
@@ -203,12 +243,16 @@ func UpdateInstanceState(inst WorkflowInstance) error {
 	if inst.WaitingForEvent != "" {
 		waiting = inst.WaitingForEvent
 	}
+	var forkRoot interface{}
+	if inst.ForkRootID != nil {
+		forkRoot = *inst.ForkRootID
+	}
 	_, err := db.Exec(`
 		UPDATE workflow_instances SET
-			current_node_key = ?, status = ?, next_wake_at = ?, waiting_for_event = ?,
+			fork_root_id = ?, branch_priority = ?, current_node_key = ?, status = ?, next_wake_at = ?, waiting_for_event = ?,
 			completed_at = ?, context_json = ?, lock_token = NULL, lock_expires_at = NULL
 		WHERE id = ?
-	`, inst.CurrentNodeKey, inst.Status, wake, waiting, completed, inst.ContextJSON, inst.ID)
+	`, forkRoot, inst.BranchPriority, inst.CurrentNodeKey, inst.Status, wake, waiting, completed, inst.ContextJSON, inst.ID)
 	return err
 }
 
@@ -276,6 +320,31 @@ func SetInstanceContext(inst *WorkflowInstance, ctx map[string]interface{}) erro
 	}
 	inst.ContextJSON = string(b)
 	return nil
+}
+
+func GetSendIDForInstanceNode(instanceID int64, nodeKey string) (int64, error) {
+	var outputJSON string
+	err := db.QueryRow(`
+		SELECT output_json FROM workflow_executions
+		WHERE instance_id = ? AND node_key = ? AND status = 'succeeded'
+		ORDER BY id DESC LIMIT 1
+	`, instanceID, nodeKey).Scan(&outputJSON)
+	if err != nil {
+		return 0, err
+	}
+	m := map[string]interface{}{}
+	if err := json.Unmarshal([]byte(outputJSON), &m); err != nil {
+		return 0, fmt.Errorf("invalid execution output")
+	}
+	switch v := m["email_send_id"].(type) {
+	case float64:
+		return int64(v), nil
+	case int64:
+		return v, nil
+	case int:
+		return int64(v), nil
+	}
+	return 0, fmt.Errorf("no email_send_id in execution")
 }
 
 func GetExecutionsForInstance(instanceID int64) ([]WorkflowExecution, error) {

@@ -130,6 +130,50 @@ func ListTemplates(userID int64) ([]TemplateListItem, error) {
 	return items, nil
 }
 
+// ListTemplatePickerItems returns templates for dropdowns without loading variables (fast).
+func ListTemplatePickerItems(userID int64) ([]TemplateListItem, error) {
+	rows, err := db.Query(`SELECT id, name, subject FROM template WHERE user_id = ? ORDER BY id DESC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []TemplateListItem
+	for rows.Next() {
+		var item TemplateListItem
+		if err := rows.Scan(&item.ID, &item.Name, &item.Subject); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, nil
+}
+
+// TemplateNameMapForUser loads id → name for all user templates in one query.
+func TemplateNameMapForUser(userID int64) (map[int64]string, error) {
+	rows, err := db.Query(`SELECT id, name FROM template WHERE user_id = ?`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[int64]string{}
+	for rows.Next() {
+		var id int64
+		var name string
+		if err := rows.Scan(&id, &name); err != nil {
+			return nil, err
+		}
+		out[id] = name
+	}
+	return out, nil
+}
+
+func FirstTemplateIDForUser(userID int64) (int64, error) {
+	var id int64
+	err := db.QueryRow(`SELECT id FROM template WHERE user_id = ? ORDER BY id ASC LIMIT 1`, userID).Scan(&id)
+	return id, err
+}
+
 func UpdateTemplate(id, userID int64, name, subject, body string, variables []string) error {
 	if _, err := GetTemplateForUser(id, userID); err != nil {
 		return err

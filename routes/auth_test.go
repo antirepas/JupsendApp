@@ -9,6 +9,9 @@ import (
 	"time"
 
 	"emailtracker.com/db"
+	"emailtracker.com/model"
+	"emailtracker.com/auth"
+	"emailtracker.com/config"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
@@ -33,6 +36,7 @@ func TestSignupLoginLogout(t *testing.T) {
 	r := testRouter()
 	email := fmt.Sprintf("auth-test-%d@test.com", time.Now().UnixNano())
 
+	// Email/password signup is disabled; ensure we redirect to plan-first onboarding.
 	signup := httptest.NewRequest(http.MethodPost, "/signup", strings.NewReader(
 		fmt.Sprintf("email=%s&password=password123&confirm_password=password123", email),
 	))
@@ -42,8 +46,18 @@ func TestSignupLoginLogout(t *testing.T) {
 	if w.Code != http.StatusFound {
 		t.Fatalf("signup expected redirect, got %d %s", w.Code, w.Body.String())
 	}
-	if !strings.Contains(w.Header().Get("Location"), "/settings/billing") {
-		t.Fatalf("expected redirect to billing, got %s", w.Header().Get("Location"))
+	if !strings.Contains(w.Header().Get("Location"), "/signup/free") {
+		t.Fatalf("expected redirect to /signup/free, got %s", w.Header().Get("Location"))
+	}
+
+	// Create a user directly so we can test login/logout.
+	hash, err := auth.HashPassword("password123")
+	if err != nil {
+		t.Fatalf("hash password: %v", err)
+	}
+	config.BaseURL = "http://localhost"
+	if _, err := model.CreateUser(email, hash, config.BaseURL); err != nil {
+		t.Fatalf("create user: %v", err)
 	}
 
 	logout := httptest.NewRequest(http.MethodPost, "/logout", nil)

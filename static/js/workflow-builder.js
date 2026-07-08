@@ -14,6 +14,7 @@
   const edgeListEl = document.getElementById('edge-list');
   const edgeListEmpty = document.getElementById('edge-list-empty');
   const edgeCountEl = document.getElementById('edge-count');
+  const edgePriorityInput = document.getElementById('edge-priority');
 
   const NODE_W = 168;
   const NODE_H = 56;
@@ -40,9 +41,9 @@
   }
 
   function defaultConfig(type) {
-    if (type === 'action_send_email') return { template_id: TEMPLATES[0]?.id || 0 };
+    if (type === 'action_send_email') return {};
     if (type === 'action_wait') return { duration_seconds: 259200 };
-    if (type === 'condition_engagement') return { predicate: 'has_opened', params: { email_send_scope: 'last_in_workflow' } };
+    if (type === 'condition_engagement') return { predicate: 'has_opened', priority: 50, params: { email_send_scope: 'last_in_workflow' } };
     return {};
   }
 
@@ -67,6 +68,74 @@
 
   function getNode(key) {
     return nodes.find(n => n.node_key === key);
+  }
+
+  function templateName(templateId) {
+    const id = parseInt(templateId, 10);
+    const t = TEMPLATES.find(x => x.id === id);
+    return t ? t.name : 'Template #' + (templateId || '?');
+  }
+
+  function sendEmailNodes() {
+    return nodes.filter(n => n.node_type === 'action_send_email');
+  }
+
+  function sendNodeDisplayLabel(n) {
+    if (!n) return 'Send email';
+    const label = (n.label || '').trim();
+    return label && label !== 'Send Email' ? label : 'Send email';
+  }
+
+  function ensureConditionParams(n) {
+    if (!n.config.params) n.config.params = { email_send_scope: 'last_in_workflow' };
+    return n.config.params;
+  }
+
+  function conditionEmailRefLabel(n) {
+    const params = ensureConditionParams(n);
+    if (params.email_send_scope === 'node' && params.email_node_key) {
+      const src = getNode(params.email_node_key);
+      return src ? sendNodeDisplayLabel(src) : params.email_node_key;
+    }
+    return 'Most recent email';
+  }
+
+  const PREDICATE_LABELS = {
+    has_opened: 'Opened',
+    has_not_opened: 'Not opened',
+    click_count_gte: 'Clicked',
+    has_replied: 'Replied',
+    has_not_replied: 'Not replied'
+  };
+
+  function conditionPredicateSummary(n) {
+    const pred = n.config.predicate || 'has_opened';
+    const params = ensureConditionParams(n);
+    let label = PREDICATE_LABELS[pred] || pred;
+    if (pred === 'click_count_gte') {
+      const min = params.min || 1;
+      label = min > 1 ? `Clicked ≥ ${min}` : 'Clicked';
+    }
+    if (pred === 'has_not_opened' || pred === 'has_not_replied') {
+      const days = params.wait_days || 3;
+      label = (pred === 'has_not_opened' ? 'Not opened' : 'Not replied') + ` after ${days}d`;
+    }
+    return label;
+  }
+
+  function needsGracePeriod(pred) {
+    return pred === 'has_not_opened' || pred === 'has_not_replied';
+  }
+
+  function clearConditionRefsToNode(deletedKey) {
+    nodes.forEach(n => {
+      if (n.node_type !== 'condition_engagement') return;
+      const params = ensureConditionParams(n);
+      if (params.email_send_scope === 'node' && params.email_node_key === deletedKey) {
+        params.email_send_scope = 'last_in_workflow';
+        delete params.email_node_key;
+      }
+    });
   }
 
   function findEdgeIndex(from, to, type) {
@@ -155,6 +224,7 @@
       return;
     }
     removeEdgesForNode(selectedKey);
+    if (n.node_type === 'action_send_email') clearConditionRefsToNode(selectedKey);
     const idx = nodes.findIndex(x => x.node_key === selectedKey);
     nodes.splice(idx, 1);
     if (lastAddedKey === selectedKey) lastAddedKey = nodes.length ? nodes[nodes.length - 1].node_key : null;
@@ -184,6 +254,25 @@
     return `M ${startX} ${startY} C ${startX} ${midY}, ${endX} ${midY}, ${endX} ${endY}`;
   }
 
+  function edgeMidpoint(from, to) {
+    const startX = from.x;
+    const startY = from.y;
+    const endX = to.x;
+    const endY = to.y;
+    const midY = (startY + endY) / 2;
+    const t = 0.5;
+    const mt = 1 - t;
+    const x = mt * mt * mt * startX
+      + 3 * mt * mt * t * startX
+      + 3 * mt * t * t * endX
+      + t * t * t * endX;
+    const y = mt * mt * mt * startY
+      + 3 * mt * mt * t * midY
+      + 3 * mt * t * t * midY
+      + t * t * t * endY;
+    return { x, y };
+  }
+
   function drawEdges() {
     const w = Math.max(canvasWrap.scrollWidth, 1200);
     const h = Math.max(canvasWrap.scrollHeight, 560);
@@ -204,6 +293,21 @@
       </marker>`;
     edgeSvg.innerHTML = '';
     edgeSvg.appendChild(defs);
+
+    nodes.filter(n => n.node_type === 'condition_engagement').forEach(cond => {
+      const params = ensureConditionParams(cond);
+      if (params.email_send_scope !== 'node' || !params.email_node_key) return;
+      const src = getNode(params.email_node_key);
+      if (!src || src.node_type !== 'action_send_email') return;
+
+      const from = nodeCenter(cond);
+      const to = nodeCenter(src);
+      const refPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      refPath.setAttribute('d', edgePath(from, to));
+      refPath.setAttribute('fill', 'none');
+      refPath.setAttribute('class', 'wf-ref-edge');
+      edgeSvg.appendChild(refPath);
+    });
 
     edges.forEach((e, edgeIndex) => {
       const fromNode = getNode(e.source_node_key);
@@ -246,20 +350,49 @@
         visPath.classList.add('wf-edge-selected');
       }
 
-      hitPath.addEventListener('mouseenter', () => visPath.classList.add('wf-edge-hover'));
-      hitPath.addEventListener('mouseleave', () => visPath.classList.remove('wf-edge-hover'));
+      const mid = edgeMidpoint(from, to);
+      const deleteBtn = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      deleteBtn.setAttribute('class', 'wf-edge-delete-btn');
+      deleteBtn.setAttribute('transform', `translate(${mid.x},${mid.y})`);
+
+      const deleteCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      deleteCircle.setAttribute('r', '10');
+      deleteCircle.setAttribute('fill', '#fff');
+      deleteCircle.setAttribute('stroke', '#dc2626');
+      deleteCircle.setAttribute('stroke-width', '1.5');
+
+      const deleteX = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      deleteX.setAttribute('text-anchor', 'middle');
+      deleteX.setAttribute('dominant-baseline', 'central');
+      deleteX.setAttribute('fill', '#dc2626');
+      deleteX.setAttribute('font-size', '14');
+      deleteX.setAttribute('font-weight', '700');
+      deleteX.textContent = '×';
+
+      deleteBtn.appendChild(deleteCircle);
+      deleteBtn.appendChild(deleteX);
+      deleteBtn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        ev.preventDefault();
+        deleteEdge(edgeIndex);
+      });
+
+      g.addEventListener('mouseenter', () => {
+        g.classList.add('wf-edge-hovering');
+        visPath.classList.add('wf-edge-hover');
+      });
+      g.addEventListener('mouseleave', () => {
+        g.classList.remove('wf-edge-hovering');
+        visPath.classList.remove('wf-edge-hover');
+      });
       hitPath.addEventListener('click', (ev) => {
         ev.stopPropagation();
         selectEdge(edgeIndex);
       });
-      hitPath.addEventListener('contextmenu', (ev) => {
-        ev.preventDefault();
-        ev.stopPropagation();
-        deleteEdge(edgeIndex);
-      });
 
       g.appendChild(hitPath);
       g.appendChild(visPath);
+      g.appendChild(deleteBtn);
 
       if (e.edge_type === 'true' || e.edge_type === 'false') {
         const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
@@ -367,6 +500,9 @@
     edgeFrom.value = e.source_node_key;
     edgeTo.value = e.target_node_key;
     edgeTypeSel.value = e.edge_type;
+    if (edgePriorityInput) {
+      edgePriorityInput.value = (e.priority != null ? e.priority : 10);
+    }
 
     updateEdgeEditorUI();
     refreshEdgeSelects();
@@ -408,13 +544,23 @@
     return true;
   }
 
-  function addEdge(from, to, type) {
+  function addEdge(from, to, type, priorityOverride = null) {
     if (!validateEdgeInput(from, to, type, null)) return false;
+
+    let priority = 0;
+    if (type === 'default') {
+      if (priorityOverride != null) {
+        priority = Math.max(0, parseInt(priorityOverride, 10) || 10);
+      } else {
+        const existingCount = edges.filter(e => e.source_node_key === from && e.edge_type === 'default').length;
+        priority = 10 + existingCount * 10;
+      }
+    }
     edges.push({
       source_node_key: from,
       target_node_key: to,
       edge_type: type,
-      priority: 0,
+      priority: priority,
       condition_json: '{}'
     });
     showMsg('Connection added', true);
@@ -428,11 +574,15 @@
     const type = edgeTypeSel.value;
     if (!validateEdgeInput(from, to, type, selectedEdgeIndex)) return;
 
+    let priority = 0;
+    if (type === 'default') {
+      priority = Math.max(0, parseInt(edgePriorityInput?.value, 10) || 10);
+    }
     edges[selectedEdgeIndex] = {
       source_node_key: from,
       target_node_key: to,
       edge_type: type,
-      priority: 0,
+      priority: priority,
       condition_json: '{}'
     };
     showMsg('Connection updated', true);
@@ -453,18 +603,22 @@
       }
     }
 
-    const existingSameBranch = edges.findIndex(e =>
-      e.source_node_key === sourceKey && e.edge_type === type
-    );
-    if (existingSameBranch >= 0) {
-      edges[existingSameBranch].target_node_key = targetKey;
-      selectedEdgeIndex = existingSameBranch;
-      showMsg('Reconnected — replaced existing ' + (EDGE_TYPE_LABELS[type] || type) + ' branch', true);
-      render();
-      return;
+    // Allow fan-out on default edges (e.g. send -> multiple conditionals).
+    // Only replace yes/no branches, where we expect uniqueness per source.
+    if (type !== 'default') {
+      const existingSameBranch = edges.findIndex(e =>
+        e.source_node_key === sourceKey && e.edge_type === type
+      );
+      if (existingSameBranch >= 0) {
+        edges[existingSameBranch].target_node_key = targetKey;
+        selectedEdgeIndex = existingSameBranch;
+        showMsg('Reconnected — replaced existing ' + (EDGE_TYPE_LABELS[type] || type) + ' branch', true);
+        render();
+        return;
+      }
     }
 
-    if (addEdge(sourceKey, targetKey, type)) {
+    if (addEdge(sourceKey, targetKey, type, null)) {
       selectedEdgeIndex = edges.length - 1;
       render();
     }
@@ -478,10 +632,17 @@
       el.style.left = n.position_x + 'px';
       el.style.top = n.position_y + 'px';
       el.dataset.key = n.node_key;
+      let subtitle = `<p class="text-xs text-slate-400 mt-0.5">${escapeHtml(n.node_type)}</p>`;
+      if (n.node_type === 'action_send_email') {
+        subtitle = '';
+      } else if (n.node_type === 'condition_engagement') {
+        subtitle = `<p class="text-xs text-amber-700 mt-0.5 font-medium">re: ${escapeHtml(conditionEmailRefLabel(n))}</p>
+          <p class="text-xs text-slate-400">${escapeHtml(conditionPredicateSummary(n))}</p>`;
+      }
       el.innerHTML = `
         <div class="wf-port wf-port-in" title="Connect here (input)"></div>
         <p class="font-semibold text-sm ${nodeColorClass(n.node_type)}">${escapeHtml(n.label)}</p>
-        <p class="text-xs text-slate-400 mt-0.5">${escapeHtml(n.node_type)}</p>
+        ${subtitle}
         <div class="wf-port wf-port-out" title="Drag to connect (output)"></div>`;
 
       const portOut = el.querySelector('.wf-port-out');
@@ -631,29 +792,103 @@
     fields.innerHTML = `<label class="form-label">Label</label>
       <input class="form-input" id="prop-label" value="${escapeAttr(n.label)}">`;
 
-    if (n.node_type === 'action_send_email') {
-      const opts = TEMPLATES.map(t => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('');
-      fields.innerHTML += `<label class="form-label mt-2">Template</label><select class="form-input" id="prop-template">${opts}</select>`;
-      const sel = document.getElementById('prop-template');
-      sel.value = n.config.template_id || TEMPLATES[0]?.id;
-      sel.onchange = e => { n.config.template_id = parseInt(e.target.value, 10); };
-    }
     if (n.node_type === 'action_wait') {
       const days = (n.config.duration_seconds || 86400) / 86400;
       fields.innerHTML += `<label class="form-label mt-2">Wait (days)</label><input type="number" min="1" class="form-input" id="prop-days" value="${days}">`;
       document.getElementById('prop-days').onchange = e => { n.config.duration_seconds = parseInt(e.target.value, 10) * 86400; };
     }
     if (n.node_type === 'condition_engagement') {
-      fields.innerHTML += `<label class="form-label mt-2">Predicate</label>
+      const params = ensureConditionParams(n);
+      const sends = sendEmailNodes();
+      let emailOpts = '<option value="last_in_workflow">Most recent email sent in workflow</option>';
+      sends.forEach(s => {
+        emailOpts += `<option value="node:${escapeAttr(s.node_key)}">${escapeHtml(sendNodeDisplayLabel(s))}</option>`;
+      });
+      if (sends.length === 0) {
+        emailOpts += '<option value="" disabled>Add a Send Email node first</option>';
+      }
+      const emailVal = params.email_send_scope === 'node' && params.email_node_key
+        ? `node:${params.email_node_key}`
+        : 'last_in_workflow';
+      const minClicks = params.min || 1;
+      const waitDays = params.wait_days || 3;
+
+      fields.innerHTML += `
+        <label class="form-label mt-2">About which email?</label>
+        <select class="form-input" id="prop-email-ref">${emailOpts}</select>
+        <p class="text-xs text-slate-500 mt-1">Link the condition to a specific send step — not just the node before it. You can branch on the same email from multiple conditions.</p>
+        <label class="form-label mt-2">Check</label>
         <select class="form-input" id="prop-predicate">
           <option value="has_opened">Has opened</option>
-          <option value="has_not_opened">Has not opened</option>
+          <option value="has_not_opened">Has not opened (after wait)</option>
           <option value="click_count_gte">Click count ≥</option>
           <option value="has_replied">Has replied</option>
-        </select>`;
-      const sel = document.getElementById('prop-predicate');
-      sel.value = n.config.predicate || 'has_opened';
-      sel.onchange = e => { n.config.predicate = e.target.value; };
+          <option value="has_not_replied">Has not replied (after wait)</option>
+        </select>
+        <label class="form-label mt-2">Condition priority</label>
+        <input type="number" min="0" class="form-input" id="prop-cond-priority" value="${n.config.priority || 50}">
+        <p class="text-xs text-slate-500 mt-1">Higher numbers run later when multiple conditions evaluate for the same email.</p>
+        <div id="prop-wait-days-wrap" class="mt-2 hidden">
+          <label class="form-label">Wait before checking (days)</label>
+          <input type="number" min="1" class="form-input" id="prop-wait-days" value="${waitDays}">
+          <p class="text-xs text-slate-500 mt-1">The workflow pauses on this step until the wait elapses. If they open or reply sooner, the "no" branch runs immediately.</p>
+        </div>
+        <div id="prop-min-clicks-wrap" class="mt-2 hidden">
+          <label class="form-label">Minimum clicks</label>
+          <input type="number" min="1" class="form-input" id="prop-min-clicks" value="${minClicks}">
+        </div>`;
+
+      const emailSel = document.getElementById('prop-email-ref');
+      emailSel.value = emailVal;
+      emailSel.onchange = e => {
+        const v = e.target.value;
+        if (v === 'last_in_workflow') {
+          params.email_send_scope = 'last_in_workflow';
+          delete params.email_node_key;
+        } else if (v.startsWith('node:')) {
+          params.email_send_scope = 'node';
+          params.email_node_key = v.slice(5);
+        }
+        render();
+      };
+
+      const predSel = document.getElementById('prop-predicate');
+      predSel.value = n.config.predicate || 'has_opened';
+      const condPrioInput = document.getElementById('prop-cond-priority');
+      if (condPrioInput) {
+        condPrioInput.value = n.config.priority || 50;
+        condPrioInput.onchange = e => {
+          n.config.priority = Math.max(0, parseInt(e.target.value, 10) || 0);
+          render();
+        };
+      }
+      const minWrap = document.getElementById('prop-min-clicks-wrap');
+      const minInput = document.getElementById('prop-min-clicks');
+      const waitWrap = document.getElementById('prop-wait-days-wrap');
+      const waitInput = document.getElementById('prop-wait-days');
+      const syncPredicateFields = () => {
+        minWrap.classList.toggle('hidden', predSel.value !== 'click_count_gte');
+        const showWait = needsGracePeriod(predSel.value);
+        waitWrap.classList.toggle('hidden', !showWait);
+        if (showWait && !params.wait_days) params.wait_days = 3;
+      };
+      syncPredicateFields();
+      predSel.onchange = e => {
+        n.config.predicate = e.target.value;
+        if (needsGracePeriod(e.target.value) && !params.wait_days) {
+          params.wait_days = 3;
+        }
+        syncPredicateFields();
+        render();
+      };
+      minInput.onchange = e => {
+        params.min = Math.max(1, parseInt(e.target.value, 10) || 1);
+        render();
+      };
+      waitInput.onchange = e => {
+        params.wait_days = Math.max(1, parseInt(e.target.value, 10) || 1);
+        render();
+      };
     }
     document.getElementById('prop-label').onchange = e => { n.label = e.target.value; render(); };
   }
@@ -717,7 +952,8 @@
     const from = edgeFrom.value;
     const to = edgeTo.value;
     const type = edgeTypeSel.value;
-    if (addEdge(from, to, type)) render();
+    const prio = edgePriorityInput ? parseInt(edgePriorityInput.value, 10) : null;
+    if (addEdge(from, to, type, prio)) render();
   });
 
   document.getElementById('btn-update-edge').addEventListener('click', updateSelectedEdge);
@@ -742,11 +978,19 @@
     const edgeList = data.Edges || data.edges || [];
 
     nodeList.forEach(n => {
+      const config = JSON.parse(n.ConfigJSON || n.config_json || '{}');
+      if ((n.NodeType || n.node_type) === 'condition_engagement') {
+        if (!config.params) config.params = { email_send_scope: 'last_in_workflow' };
+        if (!config.predicate) config.predicate = 'has_opened';
+        if ((config.predicate === 'has_not_opened' || config.predicate === 'has_not_replied') && !config.params.wait_days) {
+          config.params.wait_days = 3;
+        }
+      }
       nodes.push({
         node_key: n.NodeKey || n.node_key,
         node_type: n.NodeType || n.node_type,
         label: n.Label || n.label,
-        config: JSON.parse(n.ConfigJSON || n.config_json || '{}'),
+        config,
         position_x: n.PositionX ?? n.position_x ?? 0,
         position_y: n.PositionY ?? n.position_y ?? 0
       });

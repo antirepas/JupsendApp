@@ -1,8 +1,6 @@
 package model
 
 import (
-	"fmt"
-	"sort"
 	"time"
 
 	"emailtracker.com/db"
@@ -58,68 +56,7 @@ type CampaignWorkflowAnalytics struct {
 }
 
 func GetCampaignWorkflowAnalytics(campaignID, userID int64) (CampaignWorkflowAnalytics, error) {
-	c, err := GetCampaignForUser(campaignID, userID)
-	if err != nil {
-		return CampaignWorkflowAnalytics{}, err
-	}
-	if c.ExecutionMode != "workflow" || c.WorkflowVersionID == 0 {
-		return CampaignWorkflowAnalytics{}, fmt.Errorf("not a workflow campaign")
-	}
-
-	wfInfo, _ := GetWorkflowForVersion(c.WorkflowVersionID)
-	contactIDs, err := GetCampaignContactIDs(campaignID)
-	if err != nil {
-		return CampaignWorkflowAnalytics{}, err
-	}
-
-	overview, err := GetCampaignWorkflowOverview(campaignID, c.WorkflowVersionID, len(contactIDs))
-	if err != nil {
-		return CampaignWorkflowAnalytics{}, err
-	}
-
-	engagement := getCampaignWorkflowEngagement(campaignID, len(contactIDs))
-	stepEng := getCampaignStepEngagement(campaignID)
-	stoppedAt := getCampaignStoppedAtNode(campaignID)
-
-	denom := overview.TotalContacts
-	if denom < 1 {
-		denom = 1
-	}
-	var steps []CampaignWorkflowStepAnalytics
-	for _, s := range overview.Steps {
-		e := stepEng[s.NodeKey]
-		sa := CampaignWorkflowStepAnalytics{
-			CampaignWorkflowStepStat: s,
-			Opens:                    e.Opens,
-			Clicks:                   e.Clicks,
-			StoppedHere:              stoppedAt[s.NodeKey],
-			PassedPct:                float64(s.PassedThrough) / float64(denom) * 100,
-		}
-		if s.PassedThrough > 0 {
-			sa.OpenRate = float64(e.Opens) / float64(s.PassedThrough) * 100
-		}
-		steps = append(steps, sa)
-	}
-
-	result := CampaignWorkflowAnalytics{
-		CampaignID:   campaignID,
-		CampaignName: c.Name,
-		WorkflowName: wfInfo.WorkflowName,
-		Status:       ComputeDisplayStatus(c.Status, c.ScheduledAt, c.IsSending),
-		CreatedAt:    c.CreatedAt,
-		Overview:     overview,
-		Engagement:   engagement,
-		Steps:        steps,
-		Contacts:     buildCampaignWorkflowContactAnalytics(campaignID, c.WorkflowVersionID, contactIDs),
-		DailyStats:   getCampaignDailyStats(campaignID),
-		HourlyOpens:  getCampaignHourlyStats(campaignID, "open"),
-		HourlyClicks: getCampaignHourlyStats(campaignID, "click"),
-	}
-
-	sort.Slice(result.DailyStats, func(i, j int) bool {
-		return result.DailyStats[i].Date < result.DailyStats[j].Date
-	})
-	return result, nil
+	return GetCampaignWorkflowAnalyticsParallel(campaignID, userID)
 }
 
 type stepEngagement struct {

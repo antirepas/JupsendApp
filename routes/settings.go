@@ -73,32 +73,18 @@ func UpdateSettings(c *gin.Context) {
 		}
 	}
 
-	acc := parseSendingSettingsForm(c)
 	existing, err := model.GetSMTPAccountByUserID(userID)
-	if err == nil {
-		acc.ID = existing.ID
-		acc.AuthType = existing.AuthType
-		acc.OAuthRefreshToken = existing.OAuthRefreshToken
-		acc.OAuthAccessToken = existing.OAuthAccessToken
-		acc.OAuthExpiry = existing.OAuthExpiry
-		acc.GoogleEmail = existing.GoogleEmail
-		acc.SMTPHost = existing.SMTPHost
-		acc.SMTPPort = existing.SMTPPort
-		acc.SMTPUser = existing.SMTPUser
-		acc.IMAPHost = existing.IMAPHost
-		acc.IMAPPort = existing.IMAPPort
-		acc.IMAPUser = existing.IMAPUser
-		if existing.IsGoogleOAuth() {
-			acc.Status = "active"
-		} else if existing.Status != "" {
-			acc.Status = existing.Status
-		} else {
-			acc.Status = "inactive"
-		}
-	} else {
-		acc.Status = "inactive"
+	if err != nil {
+		c.Redirect(http.StatusFound, "/settings?error=Failed+to+load+sending+account")
+		return
 	}
-	if err := model.UpsertSMTPAccountForUser(userID, acc); err != nil {
+	existing.FromName = c.PostForm("from_name")
+	if existing.IsGoogleOAuth() {
+		existing.Status = "active"
+	}
+
+	// Plan-driven email caps/warmup come from ApplyPlanLimitsToUser, not from the settings form.
+	if err := model.UpsertSMTPAccountForUser(userID, existing); err != nil {
 		log.Print(err)
 		c.Redirect(http.StatusFound, "/settings?error=Failed+to+save+settings")
 		return

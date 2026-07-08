@@ -93,28 +93,8 @@
     {{end}}
 </div>
 
-{{if .gmailConnected}}
-<div class="card space-y-4">
-    <h3 class="card-title">Sending limits</h3>
-    <div class="grid grid-cols-3 gap-4">
-        <div><label class="form-label">Daily limit</label><input name="daily_limit" type="number" class="form-input" value="{{if .account.DailyLimit}}{{.account.DailyLimit}}{{else}}50{{end}}"></div>
-        <div><label class="form-label">Per minute</label><input name="per_minute_limit" type="number" class="form-input" value="{{if .account.PerMinuteLimit}}{{.account.PerMinuteLimit}}{{else}}2{{end}}"></div>
-        <div><label class="form-label">Min seconds between</label><input name="min_seconds_between_sends" type="number" class="form-input" value="{{if .account.MinSecondsBetweenSends}}{{.account.MinSecondsBetweenSends}}{{else}}30{{end}}"></div>
-    </div>
-    <div class="flex items-center gap-2">
-        <input type="checkbox" name="warmup_enabled" id="warmup" {{if .account.WarmupEnabled}}checked{{else}}checked{{end}}>
-        <label for="warmup" class="text-sm">Warmup ramp enabled</label>
-    </div>
-    <div class="grid grid-cols-3 gap-4">
-        <div><label class="form-label">Warmup start cap</label><input name="warmup_daily_cap" type="number" class="form-input" value="{{if .account.WarmupDailyCap}}{{.account.WarmupDailyCap}}{{else}}5{{end}}"></div>
-        <div><label class="form-label">Warmup target</label><input name="warmup_target_daily_cap" type="number" class="form-input" value="{{if .account.WarmupTargetDailyCap}}{{.account.WarmupTargetDailyCap}}{{else}}50{{end}}"></div>
-        <div><label class="form-label">Increment / day</label><input name="warmup_increment_per_day" type="number" class="form-input" value="{{if .account.WarmupIncrementPerDay}}{{.account.WarmupIncrementPerDay}}{{else}}5{{end}}"></div>
-    </div>
-</div>
-{{end}}
-
 <div class="card settings-form-actions">
-    <p class="text-sm text-gray-500">Save account, tracking, and send limit changes.</p>
+    <p class="text-sm text-gray-500">Save account and tracking changes.</p>
     <button type="submit" class="btn-primary shrink-0">Save settings</button>
 </div>
 </form>

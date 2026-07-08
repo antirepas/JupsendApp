@@ -121,11 +121,33 @@ func GetContactForUser(contactId, userID int64) (Contact, []ContactVariables, er
 }
 
 func ListContacts(userID int64) ([]ContactListItem, error) {
-	page, err := ListContactsFiltered(userID, ContactListFilter{Page: 1, PageSize: 100000})
+	return ListContactPickerItems(userID, 2000)
+}
+
+// ListContactPickerItems returns id+email only for campaign contact pickers (fast).
+func ListContactPickerItems(userID int64, limit int) ([]ContactListItem, error) {
+	if limit <= 0 {
+		limit = 2000
+	}
+	if limit > 5000 {
+		limit = 5000
+	}
+	rows, err := db.Query(`
+		SELECT id, email FROM contact WHERE user_id = ? ORDER BY email ASC LIMIT ?
+	`, userID, limit)
 	if err != nil {
 		return nil, err
 	}
-	return page.Items, nil
+	defer rows.Close()
+	var items []ContactListItem
+	for rows.Next() {
+		var item ContactListItem
+		if err := rows.Scan(&item.ID, &item.Email); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, nil
 }
 
 func ListContactsFiltered(userID int64, f ContactListFilter) (ContactListPage, error) {

@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"fmt"
 	"html"
 	"strings"
 
@@ -48,10 +49,63 @@ type WorkflowCampaignContactRowView struct {
 	NodeKey        string
 	InstanceStatus string
 	CurrentStep    string
+	BranchLabel    string
 	OpenCount      int
 	ClickCount     int
 	HasStarted     bool
 	SendID         int64
+}
+
+// WorkflowGraphNodeView carries page context into recursive wf_graph_node template calls.
+type WorkflowGraphNodeView struct {
+	NodeKey             string
+	Label               string
+	NodeType            string
+	Description         string
+	TemplateID          int64
+	TemplateName        string
+	IsHybridAB          bool
+	IsForkBranch        bool
+	EdgePriority        int
+	EdgeType            string
+	EdgeLabel           string
+	CanEditMappings     bool
+	Templates           []model.TemplateListItem
+	CampaignTemplateAID int64
+	CampaignTemplateBID int64
+	StepMappings        map[string]int64
+	Children            []WorkflowGraphNodeView
+}
+
+func wrapWorkflowGraphNode(
+	n model.CampaignWorkflowGraphNode,
+	canEdit bool,
+	templates []model.TemplateListItem,
+	mappings map[string]int64,
+	templateAID, templateBID int64,
+) WorkflowGraphNodeView {
+	v := WorkflowGraphNodeView{
+		NodeKey:             n.NodeKey,
+		Label:               n.Label,
+		NodeType:            n.NodeType,
+		Description:         n.Description,
+		TemplateID:          n.TemplateID,
+		TemplateName:        n.TemplateName,
+		IsHybridAB:          n.IsHybridAB,
+		IsForkBranch:        n.IsForkBranch,
+		EdgePriority:        n.EdgePriority,
+		EdgeType:            n.EdgeType,
+		EdgeLabel:           n.EdgeLabel,
+		CanEditMappings:     canEdit,
+		Templates:           templates,
+		CampaignTemplateAID: templateAID,
+		CampaignTemplateBID: templateBID,
+		StepMappings:        mappings,
+	}
+	for _, child := range n.Children {
+		v.Children = append(v.Children, wrapWorkflowGraphNode(child, canEdit, templates, mappings, templateAID, templateBID))
+	}
+	return v
 }
 
 func buildWorkflowCampaignContactRows(
@@ -59,33 +113,46 @@ func buildWorkflowCampaignContactRows(
 	userID int64,
 	contactIDs []int64,
 ) []WorkflowCampaignContactRowView {
-	instanceMap, _ := model.GetCampaignInstanceMap(campaign.ID)
-	sendMap := map[int64]model.ContactEngagementRow{}
-	analytics, _ := model.GetCampaignAnalytics(campaign.ID, userID)
-	for _, c := range analytics.Contacts {
-		sendMap[c.ContactID] = c
+	instances, _ := model.ListInstancesForCampaign(campaign.ID)
+	sendMap, _ := model.GetCampaignContactEngagementLite(campaign.ID)
+	emailMap, _ := model.GetCampaignContactEmailMap(campaign.ID)
+	labels := model.NodeLabelMapForVersion(campaign.WorkflowVersionID)
+
+	if len(instances) > 0 {
+		var rows []WorkflowCampaignContactRowView
+		for i, inst := range instances {
+			email := emailMap[inst.ContactID]
+			row := WorkflowCampaignContactRowView{
+				Index:          i + 1,
+				ID:             inst.ContactID,
+				Email:          email,
+				HasStarted:     true,
+				InstanceStatus: inst.Status,
+				NodeKey:        inst.CurrentNodeKey,
+				CurrentStep:    model.LabelFromMap(labels, inst.CurrentNodeKey),
+				BranchLabel:    workflowBranchLabel(inst),
+			}
+			if sent, ok := sendMap[inst.ContactID]; ok {
+				row.OpenCount = sent.OpenCount
+				row.ClickCount = sent.ClickCount
+				if sent.SendID > 0 {
+					row.SendID = sent.SendID
+				}
+			}
+			rows = append(rows, row)
+		}
+		return rows
 	}
 
 	var rows []WorkflowCampaignContactRowView
 	for i, cid := range contactIDs {
-		contact, _, err := model.GetContact(cid)
-		if err != nil {
-			continue
-		}
 		row := WorkflowCampaignContactRowView{
 			Index: i + 1,
-			ID:    contact.ID,
-			Email: contact.Email,
+			ID:    cid,
+			Email: emailMap[cid],
 		}
-		if inst, ok := instanceMap[cid]; ok {
-			row.HasStarted = true
-			row.InstanceStatus = inst.Status
-			row.NodeKey = inst.CurrentNodeKey
-			row.CurrentStep = model.NodeLabelForKey(campaign.WorkflowVersionID, inst.CurrentNodeKey)
-		} else {
-			row.InstanceStatus = "not started"
-			row.CurrentStep = "—"
-		}
+		row.InstanceStatus = "not started"
+		row.CurrentStep = "—"
 		if sent, ok := sendMap[cid]; ok {
 			row.OpenCount = sent.OpenCount
 			row.ClickCount = sent.ClickCount
@@ -97,6 +164,33 @@ func buildWorkflowCampaignContactRows(
 		rows = append(rows, row)
 	}
 	return rows
+}
+
+func workflowBranchLabel(inst model.WorkflowInstance) string {
+	if inst.ForkRootID != nil && *inst.ForkRootID > 0 {
+		return fmt.Sprintf("Branch (priority %d)", inst.BranchPriority)
+	}
+	if inst.BranchPriority > 0 {
+		return fmt.Sprintf("Main (priority %d)", inst.BranchPriority)
+	}
+	return "Main"
+}
+
+func experimentVariableLabel(variable string) string {
+	switch variable {
+	case "subject":
+		return "Subject line"
+	case "opener":
+		return "Opening line"
+	case "offer":
+		return "Offer / value prop"
+	case "full_message":
+		return "Full message"
+	case "other":
+		return "Other"
+	default:
+		return variable
+	}
 }
 
 func buildCampaignContactRows(
@@ -113,16 +207,13 @@ func buildCampaignContactRows(
 		templateB, bVars, _ = model.GetTemplateByID(campaign.TemplateBID, userID)
 	}
 
-	sendMap := map[int64]model.ContactEngagementRow{}
-	analytics, _ := model.GetCampaignAnalytics(campaign.ID, userID)
-	for _, c := range analytics.Contacts {
-		sendMap[c.ContactID] = c
-	}
+	sendMap, _ := model.GetCampaignContactEngagementLite(campaign.ID)
+	contactData, _ := model.GetCampaignContactDataMap(campaign.ID)
 
 	var rows []CampaignContactRowView
 	for i, cid := range contactIDs {
-		contact, vars, err := model.GetContact(cid)
-		if err != nil {
+		data := contactData[cid]
+		if data.Email == "" && len(data.Variables) == 0 {
 			continue
 		}
 
@@ -139,8 +230,8 @@ func buildCampaignContactRows(
 			tplVars = bVars
 		}
 
-		varMap := make(map[string]string)
-		for _, v := range vars {
+		varMap := make(map[string]string, len(data.Variables))
+		for _, v := range data.Variables {
 			varMap[v.Key] = v.Value
 		}
 
@@ -155,14 +246,14 @@ func buildCampaignContactRows(
 			cells = append(cells, ContactVariableCell{Key: key, Value: val, Missing: missingVal})
 		}
 
-		subject, _ := util.RenderTemplate(tpl.Subject, vars, "")
-		body, _ := util.RenderTemplate(tpl.Body, vars, "")
+		subject, _ := util.RenderTemplate(tpl.Subject, data.Variables, "")
+		body, _ := util.RenderTemplate(tpl.Body, data.Variables, "")
 		body = truncatePreview(body, 500)
 
 		row := CampaignContactRowView{
 			Index:           i + 1,
-			ID:              contact.ID,
-			Email:           contact.Email,
+			ID:              cid,
+			Email:           data.Email,
 			Variant:         variant,
 			TemplateName:    templateName,
 			TemplateID:      templateID,

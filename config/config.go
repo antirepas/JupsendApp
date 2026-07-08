@@ -21,10 +21,13 @@ var (
 	GoogleClientID        string
 	GoogleClientSecret    string
 	GoogleOAuthRedirectURI string
+	GoogleAppOAuthRedirectURI string
 	WhopAPIKey            string
 	WhopWebhookSecret     string
 	WhopCompanyID         string
 	WhopPlanID            string
+	WhopPlanIDStandard   string
+	WhopPlanIDPro        string
 	WhopProductID         string
 	AdminEmails           map[string]struct{}
 	OpenAIAPIKey          string
@@ -58,10 +61,16 @@ func reloadFromEnv() {
 	GoogleClientID = strings.TrimSpace(os.Getenv("GOOGLE_CLIENT_ID"))
 	GoogleClientSecret = strings.TrimSpace(os.Getenv("GOOGLE_CLIENT_SECRET"))
 	GoogleOAuthRedirectURI = strings.TrimSpace(os.Getenv("GOOGLE_OAUTH_REDIRECT_URI"))
+	GoogleAppOAuthRedirectURI = strings.TrimSpace(os.Getenv("GOOGLE_APP_OAUTH_REDIRECT_URI"))
+	if GoogleAppOAuthRedirectURI == "" {
+		GoogleAppOAuthRedirectURI = GoogleOAuthRedirectURI
+	}
 	WhopAPIKey = strings.TrimSpace(os.Getenv("WHOP_API_KEY"))
 	WhopWebhookSecret = strings.TrimSpace(os.Getenv("WHOP_WEBHOOK_SECRET"))
 	WhopCompanyID = strings.TrimSpace(os.Getenv("WHOP_COMPANY_ID"))
 	WhopPlanID = strings.TrimSpace(os.Getenv("WHOP_PLAN_ID"))
+	WhopPlanIDStandard = strings.TrimSpace(os.Getenv("WHOP_PLAN_ID_STANDARD"))
+	WhopPlanIDPro = strings.TrimSpace(os.Getenv("WHOP_PLAN_ID_PRO"))
 	WhopProductID = strings.TrimSpace(os.Getenv("WHOP_PRODUCT_ID"))
 	AdminEmails = parseEmailList(os.Getenv("ADMIN_EMAILS"))
 	OpenAIAPIKey = strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))

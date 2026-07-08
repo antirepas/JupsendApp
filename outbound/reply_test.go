@@ -34,3 +34,17 @@ func TestExtractSendIDFromReplyHeader(t *testing.T) {
 		t.Fatalf("got %d", id)
 	}
 }
+
+func TestReplyDedupeKeyPrefersMessageID(t *testing.T) {
+	key := replyDedupeKey(ReplyMatch{EmailSendID: 42}, "<abc@mail.test>")
+	if key != "imap-msg:abc@mail.test" {
+		t.Fatalf("got %q", key)
+	}
+}
+
+func TestReplyDedupeKeyFallsBackToSendID(t *testing.T) {
+	key := replyDedupeKey(ReplyMatch{EmailSendID: 42}, "")
+	if key != "reply:42" {
+		t.Fatalf("got %q", key)
+	}
+}

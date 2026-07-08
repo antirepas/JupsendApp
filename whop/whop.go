@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"emailtracker.com/config"
+	"emailtracker.com/model"
 )
 
 const apiBase = "https://api.whop.com/api/v1"
@@ -23,11 +24,11 @@ type CheckoutResponse struct {
 	PurchaseURL string `json:"purchase_url"`
 }
 
-func CreateCheckout(userID int64, redirectURL string) (string, error) {
+func CreateCheckout(userID int64, tier model.PlanTier, redirectURL string) (string, error) {
 	if config.WhopAPIKey == "" || config.WhopCompanyID == "" {
 		return "", fmt.Errorf("whop not configured: set WHOP_API_KEY and WHOP_COMPANY_ID")
 	}
-	planID, err := resolvePlanID()
+	planID, err := resolvePlanIDForTier(tier)
 	if err != nil {
 		return "", err
 	}
@@ -37,6 +38,7 @@ func CreateCheckout(userID int64, redirectURL string) (string, error) {
 		"redirect_url": redirectURL,
 		"metadata": map[string]string{
 			"user_id": strconv.FormatInt(userID, 10),
+			"plan_tier": string(tier),
 		},
 	}
 	raw, _ := json.Marshal(body)
@@ -67,9 +69,21 @@ func CreateCheckout(userID int64, redirectURL string) (string, error) {
 	return out.PurchaseURL, nil
 }
 
-func resolvePlanID() (string, error) {
-	planID := strings.TrimSpace(config.WhopPlanID)
-	productID := strings.TrimSpace(config.WhopProductID)
+func resolvePlanIDForTier(tier model.PlanTier) (string, error) {
+	switch tier {
+	case model.PlanTierPro:
+		return resolvePlanIDFromConfig(config.WhopPlanIDPro, config.WhopPlanID, config.WhopProductID)
+	case model.PlanTierStandard:
+		return resolvePlanIDFromConfig(config.WhopPlanIDStandard, config.WhopPlanID, config.WhopProductID)
+	default:
+		return resolvePlanIDFromConfig(config.WhopPlanID, config.WhopPlanID, config.WhopProductID)
+	}
+}
+
+func resolvePlanIDFromConfig(planID, fallbackPlanID, productID string) (string, error) {
+	planID = strings.TrimSpace(planID)
+	productID = strings.TrimSpace(productID)
+	fallbackPlanID = strings.TrimSpace(fallbackPlanID)
 
 	if strings.HasPrefix(planID, "prod_") {
 		productID = planID
@@ -80,6 +94,17 @@ func resolvePlanID() (string, error) {
 	}
 	if planID != "" && !strings.HasPrefix(planID, "plan_") {
 		return "", fmt.Errorf("WHOP_PLAN_ID must start with plan_ (got %q). Use WHOP_PRODUCT_ID for prod_ IDs", planID)
+	}
+	if planID == "" && fallbackPlanID != "" {
+		planID = strings.TrimSpace(fallbackPlanID)
+		if strings.HasPrefix(planID, "plan_") {
+			return planID, nil
+		}
+		// If fallbackPlanID was a prod_ style, allow it too.
+		if strings.HasPrefix(planID, "prod_") {
+			productID = planID
+			planID = ""
+		}
 	}
 	if productID == "" {
 		return "", fmt.Errorf("set WHOP_PLAN_ID (plan_...) or WHOP_PRODUCT_ID (prod_...)")

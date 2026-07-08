@@ -191,7 +191,7 @@ func GetRecentContactActivity(userID int64, limit int) ([]ContactActivityItem, e
 			INNER JOIN contact c ON c.id = es.contact_id
 			LEFT JOIN tracked_links tl ON tl.tracking_id = ee.tracking_id AND ee.event_type = 'click'
 			LEFT JOIN campaigns camp ON camp.id = es.campaign_id
-			WHERE es.user_id = ?
+			WHERE es.user_id = ? AND ee.event_type IN ('open', 'click')
 			UNION ALL
 			SELECT c.id, c.email, COALESCE(ce.email_send_id, 0), 'reply',
 				'', COALESCE(camp.name, ''), ce.occurred_at

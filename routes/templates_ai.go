@@ -7,6 +7,7 @@ import (
 	"unicode/utf8"
 
 	"emailtracker.com/ai"
+	"emailtracker.com/model"
 	"emailtracker.com/util"
 	"github.com/gin-gonic/gin"
 )
@@ -39,8 +40,13 @@ func requireAI(ctx *gin.Context) (int64, bool) {
 		return 0, false
 	}
 	userID := mustUserID(ctx)
-	if !ai.AllowRequest(userID) {
-		ctx.JSON(http.StatusTooManyRequests, gin.H{"error": "AI rate limit exceeded"})
+	cap, remaining, ok := model.ConsumeAICredit(userID)
+	if !ok {
+		ctx.JSON(http.StatusTooManyRequests, gin.H{
+			"error":     "AI credits exhausted",
+			"remaining": remaining,
+			"cap":       cap,
+		})
 		return 0, false
 	}
 	return userID, true

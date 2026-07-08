@@ -2,9 +2,11 @@ package model
 
 import (
 	"database/sql"
+	"fmt"
 	"time"
 
 	"emailtracker.com/db"
+	"golang.org/x/sync/errgroup"
 )
 
 type Campaign struct {
@@ -54,11 +56,15 @@ type VariantStats struct {
 
 type CampaignDetail struct {
 	CampaignListItem
-	TemplateAID int64
-	TemplateBID int64
-	Contacts    []CampaignContactItem
-	VariantA    VariantStats
-	VariantB    VariantStats
+	TemplateAID          int64
+	TemplateBID          int64
+	ExecutionMode        string
+	WorkflowVersionID    int64
+	ContactListID        int64
+	ExperimentVariable   string
+	ExperimentHypothesis string
+	VariantA             VariantStats
+	VariantB             VariantStats
 }
 
 type CampaignContactItem struct {
@@ -113,6 +119,40 @@ func CreateCampaign(userID int64, name string, templateAID, templateBID int64, e
 	var id int64
 	err := row.Scan(&id)
 	return id, err
+}
+
+func UpdateCampaignTemplates(campaignID, userID, templateAID, templateBID int64) error {
+	var bID interface{}
+	if templateBID > 0 {
+		bID = templateBID
+	}
+	res, err := db.Exec(`
+		UPDATE campaigns SET template_a_id = ?, template_b_id = ?
+		WHERE id = ? AND user_id = ? AND status NOT IN ('sent', 'sending')
+	`, templateAID, bID, campaignID, userID)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("campaign not found or already launched")
+	}
+	return nil
+}
+
+func UpdateCampaignExperiment(campaignID, userID int64, variable, hypothesis string) error {
+	res, err := db.Exec(`
+		UPDATE campaigns SET experiment_variable = ?, experiment_hypothesis = ?
+		WHERE id = ? AND user_id = ? AND status NOT IN ('sent', 'sending')
+	`, variable, hypothesis, campaignID, userID)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("campaign not found or already launched")
+	}
+	return nil
 }
 
 func ListCampaigns(userID int64) ([]CampaignListItem, error) {
@@ -213,38 +253,87 @@ func GetCampaignDetail(id, userID int64) (CampaignDetail, error) {
 		return CampaignDetail{}, err
 	}
 
-	list, err := ListCampaigns(userID)
-	if err != nil {
-		return CampaignDetail{}, err
-	}
+	var item CampaignListItem
+	var jobCounts SendJobCounts
+	var variantA, variantB VariantStats
 
-	var detail CampaignDetail
-	for _, item := range list {
-		if item.ID == id {
-			detail.CampaignListItem = item
-			break
-		}
+	g := errgroup.Group{}
+	g.Go(func() error {
+		var e error
+		item, e = GetCampaignListItemByID(id, userID)
+		return e
+	})
+	if c.IsSending || c.Status != "sent" {
+		g.Go(func() error {
+			jobCounts, _ = CountSendJobsByCampaign(id)
+			return nil
+		})
 	}
-	detail.TemplateAID = c.TemplateAID
-	detail.TemplateBID = c.TemplateBID
-	detail.IsSending = c.IsSending
-	detail.DisplayStatus = ComputeDisplayStatus(detail.Status, detail.ScheduledAt, detail.IsSending)
-	if c.IsSending || detail.Status != "sent" {
-		detail.SendJobCounts, _ = CountSendJobsByCampaign(id)
-	}
-
-	contacts, err := GetCampaignContacts(id)
-	if err != nil {
-		return CampaignDetail{}, err
-	}
-	detail.Contacts = contacts
-
-	detail.VariantA, _ = getVariantStats(id, "A", c.TemplateAID)
+	g.Go(func() error {
+		variantA, _ = getVariantStats(id, "A", c.TemplateAID)
+		return nil
+	})
 	if c.TemplateBID > 0 {
-		detail.VariantB, _ = getVariantStats(id, "B", c.TemplateBID)
+		g.Go(func() error {
+			variantB, _ = getVariantStats(id, "B", c.TemplateBID)
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return CampaignDetail{}, err
 	}
 
+	detail := CampaignDetail{
+		CampaignListItem:     item,
+		TemplateAID:          c.TemplateAID,
+		TemplateBID:          c.TemplateBID,
+		ExecutionMode:        c.ExecutionMode,
+		WorkflowVersionID:    c.WorkflowVersionID,
+		ContactListID:        c.ContactListID,
+		ExperimentVariable:   c.ExperimentVariable,
+		ExperimentHypothesis: c.ExperimentHypothesis,
+		VariantA:             variantA,
+		VariantB:             variantB,
+	}
+	detail.IsSending = c.IsSending
+	detail.SendJobCounts = jobCounts
+	detail.DisplayStatus = ComputeDisplayStatus(detail.Status, detail.ScheduledAt, detail.IsSending)
 	return detail, nil
+}
+
+func GetCampaignListItemByID(id, userID int64) (CampaignListItem, error) {
+	query := `
+		SELECT c.id, c.name, c.status, c.created_at, c.scheduled_at,
+			COALESCE(c.execution_mode, 'bulk'), COALESCE(c.workflow_version_id, 0),
+			COALESCE(ta.name, ''), COALESCE(tb.name, ''),
+			COALESCE(w.name, ''),
+			COALESCE(cc.cnt, 0), COALESCE(c.is_sending, 0)
+		FROM campaigns c
+		LEFT JOIN template ta ON ta.id = c.template_a_id
+		LEFT JOIN template tb ON tb.id = c.template_b_id
+		LEFT JOIN workflow_versions wv ON wv.id = c.workflow_version_id
+		LEFT JOIN workflows w ON w.id = wv.workflow_id
+		LEFT JOIN (
+			SELECT campaign_id, COUNT(*) as cnt FROM campaign_contacts GROUP BY campaign_id
+		) cc ON cc.campaign_id = c.id
+		WHERE c.user_id = ? AND c.id = ?
+	`
+	var item CampaignListItem
+	var scheduled sql.NullTime
+	var isSending int
+	err := db.QueryRow(query, userID, id).Scan(
+		&item.ID, &item.Name, &item.Status, &item.CreatedAt, &scheduled,
+		&item.ExecutionMode, &item.WorkflowVersionID,
+		&item.TemplateAName, &item.TemplateBName, &item.WorkflowName,
+		&item.ContactCount, &isSending,
+	)
+	if err != nil {
+		return CampaignListItem{}, err
+	}
+	item.ScheduledAt = scanScheduledAt(scheduled)
+	item.IsSending = isSending == 1
+	item.DisplayStatus = ComputeDisplayStatus(item.Status, item.ScheduledAt, item.IsSending)
+	return item, nil
 }
 
 func getVariantStats(campaignID int64, variant string, templateID int64) (VariantStats, error) {

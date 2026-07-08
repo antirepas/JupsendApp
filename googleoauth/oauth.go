@@ -32,8 +32,24 @@ func Config() *oauth2.Config {
 	}
 }
 
+// AppConfig is used for app sign-in flows that need a different redirect URI
+// than the Gmail connection callback.
+func AppConfig() *oauth2.Config {
+	return &oauth2.Config{
+		ClientID:     config.GoogleClientID,
+		ClientSecret: config.GoogleClientSecret,
+		RedirectURL:  config.GoogleAppOAuthRedirectURI,
+		Scopes:       gmailScopes,
+		Endpoint:     google.Endpoint,
+	}
+}
+
 func AuthURL(state string) string {
 	return Config().AuthCodeURL(state, oauth2.AccessTypeOffline, oauth2.ApprovalForce)
+}
+
+func AppAuthURL(state string) string {
+	return AppConfig().AuthCodeURL(state, oauth2.AccessTypeOffline, oauth2.ApprovalForce)
 }
 
 type googleProfile struct {
@@ -43,6 +59,16 @@ type googleProfile struct {
 
 func ExchangeCode(ctx context.Context, code string) (*oauth2.Token, googleProfile, error) {
 	tok, err := Config().Exchange(ctx, code)
+	if err != nil {
+		return nil, googleProfile{}, err
+	}
+	profile, err := fetchProfile(ctx, tok)
+	return tok, profile, err
+}
+
+// AppExchangeCode is the same as ExchangeCode, but uses the app-specific redirect URI.
+func AppExchangeCode(ctx context.Context, code string) (*oauth2.Token, googleProfile, error) {
+	tok, err := AppConfig().Exchange(ctx, code)
 	if err != nil {
 		return nil, googleProfile{}, err
 	}

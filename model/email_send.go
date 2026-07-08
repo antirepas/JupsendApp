@@ -56,6 +56,18 @@ func CreateQueuedEmailSend(userID, tId, cId int64, trackId string, campaignID in
 	return id, err
 }
 
+func GetEmailSendSentAt(sendID int64) (time.Time, error) {
+	var sentAt sql.NullTime
+	err := db.QueryRow(`SELECT sent_at FROM email_sends WHERE id = ?`, sendID).Scan(&sentAt)
+	if err != nil {
+		return time.Time{}, err
+	}
+	if !sentAt.Valid {
+		return time.Time{}, nil
+	}
+	return sentAt.Time, nil
+}
+
 func MarkEmailSendSent(sendID, accountID, jobID int64) error {
 	_, err := db.Exec(`
 		UPDATE email_sends SET delivery_status='sent', sent_at=?, smtp_account_id=?, send_job_id=? WHERE id=?

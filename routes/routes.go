@@ -19,6 +19,8 @@ func RegisterRoutes(server *gin.Engine) {
 		"templates/partials/sidebar.html",
 		"templates/auth_login.html",
 		"templates/auth_signup.html",
+		"templates/pricing_plan.html",
+		"templates/onboarding_activating.html",
 		"templates/settings.html",
 		"templates/billing.html",
 		"templates/dashboard.html",
@@ -34,8 +36,10 @@ func RegisterRoutes(server *gin.Engine) {
 		"templates/campaigns_list.html",
 		"templates/campaigns_form.html",
 		"templates/campaigns_detail.html",
+		"templates/campaigns_workflow_graph.html",
 		"templates/campaigns_analytics.html",
 		"templates/campaigns_workflow_analytics.html",
+		"templates/campaigns_hybrid_analytics.html",
 		"templates/workflows_list.html",
 		"templates/workflows_form.html",
 		"templates/workflows_builder.html",
@@ -57,6 +61,16 @@ func RegisterRoutes(server *gin.Engine) {
 	server.GET("/signup", RedirectIfAuthed(), SignupPage)
 	server.POST("/signup", RedirectIfAuthed(), SignupSubmit)
 	server.POST("/logout", Logout)
+
+	// Plan-first onboarding (3 separate URLs) + Google OAuth sign-in.
+	server.GET("/signup/:plan", RedirectIfAuthed(), SignupPlanPage)
+	server.GET("/auth/google/start", AppGoogleStart)
+	server.GET("/auth/google/callback", AppGoogleCallback)
+	onboarding := server.Group("/")
+	onboarding.Use(RequireAuth())
+	{
+		onboarding.GET("/onboarding/activate", OnboardingActivatePage)
+	}
 
 	v1 := server.Group("/api/v1")
 	v1.GET("/track/open/:id", TrackOpen)
@@ -137,6 +151,7 @@ func RegisterRoutes(server *gin.Engine) {
 		authd.GET("/workflows", ListWorkflowsPage)
 		authd.GET("/workflows/new", NewWorkflowPage)
 		authd.POST("/workflows", CreateWorkflowWeb)
+		authd.POST("/workflows/:id/delete", DeleteWorkflowWeb)
 		authd.GET("/workflows/:id/edit", WorkflowBuilderPage)
 		authd.GET("/workflows/:id/analytics", WorkflowAnalyticsPage)
 
@@ -155,6 +170,7 @@ func RegisterRoutes(server *gin.Engine) {
 		authd.POST("/campaigns/:id/paste", PasteCampaignContacts)
 		authd.POST("/campaigns/:id/upload", UploadCampaignContacts)
 		authd.GET("/campaigns/:id/sample", DownloadCampaignSample)
+		authd.POST("/campaigns/:id/workflow-templates", SaveCampaignWorkflowTemplatesWeb)
 		authd.POST("/campaigns/:id/send", SendCampaign)
 
 		authd.GET("/sends", ListSendsPage)

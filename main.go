@@ -47,6 +47,9 @@ func main() {
 	server.Use(sessions.Sessions("emailtracker_session", store))
 
 	db.Prepare()
+	model.MigrateExistingActiveUsersToStandard()
+	model.MigrateAllUsersToPlanLimits()
+	model.MigrateLegacyCampaignWorkflowStepTemplates()
 	defer db.Close()
 
 	engine := routes.InitWorkflowEngine()

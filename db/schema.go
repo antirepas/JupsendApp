@@ -79,6 +79,13 @@ func runSchema() {
 			PRIMARY KEY (campaign_id, contact_id)
 		)`,
 
+		`CREATE TABLE IF NOT EXISTS campaign_workflow_step_templates (
+			campaign_id BIGINT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+			node_key TEXT NOT NULL,
+			template_id BIGINT NOT NULL REFERENCES template(id),
+			PRIMARY KEY (campaign_id, node_key)
+		)`,
+
 		`CREATE TABLE IF NOT EXISTS email_sends (
 			id BIGSERIAL PRIMARY KEY,
 			user_id BIGINT REFERENCES users(id),
@@ -161,6 +168,8 @@ func runSchema() {
 			workflow_version_id BIGINT NOT NULL REFERENCES workflow_versions(id),
 			contact_id BIGINT NOT NULL REFERENCES contact(id),
 			campaign_id BIGINT REFERENCES campaigns(id),
+			fork_root_id BIGINT REFERENCES workflow_instances(id) ON DELETE SET NULL,
+			branch_priority INTEGER NOT NULL DEFAULT 0,
 			current_node_key TEXT NOT NULL,
 			status TEXT NOT NULL DEFAULT 'active',
 			next_wake_at TIMESTAMPTZ,

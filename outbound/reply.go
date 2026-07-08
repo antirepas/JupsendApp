@@ -137,10 +137,18 @@ func MatchReply(userID int64, from, subject, body string, inReplyTo []string, us
 	}, true
 }
 
-func handleReply(userID int64, match ReplyMatch) {
-	if match.TrackingID != "" {
-		_ = model.StoreEvent(match.TrackingID, "reply", "imap-reply", "")
+func handleReply(userID int64, match ReplyMatch, imapMessageID string) {
+	dedupe := replyDedupeKey(match, imapMessageID)
+	if dedupe != "" {
+		if exists, _ := model.ContactEventExistsByDedupe(dedupe); exists {
+			return
+		}
+	} else if match.EmailSendID > 0 {
+		if exists, _ := model.HasContactEventForSend(match.EmailSendID, "REPLY"); exists {
+			return
+		}
 	}
+
 	var wfID int64
 	if match.EmailSendID > 0 {
 		instID := model.GetSendWorkflowInstanceID(match.EmailSendID)
@@ -151,10 +159,6 @@ func handleReply(userID int64, match ReplyMatch) {
 				wfID = v.WorkflowID
 			}
 		}
-	}
-	dedupe := ""
-	if match.EmailSendID > 0 {
-		dedupe = "reply:" + strconv.FormatInt(match.EmailSendID, 10)
 	}
 	_, _ = model.InsertContactEvent(model.ContactEventInput{
 		ContactID:   match.ContactID,
@@ -169,4 +173,18 @@ func handleReply(userID int64, match ReplyMatch) {
 	})
 	_ = model.MarkContactReplied(match.ContactID)
 	_ = model.CancelActiveInstancesForContact(match.ContactID)
+}
+
+func replyDedupeKey(match ReplyMatch, imapMessageID string) string {
+	if mid := normalizeMessageID(imapMessageID); mid != "" {
+		return "imap-msg:" + mid
+	}
+	if match.EmailSendID > 0 {
+		return "reply:" + strconv.FormatInt(match.EmailSendID, 10)
+	}
+	return ""
+}
+
+func normalizeMessageID(id string) string {
+	return strings.Trim(strings.TrimSpace(id), "<>")
 }

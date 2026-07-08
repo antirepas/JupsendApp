@@ -2,7 +2,6 @@ package model
 
 import (
 	"database/sql"
-	"sort"
 	"strings"
 	"time"
 
@@ -121,85 +120,7 @@ type CampaignAnalytics struct {
 }
 
 func GetCampaignAnalytics(campaignID, userID int64) (CampaignAnalytics, error) {
-	c, err := GetCampaignForUser(campaignID, userID)
-	if err != nil {
-		return CampaignAnalytics{}, err
-	}
-
-	list, _ := ListCampaigns(userID)
-	var aName, bName string
-	for _, item := range list {
-		if item.ID == campaignID {
-			aName = item.TemplateAName
-			bName = item.TemplateBName
-			break
-		}
-	}
-
-	contactIDs, err := GetCampaignContactIDs(campaignID)
-	if err != nil {
-		return CampaignAnalytics{}, err
-	}
-
-	hasB := c.TemplateBID > 0
-	analytics := CampaignAnalytics{
-		CampaignID:           campaignID,
-		Name:                 c.Name,
-		Status:               ComputeDisplayStatus(c.Status, c.ScheduledAt, c.IsSending),
-		CreatedAt:            c.CreatedAt,
-		HasVariantB:          hasB,
-		TemplateAName:          aName,
-		TemplateBName:          bName,
-		ExperimentVariable:     c.ExperimentVariable,
-		ExperimentHypothesis:   c.ExperimentHypothesis,
-	}
-
-	analytics.Overview.ContactCount = len(contactIDs)
-	analytics.VariantA = buildVariantAnalytics("A", c.TemplateAID, aName, contactIDs, hasB, campaignID)
-	if hasB {
-		analytics.VariantB = buildVariantAnalytics("B", c.TemplateBID, bName, contactIDs, hasB, campaignID)
-	}
-
-	analytics.Contacts = getContactEngagement(campaignID, contactIDs, hasB, c.TemplateAID, c.TemplateBID, aName, bName)
-	analytics.DailyStats = getCampaignDailyStats(campaignID)
-	analytics.HourlyOpens = getCampaignHourlyStats(campaignID, "open")
-	analytics.HourlyClicks = getCampaignHourlyStats(campaignID, "click")
-	analytics.LinkClicks = getCampaignLinkClicks(campaignID)
-	analytics.VariableCoverage = getVariableCoverage(campaignID, c.TemplateAID, c.TemplateBID, contactIDs)
-
-	fillOverview(&analytics)
-	analytics.Funnel = EngagementFunnel{
-		Sent:    analytics.Overview.SentCount,
-		Opened:  analytics.Overview.UniqueOpens,
-		Clicked: analytics.Overview.UniqueClicks,
-		Replied: analytics.Overview.ReplyCount,
-	}
-	if analytics.Funnel.Sent > 0 {
-		analytics.Funnel.OpenPctOfSent = float64(analytics.Funnel.Opened) / float64(analytics.Funnel.Sent) * 100
-	}
-	if analytics.Funnel.Opened > 0 {
-		analytics.Funnel.ClickPctOfOpens = float64(analytics.Funnel.Clicked) / float64(analytics.Funnel.Opened) * 100
-	}
-	analytics.ABWinner, analytics.ABWinnerMethod = pickABWinner(analytics.VariantA, analytics.VariantB, hasB)
-
-	bench := GetAccountBenchmark(userID, 30)
-	analytics.AccountBenchmark = bench
-	if analytics.Overview.SentCount > 0 {
-		analytics.CampaignReplyRate = float64(analytics.Overview.ReplyCount) / float64(analytics.Overview.SentCount) * 100
-		analytics.ReplyRateDelta = analytics.CampaignReplyRate - bench.ReplyRate
-	}
-	if bench.PersonalBestCampaignID == campaignID || (analytics.CampaignReplyRate > 0 && analytics.CampaignReplyRate >= bench.PersonalBestReplyRate && analytics.Overview.SentCount >= 20) {
-		analytics.IsPersonalBest = true
-	}
-
-	sort.Slice(analytics.DailyStats, func(i, j int) bool {
-		return analytics.DailyStats[i].Date < analytics.DailyStats[j].Date
-	})
-	sort.Slice(analytics.VariableCoverage, func(i, j int) bool {
-		return analytics.VariableCoverage[i].Variable < analytics.VariableCoverage[j].Variable
-	})
-
-	return analytics, nil
+	return GetCampaignAnalyticsParallel(campaignID, userID)
 }
 
 func buildVariantAnalytics(variant string, templateID int64, templateName string, contactIDs []int64, hasB bool, campaignID int64) VariantAnalytics {

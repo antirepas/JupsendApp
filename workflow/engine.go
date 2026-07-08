@@ -3,6 +3,7 @@ package workflow
 import (
 	"fmt"
 	"log"
+	"sort"
 	"time"
 
 	"emailtracker.com/model"
@@ -106,11 +107,63 @@ func (e *Engine) ProcessInstance(instanceID int64) error {
 		if edgeType == "" {
 			edgeType = "default"
 		}
-		nextKey, ok := pickNextNode(adj, inst.CurrentNodeKey, edgeType)
-		if !ok {
-			inst.Status = "failed"
-			_ = model.UpdateInstanceState(inst)
-			return fmt.Errorf("no edge from %s type %s", inst.CurrentNodeKey, edgeType)
+
+		outEdges := adj[inst.CurrentNodeKey]
+		var matching []model.WorkflowEdge
+		for _, edge := range outEdges {
+			if edge.EdgeType == edgeType {
+				matching = append(matching, edge)
+			}
+		}
+
+		var nextKey string
+		if edgeType == "default" && len(matching) > 1 {
+			campaignID := int64(0)
+			if inst.CampaignID != nil {
+				campaignID = *inst.CampaignID
+			}
+
+			sort.Slice(matching, func(i, j int) bool {
+				if matching[i].Priority != matching[j].Priority {
+					return matching[i].Priority < matching[j].Priority
+				}
+				return matching[i].TargetNodeKey < matching[j].TargetNodeKey
+			})
+
+			// Root follows the highest-priority edge (lowest priority number).
+			rootEdge := matching[0]
+			nextKey = rootEdge.TargetNodeKey
+			inst.BranchPriority = rootEdge.Priority
+
+			// Create sibling instances for the other branches.
+			for _, forkEdge := range matching[1:] {
+				ctxJSON := inst.ContextJSON
+				forkID, err := model.CreateForkedWorkflowInstance(
+					inst.WorkflowVersionID,
+					inst.ContactID,
+					campaignID,
+					inst.ID,
+					forkEdge.TargetNodeKey,
+					ctxJSON,
+					forkEdge.Priority,
+				)
+				if err != nil {
+					continue
+				}
+
+				// Run the branch immediately so conditions evaluate without waiting for scheduler.
+				if ok, _ := model.ClaimInstance(forkID); ok {
+					_ = e.ProcessInstance(forkID)
+				}
+			}
+		} else {
+			var ok bool
+			nextKey, ok = pickNextNode(adj, inst.CurrentNodeKey, edgeType)
+			if !ok {
+				inst.Status = "failed"
+				_ = model.UpdateInstanceState(inst)
+				return fmt.Errorf("no edge from %s type %s", inst.CurrentNodeKey, edgeType)
+			}
 		}
 
 		inst.CurrentNodeKey = nextKey

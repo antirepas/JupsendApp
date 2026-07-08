@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"emailtracker.com/model"
 )
@@ -82,23 +83,73 @@ func EvaluateCondition(predicate string, params map[string]interface{}, inst mod
 	}
 }
 
-func resolveScopeSendID(params map[string]interface{}, inst model.WorkflowInstance) (int64, error) {
-	scope, _ := params["email_send_scope"].(string)
-	if scope == "last_in_workflow" || scope == "" {
-		ctx := model.GetInstanceContext(&inst)
-		if v, ok := ctx["last_send_id"]; ok {
-			switch t := v.(type) {
-			case float64:
-				return int64(t), nil
-			case int64:
-				return t, nil
-			case int:
-				return int64(t), nil
+// NegativePredicateWait handles grace periods for has_not_opened / has_not_replied.
+// Returns a wake time while waiting, an early branch if engagement already happened,
+// or neither when the condition should be evaluated now.
+func NegativePredicateWait(predicate string, params map[string]interface{}, inst model.WorkflowInstance) (wakeAt *time.Time, earlyEdge string, err error) {
+	if predicate != "has_not_opened" && predicate != "has_not_replied" {
+		return nil, "", nil
+	}
+	waitDays := intParam(params, "wait_days", 3)
+	if waitDays < 1 {
+		waitDays = 1
+	}
+
+	sendID, err := resolveScopeSendID(params, inst)
+	if err != nil {
+		return nil, "", err
+	}
+	if sendID == 0 {
+		return nil, "", fmt.Errorf("no email send to check")
+	}
+
+	sentAt, err := model.GetEmailSendSentAt(sendID)
+	if err != nil {
+		return nil, "", err
+	}
+	if sentAt.IsZero() {
+		wake := time.Now().Add(time.Hour)
+		return &wake, "", nil
+	}
+
+	checkAt := sentAt.Add(time.Duration(waitDays) * 24 * time.Hour)
+	if time.Now().Before(checkAt) {
+		if predicate == "has_not_opened" {
+			opened, _ := model.HasContactEventForSend(sendID, "OPEN")
+			if opened {
+				return nil, "false", nil
 			}
 		}
-		return model.GetLastSendIDForInstance(inst.ID)
+		if predicate == "has_not_replied" {
+			replied, _ := model.HasContactEventForSend(sendID, "REPLY")
+			if replied {
+				return nil, "false", nil
+			}
+		}
+		wake := checkAt
+		return &wake, "", nil
 	}
-	return model.GetLastSendIDForInstance(inst.ID)
+	return nil, "", nil
+}
+
+func resolveScopeSendID(params map[string]interface{}, inst model.WorkflowInstance) (int64, error) {
+	if params == nil {
+		params = map[string]interface{}{}
+	}
+	baseInstID := inst.ID
+	if inst.ForkRootID != nil {
+		baseInstID = *inst.ForkRootID
+	}
+	scope, _ := params["email_send_scope"].(string)
+	if scope == "node" {
+		nodeKey, _ := params["email_node_key"].(string)
+		if nodeKey == "" {
+			return 0, fmt.Errorf("email_node_key required")
+		}
+		return model.GetSendIDForInstanceNode(baseInstID, nodeKey)
+	}
+	// Fork branches evaluate against the send history of the fork root.
+	return model.GetLastSendIDForInstance(baseInstID)
 }
 
 func intParam(params map[string]interface{}, key string, def int) int {

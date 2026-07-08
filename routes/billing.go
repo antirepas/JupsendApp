@@ -40,7 +40,7 @@ func BillingCheckout(c *gin.Context) {
 	}
 	base := model.UserBaseURL(userID)
 	redirectURL := strings.TrimRight(base, "/") + "/settings/billing?success=1"
-	purchaseURL, err := whop.CreateCheckout(userID, redirectURL)
+	purchaseURL, err := whop.CreateCheckout(userID, model.PlanTierStandard, redirectURL)
 	if err != nil {
 		log.Printf("whop checkout: %v", err)
 		msg := err.Error()
@@ -85,6 +85,7 @@ func handleMembershipActivated(data json.RawMessage) {
 		return
 	}
 	userID := whop.UserIDFromMetadata(m.Metadata)
+	tier := planTierFromMetadata(m.Metadata)
 	memberID := ""
 	if m.Member != nil {
 		memberID = m.Member.ID
@@ -95,10 +96,14 @@ func handleMembershipActivated(data json.RawMessage) {
 	}
 	if userID > 0 {
 		_ = model.UpdateUserSubscription(userID, model.SubStatusActive, m.ID, memberID, ends)
+		_ = model.ApplyPlanLimitsToUser(userID, tier)
 		return
 	}
 	if m.User != nil && m.User.Email != "" {
 		_ = model.UpdateUserSubscriptionByEmail(m.User.Email, model.SubStatusActive, m.ID, memberID, ends)
+		if u, err := model.GetUserByEmail(m.User.Email); err == nil {
+			_ = model.ApplyPlanLimitsToUser(u.ID, tier)
+		}
 	}
 }
 
@@ -114,10 +119,14 @@ func handleMembershipDeactivated(data json.RawMessage) {
 	}
 	if userID > 0 {
 		_ = model.UpdateUserSubscription(userID, model.SubStatusCancelled, m.ID, memberID, nil)
+		_ = model.ApplyPlanLimitsToUser(userID, model.PlanTierFree)
 		return
 	}
 	if m.User != nil && m.User.Email != "" {
 		_ = model.UpdateUserSubscriptionByEmail(m.User.Email, model.SubStatusCancelled, m.ID, memberID, nil)
+		if u, err := model.GetUserByEmail(m.User.Email); err == nil {
+			_ = model.ApplyPlanLimitsToUser(u.ID, model.PlanTierFree)
+		}
 	}
 }
 
@@ -129,9 +138,30 @@ func handlePaymentFailed(data json.RawMessage) {
 	userID := whop.UserIDFromMetadata(m.Metadata)
 	if userID > 0 {
 		_ = model.UpdateUserSubscription(userID, model.SubStatusPastDue, m.ID, "", nil)
+		_ = model.ApplyPlanLimitsToUser(userID, model.PlanTierFree)
 		return
 	}
 	if m.User != nil && m.User.Email != "" {
 		_ = model.UpdateUserSubscriptionByEmail(m.User.Email, model.SubStatusPastDue, m.ID, "", nil)
+		if u, err := model.GetUserByEmail(m.User.Email); err == nil {
+			_ = model.ApplyPlanLimitsToUser(u.ID, model.PlanTierFree)
+		}
 	}
+}
+
+func planTierFromMetadata(meta map[string]interface{}) model.PlanTier {
+	if meta == nil {
+		return model.PlanTierStandard
+	}
+	if v, ok := meta["plan_tier"].(string); ok {
+		switch strings.ToLower(v) {
+		case string(model.PlanTierFree):
+			return model.PlanTierFree
+		case string(model.PlanTierPro):
+			return model.PlanTierPro
+		default:
+			return model.PlanTierStandard
+		}
+	}
+	return model.PlanTierStandard
 }

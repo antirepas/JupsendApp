@@ -9,7 +9,7 @@
 <div class="max-w-3xl mx-auto p-8">
 <div class="mb-8">
     <h2 class="text-2xl font-bold text-slate-900">New Campaign</h2>
-    <p class="text-slate-500 mt-1">Send once to everyone, or run a published workflow when you launch</p>
+    <p class="text-slate-500 mt-1">Send once, run a workflow, or A/B test the first workflow email</p>
 </div>
 
 {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
@@ -23,16 +23,21 @@
 
         <div>
             <label class="form-label mb-3 block">How should this campaign send?</label>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <label class="campaign-type-card cursor-pointer border-2 border-brand-600 rounded-lg p-4 block" id="card-bulk">
-                    <input type="radio" name="execution_mode" value="bulk" class="sr-only" checked>
+                    <input type="radio" name="execution_mode" value="bulk" class="sr-only mode-radio" checked>
                     <p class="font-semibold text-charcoal">One-time send</p>
-                    <p class="text-sm text-gray-500 mt-1">Pick a template (optional A/B test) and send to all contacts once.</p>
+                    <p class="text-sm text-gray-500 mt-1">Pick a template (optional A/B) and send once.</p>
                 </label>
                 <label class="campaign-type-card cursor-pointer border-2 border-gray-200 rounded-lg p-4 block" id="card-workflow">
-                    <input type="radio" name="execution_mode" value="workflow" class="sr-only">
-                    <p class="font-semibold text-charcoal">Automated follow-ups</p>
-                    <p class="text-sm text-gray-500 mt-1">Attach a workflow — sends, waits, and branches run per contact when you launch.</p>
+                    <input type="radio" name="execution_mode" value="workflow" class="sr-only mode-radio">
+                    <p class="font-semibold text-charcoal">Workflow</p>
+                    <p class="text-sm text-gray-500 mt-1">Attach a workflow — map follow-up templates on the manage page.</p>
+                </label>
+                <label class="campaign-type-card cursor-pointer border-2 border-gray-200 rounded-lg p-4 block" id="card-workflow-ab">
+                    <input type="radio" name="execution_mode" value="workflow_ab" class="sr-only mode-radio">
+                    <p class="font-semibold text-charcoal">Workflow + A/B first email</p>
+                    <p class="text-sm text-gray-500 mt-1">A/B on the first send; map follow-ups after creation.</p>
                 </label>
             </div>
         </div>
@@ -40,7 +45,7 @@
         <div id="bulk-fields" class="space-y-4">
             <div>
                 <label class="form-label">Template A (variant A)</label>
-                <select name="template_a_id" class="form-input">
+                <select name="template_a_id" id="bulk-template-a" class="form-input">
                     <option value="">Select template A...</option>
                     {{range .templates}}
                     <option value="{{.ID}}">{{.Name}}</option>
@@ -49,7 +54,7 @@
             </div>
             <div>
                 <label class="form-label">Template B (optional A/B)</label>
-                <select name="template_b_id" id="template-b-select" class="form-input">
+                <select name="template_b_id" id="bulk-template-b" class="form-input">
                     <option value="">No B variant</option>
                     {{range .templates}}
                     <option value="{{.ID}}">{{.Name}}</option>
@@ -78,8 +83,8 @@
             </div>
         </div>
 
-        <div id="workflow-fields" class="hidden space-y-3">
-            <p class="text-sm text-gray-600">Launching starts the workflow for every contact on this campaign. Replies automatically stop remaining steps for that contact.</p>
+        <div id="workflow-fields" class="hidden space-y-4">
+            <p class="text-sm text-gray-600">Launching starts the workflow for every contact. Replies automatically stop remaining steps for that contact. You'll map templates to each send step on the campaign manage page.</p>
             {{if .workflows}}
             <fieldset class="space-y-2">
                 <legend class="form-label">Published workflow</legend>
@@ -93,6 +98,44 @@
                 </label>
                 {{end}}
             </fieldset>
+
+            <div id="hybrid-ab-fields" class="hidden space-y-3 p-4 bg-violet-50 border border-violet-100 rounded-lg">
+                <p class="text-sm font-medium text-charcoal">First send step — A/B templates</p>
+                <div>
+                    <label class="form-label">Template A</label>
+                    <select name="template_a_id" id="wf-template-a" class="form-input wf-template-select" disabled>
+                        <option value="">Select template A...</option>
+                        {{range .templates}}
+                        <option value="{{.ID}}">{{.Name}}</option>
+                        {{end}}
+                    </select>
+                </div>
+                <div>
+                    <label class="form-label">Template B</label>
+                    <select name="template_b_id" id="wf-template-b" class="form-input wf-template-select" disabled>
+                        <option value="">Select template B...</option>
+                        {{range .templates}}
+                        <option value="{{.ID}}">{{.Name}}</option>
+                        {{end}}
+                    </select>
+                </div>
+                <div class="space-y-3 pt-2 border-t border-violet-200">
+                    <div>
+                        <label class="form-label">What are you testing?</label>
+                        <select name="experiment_variable" class="form-input wf-experiment-field" disabled>
+                            <option value="subject">Subject line</option>
+                            <option value="opener">Opening line</option>
+                            <option value="offer">Offer / value prop</option>
+                            <option value="full_message">Full message</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label">Hypothesis</label>
+                        <textarea name="experiment_hypothesis" class="form-input wf-experiment-field" rows="2" placeholder="e.g. Hiring-focused subject beats ramp-time subject" disabled></textarea>
+                    </div>
+                </div>
+            </div>
             {{else}}
             <div class="p-4 bg-amber-50 border border-amber-100 rounded-lg text-sm">
                 <p class="text-amber-900 font-medium">No published workflows yet</p>
@@ -114,43 +157,62 @@
 <script>
 const bulkCard = document.getElementById('card-bulk');
 const wfCard = document.getElementById('card-workflow');
+const wfAbCard = document.getElementById('card-workflow-ab');
 const bulkFields = document.getElementById('bulk-fields');
 const wfFields = document.getElementById('workflow-fields');
-const bulkRadio = bulkCard.querySelector('input');
-const wfRadio = wfCard.querySelector('input');
-
-function setMode(workflow) {
-    const wfRadios = document.querySelectorAll('.wf-radio');
-    if (workflow) {
-        bulkCard.classList.replace('border-brand-600', 'border-gray-200');
-        wfCard.classList.replace('border-gray-200', 'border-brand-600');
-        bulkFields.classList.add('hidden');
-        wfFields.classList.remove('hidden');
-        wfRadio.checked = true;
-        wfRadios.forEach(r => { r.disabled = false; r.required = true; });
-    } else {
-        wfCard.classList.replace('border-brand-600', 'border-gray-200');
-        bulkCard.classList.replace('border-gray-200', 'border-brand-600');
-        wfFields.classList.add('hidden');
-        bulkFields.classList.remove('hidden');
-        bulkRadio.checked = true;
-        wfRadios.forEach(r => { r.disabled = true; r.required = false; r.checked = false; });
-    }
-}
-bulkCard.addEventListener('click', () => setMode(false));
-wfCard.addEventListener('click', () => setMode(true));
-setMode(false);
-
-const templateB = document.getElementById('template-b-select');
+const hybridFields = document.getElementById('hybrid-ab-fields');
+const bulkTemplateA = document.getElementById('bulk-template-a');
+const bulkTemplateB = document.getElementById('bulk-template-b');
+const wfTemplateA = document.getElementById('wf-template-a');
+const wfTemplateB = document.getElementById('wf-template-b');
 const experimentFields = document.getElementById('experiment-fields');
-function toggleExperiment() {
-    if (!templateB || !experimentFields) return;
-    experimentFields.classList.toggle('hidden', !templateB.value);
+
+function setCardActive(card, active) {
+    if (!card) return;
+    card.classList.toggle('border-brand-600', active);
+    card.classList.toggle('border-gray-200', !active);
 }
-if (templateB) {
-    templateB.addEventListener('change', toggleExperiment);
+
+function setMode(mode) {
+    const isWorkflow = mode === 'workflow' || mode === 'workflow_ab';
+    const isHybrid = mode === 'workflow_ab';
+
+    setCardActive(bulkCard, mode === 'bulk');
+    setCardActive(wfCard, mode === 'workflow');
+    setCardActive(wfAbCard, mode === 'workflow_ab');
+
+    bulkFields.classList.toggle('hidden', isWorkflow);
+    wfFields.classList.toggle('hidden', !isWorkflow);
+    hybridFields?.classList.toggle('hidden', !isHybrid);
+
+    bulkTemplateA && (bulkTemplateA.disabled = isWorkflow);
+    bulkTemplateB && (bulkTemplateB.disabled = isWorkflow);
+    wfTemplateA && (wfTemplateA.disabled = !isHybrid);
+    wfTemplateB && (wfTemplateB.disabled = !isHybrid);
+    document.querySelectorAll('.wf-experiment-field').forEach(el => { el.disabled = !isHybrid; });
+
+    document.querySelectorAll('.wf-radio').forEach(r => {
+        r.disabled = !isWorkflow;
+        r.required = isWorkflow;
+        if (!isWorkflow) r.checked = false;
+    });
+}
+
+bulkCard?.addEventListener('click', () => { document.querySelector('input[value="bulk"]').checked = true; setMode('bulk'); });
+wfCard?.addEventListener('click', () => { document.querySelector('input[value="workflow"]').checked = true; setMode('workflow'); });
+wfAbCard?.addEventListener('click', () => { document.querySelector('input[value="workflow_ab"]').checked = true; setMode('workflow_ab'); });
+
+function toggleExperiment() {
+    if (!bulkTemplateB || !experimentFields) return;
+    const mode = document.querySelector('input[name=execution_mode]:checked')?.value || 'bulk';
+    experimentFields.classList.toggle('hidden', !bulkTemplateB.value || mode !== 'bulk');
+}
+if (bulkTemplateB) {
+    bulkTemplateB.addEventListener('change', toggleExperiment);
     toggleExperiment();
 }
+
+setMode('bulk');
 </script>
 </body>
 </html>

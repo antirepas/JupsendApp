@@ -43,6 +43,20 @@ func CreateWorkflowWeb(ctx *gin.Context) {
 	ctx.Redirect(http.StatusFound, "/workflows/"+strconv.FormatInt(id, 10)+"/edit")
 }
 
+func DeleteWorkflowWeb(ctx *gin.Context) {
+	id, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
+	if err != nil {
+		ctx.Redirect(http.StatusFound, "/workflows?error=Invalid+workflow")
+		return
+	}
+	if err := model.DeleteWorkflow(id, mustUserID(ctx)); err != nil {
+		log.Print(err)
+		ctx.Redirect(http.StatusFound, "/workflows?error=Failed+to+delete")
+		return
+	}
+	ctx.Redirect(http.StatusFound, "/workflows?success=Workflow+deleted")
+}
+
 func WorkflowBuilderPage(ctx *gin.Context) {
 	id, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
 	if err != nil {

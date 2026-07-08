@@ -2,6 +2,7 @@ package model
 
 import (
 	"fmt"
+	"sort"
 
 	"emailtracker.com/db"
 )
@@ -30,18 +31,38 @@ type CampaignWorkflowStepStat struct {
 }
 
 type CampaignWorkflowStepDisplay struct {
-	NodeKey     string
-	Label       string
-	NodeType    string
-	Description string
-	StepIndex   int
+	NodeKey      string
+	Label        string
+	NodeType     string
+	Description  string
+	StepIndex    int
+	TemplateID   int64
+	TemplateName string
+	IsHybridAB   bool
 }
 
 func GetCampaignWorkflowStepDisplay(versionID int64) ([]CampaignWorkflowStepDisplay, error) {
+	return getCampaignWorkflowStepDisplay(versionID, Campaign{}, 0)
+}
+
+func GetCampaignWorkflowStepDisplayForCampaign(campaign Campaign, userID int64) ([]CampaignWorkflowStepDisplay, error) {
+	return getCampaignWorkflowStepDisplay(campaign.WorkflowVersionID, campaign, userID)
+}
+
+func getCampaignWorkflowStepDisplay(versionID int64, campaign Campaign, userID int64) ([]CampaignWorkflowStepDisplay, error) {
 	graph, err := GetWorkflowGraph(versionID)
 	if err != nil {
 		return nil, err
 	}
+
+	var mappings map[string]int64
+	var firstSendKey string
+	isHybrid := campaign.ExecutionMode == "workflow_ab"
+	if campaign.ID > 0 {
+		mappings, _ = GetCampaignWorkflowTemplates(campaign.ID)
+		firstSendKey, _ = GetFirstSendNodeKey(versionID)
+	}
+
 	ordered := orderedWorkflowDisplayNodes(graph)
 	var steps []CampaignWorkflowStepDisplay
 	for i, n := range ordered {
@@ -49,32 +70,48 @@ func GetCampaignWorkflowStepDisplay(versionID int64) ([]CampaignWorkflowStepDisp
 		if label == "" {
 			label = NodeLabelForKey(versionID, n.NodeKey)
 		}
-		steps = append(steps, CampaignWorkflowStepDisplay{
+		step := CampaignWorkflowStepDisplay{
 			NodeKey:     n.NodeKey,
 			Label:       label,
 			NodeType:    n.NodeType,
-			Description: describeWorkflowStep(n),
+			Description: describeWorkflowStep(n, graph),
 			StepIndex:   i + 1,
-		})
+		}
+		if n.NodeType == "action_send_email" && campaign.ID > 0 {
+			if isHybrid && n.NodeKey == firstSendKey {
+				step.IsHybridAB = true
+				if campaign.TemplateAID > 0 {
+					if t, _, err := GetTemplateByID(campaign.TemplateAID, userID); err == nil {
+						step.TemplateName = t.Name + " / "
+					}
+				}
+				if campaign.TemplateBID > 0 {
+					if t, _, err := GetTemplateByID(campaign.TemplateBID, userID); err == nil {
+						step.TemplateName += t.Name
+					}
+				}
+				step.Description = "A/B first email: " + step.TemplateName
+			} else if tid := mappings[n.NodeKey]; tid > 0 {
+				step.TemplateID = tid
+				if t, _, err := GetTemplateByID(tid, userID); err == nil {
+					step.TemplateName = t.Name
+					step.Description = "Sends " + t.Name
+				}
+			}
+		}
+		steps = append(steps, step)
 	}
 	return steps, nil
 }
 
-func describeWorkflowStep(n WorkflowNode) string {
+func describeWorkflowStep(n WorkflowNode, graph WorkflowGraph) string {
 	switch n.NodeType {
 	case "action_send_email":
-		cfg := ParseNodeConfig(n.ConfigJSON)
-		tid := int64(0)
-		if v, ok := cfg["template_id"].(float64); ok {
-			tid = int64(v)
+		label := n.Label
+		if label == "" {
+			label = "email"
 		}
-		name := fmt.Sprintf("template #%d", tid)
-		if tid > 0 {
-			if t, err := GetTemplate(tid); err == nil {
-				name = t.Name
-			}
-		}
-		return "Sends " + name
+		return "Sends: " + label
 	case "action_wait":
 		cfg := ParseNodeConfig(n.ConfigJSON)
 		secs := 86400
@@ -93,18 +130,7 @@ func describeWorkflowStep(n WorkflowNode) string {
 		}
 		return fmt.Sprintf("Pauses for %d days", days)
 	case "condition_engagement":
-		cfg := ParseNodeConfig(n.ConfigJSON)
-		if cond, ok := cfg["condition"].(string); ok && cond != "" {
-			switch cond {
-			case "opened":
-				return "Branches if the contact opened the email"
-			case "clicked":
-				return "Branches if the contact clicked a link"
-			case "replied":
-				return "Branches if the contact replied"
-			}
-		}
-		return "Branches based on engagement"
+		return DescribeConditionEngagement(ParseNodeConfig(n.ConfigJSON), graph)
 	case "action_end":
 		return "Workflow completes for this contact"
 	default:
@@ -182,6 +208,7 @@ func GetCampaignWorkflowOverview(campaignID, versionID int64, totalContacts int)
 	}
 
 	ordered := orderedWorkflowDisplayNodes(graph)
+	labelMap := labelsFromGraph(graph)
 	denom := totalContacts
 	if denom < 1 {
 		denom = 1
@@ -189,7 +216,7 @@ func GetCampaignWorkflowOverview(campaignID, versionID int64, totalContacts int)
 	for i, n := range ordered {
 		label := n.Label
 		if label == "" {
-			label = NodeLabelForKey(versionID, n.NodeKey)
+			label = LabelFromMap(labelMap, n.NodeKey)
 		}
 		here := nodeAtCount[n.NodeKey]
 		overview.Steps = append(overview.Steps, CampaignWorkflowStepStat{
@@ -204,6 +231,31 @@ func GetCampaignWorkflowOverview(campaignID, versionID int64, totalContacts int)
 	}
 
 	return overview, nil
+}
+
+func labelsFromGraph(graph WorkflowGraph) map[string]string {
+	labels := map[string]string{}
+	for _, n := range graph.Nodes {
+		if n.Label != "" {
+			labels[n.NodeKey] = n.Label
+			continue
+		}
+		switch n.NodeType {
+		case "action_send_email":
+			labels[n.NodeKey] = "Send email"
+		case "action_wait":
+			labels[n.NodeKey] = "Wait"
+		case "condition_engagement":
+			labels[n.NodeKey] = "Condition"
+		case "action_end":
+			labels[n.NodeKey] = "End"
+		case "trigger_campaign_started":
+			labels[n.NodeKey] = "Start"
+		default:
+			labels[n.NodeKey] = n.NodeType
+		}
+	}
+	return labels
 }
 
 func orderedWorkflowDisplayNodes(graph WorkflowGraph) []WorkflowNode {
@@ -252,4 +304,227 @@ func orderedWorkflowDisplayNodes(graph WorkflowGraph) []WorkflowNode {
 		}
 	}
 	return ordered
+}
+
+type CampaignWorkflowGraphNode struct {
+	NodeKey      string
+	Label        string
+	NodeType     string
+	Description  string
+	TemplateID   int64
+	TemplateName string
+	IsHybridAB   bool
+	IsForkBranch bool
+	EdgePriority int
+	EdgeType     string
+	EdgeLabel    string
+	Children     []CampaignWorkflowGraphNode
+}
+
+// BuildCampaignWorkflowGraphTree renders the workflow as a branching tree (not a flat BFS list).
+func BuildCampaignWorkflowGraphTree(campaign Campaign, userID int64) (CampaignWorkflowGraphNode, error) {
+	graph, err := GetWorkflowGraph(campaign.WorkflowVersionID)
+	if err != nil {
+		return CampaignWorkflowGraphNode{}, err
+	}
+	mappings, _ := GetCampaignWorkflowTemplates(campaign.ID)
+	firstSendKey, _ := GetFirstSendNodeKey(campaign.WorkflowVersionID)
+	isHybrid := campaign.ExecutionMode == "workflow_ab"
+
+	var entryKey string
+	for _, n := range graph.Nodes {
+		if n.NodeType == "trigger_campaign_started" {
+			entryKey = n.NodeKey
+			break
+		}
+	}
+	if entryKey == "" {
+		return CampaignWorkflowGraphNode{}, fmt.Errorf("no entry node")
+	}
+
+	templateNames, _ := TemplateNameMapForUser(userID)
+	nameFor := func(id int64) string {
+		if id <= 0 {
+			return ""
+		}
+		return templateNames[id]
+	}
+
+	ctx := graphTreeContext{
+		graph:        graph,
+		campaign:     campaign,
+		userID:       userID,
+		mappings:     mappings,
+		firstSendKey: firstSendKey,
+		isHybrid:     isHybrid,
+		nameFor:      nameFor,
+		labelMap:     labelsFromGraph(graph),
+	}
+	return buildGraphTreeNode(entryKey, ctx, nil), nil
+}
+
+type graphTreeContext struct {
+	graph        WorkflowGraph
+	campaign     Campaign
+	userID       int64
+	mappings     map[string]int64
+	firstSendKey string
+	isHybrid     bool
+	nameFor      func(int64) string
+	labelMap     map[string]string
+}
+
+func buildGraphTreeNode(nodeKey string, ctx graphTreeContext, path map[string]bool) CampaignWorkflowGraphNode {
+	if path == nil {
+		path = map[string]bool{}
+	}
+	if path[nodeKey] {
+		return CampaignWorkflowGraphNode{
+			NodeKey:     nodeKey,
+			Label:       "…",
+			NodeType:    "action_end",
+			Description: "Merge point (cycle trimmed)",
+		}
+	}
+	path[nodeKey] = true
+	defer delete(path, nodeKey)
+
+	nodeMap := map[string]WorkflowNode{}
+	for _, n := range ctx.graph.Nodes {
+		nodeMap[n.NodeKey] = n
+	}
+	n, ok := nodeMap[nodeKey]
+	if !ok {
+		return CampaignWorkflowGraphNode{NodeKey: nodeKey, Label: nodeKey, NodeType: "action_end"}
+	}
+
+	label := n.Label
+	if label == "" {
+		label = LabelFromMap(ctx.labelMap, n.NodeKey)
+	}
+
+	out := CampaignWorkflowGraphNode{
+		NodeKey:     n.NodeKey,
+		Label:       label,
+		NodeType:    n.NodeType,
+		Description: describeWorkflowStep(n, ctx.graph),
+	}
+
+	if n.NodeType == "action_send_email" {
+		if ctx.isHybrid && n.NodeKey == ctx.firstSendKey {
+			out.IsHybridAB = true
+			aName := ctx.nameFor(ctx.campaign.TemplateAID)
+			bName := ctx.nameFor(ctx.campaign.TemplateBID)
+			out.TemplateName = aName + " / " + bName
+			out.Description = "A/B first email"
+		} else if tid := ctx.mappings[n.NodeKey]; tid > 0 {
+			out.TemplateID = tid
+			out.TemplateName = ctx.nameFor(tid)
+			out.Description = "Sends " + out.TemplateName
+		}
+	}
+
+	if n.NodeType == "trigger_campaign_started" {
+		children := outgoingDisplayEdges(ctx.graph, nodeKey, n.NodeType)
+		if len(children) == 1 {
+			child := buildGraphTreeNode(children[0].TargetNodeKey, ctx, path)
+			child.EdgePriority = children[0].Priority
+			child.EdgeType = children[0].EdgeType
+			child.EdgeLabel = edgeDisplayLabel(children[0], len(children) > 1)
+			return child
+		}
+		for _, e := range children {
+			child := buildGraphTreeNode(e.TargetNodeKey, ctx, copyPath(path))
+			child.IsForkBranch = len(children) > 1
+			child.EdgePriority = e.Priority
+			child.EdgeType = e.EdgeType
+			child.EdgeLabel = edgeDisplayLabel(e, len(children) > 1)
+			out.Children = append(out.Children, child)
+		}
+		return out
+	}
+
+	children := outgoingDisplayEdges(ctx.graph, nodeKey, n.NodeType)
+	for _, e := range children {
+		child := buildGraphTreeNode(e.TargetNodeKey, ctx, copyPath(path))
+		child.IsForkBranch = len(children) > 1
+		child.EdgePriority = e.Priority
+		child.EdgeType = e.EdgeType
+		child.EdgeLabel = edgeDisplayLabel(e, len(children) > 1)
+		out.Children = append(out.Children, child)
+	}
+	return out
+}
+
+func copyPath(path map[string]bool) map[string]bool {
+	out := make(map[string]bool, len(path))
+	for k, v := range path {
+		out[k] = v
+	}
+	return out
+}
+
+func defaultChildEdges(graph WorkflowGraph, sourceKey string) []WorkflowEdge {
+	return outgoingDisplayEdges(graph, sourceKey, "")
+}
+
+func outgoingDisplayEdges(graph WorkflowGraph, sourceKey, sourceNodeType string) []WorkflowEdge {
+	nodeType := sourceNodeType
+	if nodeType == "" {
+		for _, n := range graph.Nodes {
+			if n.NodeKey == sourceKey {
+				nodeType = n.NodeType
+				break
+			}
+		}
+	}
+
+	var edges []WorkflowEdge
+	for _, e := range graph.Edges {
+		if e.SourceNodeKey != sourceKey {
+			continue
+		}
+		if nodeType == "condition_engagement" {
+			if e.EdgeType == "true" || e.EdgeType == "false" {
+				edges = append(edges, e)
+			}
+			continue
+		}
+		if e.EdgeType == "default" {
+			edges = append(edges, e)
+		}
+	}
+	sort.Slice(edges, func(i, j int) bool {
+		order := func(t string) int {
+			switch t {
+			case "true":
+				return 0
+			case "false":
+				return 1
+			default:
+				return 2
+			}
+		}
+		if order(edges[i].EdgeType) != order(edges[j].EdgeType) {
+			return order(edges[i].EdgeType) < order(edges[j].EdgeType)
+		}
+		if edges[i].Priority != edges[j].Priority {
+			return edges[i].Priority < edges[j].Priority
+		}
+		return edges[i].TargetNodeKey < edges[j].TargetNodeKey
+	})
+	return edges
+}
+
+func edgeDisplayLabel(e WorkflowEdge, isFork bool) string {
+	switch e.EdgeType {
+	case "true":
+		return "If yes"
+	case "false":
+		return "If no"
+	}
+	if isFork && e.Priority > 0 {
+		return fmt.Sprintf("Priority %d", e.Priority)
+	}
+	return ""
 }

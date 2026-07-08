@@ -3,6 +3,7 @@ package model
 import (
 	"database/sql"
 	"encoding/json"
+	"strings"
 	"time"
 
 	"emailtracker.com/db"
@@ -151,6 +152,21 @@ func (n *sqlNullInt64) Scan(value interface{}) error {
 		n.Valid = true
 	}
 	return nil
+}
+
+func ContactEventExistsByDedupe(dedupeKey string) (bool, error) {
+	if strings.TrimSpace(dedupeKey) == "" {
+		return false, nil
+	}
+	var id int64
+	err := db.QueryRow(`SELECT id FROM contact_events WHERE dedupe_key = ?`, dedupeKey).Scan(&id)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func CountContactEventsForSend(emailSendID int64, eventType string) (int, error) {

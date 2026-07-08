@@ -135,6 +135,42 @@ func GetWorkflowForUser(id, userID int64) (Workflow, error) {
 	return w, err
 }
 
+func DeleteWorkflow(id, userID int64) error {
+	if _, err := GetWorkflowForUser(id, userID); err != nil {
+		return err
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	_, err = tx.Exec(`
+		DELETE FROM workflow_instances
+		WHERE workflow_version_id IN (SELECT id FROM workflow_versions WHERE workflow_id = ?)
+	`, id)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`
+		UPDATE campaigns
+		SET workflow_version_id = NULL, execution_mode = 'bulk'
+		WHERE workflow_version_id IN (SELECT id FROM workflow_versions WHERE workflow_id = ?)
+		  AND user_id = ?
+	`, id, userID)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`DELETE FROM workflows WHERE id = ? AND tenant_id = ?`, id, userID)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
 func CreateWorkflowVersion(workflowID int64) (int64, error) {
 	var maxVer int
 	_ = db.QueryRow(`SELECT COALESCE(MAX(version), 0) FROM workflow_versions WHERE workflow_id = ?`, workflowID).Scan(&maxVer)
@@ -358,8 +394,10 @@ func ValidateWorkflowGraph(versionID int64) []string {
 	}
 
 	nodeKeys := make(map[string]bool)
+	nodeTypes := make(map[string]string)
 	for _, n := range g.Nodes {
 		nodeKeys[n.NodeKey] = true
+		nodeTypes[n.NodeKey] = n.NodeType
 	}
 
 	adj := make(map[string][]WorkflowEdge)
@@ -414,6 +452,9 @@ func ValidateWorkflowGraph(versionID int64) []string {
 			}
 			if !hasTrue || !hasFalse {
 				errs = append(errs, fmt.Sprintf("condition node %s needs true and false edges", n.NodeKey))
+			}
+			if msg := validateConditionEmailRef(n, nodeTypes); msg != "" {
+				errs = append(errs, msg)
 			}
 		}
 	}

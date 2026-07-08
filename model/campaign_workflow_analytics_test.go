@@ -92,7 +92,7 @@ func TestDescribeWorkflowStepWaitHours(t *testing.T) {
 	desc := describeWorkflowStep(WorkflowNode{
 		NodeType:   "action_wait",
 		ConfigJSON: `{"duration_seconds":7200}`,
-	})
+	}, WorkflowGraph{})
 	if desc != "Pauses for 2 hours" {
 		t.Fatalf("got %q", desc)
 	}

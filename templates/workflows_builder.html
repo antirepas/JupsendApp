@@ -11,9 +11,12 @@
     <div>
         <a href="/workflows" class="text-sm text-brand-600">← Workflows</a>
         <h2 class="text-2xl font-bold text-slate-900 mt-1">{{.workflow.Name}}</h2>
-        <p class="text-sm text-slate-500 mt-1">Drag nodes on the canvas. Drag the dot below a node to another node to connect. Right-click a line to delete it.</p>
+        <p class="text-sm text-slate-500 mt-1">Drag nodes on the canvas. Drag the dot below a node to another node to connect. Hover a line and click × to remove it. Link each condition to the email it should check.</p>
     </div>
     <div class="flex gap-2">
+        <form method="POST" action="/workflows/{{.workflow.ID}}/delete" onsubmit="return confirm('Delete this workflow? Running instances will be stopped and linked campaigns will switch to bulk mode.');">
+            <button type="submit" class="btn-secondary text-red-600">Delete</button>
+        </form>
         <button type="button" id="btn-validate" class="btn-secondary">Validate</button>
         <button type="button" id="btn-save" class="btn-primary">Save</button>
         <button type="button" id="btn-publish" class="btn-primary">Publish</button>
@@ -48,7 +51,7 @@
 
 <div class="card mt-4">
     <h3 class="font-semibold mb-1">Connections</h3>
-    <p class="text-xs text-slate-500 mb-4">Click a line on the canvas to edit it, or right-click a line to delete. You can also drag from the <span class="font-medium">blue dot</span> under a node to the <span class="font-medium">green dot</span> on another node.</p>
+    <p class="text-xs text-slate-500 mb-4">Click a line on the canvas to edit it. Hover a line and click × to delete it. You can also drag from the <span class="font-medium">blue dot</span> under a node to the <span class="font-medium">green dot</span> on another node.</p>
 
     <div id="edge-editor" class="wf-edge-editor">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -71,6 +74,12 @@
                 <select id="edge-to" class="form-input text-sm"></select>
                 <p class="form-hint">Target node — where the arrow points</p>
             </div>
+        </div>
+
+        <div class="mt-4">
+            <label class="form-label" for="edge-priority">Priority (default edges)</label>
+            <input type="number" id="edge-priority" class="form-input text-sm" value="10" min="0">
+            <p class="form-hint">When a node has multiple outgoing "Then → next step" connections, lower priority runs first.</p>
         </div>
         <div class="flex flex-wrap gap-2 mt-4 items-center">
             <button type="button" id="btn-save-edge" class="btn-primary text-sm">Connect nodes</button>

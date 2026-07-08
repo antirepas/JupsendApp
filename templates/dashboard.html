@@ -30,6 +30,8 @@
     </div>
 </div>
 
+{{template "warmup_progress_widget" .}}
+
 <div class="card mt-6">
     <h3 class="card-title">3 steps to get started</h3>
     <p class="text-sm text-gray-500 mb-6">Follow these guides, then launch your first outreach.</p>
@@ -91,6 +93,8 @@
     <h2 class="text-2xl font-bold text-charcoal">Dashboard</h2>
     <p class="text-gray-500 mt-1 text-sm">Last 30 days</p>
 </div>
+
+{{template "warmup_progress_widget" .}}
 
 <div class="kpi-grid mb-6">
     <div class="kpi-card">
@@ -188,7 +192,7 @@
 
 <div class="card mb-8">
     <h3 class="card-title">Contact activity</h3>
-    <p class="text-sm text-gray-500 mb-4">Who opened your emails or clicked links</p>
+    <p class="text-sm text-gray-500 mb-4">Recent opens, clicks, and replies</p>
     {{if .contactActivity}}
     <div class="overflow-x-auto">
     <table class="data-table">
@@ -208,10 +212,10 @@
                     <a href="/contacts/{{.ContactID}}" class="text-brand-600 hover:underline">{{.ContactEmail}}</a>
                 </td>
                 <td>
-                    <span class="badge {{if eq .EventType "open"}}badge-green{{else}}badge-blue{{end}}">{{.EventType}}</span>
+                    <span class="badge {{if eq .EventType "open"}}badge-green{{else if eq .EventType "click"}}badge-blue{{else if eq .EventType "reply"}}badge-violet{{else}}badge-gray{{end}}">{{.EventType}}</span>
                 </td>
                 <td class="text-sm text-gray-600 max-w-xs truncate">
-                    {{if eq .EventType "click"}}{{if .LinkURL}}{{.LinkURL}}{{else}}—{{end}}{{else}}Opened email{{end}}
+                    {{if eq .EventType "click"}}{{if .LinkURL}}{{.LinkURL}}{{else}}—{{end}}{{else if eq .EventType "reply"}}Replied to your email{{else if eq .EventType "open"}}Opened email{{else}}{{.EventType}}{{end}}
                 </td>
                 <td class="text-sm text-gray-500">{{if .CampaignName}}{{.CampaignName}}{{else}}—{{end}}</td>
                 <td class="text-sm text-gray-400 whitespace-nowrap">{{.CreatedAt.Format "Jan 2, 15:04"}}</td>
@@ -312,4 +316,83 @@
 </div>
 </body>
 </html>
+{{end}}
+
+{{define "warmup_progress_widget"}}
+{{with .warmupProgress}}
+{{if .HasAccount}}
+<div class="warmup-card">
+    <div class="warmup-card-head">
+        <div>
+            <div class="flex items-center gap-2 flex-wrap">
+                <h3 class="warmup-card-title">Email warmup</h3>
+                {{if .IsFullyWarmed}}
+                <span class="warmup-badge warmup-badge--done"><span class="warmup-badge-dot"></span> Ready</span>
+                {{else if .Enabled}}
+                <span class="warmup-badge"><span class="warmup-badge-dot"></span> Ramping</span>
+                {{end}}
+            </div>
+            <p class="warmup-card-sub">
+                {{if .SenderEmail}}{{.SenderEmail}}{{else}}Sending account{{end}}
+                {{if and .Enabled (not .IsFullyWarmed)}} · +{{.IncrementPerDay}}/day until {{.TargetCap}}/day{{else if not .Enabled}} · Warmup off (fixed {{.TodayCap}}/day cap){{end}}
+            </p>
+        </div>
+        <a href="/settings/billing" class="warmup-card-link">View plan →</a>
+    </div>
+    <div class="warmup-card-body">
+        <div class="warmup-ring {{if .IsFullyWarmed}}warmup-ring--complete{{end}}" style="--ring-pct: {{printf "%.1f" .OverallPct}}">
+            <div class="warmup-ring-inner">
+                <span class="warmup-ring-value">{{printf "%.0f" .OverallPct}}%</span>
+                <span class="warmup-ring-label">{{if .IsFullyWarmed}}Ready{{else}}Warmed{{end}}</span>
+            </div>
+        </div>
+        <div class="warmup-details">
+            <div class="warmup-daily">
+                <div class="warmup-daily-head">
+                    <span>Today's send quota</span>
+                    <span class="warmup-daily-count">{{.SendsToday}} / {{.TodayCap}}</span>
+                </div>
+                <div class="warmup-daily-bar">
+                    <div class="warmup-daily-fill {{if ge .TodayUsedPct 100.0}}warmup-daily-fill--full{{end}}" style="width: {{if gt .TodayUsedPct 100.0}}100{{else}}{{printf "%.0f" .TodayUsedPct}}{{end}}%"></div>
+                </div>
+                <p class="warmup-daily-note">
+                    {{if ge .TodayRemaining 1}}{{.TodayRemaining}} sends remaining today{{else if eq .TodayRemaining 0}}Daily cap reached — more sends unlock tomorrow{{else}}Daily cap reached{{end}}
+                </p>
+            </div>
+            {{if .Enabled}}
+            <p class="warmup-ramp-label">Warmup ramp</p>
+            <div class="warmup-ramp-track">
+                <div class="warmup-ramp-fill" style="width: {{if gt .OverallPct 100.0}}100{{else}}{{printf "%.0f" .OverallPct}}{{end}}%"></div>
+                <div class="warmup-ramp-marker" style="left: {{if gt .OverallPct 100.0}}100{{else}}{{printf "%.0f" .OverallPct}}{{end}}%"></div>
+            </div>
+            <div class="warmup-ramp-labels">
+                <span>{{.StartCap}}/day</span>
+                <span><strong>{{.RampCap}}/day</strong> now</span>
+                <span>{{.TargetCap}}/day</span>
+            </div>
+            {{if .IsFullyWarmed}}
+            <p class="warmup-eta warmup-eta--done">Fully warmed — you're at full daily sending capacity.</p>
+            {{else if gt .DaysRemaining 0}}
+            <p class="warmup-eta">~{{.DaysRemaining}} day{{if ne .DaysRemaining 1}}s{{end}} until full volume (day {{.DaysElapsed}} of {{.RampDaysTotal}})</p>
+            {{else}}
+            <p class="warmup-eta">Almost there — full volume unlocks soon.</p>
+            {{end}}
+            {{else}}
+            <p class="warmup-eta">Warmup is off. You can send up to {{.TodayCap}} emails per day.</p>
+            {{end}}
+        </div>
+    </div>
+</div>
+{{else}}
+<div class="warmup-card warmup-card--empty">
+    <div class="warmup-card-head">
+        <div>
+            <h3 class="warmup-card-title">Email warmup</h3>
+            <p class="warmup-card-sub">Connect Gmail to ramp send volume safely and protect deliverability.</p>
+        </div>
+    </div>
+    <a href="/settings" class="btn-primary inline-block">Connect in settings</a>
+</div>
+{{end}}
+{{end}}
 {{end}}

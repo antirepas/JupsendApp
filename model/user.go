@@ -15,10 +15,13 @@ type User struct {
 	PasswordHash       string
 	BaseURL            string
 	SubscriptionStatus string
+	PlanTier           string
 	WhopMembershipID   string
 	WhopMemberID       string
 	SubscriptionEndsAt *time.Time
 	IsAdmin            bool
+	AIcreditsUsedToday int
+	AIcreditsResetAt   *time.Time
 	SendCooldownDays        int
 	IncludeUnsubscribeLink  bool
 	GoalMeetingsPerMonth    int
@@ -30,8 +33,17 @@ type User struct {
 const (
 	SubStatusNone      = "none"
 	SubStatusActive    = "active"
+	SubStatusPendingPayment = "pending_payment"
 	SubStatusPastDue   = "past_due"
 	SubStatusCancelled = "cancelled"
+)
+
+type PlanTier string
+
+const (
+	PlanTierFree     PlanTier = "free"
+	PlanTierStandard PlanTier = "standard"
+	PlanTierPro      PlanTier = "pro"
 )
 
 func CreateUser(email, passwordHash, baseURL string) (int64, error) {
@@ -53,6 +65,8 @@ func GetUserByEmail(email string) (User, error) {
 		SELECT id, email, password_hash, COALESCE(base_url, ''),
 			COALESCE(subscription_status, 'none'), COALESCE(whop_membership_id, ''), COALESCE(whop_member_id, ''),
 			subscription_ends_at, is_admin, COALESCE(send_cooldown_days, 30), COALESCE(include_unsubscribe_link, TRUE),
+			COALESCE(plan_tier, 'free'),
+			COALESCE(ai_credits_used_today, 0), ai_credits_reset_at,
 			COALESCE(goal_meetings_per_month, 0), COALESCE(goal_reply_to_meeting_pct, 50), COALESCE(goal_daily_send_cap, 0),
 			created_at
 		FROM users WHERE email = ?
@@ -65,6 +79,8 @@ func GetUserByID(id int64) (User, error) {
 		SELECT id, email, password_hash, COALESCE(base_url, ''),
 			COALESCE(subscription_status, 'none'), COALESCE(whop_membership_id, ''), COALESCE(whop_member_id, ''),
 			subscription_ends_at, is_admin, COALESCE(send_cooldown_days, 30), COALESCE(include_unsubscribe_link, TRUE),
+			COALESCE(plan_tier, 'free'),
+			COALESCE(ai_credits_used_today, 0), ai_credits_reset_at,
 			COALESCE(goal_meetings_per_month, 0), COALESCE(goal_reply_to_meeting_pct, 50), COALESCE(goal_daily_send_cap, 0),
 			created_at
 		FROM users WHERE id = ?
@@ -75,12 +91,19 @@ func GetUserByID(id int64) (User, error) {
 func scanUser(row interface{ Scan(...interface{}) error }) (User, error) {
 	var u User
 	var ends sql.NullTime
+	var resetAt sql.NullTime
 	err := row.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.BaseURL,
 		&u.SubscriptionStatus, &u.WhopMembershipID, &u.WhopMemberID, &ends, &u.IsAdmin, &u.SendCooldownDays, &u.IncludeUnsubscribeLink,
+		&u.PlanTier,
+		&u.AIcreditsUsedToday, &resetAt,
 		&u.GoalMeetingsPerMonth, &u.GoalReplyToMeetingPct, &u.GoalDailySendCap, &u.CreatedAt)
 	if ends.Valid {
 		t := ends.Time
 		u.SubscriptionEndsAt = &t
+	}
+	if resetAt.Valid {
+		t := resetAt.Time
+		u.AIcreditsResetAt = &t
 	}
 	return u, err
 }

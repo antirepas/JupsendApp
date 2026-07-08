@@ -39,18 +39,6 @@ type SendEmailExecutor struct{}
 func (SendEmailExecutor) Type() string { return "action_send_email" }
 
 func (SendEmailExecutor) Execute(ctx ExecutionContext) (NodeResult, error) {
-	cfg := model.ParseNodeConfig(ctx.Node.ConfigJSON)
-	templateID := int64(0)
-	switch v := cfg["template_id"].(type) {
-	case float64:
-		templateID = int64(v)
-	case int:
-		templateID = int64(v)
-	}
-	if templateID == 0 {
-		return NodeResult{Failed: true, ErrorMessage: "template_id required"}, nil
-	}
-
 	execKey := fmt.Sprintf("%d:%s:send", ctx.Instance.ID, ctx.Node.NodeKey)
 	exists, _ := model.ExecutionExists(execKey)
 	if exists {
@@ -66,6 +54,14 @@ func (SendEmailExecutor) Execute(ctx ExecutionContext) (NodeResult, error) {
 	campaignID := int64(0)
 	if ctx.Instance.CampaignID != nil {
 		campaignID = *ctx.Instance.CampaignID
+	}
+
+	templateID, err := model.ResolveCampaignSendTemplate(campaignID, ctx.Node.NodeKey, variant, ctx.Instance.WorkflowVersionID)
+	if err != nil || templateID == 0 {
+		if err == nil {
+			err = fmt.Errorf("missing template for node %s", ctx.Node.NodeKey)
+		}
+		return NodeResult{Failed: true, ErrorMessage: err.Error()}, nil
 	}
 
 	sendID, err := ctx.Mailer.SendWorkflowEmail(templateID, ctx.Instance.ContactID, campaignID, variant, ctx.Instance.ID)
@@ -132,6 +128,18 @@ func (ConditionExecutor) Execute(ctx ExecutionContext) (NodeResult, error) {
 	if params == nil {
 		params = map[string]interface{}{}
 	}
+
+	wakeAt, earlyEdge, err := NegativePredicateWait(predicate, params, ctx.Instance)
+	if err != nil {
+		return NodeResult{Failed: true, ErrorMessage: err.Error()}, nil
+	}
+	if earlyEdge != "" {
+		return NodeResult{NextEdgeType: earlyEdge}, nil
+	}
+	if wakeAt != nil {
+		return NodeResult{WakeAt: wakeAt}, nil
+	}
+
 	ok, err := EvaluateCondition(predicate, params, ctx.Instance, ctx.Instance.ContactID)
 	if err != nil {
 		return NodeResult{Failed: true, ErrorMessage: err.Error()}, nil
