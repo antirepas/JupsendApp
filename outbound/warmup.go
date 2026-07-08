@@ -9,21 +9,21 @@ import (
 
 // WarmupProgress is dashboard-ready warmup state for an SMTP account.
 type WarmupProgress struct {
-	HasAccount     bool
-	Enabled        bool
-	SenderEmail    string
-	SendsToday     int
-	TodayCap       int
-	TodayRemaining int
-	TodayUsedPct   float64
-	StartCap       int
-	TargetCap      int
-	RampCap        int
-	OverallPct     float64
-	DaysElapsed    int
-	RampDaysTotal  int
-	DaysRemaining  int
-	IsFullyWarmed  bool
+	HasAccount      bool
+	Enabled         bool
+	SenderEmail     string
+	SendsToday      int
+	TodayCap        int
+	TodayRemaining  int
+	TodayUsedPct    float64
+	StartCap        int
+	TargetCap       int
+	RampCap         int
+	OverallPct      float64
+	DaysElapsed     int
+	RampDaysTotal   int
+	DaysRemaining   int
+	IsFullyWarmed   bool
 	IncrementPerDay int
 }
 
