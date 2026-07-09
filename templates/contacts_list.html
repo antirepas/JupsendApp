@@ -128,7 +128,7 @@
 {{if eq .tab "import"}}
 <div class="card mb-6">
     <h3 class="card-title">Paste contacts</h3>
-    <p class="text-sm text-gray-500 mb-3">One per line: <code class="text-xs bg-gray-100 px-1 rounded">email</code> or <code class="text-xs bg-gray-100 px-1 rounded">email,name,company</code> (use template below for columns).</p>
+    <p class="text-sm text-gray-500 mb-3">One per line: <code class="text-xs bg-gray-100 px-1 rounded">email</code> or <code class="text-xs bg-gray-100 px-1 rounded">email,name,company</code>. Multiple emails in one cell use <code class="text-xs bg-gray-100 px-1 rounded">;</code> — we pick <code class="text-xs bg-gray-100 px-1 rounded">hello@</code> &gt; <code class="text-xs bg-gray-100 px-1 rounded">contact@</code> &gt; <code class="text-xs bg-gray-100 px-1 rounded">support@</code>.</p>
     <form method="POST" action="/contacts/paste" class="space-y-4">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -157,7 +157,7 @@
 </div>
 
 <div class="card">
-    <h3 class="card-title">Import from Excel</h3>
+    <h3 class="card-title">Import from Excel or CSV</h3>
     {{if .templates}}
     <form method="POST" action="/contacts/upload" enctype="multipart/form-data" class="space-y-4">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -186,8 +186,9 @@
             <a id="sample-download" href="#" class="text-sm text-brand-600 font-medium">Download sample spreadsheet</a>
         </div>
         <div>
-            <label class="form-label">Excel file (.xlsx)</label>
-            <input type="file" name="file" class="form-input" accept=".xlsx,.xls" required>
+            <label class="form-label">Spreadsheet (.xlsx, .xls, .csv)</label>
+            <input type="file" name="file" class="form-input" accept=".xlsx,.xls,.csv" required>
+            <p class="form-hint">Email column may contain multiple addresses separated by <code class="text-xs bg-gray-100 px-1 rounded">;</code> — we pick hello@ &gt; contact@ &gt; support@.</p>
         </div>
         <button type="submit" class="btn-primary">Upload &amp; import</button>
     </form>

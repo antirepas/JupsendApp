@@ -418,7 +418,7 @@ func UploadCampaignContacts(ctx *gin.Context) {
 	defer src.Close()
 
 	vars, _ := model.MergeTemplateVariables(mustUserID(ctx), []int64{campaign.TemplateAID, campaign.TemplateBID})
-	rows, err := util.ParseContactsExcel(src, vars)
+	rows, err := util.ParseContactsUpload(src, file.Filename, vars)
 	if err != nil {
 		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error="+url.QueryEscape(err.Error()))
 		return

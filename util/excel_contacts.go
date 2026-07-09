@@ -2,6 +2,7 @@ package util
 
 import (
 	"bytes"
+	"encoding/csv"
 	"fmt"
 	"io"
 	"strings"
@@ -37,7 +38,7 @@ func CreateContactSampleExcel(templateVars []string) ([]byte, error) {
 		}
 	}
 
-	examples := []string{"recipient@example.com"}
+	examples := []string{"hello@example.com;contact@example.com"}
 	for _, v := range templateVars {
 		examples = append(examples, "example_"+v)
 	}
@@ -58,6 +59,15 @@ func CreateContactSampleExcel(templateVars []string) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// ParseContactsUpload reads Excel (.xlsx/.xls) or CSV based on the filename.
+func ParseContactsUpload(reader io.Reader, filename string, templateVars []string) ([]ContactImportRow, error) {
+	name := strings.ToLower(strings.TrimSpace(filename))
+	if strings.HasSuffix(name, ".csv") {
+		return ParseContactsCSV(reader, templateVars)
+	}
+	return ParseContactsExcel(reader, templateVars)
+}
+
 func ParseContactsExcel(reader io.Reader, templateVars []string) ([]ContactImportRow, error) {
 	f, err := excelize.OpenReader(reader)
 	if err != nil {
@@ -70,7 +80,21 @@ func ParseContactsExcel(reader io.Reader, templateVars []string) ([]ContactImpor
 	if err != nil {
 		return nil, fmt.Errorf("could not read sheet rows: %w", err)
 	}
+	return parseContactRowsFromTable(rows, templateVars)
+}
 
+func ParseContactsCSV(reader io.Reader, templateVars []string) ([]ContactImportRow, error) {
+	r := csv.NewReader(reader)
+	r.TrimLeadingSpace = true
+	r.LazyQuotes = true
+	rows, err := r.ReadAll()
+	if err != nil {
+		return nil, fmt.Errorf("could not read CSV file: %w", err)
+	}
+	return parseContactRowsFromTable(rows, templateVars)
+}
+
+func parseContactRowsFromTable(rows [][]string, templateVars []string) ([]ContactImportRow, error) {
 	if len(rows) == 0 {
 		return nil, fmt.Errorf("spreadsheet is empty")
 	}
@@ -94,9 +118,14 @@ func ParseContactsExcel(reader io.Reader, templateVars []string) ([]ContactImpor
 	}
 
 	var contacts []ContactImportRow
-	for rowIdx, row := range rows[1:] {
-		email := cellValue(row, colIndex[emailColumn])
-		if email == "" {
+	for _, row := range rows[1:] {
+		rawEmail := cellValue(row, colIndex[emailColumn])
+		if rawEmail == "" {
+			continue
+		}
+
+		email, ok := ResolveImportEmail(rawEmail)
+		if !ok {
 			continue
 		}
 
@@ -104,10 +133,6 @@ func ParseContactsExcel(reader io.Reader, templateVars []string) ([]ContactImpor
 		for _, v := range templateVars {
 			idx := colIndex[normalizeHeader(v)]
 			vars[v] = cellValue(row, idx)
-		}
-
-		if !strings.Contains(email, "@") {
-			return nil, fmt.Errorf("invalid email on row %d: %s", rowIdx+2, email)
 		}
 
 		contacts = append(contacts, ContactImportRow{

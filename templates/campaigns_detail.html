@@ -351,7 +351,7 @@
         <button type="button" class="tab-btn" data-tab="select">Select existing</button>
         {{if not .isWorkflow}}
         <button type="button" class="tab-btn" data-tab="paste">Paste</button>
-        <button type="button" class="tab-btn" data-tab="upload">Upload Excel</button>
+        <button type="button" class="tab-btn" data-tab="upload">Upload file</button>
         {{end}}
     </div>
     <div id="tab-list" class="contact-tab-panel">
@@ -405,7 +405,7 @@
         {{end}}
         <form method="POST" action="/campaigns/{{.campaign.ID}}/paste" class="space-y-2">
             <textarea name="paste" rows="6" class="form-input text-sm font-mono" placeholder="email,name,company&#10;john@example.com,John,Acme"></textarea>
-            <p class="form-hint">One per line: email or email,var1,var2 matching template variables</p>
+            <p class="form-hint">One per line. Multiple emails in the first column use <code class="text-xs bg-gray-100 px-1 rounded">;</code> — we pick hello@ &gt; contact@ &gt; support@.</p>
             <button type="submit" class="btn-primary text-sm">Import pasted</button>
         </form>
     </div>
@@ -414,9 +414,10 @@
         <p class="text-sm text-gray-600 mb-2">Columns: <span class="badge badge-gray">email</span> {{range .mergedVars}}<span class="badge badge-gray">{{.}}</span>{{end}}</p>
         {{end}}
         <form method="POST" action="/campaigns/{{.campaign.ID}}/upload" enctype="multipart/form-data" class="space-y-2">
-            <input type="file" name="file" class="form-input" accept=".xlsx,.xls" required>
+            <input type="file" name="file" class="form-input" accept=".xlsx,.xls,.csv" required>
+            <p class="form-hint">Excel or CSV. Email column may list multiple addresses with <code class="text-xs bg-gray-100 px-1 rounded">;</code>.</p>
             <a href="/campaigns/{{.campaign.ID}}/sample" class="text-sm text-brand-600 font-medium">Download sample</a>
-            <button type="submit" class="btn-primary text-sm">Upload Excel</button>
+            <button type="submit" class="btn-primary text-sm">Upload &amp; import</button>
         </form>
     </div>
     {{end}}

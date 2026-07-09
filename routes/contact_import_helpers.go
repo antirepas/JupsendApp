@@ -15,8 +15,8 @@ func parseImportRowsFromPaste(paste string, variableKeys []string) []model.Impor
 	}
 	if len(variableKeys) == 0 && len(rows) == 0 {
 		for _, line := range strings.Split(paste, "\n") {
-			email := strings.TrimSpace(line)
-			if strings.Contains(email, "@") {
+			email, ok := util.ResolveImportEmail(line)
+			if ok {
 				rows = append(rows, model.ImportContactRow{Email: email})
 			}
 		}

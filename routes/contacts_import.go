@@ -65,7 +65,7 @@ func UploadContacts(ctx *gin.Context) {
 	}
 	defer src.Close()
 
-	rows, err := util.ParseContactsExcel(src, vars)
+	rows, err := util.ParseContactsUpload(src, file.Filename, vars)
 	if err != nil {
 		ctx.Redirect(http.StatusFound, "/contacts?tab=import&error="+url.QueryEscape(err.Error()))
 		return

@@ -12,9 +12,12 @@ func ParseContactPaste(text string) []ContactImportRow {
 		if line == "" {
 			continue
 		}
-		parts := strings.Split(line, ",")
-		email := strings.TrimSpace(parts[0])
-		if !strings.Contains(email, "@") {
+		parts := splitCSVLine(line)
+		if len(parts) == 0 {
+			continue
+		}
+		email, ok := ResolveImportEmail(parts[0])
+		if !ok {
 			continue
 		}
 		row := ContactImportRow{
@@ -40,12 +43,12 @@ func ParseContactPasteWithHeaders(text string, variableKeys []string) []ContactI
 		if line == "" {
 			continue
 		}
-		parts := strings.Split(line, ",")
+		parts := splitCSVLine(line)
 		if len(parts) == 0 {
 			continue
 		}
-		email := strings.TrimSpace(parts[0])
-		if !strings.Contains(email, "@") {
+		email, ok := ResolveImportEmail(parts[0])
+		if !ok {
 			continue
 		}
 		row := ContactImportRow{
@@ -61,4 +64,29 @@ func ParseContactPasteWithHeaders(text string, variableKeys []string) []ContactI
 		rows = append(rows, row)
 	}
 	return rows
+}
+
+// splitCSVLine splits a paste row on commas outside quoted strings.
+func splitCSVLine(line string) []string {
+	var parts []string
+	var b strings.Builder
+	inQuotes := false
+	for i := 0; i < len(line); i++ {
+		ch := line[i]
+		switch ch {
+		case '"':
+			inQuotes = !inQuotes
+		case ',':
+			if inQuotes {
+				b.WriteByte(ch)
+			} else {
+				parts = append(parts, strings.TrimSpace(b.String()))
+				b.Reset()
+			}
+		default:
+			b.WriteByte(ch)
+		}
+	}
+	parts = append(parts, strings.TrimSpace(b.String()))
+	return parts
 }
