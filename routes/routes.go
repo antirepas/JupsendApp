@@ -17,6 +17,7 @@ func RegisterRoutes(server *gin.Engine) {
 	server.LoadHTMLFiles(
 		"templates/partials/head.html",
 		"templates/partials/sidebar.html",
+		"templates/partials/workflow_archive_modal.html",
 		"templates/auth_login.html",
 		"templates/auth_signup.html",
 		"templates/pricing_plan.html",
