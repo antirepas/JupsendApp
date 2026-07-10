@@ -62,11 +62,7 @@ func reloadFromEnv() {
 	TokenEncryptionKey = strings.TrimSpace(os.Getenv("TOKEN_ENCRYPTION_KEY"))
 	GoogleClientID = strings.TrimSpace(os.Getenv("GOOGLE_CLIENT_ID"))
 	GoogleClientSecret = strings.TrimSpace(os.Getenv("GOOGLE_CLIENT_SECRET"))
-	GoogleOAuthRedirectURI = strings.TrimSpace(os.Getenv("GOOGLE_OAUTH_REDIRECT_URI"))
-	GoogleAppOAuthRedirectURI = strings.TrimSpace(os.Getenv("GOOGLE_APP_OAUTH_REDIRECT_URI"))
-	if GoogleAppOAuthRedirectURI == "" {
-		GoogleAppOAuthRedirectURI = GoogleOAuthRedirectURI
-	}
+	applyGoogleOAuthRedirectURIs()
 	WhopAPIKey = strings.TrimSpace(os.Getenv("WHOP_API_KEY"))
 	WhopAPIBase = strings.TrimRight(strings.TrimSpace(envOr("WHOP_API_BASE", "https://api.whop.com/api/v1")), "/")
 	WhopWebhookSecret = strings.TrimSpace(os.Getenv("WHOP_WEBHOOK_SECRET"))

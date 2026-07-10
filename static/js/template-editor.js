@@ -7,6 +7,8 @@
     const bodyHidden = document.getElementById('template-body');
     const chipsEl = document.getElementById('template-var-chips');
     const sampleFieldsEl = document.getElementById('template-sample-fields');
+    const sourceVarsEl = document.getElementById('template-source-vars');
+    const sampleSourceSelect = document.getElementById('template-sample-source');
     const previewSubject = document.getElementById('preview-subject');
     const previewFrame = document.getElementById('preview-frame');
     const editorEl = document.getElementById('template-editor');
@@ -22,7 +24,7 @@
     let defaultSample = {};
     const sampleScript = document.getElementById('template-default-sample');
     try {
-        defaultSample = sampleScript ? JSON.parse(sampleScript.textContent || '{}') : {};
+        defaultSample = normalizeSample(JSON.parse(sampleScript.textContent || '{}'));
     } catch (_) {
         defaultSample = { name: 'Alex', company: 'Acme Corp' };
     }
@@ -30,6 +32,36 @@
 
     const varRe = /\{\{\s*~?\s*([a-zA-Z_][a-zA-Z0-9_ ]*)\s*(?:\|[^}]*)?\s*\}\}/g;
     const ifVarRe = /\{%\s*if\s+([a-zA-Z_][a-zA-Z0-9_ ]*)\s*%\}/g;
+    const validVarKeyRe = /^[a-zA-Z_][a-zA-Z0-9_ ]*$/;
+
+    function isValidVarKey(key) {
+        return validVarKeyRe.test(key);
+    }
+
+    function normalizeSample(raw) {
+        if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+            const out = {};
+            Object.keys(raw).forEach((k) => {
+                if (isValidVarKey(k) && raw[k] != null) {
+                    out[k] = String(raw[k]);
+                }
+            });
+            return out;
+        }
+        if (typeof raw === 'string' && raw.trim()) {
+            try {
+                return normalizeSample(JSON.parse(raw));
+            } catch (_) {
+                return {};
+            }
+        }
+        return {};
+    }
+
+    function resetSampleValues() {
+        Object.keys(sampleValues).forEach((k) => delete sampleValues[k]);
+        Object.assign(sampleValues, defaultSample);
+    }
 
     const quill = new Quill(editorEl, {
         theme: 'snow',
@@ -145,14 +177,51 @@
         });
     }
 
+    function renderSourceVars(keys, sample, label) {
+        if (!sourceVarsEl) return;
+        const orderedKeys = (keys && keys.length ? keys : Object.keys(sample || {}))
+            .filter(isValidVarKey)
+            .sort();
+        if (!orderedKeys.length) {
+            sourceVarsEl.hidden = true;
+            sourceVarsEl.innerHTML = '';
+            return;
+        }
+        sourceVarsEl.hidden = false;
+        sourceVarsEl.innerHTML = '';
+        const title = document.createElement('p');
+        title.className = 'template-source-vars-title';
+        title.textContent = label || 'Columns from selection';
+        sourceVarsEl.appendChild(title);
+        const grid = document.createElement('div');
+        grid.className = 'template-source-var-grid';
+        orderedKeys.forEach((key) => {
+            const item = document.createElement('div');
+            item.className = 'template-source-var-item';
+            const keyEl = document.createElement('span');
+            keyEl.className = 'template-source-var-key';
+            keyEl.textContent = key;
+            const valEl = document.createElement('span');
+            valEl.className = 'template-source-var-value';
+            const val = sample && sample[key] !== undefined ? sample[key] : '';
+            valEl.textContent = val || '(empty)';
+            item.appendChild(keyEl);
+            item.appendChild(valEl);
+            grid.appendChild(item);
+        });
+        sourceVarsEl.appendChild(grid);
+    }
+
     function renderSampleFields(keys) {
         if (!sampleFieldsEl) return;
         sampleFieldsEl.innerHTML = '';
-        const keySet = new Set(keys);
-        Object.keys(sampleValues).forEach((k) => keySet.add(k));
+        const keySet = new Set(keys.filter(isValidVarKey));
+        Object.keys(sampleValues).forEach((k) => {
+            if (isValidVarKey(k)) keySet.add(k);
+        });
         const allKeys = Array.from(keySet).sort();
         if (allKeys.length === 0) {
-            sampleFieldsEl.innerHTML = '<p class="text-xs text-slate-400">Sample values appear when you add variables or load from a contact/list.</p>';
+            sampleFieldsEl.innerHTML = '<p class="text-xs text-slate-400">Sample values appear when you add variables or pick a contact/list above.</p>';
             return;
         }
         allKeys.forEach((key) => {
@@ -682,18 +751,20 @@
         previewUseAI.addEventListener('change', schedulePreview);
     }
 
-    const sampleContactSelect = document.getElementById('template-sample-contact');
-    const sampleListSelect = document.getElementById('template-sample-list');
-
-    async function applySampleFromSource(url) {
+    async function applySampleFromSource(url, label) {
         try {
             const res = await fetch(url, { credentials: 'same-origin' });
             if (!res.ok) return;
             const data = await res.json();
-            const sample = data.sample || {};
+            const sample = normalizeSample(data.sample);
+            const keys = Array.isArray(data.variable_keys)
+                ? data.variable_keys.filter(isValidVarKey)
+                : Object.keys(sample);
+            resetSampleValues();
             Object.keys(sample).forEach((k) => {
                 sampleValues[k] = sample[k];
             });
+            renderSourceVars(keys, sample, label);
             renderSampleFields(extractVariables());
             schedulePreview();
         } catch (_) {
@@ -701,15 +772,26 @@
         }
     }
 
-    sampleContactSelect?.addEventListener('change', () => {
-        if (sampleListSelect) sampleListSelect.value = '';
-        const id = sampleContactSelect.value;
-        if (id) applySampleFromSource('/contacts/' + id + '/variables');
-    });
-    sampleListSelect?.addEventListener('change', () => {
-        if (sampleContactSelect) sampleContactSelect.value = '';
-        const id = sampleListSelect.value;
-        if (id) applySampleFromSource('/contacts/lists/' + id + '/variables');
+    sampleSourceSelect?.addEventListener('change', () => {
+        const raw = sampleSourceSelect.value || '';
+        if (!raw) {
+            resetSampleValues();
+            renderSourceVars([], {}, '');
+            renderSampleFields(extractVariables());
+            schedulePreview();
+            return;
+        }
+        const parts = raw.split(':');
+        if (parts.length !== 2) return;
+        const kind = parts[0];
+        const id = parts[1];
+        const opt = sampleSourceSelect.selectedOptions[0];
+        const label = opt ? opt.textContent.trim() : '';
+        if (kind === 'contact') {
+            applySampleFromSource('/contacts/' + id + '/variables', 'Contact: ' + label);
+        } else if (kind === 'list') {
+            applySampleFromSource('/contacts/lists/' + id + '/variables', 'List: ' + label);
+        }
     });
 
     document.querySelectorAll('.syntax-copy').forEach((btn) => {

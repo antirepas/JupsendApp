@@ -257,9 +257,12 @@ func ListVariableSample(listID, userID int64) (keys []string, sample map[string]
 	if err != nil || len(ids) == 0 {
 		return keys, sample, err
 	}
-	_, vars, err := GetContact(ids[0])
+	c, vars, err := GetContact(ids[0])
 	if err != nil {
 		return keys, sample, err
+	}
+	if c.Email != "" {
+		sample["email"] = c.Email
 	}
 	for _, v := range vars {
 		sample[v.Key] = v.Value
@@ -267,18 +270,33 @@ func ListVariableSample(listID, userID int64) (keys []string, sample map[string]
 	if len(keys) == 0 {
 		keys = keysFromVariables(vars)
 	}
+	if _, ok := sample["email"]; ok {
+		keys = appendUniqueKey(keys, "email")
+	}
 	return keys, sample, nil
+}
+
+func appendUniqueKey(keys []string, key string) []string {
+	for _, k := range keys {
+		if k == key {
+			return keys
+		}
+	}
+	return append(keys, key)
 }
 
 // ContactVariableSample returns variables for template preview.
 func ContactVariableSample(userID, contactID int64) (map[string]string, error) {
-	if _, vars, err := GetContactForUser(contactID, userID); err != nil {
+	c, vars, err := GetContactForUser(contactID, userID)
+	if err != nil {
 		return nil, err
-	} else {
-		out := map[string]string{}
-		for _, v := range vars {
-			out[v.Key] = v.Value
-		}
-		return out, nil
 	}
+	out := map[string]string{}
+	if c.Email != "" {
+		out["email"] = c.Email
+	}
+	for _, v := range vars {
+		out[v.Key] = v.Value
+	}
+	return out, nil
 }

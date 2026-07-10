@@ -1435,6 +1435,45 @@ g.wf-edge-hovering .wf-edge-delete-btn {
     border-color: #A78BFA;
 }
 
+.template-source-vars {
+    margin-top: 0.75rem;
+    padding: 0.75rem;
+    background: #F9FAFB;
+    border: 1px solid #E5E7EB;
+    border-radius: 0.5rem;
+}
+
+.template-source-vars-title {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #475569;
+    margin-bottom: 0.5rem;
+}
+
+.template-source-var-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+    gap: 0.5rem;
+}
+
+.template-source-var-item {
+    font-size: 0.75rem;
+}
+
+.template-source-var-key {
+    display: block;
+    font-family: ui-monospace, monospace;
+    color: #5B21B6;
+    font-weight: 600;
+}
+
+.template-source-var-value {
+    display: block;
+    color: #64748B;
+    margin-top: 0.125rem;
+    word-break: break-word;
+}
+
 .template-inbox-mock {
     background: #F9FAFB;
     border: 1px solid #E5E7EB;

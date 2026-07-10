@@ -66,6 +66,7 @@ func RegisterRoutes(server *gin.Engine) {
 	server.GET("/auth/google/login", AppGoogleLoginStart)
 	server.GET("/auth/google/start", AppGoogleStart)
 	server.GET("/auth/google/callback", AppGoogleCallback)
+	server.POST("/auth/dev/login", RedirectIfAuthed(), DevLogin)
 	onboarding := server.Group("/")
 	onboarding.Use(RequireAuth())
 	{

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"emailtracker.com/auth"
+	"emailtracker.com/config"
 	"emailtracker.com/googleoauth"
 	"github.com/gin-gonic/gin"
 )
@@ -16,6 +17,8 @@ func LoginPage(c *gin.Context) {
 		"error":            c.Query("error"),
 		"next":             c.Query("next"),
 		"googleConfigured": googleoauth.IsConfigured(),
+		"devLoginEnabled":  config.IsLocalDev(),
+		"devLoginEmail":    config.DevLoginEmail(),
 	})
 }
 

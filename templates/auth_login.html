@@ -23,6 +23,17 @@
     {{else}}
     <div class="alert-error">Google sign-in is not configured on this server.</div>
     {{end}}
+    {{if .devLoginEnabled}}
+    <form method="POST" action="/auth/dev/login" class="mt-6 pt-6 border-t border-slate-200 space-y-3">
+        <input type="hidden" name="next" value="{{.next}}">
+        <p class="text-xs text-amber-700 font-medium">Local dev only — skips Google OAuth</p>
+        <div>
+            <label class="form-label text-xs" for="dev-login-email">Email (optional)</label>
+            <input type="email" id="dev-login-email" name="email" class="form-input text-sm" value="{{.devLoginEmail}}" placeholder="dev@localhost.local">
+        </div>
+        <button type="submit" class="btn-secondary w-full justify-center">Dev login</button>
+    </form>
+    {{end}}
     <p class="text-sm text-gray-500 mt-6 text-center">No account? <a href="/signup" class="text-brand-600 font-medium">Sign up</a></p>
 </div>
 </div>

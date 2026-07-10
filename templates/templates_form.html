@@ -40,6 +40,24 @@
                 <label class="form-label">Variables</label>
                 <div id="template-var-chips" class="template-var-chips"></div>
                 <p class="form-hint mt-1">See <a href="#template-syntax-guide" class="text-brand-600 font-medium">syntax guide below</a> for filters and conditionals.</p>
+                <div class="mt-4 pt-4 border-t border-slate-100">
+                    <label class="form-label" for="template-sample-source">Preview from contact or list</label>
+                    <select id="template-sample-source" class="form-input text-sm max-w-md">
+                        <option value="">— Use default sample values —</option>
+                        <optgroup label="Contacts">
+                            {{range .contacts}}
+                            <option value="contact:{{.ID}}">{{.Email}}</option>
+                            {{end}}
+                        </optgroup>
+                        <optgroup label="Lists">
+                            {{range .lists}}
+                            <option value="list:{{.ID}}">{{.Name}} ({{.MemberCount}})</option>
+                            {{end}}
+                        </optgroup>
+                    </select>
+                    <p class="form-hint mt-1">Pick a contact or list to see its columns and fill the live preview sample data.</p>
+                    <div id="template-source-vars" class="template-source-vars" hidden></div>
+                </div>
             </div>
             <div id="template-tone-banner" class="template-tone-banner" hidden>
                 <p class="template-tone-banner-text"></p>
@@ -74,26 +92,6 @@
             <div id="template-lint-sidebar" class="template-lint-sidebar" aria-live="polite"></div>
             <div class="mt-4 pt-4 border-t border-slate-100">
                 <p class="form-label mb-2">Preview sample data</p>
-                <div class="grid grid-cols-1 gap-3 mb-3">
-                    <div>
-                        <label class="form-label text-xs">Load from contact</label>
-                        <select id="template-sample-contact" class="form-input text-sm">
-                            <option value="">—</option>
-                            {{range .contacts}}
-                            <option value="{{.ID}}">{{.Email}}</option>
-                            {{end}}
-                        </select>
-                    </div>
-                    <div>
-                        <label class="form-label text-xs">Load from list</label>
-                        <select id="template-sample-list" class="form-input text-sm">
-                            <option value="">—</option>
-                            {{range .lists}}
-                            <option value="{{.ID}}">{{.Name}} ({{.MemberCount}})</option>
-                            {{end}}
-                        </select>
-                    </div>
-                </div>
                 <div id="template-sample-fields" class="template-sample-fields"></div>
                 {{if .aiEnabled}}
                 <label class="flex items-center gap-2 mt-3 text-sm text-slate-600">

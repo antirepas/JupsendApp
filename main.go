@@ -23,6 +23,9 @@ func main() {
 		log.Println("WARNING: TOKEN_ENCRYPTION_KEY not set — Gmail OAuth tokens use a dev-only key; set the same key on production and reconnect Gmail")
 	}
 	log.Printf("emailtracker starting (version=%s)", config.BuildVersion)
+	if config.IsLocalDev() {
+		log.Printf("WARNING: dev login enabled at /auth/dev/login (email=%s)", config.DevLoginEmail())
+	}
 
 	secret := config.SessionSecret
 	if secret == "" {
