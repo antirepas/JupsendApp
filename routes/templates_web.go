@@ -13,6 +13,7 @@ type templatePreviewRequest struct {
 	Subject string            `json:"subject"`
 	Body    string            `json:"body"`
 	Sample  map[string]string `json:"sample"`
+	UseAI   bool              `json:"use_ai"`
 }
 
 func PreviewTemplate(ctx *gin.Context) {
@@ -27,13 +28,24 @@ func PreviewTemplate(ctx *gin.Context) {
 		vars = append(vars, model.ContactVariables{Key: k, Value: v})
 	}
 
-	subj, _ := util.RenderTemplate(req.Subject, vars, "")
-	body, _ := util.RenderTemplate(req.Body, vars, "")
+	userID := mustUserID(ctx)
+	opts := util.RenderOptions{
+		ForPreview: true,
+		UseAI:      req.UseAI,
+		UserID:     userID,
+		Ctx:        ctx.Request.Context(),
+	}
+	subj, body, missing, err := util.RenderEmail(req.Subject, req.Body, vars, opts)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "render failed"})
+		return
+	}
 	body = util.WrapHTMLBody(body)
 
 	ctx.JSON(http.StatusOK, gin.H{
-		"subject":   subj,
-		"body_html": body,
+		"subject":          subj,
+		"body_html":        body,
+		"missing_required": missing,
 	})
 }
 

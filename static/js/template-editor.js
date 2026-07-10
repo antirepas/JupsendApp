@@ -25,7 +25,8 @@
     }
     const sampleValues = { ...defaultSample };
 
-    const varRe = /\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/g;
+    const varRe = /\{\{\s*~?\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\|[^}]*)?\s*\}\}/g;
+    const ifVarRe = /\{%\s*if\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*%\}/g;
 
     const quill = new Quill(editorEl, {
         theme: 'snow',
@@ -83,6 +84,14 @@
                 keys.push(key);
             }
         }
+        const ifRe = new RegExp(ifVarRe.source, 'g');
+        while ((m = ifRe.exec(text)) !== null) {
+            const key = m[1];
+            if (!seen.has(key)) {
+                seen.add(key);
+                keys.push(key);
+            }
+        }
         keys.sort();
         return keys;
     }
@@ -100,6 +109,10 @@
             chipsEl.innerHTML = '<span class="text-sm text-slate-400">Type {{name}} in subject or body — variables are detected automatically.</span>';
             return;
         }
+        const hint = document.createElement('p');
+        hint.className = 'text-xs text-slate-400 w-full mb-1';
+        hint.textContent = 'Click to insert plain {{key}} — add filters from the syntax guide.';
+        chipsEl.appendChild(hint);
         keys.forEach((key) => {
             const btn = document.createElement('button');
             btn.type = 'button';
@@ -168,6 +181,8 @@
         previewTimer = setTimeout(refreshPreview, 300);
     }
 
+    const previewUseAI = document.getElementById('preview-use-ai');
+
     async function refreshPreview() {
         syncBody();
         const keys = extractVariables();
@@ -175,6 +190,7 @@
         keys.forEach((k) => {
             sample[k] = sampleValues[k] !== undefined ? sampleValues[k] : defaultForKey(k);
         });
+        const useAI = previewUseAI && previewUseAI.checked;
         try {
             const res = await fetch('/templates/preview', {
                 method: 'POST',
@@ -183,6 +199,7 @@
                     subject: subjectInput.value || '',
                     body: bodyHidden.value || '',
                     sample,
+                    use_ai: useAI,
                 }),
             });
             if (!res.ok) return;
@@ -578,6 +595,24 @@
             lastFetchedSubject = '';
         }
         onContentChange();
+    });
+    if (previewUseAI) {
+        previewUseAI.addEventListener('change', schedulePreview);
+    }
+
+    document.querySelectorAll('.syntax-copy').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+            const text = btn.dataset.copy || '';
+            if (!text) return;
+            try {
+                await navigator.clipboard.writeText(text);
+                const prev = btn.textContent;
+                btn.textContent = 'Copied';
+                setTimeout(() => { btn.textContent = prev; }, 1200);
+            } catch (_) {
+                /* ignore */
+            }
+        });
     });
 
     form.addEventListener('submit', async (e) => {

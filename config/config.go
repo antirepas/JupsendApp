@@ -23,6 +23,7 @@ var (
 	GoogleOAuthRedirectURI string
 	GoogleAppOAuthRedirectURI string
 	WhopAPIKey            string
+	WhopAPIBase           string
 	WhopWebhookSecret     string
 	WhopCompanyID         string
 	WhopPlanID            string
@@ -66,6 +67,7 @@ func reloadFromEnv() {
 		GoogleAppOAuthRedirectURI = GoogleOAuthRedirectURI
 	}
 	WhopAPIKey = strings.TrimSpace(os.Getenv("WHOP_API_KEY"))
+	WhopAPIBase = strings.TrimRight(strings.TrimSpace(envOr("WHOP_API_BASE", "https://api.whop.com/api/v1")), "/")
 	WhopWebhookSecret = strings.TrimSpace(os.Getenv("WHOP_WEBHOOK_SECRET"))
 	WhopCompanyID = strings.TrimSpace(os.Getenv("WHOP_COMPANY_ID"))
 	WhopPlanID = strings.TrimSpace(os.Getenv("WHOP_PLAN_ID"))

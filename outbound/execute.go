@@ -1,6 +1,7 @@
 package outbound
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"strings"
@@ -62,10 +63,23 @@ func executeJob(job model.SendJob, account model.SMTPAccount) error {
 	trackID := detail.TrackingID
 	baseURL := model.UserBaseURL(job.UserID)
 
-	newBody, _ := util.RenderTemplate(template.Body, contactVars, "")
+	renderOpts := util.RenderOptions{
+		UserID: job.UserID,
+		Ctx:    context.Background(),
+	}
+	newSubject, newBody, missingRequired, err := util.RenderEmail(template.Subject, template.Body, contactVars, renderOpts)
+	if err != nil {
+		return fmt.Errorf("render template: %w", err)
+	}
+	if len(missingRequired) > 0 {
+		reason := "missing_required_var:" + strings.Join(missingRequired, ",")
+		_ = model.MarkEmailSendFailed(emailSendID)
+		_ = model.FailSendJob(job.ID, reason, "failed")
+		return fmt.Errorf("%s", reason)
+	}
+
 	newBody = util.WrapHTMLBody(newBody)
 	newBody = util.InjectTrackingPixelWithBase(newBody, trackID, baseURL)
-	newSubject, _ := util.RenderTemplate(template.Subject, contactVars, "")
 	replacedLinksBody := util.RewriteLinksWithBase(newBody, emailSendID, baseURL)
 	plainBody := util.StripHTML(replacedLinksBody)
 

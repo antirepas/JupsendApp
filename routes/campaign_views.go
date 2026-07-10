@@ -246,8 +246,7 @@ func buildCampaignContactRows(
 			cells = append(cells, ContactVariableCell{Key: key, Value: val, Missing: missingVal})
 		}
 
-		subject, _ := util.RenderTemplate(tpl.Subject, data.Variables, "")
-		body, _ := util.RenderTemplate(tpl.Body, data.Variables, "")
+		subject, body, _, _ := util.RenderEmail(tpl.Subject, tpl.Body, data.Variables, util.RenderOptions{ForPreview: true, BodyMode: true})
 		body = truncatePreview(body, 500)
 
 		row := CampaignContactRowView{

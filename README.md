@@ -129,6 +129,7 @@ Full app access requires an active Whop subscription. After signup, users land o
 | Variable | Description |
 |----------|-------------|
 | `WHOP_API_KEY` | Company API key |
+| `WHOP_API_BASE` | API base URL — production: `https://api.whop.com/api/v1` (default); sandbox: `https://sandbox-api.whop.com/api/v1` |
 | `WHOP_WEBHOOK_SECRET` | Webhook signing secret (`whsec_...`) |
 | `WHOP_COMPANY_ID` | Company ID (`biz_...`) |
 | `WHOP_PLAN_ID` | Plan ID for checkout (`plan_...`) |
@@ -372,6 +373,7 @@ go test ./...
 | `GOOGLE_CLIENT_SECRET` | Gmail OAuth client secret | — |
 | `GOOGLE_OAUTH_REDIRECT_URI` | Gmail OAuth callback URL | — |
 | `WHOP_API_KEY` | Whop API key for checkout | — |
+| `WHOP_API_BASE` | Whop API base (`https://api.whop.com/api/v1` or sandbox URL) | production default |
 | `WHOP_WEBHOOK_SECRET` | Whop webhook HMAC secret | — |
 | `WHOP_COMPANY_ID` | Whop company ID | — |
 | `WHOP_PLAN_ID` | Whop plan ID (`plan_...`) for checkout | — |

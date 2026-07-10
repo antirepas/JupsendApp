@@ -145,3 +145,17 @@ func PersonalizationHintPrompt() string {
 func ToneCheckPrompt() string {
 	return `Analyze the tone of this email. Reply with JSON only: {"tone":"formal|casual|neutral","message":"one short sentence for the user"}`
 }
+
+func FitPrompt() string {
+	return "You adapt a variable value so it fits grammatically into the surrounding sentence. " +
+		"The user provides sentence context with ___ marking the insertion point, and the raw value. " +
+		"Return ONLY the replacement phrase (what goes at ___), not the full sentence. " +
+		"Preserve the meaning. No quotes or explanation."
+}
+
+func SummarizePrompt(maxWords int) string {
+	return fmt.Sprintf(
+		"Summarize the following text to at most %d words. Return only the summary, no quotes or explanation.",
+		maxWords,
+	)
+}

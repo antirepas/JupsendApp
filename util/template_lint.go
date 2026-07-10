@@ -82,7 +82,50 @@ func LintTemplate(subject, bodyHTML string) []TemplateLintIssue {
 		}
 	}
 
+	lintFilters(combined, &issues)
+	if strings.Contains(subject, "~") || strings.Contains(subject, "|fit") || strings.Contains(subject, "|summarize") {
+		issues = append(issues, TemplateLintIssue{
+			Level:   "warn",
+			Code:    "ai_in_subject",
+			Message: "AI filters in the subject add latency and use credits — consider using them in the body only",
+			Source:  "rule",
+		})
+	}
+
 	return issues
+}
+
+func lintFilters(text string, issues *[]TemplateLintIssue) {
+	seenRequired := map[string]bool{}
+	for _, ref := range ParseVarRefs(text) {
+		for _, f := range ref.Filters {
+			if !KnownFilters[f.Name] {
+				*issues = append(*issues, TemplateLintIssue{
+					Level:   "warn",
+					Code:    "unknown_filter",
+					Message: fmt.Sprintf("Unknown filter %q on {{%s}}", f.Name, ref.Name),
+					Source:  "rule",
+				})
+			}
+			if f.Name == "required" && !seenRequired[ref.Name] {
+				seenRequired[ref.Name] = true
+				*issues = append(*issues, TemplateLintIssue{
+					Level:   "info",
+					Code:    "required_without_default",
+					Message: fmt.Sprintf("{{%s|required}} — contacts missing this value will be skipped at send", ref.Name),
+					Source:  "rule",
+				})
+			}
+			if f.Name == "raw" {
+				*issues = append(*issues, TemplateLintIssue{
+					Level:   "warn",
+					Code:    "raw_html",
+					Message: fmt.Sprintf("{{%s|raw}} inserts unescaped HTML — only use with trusted content", ref.Name),
+					Source:  "rule",
+				})
+			}
+		}
+	}
 }
 
 func hasClearAsk(plain string) bool {
@@ -128,8 +171,8 @@ func isMostlyUppercase(s string) bool {
 
 func countVarOccurrences(text, key string) int {
 	count := 0
-	for _, m := range templateVarRe.FindAllStringSubmatch(text, -1) {
-		if len(m) >= 2 && m[1] == key {
+	for _, ref := range ParseVarRefs(text) {
+		if ref.Name == key {
 			count++
 		}
 	}

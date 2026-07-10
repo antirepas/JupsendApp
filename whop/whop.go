@@ -18,7 +18,13 @@ import (
 	"emailtracker.com/model"
 )
 
-const apiBase = "https://api.whop.com/api/v1"
+func apiBase() string {
+	base := strings.TrimRight(strings.TrimSpace(config.WhopAPIBase), "/")
+	if base == "" {
+		return "https://api.whop.com/api/v1"
+	}
+	return base
+}
 
 type CheckoutResponse struct {
 	PurchaseURL string `json:"purchase_url"`
@@ -42,7 +48,7 @@ func CreateCheckout(userID int64, tier model.PlanTier, redirectURL string) (stri
 		},
 	}
 	raw, _ := json.Marshal(body)
-	req, err := http.NewRequest(http.MethodPost, apiBase+"/checkout_configurations", bytes.NewReader(raw))
+	req, err := http.NewRequest(http.MethodPost, apiBase()+"/checkout_configurations", bytes.NewReader(raw))
 	if err != nil {
 		return "", err
 	}
@@ -117,7 +123,7 @@ func firstPlanForProduct(companyID, productID string) (string, error) {
 	q.Set("account_id", companyID)
 	q.Set("product_ids", productID)
 	q.Set("first", "1")
-	req, err := http.NewRequest(http.MethodGet, apiBase+"/plans?"+q.Encode(), nil)
+	req, err := http.NewRequest(http.MethodGet, apiBase()+"/plans?"+q.Encode(), nil)
 	if err != nil {
 		return "", err
 	}

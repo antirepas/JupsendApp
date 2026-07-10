@@ -39,6 +39,7 @@
             <div class="mt-4">
                 <label class="form-label">Variables</label>
                 <div id="template-var-chips" class="template-var-chips"></div>
+                <p class="form-hint mt-1">See <a href="#template-syntax-guide" class="text-brand-600 font-medium">syntax guide below</a> for filters and conditionals.</p>
             </div>
             <div id="template-tone-banner" class="template-tone-banner" hidden>
                 <p class="template-tone-banner-text"></p>
@@ -73,10 +74,78 @@
             <div class="mt-4 pt-4 border-t border-slate-100">
                 <p class="form-label mb-2">Preview sample data</p>
                 <div id="template-sample-fields" class="template-sample-fields"></div>
+                {{if .aiEnabled}}
+                <label class="flex items-center gap-2 mt-3 text-sm text-slate-600">
+                    <input type="checkbox" id="preview-use-ai" class="rounded border-slate-300">
+                    Preview with AI (uses credits)
+                </label>
+                {{end}}
             </div>
         </div>
     </div>
 </form>
+
+<details id="template-syntax-guide" class="card mt-8 template-syntax-guide">
+    <summary class="card-title cursor-pointer select-none">Variable syntax guide</summary>
+    <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <h4 class="text-sm font-semibold text-slate-800 mb-1">Basics</h4>
+            <p class="text-xs text-slate-500 mb-2">Simple personalization from contact data.</p>
+            <code class="syntax-example text-xs block bg-white border border-slate-200 rounded px-2 py-1 font-mono">{{"{{name}}"}}, {{"{{company}}"}}</code>
+            <button type="button" class="btn-secondary btn-sm mt-2 syntax-copy" data-copy="{{"{{name}}"}}">Copy</button>
+        </div>
+        <div class="rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <h4 class="text-sm font-semibold text-slate-800 mb-1">Formatting</h4>
+            <p class="text-xs text-slate-500 mb-2">First name, title case, and fallback when empty.</p>
+            <code class="syntax-example text-xs block bg-white border border-slate-200 rounded px-2 py-1 font-mono">{{"{{name|first|default:there}}"}}</code>
+            <button type="button" class="btn-secondary btn-sm mt-2 syntax-copy" data-copy="{{"{{name|first|default:there}}"}}">Copy</button>
+            <code class="syntax-example text-xs block bg-white border border-slate-200 rounded px-2 py-1 font-mono mt-2">{{"{{company|title}}"}}</code>
+            <button type="button" class="btn-secondary btn-sm mt-2 syntax-copy" data-copy="{{"{{company|title}}"}}">Copy</button>
+        </div>
+        <div class="rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <h4 class="text-sm font-semibold text-slate-800 mb-1">Required &amp; fallback</h4>
+            <p class="text-xs text-slate-500 mb-2">Missing required values skip that contact at send.</p>
+            <code class="syntax-example text-xs block bg-white border border-slate-200 rounded px-2 py-1 font-mono">{{"{{company|required}}"}}</code>
+            <button type="button" class="btn-secondary btn-sm mt-2 syntax-copy" data-copy="{{"{{company|required}}"}}">Copy</button>
+            <code class="syntax-example text-xs block bg-white border border-slate-200 rounded px-2 py-1 font-mono mt-2">{{"{{role|default:your team}}"}}</code>
+            <button type="button" class="btn-secondary btn-sm mt-2 syntax-copy" data-copy="{{"{{role|default:your team}}"}}">Copy</button>
+        </div>
+        <div class="rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <h4 class="text-sm font-semibold text-slate-800 mb-1">Optional blocks</h4>
+            <p class="text-xs text-slate-500 mb-2">Hide a paragraph when the variable is empty.</p>
+            <code class="syntax-example text-xs block bg-white border border-slate-200 rounded px-2 py-1 font-mono whitespace-pre-wrap">{% if description %}I noticed {{"{{description}}"}}.{% endif %}</code>
+            <button type="button" class="btn-secondary btn-sm mt-2 syntax-copy" data-copy="{% if description %}I noticed {{"{{description}}"}}.{% endif %}">Copy</button>
+        </div>
+        <div class="rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <h4 class="text-sm font-semibold text-slate-800 mb-1">Links</h4>
+            <p class="text-xs text-slate-500 mb-2">Validate and wrap URLs as clickable links in the body.</p>
+            <code class="syntax-example text-xs block bg-white border border-slate-200 rounded px-2 py-1 font-mono">{{"{{landing|url}}"}}</code>
+            <button type="button" class="btn-secondary btn-sm mt-2 syntax-copy" data-copy="{{"{{landing|url}}"}}">Copy</button>
+        </div>
+        <div class="rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <h4 class="text-sm font-semibold text-slate-800 mb-1">Truncate</h4>
+            <p class="text-xs text-slate-500 mb-2">Limit text to a word count (deterministic).</p>
+            <code class="syntax-example text-xs block bg-white border border-slate-200 rounded px-2 py-1 font-mono">{{"{{bio|truncate:30}}"}}</code>
+            <button type="button" class="btn-secondary btn-sm mt-2 syntax-copy" data-copy="{{"{{bio|truncate:30}}"}}">Copy</button>
+        </div>
+        {{if .aiEnabled}}
+        <div class="rounded-lg border border-slate-200 bg-slate-50 p-4 md:col-span-2">
+            <h4 class="text-sm font-semibold text-slate-800 mb-1">AI (uses credits at send)</h4>
+            <p class="text-xs text-slate-500 mb-2">Fit text into a sentence grammatically, or summarize to N words.</p>
+            <code class="syntax-example text-xs block bg-white border border-slate-200 rounded px-2 py-1 font-mono">{{"{{~description}}"}}</code>
+            <button type="button" class="btn-secondary btn-sm mt-2 syntax-copy" data-copy="{{"{{~description}}"}}">Copy</button>
+            <code class="syntax-example text-xs block bg-white border border-slate-200 rounded px-2 py-1 font-mono mt-2">{{"{{bio|summarize:30}}"}}</code>
+            <button type="button" class="btn-secondary btn-sm mt-2 syntax-copy" data-copy="{{"{{bio|summarize:30}}"}}">Copy</button>
+        </div>
+        {{else}}
+        <div class="rounded-lg border border-slate-200 bg-slate-50 p-4 md:col-span-2">
+            <h4 class="text-sm font-semibold text-slate-800 mb-1">AI filters</h4>
+            <p class="text-xs text-slate-400">AI not configured — {{"{{~var}}"}} and {{"{{var|summarize:N}}"}} require OpenAI.</p>
+        </div>
+        {{end}}
+    </div>
+</details>
+
 <div id="template-selection-popover" class="template-ai-popover" hidden>
     <button type="button" data-ai-action="shorten">Shorten</button>
     <button type="button" data-ai-action="soften">Soften</button>
