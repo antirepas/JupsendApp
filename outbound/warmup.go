@@ -37,11 +37,11 @@ func EffectiveDailyCap(account model.SMTPAccount) int {
 	}
 	startCap := account.WarmupDailyCap
 	if startCap == 0 {
-		startCap = 5
+		startCap = model.DefaultWarmupDailyCap
 	}
 	increment := account.WarmupIncrementPerDay
 	if increment == 0 {
-		increment = 5
+		increment = model.DefaultWarmupIncrementPerDay
 	}
 	started := account.WarmupStartedAt
 	if started == nil {
@@ -70,7 +70,7 @@ func ComputeWarmupProgress(account model.SMTPAccount, hasAccount bool) WarmupPro
 	p.Enabled = account.WarmupEnabled
 	p.StartCap = account.WarmupDailyCap
 	if p.StartCap <= 0 {
-		p.StartCap = 5
+		p.StartCap = model.DefaultWarmupDailyCap
 	}
 	p.TargetCap = account.WarmupTargetDailyCap
 	if p.TargetCap <= 0 {
@@ -81,7 +81,7 @@ func ComputeWarmupProgress(account model.SMTPAccount, hasAccount bool) WarmupPro
 	}
 	p.IncrementPerDay = account.WarmupIncrementPerDay
 	if p.IncrementPerDay <= 0 {
-		p.IncrementPerDay = 5
+		p.IncrementPerDay = model.DefaultWarmupIncrementPerDay
 	}
 
 	p.TodayCap = EffectiveDailyCap(account)

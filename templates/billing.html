@@ -6,37 +6,87 @@
 <div class="flex h-full">
 {{template "sidebar" .}}
 <main class="flex-1 overflow-y-auto">
-<div class="max-w-2xl mx-auto p-8">
+<div class="max-w-4xl mx-auto p-8">
 <a href="/settings" class="text-sm text-brand-600 font-medium">← Settings</a>
 <h2 class="text-2xl font-bold text-charcoal mb-2 mt-2">Billing</h2>
-<p class="text-gray-500 text-sm mb-6">Manage your jupsend subscription.</p>
-{{if .success}}<div class="alert-success mb-6">Subscription updated. You can now use the full app.</div>{{end}}
+<p class="text-gray-500 text-sm mb-6">View your plan, switch tiers, or cancel your subscription.</p>
+{{if .success}}<div class="alert-success mb-6">{{.success}}</div>{{end}}
 {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
 
-<div class="card space-y-4">
-    <h3 class="card-title">Subscription status</h3>
-    <p class="text-sm text-slate-600">Signed in as <strong>{{.user.Email}}</strong></p>
+<div class="card mb-6">
+    <h3 class="card-title">Your plan</h3>
+    <p class="text-sm text-slate-600 mb-4">Signed in as <strong>{{.user.Email}}</strong></p>
     {{if .isAdmin}}
-    <p class="text-green-700 font-medium">Admin — full app access without a subscription.</p>
-    {{else if .subscribed}}
-    <p class="text-green-700 font-medium">Active — full app access is enabled.</p>
+    <p class="text-green-700 font-medium mb-2">Admin — full app access without a subscription.</p>
     {{else}}
-    <p class="text-amber-700">No active subscription. Subscribe to unlock campaigns, contacts, sends, and workflows.</p>
-    <form method="POST" action="/settings/billing/checkout">
-        <button type="submit" class="btn-primary">Subscribe</button>
-    </form>
+    <div class="flex flex-wrap items-start justify-between gap-4">
+        <div>
+            <p class="text-2xl font-bold text-charcoal">{{.currentPlan.Name}}</p>
+            <p class="text-sm text-slate-500 mt-1">Status: <span class="font-medium text-slate-700">{{.statusLabel}}</span></p>
+            {{if .renewalDate}}
+            <p class="text-sm text-slate-500 mt-1">{{if .cancelAtPeriodEnd}}Access until{{else}}Renews{{end}}: <span class="font-medium text-slate-700">{{.renewalDate}}</span></p>
+            {{end}}
+            {{if .cancelAtPeriodEnd}}
+            <p class="text-sm text-amber-700 mt-2">Cancellation scheduled — you keep access until the date above.</p>
+            {{end}}
+        </div>
+        <div class="text-sm text-slate-600 space-y-1">
+            <p><strong>{{.currentPlan.DailyEmails}}</strong> emails / day</p>
+            <p><strong>{{.currentPlan.AICredits}}</strong> AI credits / day</p>
+            <p>Warmup: {{if .currentPlan.Warmup}}On{{else}}Off{{end}}</p>
+        </div>
+    </div>
+    {{if .manageURL}}
+    <a href="{{.manageURL}}" target="_blank" rel="noopener" class="inline-block mt-4 text-sm text-brand-600 font-medium">Manage payment method on Whop →</a>
+    {{end}}
     {{end}}
 </div>
 
-<div class="card space-y-2 mt-6">
-    <h3 class="card-title">What's included</h3>
-    <ul class="text-sm text-slate-600 list-disc list-inside space-y-1">
-        <li>Campaigns, workflows, and bulk sending</li>
-        <li>Contact management and suppressions</li>
-        <li>Open/click tracking and analytics</li>
-    </ul>
-    <p class="text-xs text-slate-500 mt-2">Settings and Gmail connection remain available without a subscription.</p>
+{{if not .isAdmin}}
+<h3 class="text-lg font-semibold text-charcoal mb-3">Change plan</h3>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+    {{range .plans}}
+    <div class="card {{if .Current}}ring-2 ring-brand-500{{end}}">
+        <div class="flex items-center justify-between mb-2">
+            <h4 class="font-semibold text-charcoal">{{.Name}}</h4>
+            {{if .Current}}<span class="badge badge-blue text-xs">Current</span>{{end}}
+        </div>
+        <ul class="text-sm text-slate-600 space-y-1 mb-4">
+            <li>{{.DailyEmails}} emails / day</li>
+            <li>{{.AICredits}} AI credits / day</li>
+            <li>Warmup {{if .Warmup}}on{{else}}off{{end}}</li>
+        </ul>
+        {{if .Current}}
+        <p class="text-xs text-slate-400">Your active plan</p>
+        {{else if eq .Tier "free"}}
+            {{if $.hasPaidMembership}}
+            <p class="text-xs text-slate-500 mb-2">Cancel your paid subscription below to return to Free limits.</p>
+            {{else}}
+            <p class="text-xs text-slate-400">Sign up free from the landing page</p>
+            {{end}}
+        {{else if $.whopConfigured}}
+        <form method="POST" action="/settings/billing/checkout">
+            <input type="hidden" name="plan" value="{{.Tier}}">
+            <button type="submit" class="btn-primary w-full text-sm">Switch to {{.Name}}</button>
+        </form>
+        {{else}}
+        <p class="text-xs text-slate-400">Whop billing not configured</p>
+        {{end}}
+    </div>
+    {{end}}
 </div>
+
+{{if and .hasPaidMembership .whopConfigured (not .cancelAtPeriodEnd)}}
+<div class="card border-amber-200 bg-amber-50/50">
+    <h3 class="card-title text-amber-900">Cancel subscription</h3>
+    <p class="text-sm text-amber-800 mb-4">Cancel at the end of your billing period. You keep access until then, then move to Free plan limits.</p>
+    <form method="POST" action="/settings/billing/cancel" onsubmit="return confirm('Cancel your subscription at period end?');">
+        <button type="submit" class="btn-secondary text-sm">Cancel subscription</button>
+    </form>
+</div>
+{{end}}
+{{end}}
+
 </div>
 </main>
 </div>

@@ -67,8 +67,8 @@ func TemplateAIRewrite(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "text is required"})
 		return
 	}
-	if utf8.RuneCountInString(text) > 50 {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "text must be 50 characters or fewer"})
+	if utf8.RuneCountInString(text) > 120 {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "text must be 120 characters or fewer"})
 		return
 	}
 	action := strings.TrimSpace(req.Action)

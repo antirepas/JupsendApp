@@ -88,6 +88,7 @@ func RegisterRoutes(server *gin.Engine) {
 		settings.POST("/settings/base-url", UpdateBaseURL)
 		settings.GET("/settings/billing", BillingPage)
 		settings.POST("/settings/billing/checkout", BillingCheckout)
+		settings.POST("/settings/billing/cancel", BillingCancel)
 		settings.GET("/settings/gmail/connect", GmailConnect)
 		settings.GET("/settings/gmail/callback", GmailCallback)
 		settings.POST("/settings/gmail/disconnect", GmailDisconnect)

@@ -15,6 +15,9 @@
     const startersEl = document.getElementById('template-starters');
     const toneBanner = document.getElementById('template-tone-banner');
     const selectionPopover = document.getElementById('template-selection-popover');
+    if (selectionPopover) {
+        document.body.appendChild(selectionPopover);
+    }
 
     let defaultSample = {};
     const sampleScript = document.getElementById('template-default-sample');
@@ -61,6 +64,16 @@
     let currentAIHint = '';
     let selectionRange = null;
     let popoverLoading = false;
+    const AI_SELECTION_MAX = 120;
+
+    function showAIError(message) {
+        if (!lintSidebar) return;
+        const note = document.createElement('div');
+        note.className = 'alert-error text-sm mb-3';
+        note.textContent = message;
+        lintSidebar.prepend(note);
+        setTimeout(() => note.remove(), 5000);
+    }
 
     function syncBody() {
         bodyHidden.value = quill.root.innerHTML;
@@ -316,65 +329,89 @@
     }
 
     function hideSelectionPopover() {
+        if (popoverLoading) return;
         if (selectionPopover) selectionPopover.hidden = true;
         selectionRange = null;
     }
 
     function showSelectionPopover(range, text) {
         if (!aiEnabled || !selectionPopover || popoverLoading) return;
-        if (!text || text.length > 50) {
+        if (!text || text.length > AI_SELECTION_MAX) {
             hideSelectionPopover();
             return;
         }
-        selectionRange = range;
+        selectionRange = { index: range.index, length: range.length };
         const bounds = quill.getBounds(range.index, range.length);
         const editorRect = editorEl.getBoundingClientRect();
-        selectionPopover.style.top = (editorRect.top + bounds.bottom + window.scrollY + 6) + 'px';
-        selectionPopover.style.left = (editorRect.left + bounds.left + window.scrollX) + 'px';
+        selectionPopover.style.position = 'fixed';
+        selectionPopover.style.top = (editorRect.top + bounds.bottom + 6) + 'px';
+        selectionPopover.style.left = (editorRect.left + bounds.left) + 'px';
         selectionPopover.hidden = false;
     }
 
     async function runRewrite(action) {
-        if (!selectionRange || popoverLoading) return;
-        const text = quill.getText(selectionRange.index, selectionRange.length).trim();
-        if (!text || text.length > 50) return;
+        const range = selectionRange;
+        if (!range || popoverLoading) return;
+        const text = quill.getText(range.index, range.length).trim();
+        if (!text || text.length > AI_SELECTION_MAX) {
+            showAIError('Select up to ' + AI_SELECTION_MAX + ' characters to rewrite.');
+            return;
+        }
         popoverLoading = true;
-        selectionPopover.classList.add('template-ai-loading');
+        if (selectionPopover) selectionPopover.classList.add('template-ai-loading');
         try {
             const res = await fetch('/templates/ai/rewrite', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
                 body: JSON.stringify({ text, action }),
             });
-            if (!res.ok) return;
-            const data = await res.json();
-            if (!data.text) return;
-            quill.deleteText(selectionRange.index, selectionRange.length);
-            quill.insertText(selectionRange.index, data.text);
-            quill.setSelection(selectionRange.index + data.text.length);
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                showAIError(data.error || 'AI rewrite failed (' + res.status + ')');
+                return;
+            }
+            if (!data.text) {
+                showAIError('AI returned an empty response.');
+                return;
+            }
+            quill.deleteText(range.index, range.length);
+            quill.insertText(range.index, data.text);
+            quill.setSelection(range.index + data.text.length);
             onContentChange();
         } catch (_) {
-            /* ignore */
+            showAIError('Could not reach the AI service.');
         } finally {
             popoverLoading = false;
-            selectionPopover.classList.remove('template-ai-loading');
+            if (selectionPopover) selectionPopover.classList.remove('template-ai-loading');
             hideSelectionPopover();
         }
     }
 
     if (selectionPopover) {
         selectionPopover.querySelectorAll('[data-ai-action]').forEach((btn) => {
-            btn.addEventListener('click', () => runRewrite(btn.dataset.aiAction));
+            btn.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+            });
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                runRewrite(btn.dataset.aiAction);
+            });
         });
     }
 
     quill.on('selection-change', (range) => {
-        if (!aiEnabled || !range || range.length === 0) {
+        if (!aiEnabled) return;
+        if (popoverLoading) return;
+        if (selectionPopover && !selectionPopover.hidden) return;
+        if (!range || range.length === 0) {
             hideSelectionPopover();
             return;
         }
         const text = quill.getText(range.index, range.length).trim();
-        if (text.length >= 1 && text.length <= 50) {
+        if (text.length >= 1 && text.length <= AI_SELECTION_MAX) {
             showSelectionPopover(range, text);
         } else {
             hideSelectionPopover();

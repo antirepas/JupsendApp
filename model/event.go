@@ -181,32 +181,75 @@ type ContactActivityItem struct {
 	CreatedAt    time.Time
 }
 
+type ContactActivityPage struct {
+	Items      []ContactActivityItem
+	Total      int
+	Page       int
+	PageSize   int
+	TotalPages int
+}
+
+const recentContactActivitySQL = `
+	SELECT c.id, c.email, es.id AS send_id, ee.event_type,
+		COALESCE(tl.original_url, '') AS link_url, COALESCE(camp.name, '') AS campaign_name, ee.created_at
+	FROM email_events ee
+	INNER JOIN email_sends es ON es.id = ee.email_send_id
+	INNER JOIN contact c ON c.id = es.contact_id
+	LEFT JOIN tracked_links tl ON tl.tracking_id = ee.tracking_id AND ee.event_type = 'click'
+	LEFT JOIN campaigns camp ON camp.id = es.campaign_id
+	WHERE es.user_id = ? AND ee.event_type IN ('open', 'click')
+	UNION ALL
+	SELECT c.id, c.email, COALESCE(ce.email_send_id, 0), 'reply',
+		'', COALESCE(camp.name, ''), ce.occurred_at
+	FROM contact_events ce
+	INNER JOIN contact c ON c.id = ce.contact_id
+	LEFT JOIN email_sends es ON es.id = ce.email_send_id
+	LEFT JOIN campaigns camp ON camp.id = es.campaign_id
+	WHERE c.user_id = ? AND ce.event_type = 'REPLY'
+`
+
 func GetRecentContactActivity(userID int64, limit int) ([]ContactActivityItem, error) {
-	query := `
-		SELECT * FROM (
-			SELECT c.id, c.email, es.id AS send_id, ee.event_type,
-				COALESCE(tl.original_url, '') AS link_url, COALESCE(camp.name, '') AS campaign_name, ee.created_at
-			FROM email_events ee
-			INNER JOIN email_sends es ON es.id = ee.email_send_id
-			INNER JOIN contact c ON c.id = es.contact_id
-			LEFT JOIN tracked_links tl ON tl.tracking_id = ee.tracking_id AND ee.event_type = 'click'
-			LEFT JOIN campaigns camp ON camp.id = es.campaign_id
-			WHERE es.user_id = ? AND ee.event_type IN ('open', 'click')
-			UNION ALL
-			SELECT c.id, c.email, COALESCE(ce.email_send_id, 0), 'reply',
-				'', COALESCE(camp.name, ''), ce.occurred_at
-			FROM contact_events ce
-			INNER JOIN contact c ON c.id = ce.contact_id
-			LEFT JOIN email_sends es ON es.id = ce.email_send_id
-			LEFT JOIN campaigns camp ON camp.id = es.campaign_id
-			WHERE c.user_id = ? AND ce.event_type = 'REPLY'
-		) activity
-		ORDER BY created_at DESC
-		LIMIT ?
-	`
-	rows, err := db.Query(query, userID, userID, limit)
+	page, err := GetRecentContactActivityPage(userID, 1, limit)
 	if err != nil {
 		return nil, err
+	}
+	return page.Items, nil
+}
+
+func GetRecentContactActivityPage(userID int64, page, pageSize int) (ContactActivityPage, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 10
+	}
+	if pageSize > 50 {
+		pageSize = 50
+	}
+
+	countQuery := `SELECT COUNT(*) FROM (` + recentContactActivitySQL + `) activity`
+	var total int
+	if err := db.QueryRow(countQuery, userID, userID).Scan(&total); err != nil {
+		return ContactActivityPage{}, err
+	}
+
+	totalPages := 0
+	if total > 0 {
+		totalPages = (total + pageSize - 1) / pageSize
+	}
+	if totalPages > 0 && page > totalPages {
+		page = totalPages
+	}
+
+	offset := (page - 1) * pageSize
+	listQuery := `
+		SELECT * FROM (` + recentContactActivitySQL + `) activity
+		ORDER BY created_at DESC
+		LIMIT ? OFFSET ?
+	`
+	rows, err := db.Query(listQuery, userID, userID, pageSize, offset)
+	if err != nil {
+		return ContactActivityPage{}, err
 	}
 	defer rows.Close()
 
@@ -215,11 +258,18 @@ func GetRecentContactActivity(userID int64, limit int) ([]ContactActivityItem, e
 		var item ContactActivityItem
 		if err := rows.Scan(&item.ContactID, &item.ContactEmail, &item.SendID, &item.EventType,
 			&item.LinkURL, &item.CampaignName, &item.CreatedAt); err != nil {
-			return nil, err
+			return ContactActivityPage{}, err
 		}
 		items = append(items, item)
 	}
-	return items, nil
+
+	return ContactActivityPage{
+		Items:      items,
+		Total:      total,
+		Page:       page,
+		PageSize:   pageSize,
+		TotalPages: totalPages,
+	}, nil
 }
 
 func GetDailyStats(userID int64, days int) ([]DailyStat, error) {

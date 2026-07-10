@@ -30,8 +30,12 @@ type CheckoutResponse struct {
 	PurchaseURL string `json:"purchase_url"`
 }
 
+func IsConfigured() bool {
+	return config.WhopAPIKey != "" && config.WhopCompanyID != ""
+}
+
 func CreateCheckout(userID int64, tier model.PlanTier, redirectURL string) (string, error) {
-	if config.WhopAPIKey == "" || config.WhopCompanyID == "" {
+	if !IsConfigured() {
 		return "", fmt.Errorf("whop not configured: set WHOP_API_KEY and WHOP_COMPANY_ID")
 	}
 	planID, err := resolvePlanIDForTier(tier)
@@ -43,7 +47,7 @@ func CreateCheckout(userID int64, tier model.PlanTier, redirectURL string) (stri
 		"plan_id":      planID,
 		"redirect_url": redirectURL,
 		"metadata": map[string]string{
-			"user_id": strconv.FormatInt(userID, 10),
+			"user_id":   strconv.FormatInt(userID, 10),
 			"plan_tier": string(tier),
 		},
 	}

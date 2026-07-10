@@ -30,8 +30,6 @@
     </div>
 </div>
 
-{{template "warmup_progress_widget" .}}
-
 <div class="card mt-6">
     <h3 class="card-title">3 steps to get started</h3>
     <p class="text-sm text-gray-500 mb-6">Follow these guides, then launch your first outreach.</p>
@@ -88,13 +86,13 @@
     </div>
 </div>
 
+{{template "warmup_progress_widget" .}}
+
 {{else}}
 <div class="mb-6">
     <h2 class="text-2xl font-bold text-charcoal">Dashboard</h2>
     <p class="text-gray-500 mt-1 text-sm">Last 30 days</p>
 </div>
-
-{{template "warmup_progress_widget" .}}
 
 <div class="kpi-grid mb-6">
     <div class="kpi-card">
@@ -224,6 +222,20 @@
         </tbody>
     </table>
     </div>
+    {{if gt .contactActivityPage.TotalPages 1}}
+    <div class="flex items-center justify-between px-1 pt-4 mt-2 border-t border-gray-100 text-sm">
+        <span class="text-gray-500">{{.activityRangeStart}}–{{.activityRangeEnd}} of {{.contactActivityPage.Total}}</span>
+        <div class="flex gap-2">
+            {{if .activityHasPrev}}
+            <a href="/?activity_page={{.activityPrevPage}}" class="btn-secondary text-xs">Previous</a>
+            {{end}}
+            <span class="text-gray-500 self-center px-1">Page {{.contactActivityPage.Page}} of {{.contactActivityPage.TotalPages}}</span>
+            {{if .activityHasNext}}
+            <a href="/?activity_page={{.activityNextPage}}" class="btn-secondary text-xs">Next</a>
+            {{end}}
+        </div>
+    </div>
+    {{end}}
     {{else}}
     <p class="text-gray-400 text-sm py-4">No opens or clicks yet. Send a campaign to see contact activity here.</p>
     {{end}}
@@ -249,6 +261,8 @@
     </div>
     {{end}}
 </div>
+
+{{template "warmup_progress_widget" .}}
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
@@ -320,79 +334,84 @@
 
 {{define "warmup_progress_widget"}}
 {{with .warmupProgress}}
-{{if .HasAccount}}
-<div class="warmup-card">
-    <div class="warmup-card-head">
+<div class="card warmup-panel mt-8">
+    {{if .HasAccount}}
+    <div class="warmup-panel-top">
         <div>
-            <div class="flex items-center gap-2 flex-wrap">
-                <h3 class="warmup-card-title">Email warmup</h3>
-                {{if .IsFullyWarmed}}
-                <span class="warmup-badge warmup-badge--done"><span class="warmup-badge-dot"></span> Ready</span>
-                {{else if .Enabled}}
-                <span class="warmup-badge"><span class="warmup-badge-dot"></span> Ramping</span>
-                {{end}}
-            </div>
-            <p class="warmup-card-sub">
-                {{if .SenderEmail}}{{.SenderEmail}}{{else}}Sending account{{end}}
-                {{if and .Enabled (not .IsFullyWarmed)}} · +{{.IncrementPerDay}}/day until {{.TargetCap}}/day{{else if not .Enabled}} · Warmup off (fixed {{.TodayCap}}/day cap){{end}}
+            <h3 class="card-title mb-0">Sending warmup</h3>
+            <p class="text-sm text-gray-500 mt-1">
+                {{if .SenderEmail}}{{.SenderEmail}}{{else}}Sending account{{end}}{{if and .Enabled (not .IsFullyWarmed)}} · +{{.IncrementPerDay}}/day until {{.TargetCap}}/day{{else if not .Enabled}} · fixed {{.TodayCap}}/day cap{{end}}
             </p>
         </div>
-        <a href="/settings/billing" class="warmup-card-link">View plan →</a>
+        <div class="warmup-panel-actions">
+            {{if .IsFullyWarmed}}
+            <span class="badge badge-green">At full volume</span>
+            {{else if .Enabled}}
+            <span class="badge badge-amber">Warming up</span>
+            {{else}}
+            <span class="badge badge-gray">Warmup off</span>
+            {{end}}
+            <a href="/settings/billing" class="text-sm text-brand-600 font-medium whitespace-nowrap">Plan details</a>
+        </div>
     </div>
-    <div class="warmup-card-body">
-        <div class="warmup-ring {{if .IsFullyWarmed}}warmup-ring--complete{{end}}" style="--ring-pct: {{printf "%.1f" .OverallPct}}">
-            <div class="warmup-ring-inner">
-                <span class="warmup-ring-value">{{printf "%.0f" .OverallPct}}%</span>
-                <span class="warmup-ring-label">{{if .IsFullyWarmed}}Ready{{else}}Warmed{{end}}</span>
+
+    <div class="warmup-panel-metrics">
+        <div class="warmup-metric">
+            <span class="warmup-metric-label">Sent today</span>
+            <span class="warmup-metric-value">{{.SendsToday}}<span class="warmup-metric-of"> / {{.TodayCap}}</span></span>
+            <span class="warmup-metric-hint">
+                {{if ge .TodayRemaining 1}}{{.TodayRemaining}} remaining{{else if eq .TodayRemaining 0}}Cap reached for today{{else}}Cap reached{{end}}
+            </span>
+        </div>
+        <div class="warmup-metric">
+            <span class="warmup-metric-label">Daily limit</span>
+            <span class="warmup-metric-value">{{.RampCap}}<span class="warmup-metric-of"> / {{.TargetCap}}</span></span>
+            <span class="warmup-metric-hint">{{if .IsFullyWarmed}}Full sending volume{{else if .Enabled}}Ramping up{{else}}No ramp active{{end}}</span>
+        </div>
+        {{if and .Enabled (not .IsFullyWarmed)}}
+        <div class="warmup-metric">
+            <span class="warmup-metric-label">Full volume in</span>
+            <span class="warmup-metric-value">{{if gt .DaysRemaining 0}}~{{.DaysRemaining}}d{{else}}Soon{{end}}</span>
+            <span class="warmup-metric-hint">Day {{.DaysElapsed}} of {{.RampDaysTotal}}</span>
+        </div>
+        {{end}}
+    </div>
+
+    <div class="warmup-panel-progress">
+        <div class="warmup-progress-row">
+            <div class="warmup-progress-head">
+                <span>Today's quota</span>
+                <span>{{.SendsToday}} / {{.TodayCap}}</span>
+            </div>
+            <div class="warmup-progress-track">
+                <div class="warmup-progress-fill {{if ge .TodayUsedPct 100.0}}warmup-progress-fill--full{{end}}" style="width: {{if gt .TodayUsedPct 100.0}}100{{else}}{{printf "%.0f" .TodayUsedPct}}{{end}}%"></div>
             </div>
         </div>
-        <div class="warmup-details">
-            <div class="warmup-daily">
-                <div class="warmup-daily-head">
-                    <span>Today's send quota</span>
-                    <span class="warmup-daily-count">{{.SendsToday}} / {{.TodayCap}}</span>
-                </div>
-                <div class="warmup-daily-bar">
-                    <div class="warmup-daily-fill {{if ge .TodayUsedPct 100.0}}warmup-daily-fill--full{{end}}" style="width: {{if gt .TodayUsedPct 100.0}}100{{else}}{{printf "%.0f" .TodayUsedPct}}{{end}}%"></div>
-                </div>
-                <p class="warmup-daily-note">
-                    {{if ge .TodayRemaining 1}}{{.TodayRemaining}} sends remaining today{{else if eq .TodayRemaining 0}}Daily cap reached — more sends unlock tomorrow{{else}}Daily cap reached{{end}}
-                </p>
+        {{if .Enabled}}
+        <div class="warmup-progress-row">
+            <div class="warmup-progress-head">
+                <span>Warmup ramp</span>
+                <span>{{printf "%.0f" .OverallPct}}%</span>
             </div>
-            {{if .Enabled}}
-            <p class="warmup-ramp-label">Warmup ramp</p>
-            <div class="warmup-ramp-track">
-                <div class="warmup-ramp-fill" style="width: {{if gt .OverallPct 100.0}}100{{else}}{{printf "%.0f" .OverallPct}}{{end}}%"></div>
-                <div class="warmup-ramp-marker" style="left: {{if gt .OverallPct 100.0}}100{{else}}{{printf "%.0f" .OverallPct}}{{end}}%"></div>
+            <div class="warmup-progress-track">
+                <div class="warmup-progress-fill warmup-progress-fill--ramp" style="width: {{if gt .OverallPct 100.0}}100{{else}}{{printf "%.0f" .OverallPct}}{{end}}%"></div>
             </div>
-            <div class="warmup-ramp-labels">
+            <div class="warmup-progress-scale">
                 <span>{{.StartCap}}/day</span>
-                <span><strong>{{.RampCap}}/day</strong> now</span>
                 <span>{{.TargetCap}}/day</span>
             </div>
-            {{if .IsFullyWarmed}}
-            <p class="warmup-eta warmup-eta--done">Fully warmed — you're at full daily sending capacity.</p>
-            {{else if gt .DaysRemaining 0}}
-            <p class="warmup-eta">~{{.DaysRemaining}} day{{if ne .DaysRemaining 1}}s{{end}} until full volume (day {{.DaysElapsed}} of {{.RampDaysTotal}})</p>
-            {{else}}
-            <p class="warmup-eta">Almost there — full volume unlocks soon.</p>
-            {{end}}
-            {{else}}
-            <p class="warmup-eta">Warmup is off. You can send up to {{.TodayCap}} emails per day.</p>
-            {{end}}
         </div>
+        {{end}}
     </div>
-</div>
-{{else}}
-<div class="warmup-card warmup-card--empty">
-    <div class="warmup-card-head">
+    {{else}}
+    <div class="warmup-panel-top">
         <div>
-            <h3 class="warmup-card-title">Email warmup</h3>
-            <p class="warmup-card-sub">Connect Gmail to ramp send volume safely and protect deliverability.</p>
+            <h3 class="card-title mb-0">Sending warmup</h3>
+            <p class="text-sm text-gray-500 mt-1">Connect Gmail to gradually increase daily send limits and protect deliverability.</p>
         </div>
+        <a href="/settings" class="btn-primary btn-sm">Connect Gmail</a>
     </div>
-    <a href="/settings" class="btn-primary inline-block">Connect in settings</a>
+    {{end}}
 </div>
-{{end}}
 {{end}}
 {{end}}

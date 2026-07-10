@@ -20,10 +20,16 @@ func Dashboard(ctx *gin.Context) {
 	userID := mustUserID(ctx)
 	user, _ := model.GetUserByID(userID)
 
+	activityPageNum, _ := strconv.Atoi(ctx.DefaultQuery("activity_page", "1"))
+	if activityPageNum < 1 {
+		activityPageNum = 1
+	}
+	const activityPageSize = 10
+
 	var (
-		stats             model.DashboardStats
-		contactActivity   []model.ContactActivityItem
-		daily             []model.DailyStat
+		stats               model.DashboardStats
+		contactActivityPage model.ContactActivityPage
+		daily               []model.DailyStat
 		counts            model.EntityCounts
 		campaigns         []model.CampaignListItem
 		benchmark         model.AccountBenchmark
@@ -42,7 +48,7 @@ func Dashboard(ctx *gin.Context) {
 	}()
 	go func() {
 		defer wg.Done()
-		contactActivity, _ = model.GetRecentContactActivity(userID, 25)
+		contactActivityPage, _ = model.GetRecentContactActivityPage(userID, activityPageNum, activityPageSize)
 	}()
 	go func() {
 		defer wg.Done()
@@ -97,12 +103,28 @@ func Dashboard(ctx *gin.Context) {
 
 	isEmpty := stats.TotalSends == 0 && counts.Campaigns == 0
 
+	activityHasPrev := contactActivityPage.Page > 1
+	activityHasNext := contactActivityPage.TotalPages > 0 && contactActivityPage.Page < contactActivityPage.TotalPages
+	activityRangeStart := 0
+	activityRangeEnd := 0
+	if contactActivityPage.Total > 0 {
+		activityRangeStart = (contactActivityPage.Page-1)*contactActivityPage.PageSize + 1
+		activityRangeEnd = activityRangeStart + len(contactActivityPage.Items) - 1
+	}
+
 	ctx.HTML(http.StatusOK, "dashboard.html", gin.H{
 		"title":           "Dashboard",
 		"active":          "dashboard",
 		"user":            user,
 		"stats":           stats,
-		"contactActivity": contactActivity,
+		"contactActivity": contactActivityPage.Items,
+		"contactActivityPage": contactActivityPage,
+		"activityHasPrev":     activityHasPrev,
+		"activityHasNext":     activityHasNext,
+		"activityPrevPage":    contactActivityPage.Page - 1,
+		"activityNextPage":    contactActivityPage.Page + 1,
+		"activityRangeStart":  activityRangeStart,
+		"activityRangeEnd":    activityRangeEnd,
 		"dailyStats":      daily,
 		"counts":          counts,
 		"campaigns":       campaigns,

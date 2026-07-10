@@ -5,6 +5,12 @@ import (
 	"time"
 
 	"emailtracker.com/db"
+	"strings"
+)
+
+const (
+	DefaultWarmupDailyCap        = 20
+	DefaultWarmupIncrementPerDay = 20
 )
 
 type planSpec struct {
@@ -36,9 +42,9 @@ func PlanSpecForTier(tier PlanTier) (planSpec, error) {
 			DailyEmailCap:           250,
 			AICreditsPerDay:         2000,
 			WarmupEnabled:           true,
-			WarmupDailyCap:          5,
+			WarmupDailyCap:          DefaultWarmupDailyCap,
 			WarmupTargetDailyCap:    250,
-			WarmupIncrementPerDay:   5,
+			WarmupIncrementPerDay:   DefaultWarmupIncrementPerDay,
 			PerMinuteLimit:          2,
 			MinSecondsBetweenSends: 30,
 		}, nil
@@ -47,9 +53,9 @@ func PlanSpecForTier(tier PlanTier) (planSpec, error) {
 			DailyEmailCap:           500,
 			AICreditsPerDay:         10000,
 			WarmupEnabled:           true,
-			WarmupDailyCap:          5,
+			WarmupDailyCap:          DefaultWarmupDailyCap,
 			WarmupTargetDailyCap:    500,
-			WarmupIncrementPerDay:   5,
+			WarmupIncrementPerDay:   DefaultWarmupIncrementPerDay,
 			PerMinuteLimit:          2,
 			MinSecondsBetweenSends: 30,
 		}, nil
@@ -64,6 +70,56 @@ func AICreditsCapForTier(tier PlanTier) int {
 		s, _ = PlanSpecForTier(PlanTierFree)
 	}
 	return s.AICreditsPerDay
+}
+
+// PlanInfo is a user-facing summary of a plan tier.
+type PlanInfo struct {
+	Tier        PlanTier
+	Name        string
+	DailyEmails int
+	AICredits   int
+	Warmup      bool
+}
+
+func PlanInfoForTier(tier PlanTier) PlanInfo {
+	spec, err := PlanSpecForTier(tier)
+	if err != nil {
+		spec, _ = PlanSpecForTier(PlanTierFree)
+		tier = PlanTierFree
+	}
+	name := "Free"
+	switch tier {
+	case PlanTierStandard:
+		name = "Standard"
+	case PlanTierPro:
+		name = "Pro"
+	}
+	return PlanInfo{
+		Tier:        tier,
+		Name:        name,
+		DailyEmails: spec.DailyEmailCap,
+		AICredits:   spec.AICreditsPerDay,
+		Warmup:      spec.WarmupEnabled,
+	}
+}
+
+func AllPlanTiers() []PlanInfo {
+	return []PlanInfo{
+		PlanInfoForTier(PlanTierFree),
+		PlanInfoForTier(PlanTierStandard),
+		PlanInfoForTier(PlanTierPro),
+	}
+}
+
+func NormalizePlanTier(s string) PlanTier {
+	switch PlanTier(strings.ToLower(strings.TrimSpace(s))) {
+	case PlanTierStandard:
+		return PlanTierStandard
+	case PlanTierPro:
+		return PlanTierPro
+	default:
+		return PlanTierFree
+	}
 }
 
 // ApplyPlanLimitsToUser sets plan_tier + synchronizes smtp_accounts sending limits and warmup behavior.

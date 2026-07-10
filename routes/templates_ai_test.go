@@ -78,7 +78,7 @@ func TestTemplateAIRewriteRejectsLongText(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(w)
-	longText := make([]byte, 51)
+	longText := make([]byte, 121)
 	for i := range longText {
 		longText[i] = 'a'
 	}
