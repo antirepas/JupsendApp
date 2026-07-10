@@ -112,6 +112,12 @@
     function defaultForKey(key) {
         if (sampleValues[key] !== undefined) return sampleValues[key];
         if (defaultSample[key] !== undefined) return defaultSample[key];
+        const lower = key.toLowerCase();
+        if (lower === 'description') {
+            return 'We sell probate leads to real estate investors and agents.';
+        }
+        if (lower === 'founder') return 'Jane';
+        if (lower === 'companyname' || lower === 'company') return 'Acme Corp';
         return key.charAt(0).toUpperCase() + key.slice(1).replace(/_/g, ' ');
     }
 
@@ -195,6 +201,18 @@
     }
 
     const previewUseAI = document.getElementById('preview-use-ai');
+    const previewAINotice = document.getElementById('preview-ai-notice');
+
+    function showPreviewAINotice(message) {
+        if (!previewAINotice) return;
+        if (!message) {
+            previewAINotice.hidden = true;
+            previewAINotice.textContent = '';
+            return;
+        }
+        previewAINotice.textContent = message;
+        previewAINotice.hidden = false;
+    }
 
     async function refreshPreview() {
         syncBody();
@@ -204,10 +222,14 @@
             sample[k] = sampleValues[k] !== undefined ? sampleValues[k] : defaultForKey(k);
         });
         const useAI = previewUseAI && previewUseAI.checked;
+        if (!useAI) {
+            showPreviewAINotice('');
+        }
         try {
             const res = await fetch('/templates/preview', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
                 body: JSON.stringify({
                     subject: subjectInput.value || '',
                     body: bodyHidden.value || '',
@@ -215,12 +237,29 @@
                     use_ai: useAI,
                 }),
             });
-            if (!res.ok) return;
+            if (!res.ok) {
+                if (useAI) {
+                    let detail = 'Preview request failed (' + res.status + ').';
+                    try {
+                        const errData = await res.json();
+                        if (errData.error) detail = errData.error;
+                    } catch (_) { /* ignore */ }
+                    showPreviewAINotice(detail);
+                }
+                return;
+            }
             const data = await res.json();
             if (previewSubject) previewSubject.textContent = data.subject || '(no subject)';
             if (previewFrame) previewFrame.srcdoc = data.body_html || '';
+            if (useAI && Array.isArray(data.ai_warnings) && data.ai_warnings.length > 0) {
+                showPreviewAINotice(data.ai_warnings.join(' '));
+            } else if (useAI) {
+                showPreviewAINotice('');
+            }
         } catch (_) {
-            /* ignore */
+            if (useAI) {
+                showPreviewAINotice('Could not reach the preview service.');
+            }
         }
     }
 

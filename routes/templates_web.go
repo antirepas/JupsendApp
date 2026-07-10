@@ -29,11 +29,15 @@ func PreviewTemplate(ctx *gin.Context) {
 	}
 
 	userID := mustUserID(ctx)
+	var aiWarnings []string
 	opts := util.RenderOptions{
 		ForPreview: true,
 		UseAI:      req.UseAI,
 		UserID:     userID,
 		Ctx:        ctx.Request.Context(),
+	}
+	if req.UseAI {
+		opts.AIWarnings = &aiWarnings
 	}
 	subj, body, missing, err := util.RenderEmail(req.Subject, req.Body, vars, opts)
 	if err != nil {
@@ -46,6 +50,7 @@ func PreviewTemplate(ctx *gin.Context) {
 		"subject":          subj,
 		"body_html":        body,
 		"missing_required": missing,
+		"ai_warnings":      aiWarnings,
 	})
 }
 

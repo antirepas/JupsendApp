@@ -32,8 +32,11 @@ func chargeAICredit(userID int64, consume AICreditConsumer) {
 }
 
 // ApplyAIFilters runs fit and summarize filters. Falls back on error or no credits.
-func ApplyAIFilters(ctx context.Context, value string, ref VarRef, fullText string, tokenPos int, userID int64, consume AICreditConsumer, creditsCheck func(userID int64) bool) string {
+func ApplyAIFilters(ctx context.Context, value string, ref VarRef, fullText string, tokenPos int, userID int64, consume AICreditConsumer, creditsCheck func(userID int64) bool, warnings *[]string) string {
 	if userID <= 0 || !ai.Enabled() {
+		if warnings != nil && ref.AIFit {
+			*warnings = append(*warnings, "AI is not configured on the server.")
+		}
 		return value
 	}
 	if strings.TrimSpace(value) == "" {
@@ -44,16 +47,19 @@ func ApplyAIFilters(ctx context.Context, value string, ref VarRef, fullText stri
 		if f.Name == "summarize" {
 			if !aiCreditsAvailable(userID, creditsCheck) {
 				log.Printf("template ai: credits exhausted for user %d", userID)
+				appendAIWarning(warnings, "AI credits exhausted — summarize skipped for "+ref.Name+".")
 				continue
 			}
 			maxWords := SummarizeWordCount(f.Arg)
-			out, err := ai.Complete(ctx, ai.SummarizePrompt(maxWords), result)
+			out, err := ai.CompleteTransform(ctx, ai.SummarizePrompt(maxWords), result)
 			if err != nil {
 				log.Printf("template ai summarize user=%d: %v", userID, err)
+				appendAIWarning(warnings, fmt.Sprintf("Summarize failed for %s: %v", ref.Name, err))
 				continue
 			}
 			out = strings.TrimSpace(out)
 			if out == "" {
+				appendAIWarning(warnings, fmt.Sprintf("Summarize returned empty text for %s.", ref.Name))
 				continue
 			}
 			chargeAICredit(userID, consume)
@@ -63,24 +69,33 @@ func ApplyAIFilters(ctx context.Context, value string, ref VarRef, fullText stri
 	if ref.AIFit {
 		if !aiCreditsAvailable(userID, creditsCheck) {
 			log.Printf("template ai: credits exhausted for user %d", userID)
+			appendAIWarning(warnings, "AI credits exhausted — could not fit "+ref.Name+".")
 			return result
 		}
 		context := extractFitContext(fullText, tokenPos, ref.Raw)
 		userMsg := fmt.Sprintf("Sentence context:\n%s\n\nValue to insert:\n%s", context, result)
-		out, err := ai.Complete(ctx, ai.FitPrompt(), userMsg)
+		out, err := ai.CompleteTransform(ctx, ai.FitPrompt(), userMsg)
 		if err != nil {
 			log.Printf("template ai fit user=%d: %v", userID, err)
+			appendAIWarning(warnings, fmt.Sprintf("AI fit failed for %s: %v", ref.Name, err))
 			return result
 		}
 		out = strings.TrimSpace(out)
 		if out == "" {
 			log.Printf("template ai fit user=%d: empty response", userID)
+			appendAIWarning(warnings, fmt.Sprintf("AI fit returned empty text for %s.", ref.Name))
 			return result
 		}
 		chargeAICredit(userID, consume)
 		result = out
 	}
 	return result
+}
+
+func appendAIWarning(warnings *[]string, msg string) {
+	if warnings != nil && msg != "" {
+		*warnings = append(*warnings, msg)
+	}
 }
 
 func extractFitContext(text string, tokenPos int, rawToken string) string {
