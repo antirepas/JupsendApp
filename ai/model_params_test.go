@@ -27,7 +27,7 @@ func TestBuildChatCompletionPayloadReasoningModel(t *testing.T) {
 	if _, ok := payload["max_tokens"]; ok {
 		t.Fatal("reasoning model payload must not include max_tokens")
 	}
-	if payload["max_completion_tokens"] != 512 {
+	if payload["max_completion_tokens"] != 2048 {
 		t.Fatalf("max_completion_tokens = %v", payload["max_completion_tokens"])
 	}
 	if payload["reasoning_effort"] != "minimal" {

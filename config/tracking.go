@@ -2,6 +2,13 @@ package config
 
 import "strings"
 
+// NormalizeTrackingBaseURL strips trailing slashes and accidental /api/v1 suffixes.
+func NormalizeTrackingBaseURL(baseURL string) string {
+	base := strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	base = strings.TrimSuffix(base, "/api/v1")
+	return base
+}
+
 // TrackingWarning explains when open pixels are unlikely to work for the current BASE_URL.
 func TrackingWarning(baseURL string) string {
 	lower := strings.ToLower(strings.TrimSpace(baseURL))

@@ -5,7 +5,6 @@ import (
 	"log"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"emailtracker.com/model"
 	"emailtracker.com/util"
@@ -106,17 +105,6 @@ func DeleteCampaign(ctx *gin.Context) {
 		return
 	}
 	ctx.Redirect(http.StatusFound, "/campaigns?success=Campaign+deleted")
-}
-
-func UpdateBaseURL(ctx *gin.Context) {
-	userID := mustUserID(ctx)
-	baseURL := strings.TrimRight(strings.TrimSpace(ctx.PostForm("base_url")), "/")
-	if baseURL == "" {
-		ctx.Redirect(http.StatusFound, "/settings?error=BASE_URL+required")
-		return
-	}
-	_ = model.UpdateUserBaseURL(userID, baseURL)
-	ctx.Redirect(http.StatusFound, "/settings?success=Tracking+URL+updated")
 }
 
 func TestTrackingPixel(ctx *gin.Context) {

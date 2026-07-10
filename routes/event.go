@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"emailtracker.com/model"
+	"emailtracker.com/util"
 	"emailtracker.com/workflow"
 	"github.com/gin-gonic/gin"
 )
@@ -56,10 +57,17 @@ func TrackOpen(ctx *gin.Context) {
 func TrackClick(ctx *gin.Context) {
 	trackingID := ctx.Param("id")
 
-	originalUrl, err := getOriginalURL(trackingID)
+	originalURL, err := getOriginalURL(trackingID)
 	if err != nil {
-		log.Print(err)
-		ctx.Redirect(http.StatusFound, "/")
+		log.Printf("track click: unknown link id=%s: %v", trackingID, err)
+		ctx.String(http.StatusNotFound, "Link not found or expired.")
+		return
+	}
+
+	dest, ok := util.SafeRedirectURL(originalURL)
+	if !ok {
+		log.Printf("track click: invalid destination for id=%s url=%q", trackingID, originalURL)
+		ctx.String(http.StatusBadRequest, "Invalid link destination.")
 		return
 	}
 
@@ -68,9 +76,9 @@ func TrackClick(ctx *gin.Context) {
 		log.Print(err)
 	}
 
-	recordEngagementEventFn(trackingID, "CLICK", map[string]interface{}{"clicked_url": originalUrl})
+	recordEngagementEventFn(trackingID, "CLICK", map[string]interface{}{"clicked_url": dest})
 	trackResponseHeaders(ctx)
-	ctx.Redirect(http.StatusFound, originalUrl)
+	ctx.Redirect(http.StatusFound, dest)
 }
 
 func recordEngagementEvent(trackingID, eventType string, meta map[string]interface{}) {

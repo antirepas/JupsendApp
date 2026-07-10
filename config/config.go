@@ -33,6 +33,7 @@ var (
 	AdminEmails           map[string]struct{}
 	OpenAIAPIKey          string
 	OpenAIModel           string
+	OpenAIFallbackModel   string
 )
 
 func Load() {
@@ -77,6 +78,7 @@ func reloadFromEnv() {
 	AdminEmails = parseEmailList(os.Getenv("ADMIN_EMAILS"))
 	OpenAIAPIKey = strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
 	OpenAIModel = envOr("OPENAI_MODEL", "gpt-5-nano")
+	OpenAIFallbackModel = strings.TrimSpace(os.Getenv("OPENAI_FALLBACK_MODEL"))
 }
 
 func AIEnabled() bool {

@@ -157,3 +157,57 @@ func TestTrackClickSuccess(t *testing.T) {
 		t.Fatalf("expected redirect to https://example.com, got %s", location)
 	}
 }
+
+func TestTrackClickUnknownID(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	originalGetOriginalURL := getOriginalURL
+	defer func() {
+		getOriginalURL = originalGetOriginalURL
+	}()
+
+	getOriginalURL = func(id string) (string, error) {
+		return "", errors.New("not found")
+	}
+
+	router := gin.New()
+	router.GET("/api/v1/track/click/:id", TrackClick)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/track/click/missing", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected status 404, got %d location=%s", w.Code, w.Header().Get("Location"))
+	}
+	if loc := w.Header().Get("Location"); loc != "" {
+		t.Fatalf("expected no redirect, got %s", loc)
+	}
+}
+
+func TestTrackClickInvalidDestination(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	originalGetOriginalURL := getOriginalURL
+	originalRecordEngagement := recordEngagementEventFn
+	defer func() {
+		getOriginalURL = originalGetOriginalURL
+		recordEngagementEventFn = originalRecordEngagement
+	}()
+
+	recordEngagementEventFn = func(string, string, map[string]interface{}) {}
+	getOriginalURL = func(id string) (string, error) {
+		return "/settings", nil
+	}
+
+	router := gin.New()
+	router.GET("/api/v1/track/click/:id", TrackClick)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/track/click/abc123", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d location=%s", w.Code, w.Header().Get("Location"))
+	}
+}

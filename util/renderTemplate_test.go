@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"emailtracker.com/ai"
+	"emailtracker.com/config"
 	"emailtracker.com/model"
 )
 
@@ -98,6 +99,42 @@ func TestRenderTemplateTitleCase(t *testing.T) {
 }
 
 func TestRenderTemplateAIFitWithMock(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "test-key")
+	config.Reload()
+
+	ai.SetDefaultCompleter(&mockAI{out: "probate lead sales to investors and agents"})
+	oldConsume := DefaultAICreditConsumer
+	DefaultAICreditConsumer = func(userID int64) bool { return true }
+	defer func() {
+		ai.SetDefaultCompleter(ai.DefaultCompleter)
+		DefaultAICreditConsumer = oldConsume
+	}()
+
+	tpl := `I noticed {{CompanyName}} helps {{~Description}}.`
+	res, err := RenderTemplate(tpl, vars(map[string]string{
+		"companyname": "Probate Leads Co",
+		"Description": "We sell probate leads to real estate investors and agents.",
+	}), RenderOptions{
+		UserID:         1,
+		BodyMode:       true,
+		Ctx:            context.Background(),
+		AICreditsCheck: func(userID int64) bool { return true },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(res.Text, "probate lead sales") {
+		t.Fatalf("got %q", res.Text)
+	}
+	if strings.Contains(res.Text, "We sell probate leads") {
+		t.Fatalf("expected fitted phrase, got raw value: %q", res.Text)
+	}
+}
+
+func TestRenderTemplateAIFitWithMockLegacy(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "test-key")
+	config.Reload()
+
 	ai.SetDefaultCompleter(&mockAI{out: "that you are hiring"})
 	oldConsume := DefaultAICreditConsumer
 	DefaultAICreditConsumer = func(userID int64) bool { return true }
@@ -108,9 +145,10 @@ func TestRenderTemplateAIFitWithMock(t *testing.T) {
 
 	tpl := `I noticed {{~description}} and wanted to reach out.`
 	res, err := RenderTemplate(tpl, vars(map[string]string{"description": "you are hiring"}), RenderOptions{
-		UserID:   1,
-		BodyMode: true,
-		Ctx:      context.Background(),
+		UserID:         1,
+		BodyMode:       true,
+		Ctx:            context.Background(),
+		AICreditsCheck: func(userID int64) bool { return true },
 	})
 	if err != nil {
 		t.Fatal(err)

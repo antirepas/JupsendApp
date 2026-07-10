@@ -11,36 +11,57 @@ import (
 	"emailtracker.com/model"
 )
 
-// AICreditConsumer consumes one AI credit; returns false if exhausted.
+// AICreditConsumer consumes one AI credit after a successful AI call.
 type AICreditConsumer func(userID int64) bool
 
+func aiCreditsAvailable(userID int64, check func(userID int64) bool) bool {
+	if userID <= 0 || !ai.Enabled() {
+		return false
+	}
+	if check != nil {
+		return check(userID)
+	}
+	_, _, ok := model.AICreditsRemaining(userID)
+	return ok
+}
+
+func chargeAICredit(userID int64, consume AICreditConsumer) {
+	if consume != nil && userID > 0 {
+		consume(userID)
+	}
+}
+
 // ApplyAIFilters runs fit and summarize filters. Falls back on error or no credits.
-func ApplyAIFilters(ctx context.Context, value string, ref VarRef, fullText string, tokenPos int, userID int64, consume AICreditConsumer) string {
-	if userID <= 0 {
+func ApplyAIFilters(ctx context.Context, value string, ref VarRef, fullText string, tokenPos int, userID int64, consume AICreditConsumer, creditsCheck func(userID int64) bool) string {
+	if userID <= 0 || !ai.Enabled() {
+		return value
+	}
+	if strings.TrimSpace(value) == "" {
 		return value
 	}
 	result := value
 	for _, f := range ref.Filters {
 		if f.Name == "summarize" {
-			if consume != nil && !consume(userID) {
+			if !aiCreditsAvailable(userID, creditsCheck) {
 				log.Printf("template ai: credits exhausted for user %d", userID)
 				continue
 			}
-			maxWords := 30
-			fmt.Sscanf(f.Arg, "%d", &maxWords)
-			if maxWords <= 0 {
-				maxWords = 30
-			}
+			maxWords := SummarizeWordCount(f.Arg)
 			out, err := ai.Complete(ctx, ai.SummarizePrompt(maxWords), result)
 			if err != nil {
-				log.Printf("template ai summarize: %v", err)
+				log.Printf("template ai summarize user=%d: %v", userID, err)
 				continue
 			}
-			result = strings.TrimSpace(out)
+			out = strings.TrimSpace(out)
+			if out == "" {
+				continue
+			}
+			chargeAICredit(userID, consume)
+			result = out
 		}
 	}
 	if ref.AIFit {
-		if consume != nil && !consume(userID) {
+		if !aiCreditsAvailable(userID, creditsCheck) {
 			log.Printf("template ai: credits exhausted for user %d", userID)
 			return result
 		}
@@ -48,10 +69,16 @@ func ApplyAIFilters(ctx context.Context, value string, ref VarRef, fullText stri
 		userMsg := fmt.Sprintf("Sentence context:\n%s\n\nValue to insert:\n%s", context, result)
 		out, err := ai.Complete(ctx, ai.FitPrompt(), userMsg)
 		if err != nil {
-			log.Printf("template ai fit: %v", err)
+			log.Printf("template ai fit user=%d: %v", userID, err)
 			return result
 		}
-		result = strings.TrimSpace(out)
+		out = strings.TrimSpace(out)
+		if out == "" {
+			log.Printf("template ai fit user=%d: empty response", userID)
+			return result
+		}
+		chargeAICredit(userID, consume)
+		result = out
 	}
 	return result
 }

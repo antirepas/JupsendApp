@@ -119,11 +119,6 @@ func UpdateUserPassword(userID int64, passwordHash string) error {
 	return err
 }
 
-func UpdateUserBaseURL(userID int64, baseURL string) error {
-	_, err := db.Exec(`UPDATE users SET base_url = ? WHERE id = ?`, strings.TrimRight(strings.TrimSpace(baseURL), "/"), userID)
-	return err
-}
-
 func UserHasActiveSubscription(u User) bool {
 	if u.SubscriptionStatus == SubStatusActive {
 		return true
@@ -180,11 +175,8 @@ func UpdateUserSubscriptionByEmail(email, status, membershipID, memberID string,
 }
 
 func UserBaseURL(userID int64) string {
-	u, err := GetUserByID(userID)
-	if err != nil || u.BaseURL == "" {
-		return config.BaseURL
-	}
-	return u.BaseURL
+	_ = userID
+	return config.NormalizeTrackingBaseURL(config.BaseURL)
 }
 
 func UpdateUserOutreachGoals(userID int64, meetings, replyPct, dailyCap int) error {

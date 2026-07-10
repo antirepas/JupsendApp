@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-	"strings"
 
 	"emailtracker.com/auth"
 	"emailtracker.com/googleoauth"
@@ -48,11 +47,6 @@ func UpdateSettings(c *gin.Context) {
 	if err != nil {
 		c.Redirect(http.StatusFound, "/login")
 		return
-	}
-
-	baseURL := strings.TrimRight(strings.TrimSpace(c.PostForm("base_url")), "/")
-	if baseURL != "" {
-		_ = model.UpdateUserBaseURL(userID, baseURL)
 	}
 
 	currentPass := c.PostForm("current_password")

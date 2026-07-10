@@ -80,12 +80,18 @@ func RegisterRoutes(server *gin.Engine) {
 	v1.POST("/webhooks/whop", WhopWebhook)
 	v1.GET("/u/:token", UnsubscribePage)
 
+	// Public aliases (no /api/v1 prefix) for tracking and unsubscribe links.
+	server.GET("/track/open/:id", TrackOpen)
+	server.HEAD("/track/open/:id", TrackOpen)
+	server.GET("/track/click/:id", TrackClick)
+	server.HEAD("/track/click/:id", TrackClick)
+	server.GET("/u/:token", UnsubscribePage)
+
 	settings := server.Group("/")
 	settings.Use(RequireAuth())
 	{
 		settings.GET("/settings", SettingsPage)
 		settings.POST("/settings", UpdateSettings)
-		settings.POST("/settings/base-url", UpdateBaseURL)
 		settings.GET("/settings/billing", BillingPage)
 		settings.POST("/settings/billing/checkout", BillingCheckout)
 		settings.POST("/settings/billing/cancel", BillingCancel)

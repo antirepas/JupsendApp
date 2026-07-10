@@ -7,18 +7,32 @@ import (
 	"regexp"
 	"strings"
 
+	"emailtracker.com/ai"
 	"emailtracker.com/config"
 	"emailtracker.com/model"
 )
 
+func lookupContactVar(varMap map[string]string, name string) string {
+	if v, ok := varMap[name]; ok {
+		return v
+	}
+	for k, v := range varMap {
+		if strings.EqualFold(k, name) {
+			return v
+		}
+	}
+	return ""
+}
+
 // RenderOptions controls template rendering behavior.
 type RenderOptions struct {
-	UserID     int64
-	ForPreview bool
-	UseAI      bool
-	BodyMode   bool // true for HTML body, false for plain subject
-	Ctx        context.Context
-	ConsumeAI  AICreditConsumer
+	UserID         int64
+	ForPreview     bool
+	UseAI          bool
+	BodyMode       bool // true for HTML body, false for plain subject
+	Ctx            context.Context
+	ConsumeAI      AICreditConsumer
+	AICreditsCheck func(userID int64) bool // optional override (tests)
 }
 
 // RenderResult holds rendered text and any missing required variables.
@@ -85,12 +99,12 @@ func RenderTemplate(tBody string, contactVars []model.ContactVariables, opts Ren
 	refs = ParseVarRefs(text)
 
 	var missing []string
-	runAI := opts.UserID > 0 && (!opts.ForPreview || opts.UseAI)
+	runAI := ai.Enabled() && opts.UserID > 0 && (!opts.ForPreview || opts.UseAI)
 
 	// Replace each var ref from end to start to preserve positions
 	for i := len(refs) - 1; i >= 0; i-- {
 		ref := refs[i]
-		raw := varMap[ref.Name]
+		raw := lookupContactVar(varMap, ref.Name)
 		value, required, rawHTML := ApplyFilters(raw, ref.Filters, opts.BodyMode)
 
 		if required && isEmptyValue(value) {
@@ -99,7 +113,7 @@ func RenderTemplate(tBody string, contactVars []model.ContactVariables, opts Ren
 		}
 
 		if runAI && (ref.AIFit || hasFilter(ref.Filters, "summarize")) {
-			value = ApplyAIFilters(opts.Ctx, value, ref, text, ref.TokenPos, opts.UserID, opts.ConsumeAI)
+			value = ApplyAIFilters(opts.Ctx, value, ref, text, ref.TokenPos, opts.UserID, opts.ConsumeAI, opts.AICreditsCheck)
 		}
 
 		if !opts.BodyMode {
@@ -149,11 +163,7 @@ func InjectTrackingPixel(body, trackId string) string {
 }
 
 func InjectTrackingPixelWithBase(body, trackId, baseURL string) string {
-	base := strings.TrimRight(strings.TrimSpace(baseURL), "/")
-	if base == "" {
-		base = "http://localhost:8080"
-	}
-	pixelURL := fmt.Sprintf("%s/api/v1/track/open/%s", base, trackId)
+	pixelURL := TrackOpenURL(baseURL, trackId)
 
 	pixel := fmt.Sprintf(
 		`<img src="%s" width="1" height="1" alt="" border="0" style="display:block;width:1px;height:1px;border:0;margin:0;padding:0;line-height:1;" />`,
@@ -184,18 +194,20 @@ func RewriteLinksWithBase(htmlBody string, emailSendId int64, baseURL string) st
 
 	return re.ReplaceAllStringFunc(htmlBody, func(match string) string {
 		originalURL := re.FindStringSubmatch(match)[1]
+		if shouldSkipLinkTracking(originalURL) {
+			return match
+		}
+		if _, ok := SafeRedirectURL(originalURL); !ok {
+			return match
+		}
 
-		linkTrackingID := fmt.Sprintf("%d", GenerateID())
+		linkTrackingID := GenerateLinkTrackingID()
 		_, err := model.SaveTrackLink(emailSendId, linkTrackingID, originalURL)
 		if err != nil {
 			return match
 		}
 
-		base := strings.TrimRight(strings.TrimSpace(baseURL), "/")
-		if base == "" {
-			base = "http://localhost:8080"
-		}
-		trackingURL := fmt.Sprintf(`href="%s/api/v1/track/click/%s"`, base, linkTrackingID)
+		trackingURL := fmt.Sprintf(`href="%s"`, TrackClickURL(baseURL, linkTrackingID))
 		return trackingURL
 	})
 }

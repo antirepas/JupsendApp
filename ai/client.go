@@ -51,12 +51,47 @@ func Enabled() bool {
 
 func (c *Client) Complete(ctx context.Context, system, user string) (string, error) {
 	apiKey := config.OpenAIAPIKey
-	model := config.OpenAIModel
+	primary := config.OpenAIModel
 	if apiKey == "" {
 		return "", fmt.Errorf("AI not configured")
 	}
 
-	payload := buildChatCompletionPayload(model, system, user)
+	type attempt struct {
+		model   string
+		payload map[string]interface{}
+	}
+	attempts := []attempt{
+		{primary, buildChatCompletionPayload(primary, system, user)},
+	}
+	if isReasoningChatModel(primary) {
+		attempts = append(attempts, attempt{primary, buildReasoningFallbackPayload(primary, system, user)})
+	}
+	if fb := fallbackOpenAIModel(primary); fb != "" {
+		attempts = append(attempts, attempt{fb, buildChatCompletionPayload(fb, system, user)})
+	}
+
+	var lastErr error
+	for _, a := range attempts {
+		if a.model == "" {
+			continue
+		}
+		text, err := c.doComplete(ctx, apiKey, a.payload)
+		if err == nil && text != "" {
+			return text, nil
+		}
+		if err == nil {
+			lastErr = fmt.Errorf("openai: empty response")
+		} else {
+			lastErr = err
+		}
+		if !shouldRetryOpenAI(lastErr) {
+			break
+		}
+	}
+	return "", lastErr
+}
+
+func (c *Client) doComplete(ctx context.Context, apiKey string, payload map[string]interface{}) (string, error) {
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return "", err
@@ -139,10 +174,10 @@ func ToneCheckPrompt() string {
 }
 
 func FitPrompt() string {
-	return "You adapt a variable value so it fits grammatically into the surrounding sentence. " +
-		"The user provides sentence context with ___ marking the insertion point, and the raw value. " +
-		"Return ONLY the replacement phrase (what goes at ___), not the full sentence. " +
-		"Preserve the meaning. No quotes or explanation."
+	return "Rewrite the raw value so it fits grammatically into the sentence context. " +
+		"The context contains ___ where the phrase belongs. " +
+		"Return ONLY the short phrase that replaces ___ — not the full sentence, and not a standalone pitch. " +
+		"Keep it concise (typically 3-12 words). Preserve the core meaning. No quotes or explanation."
 }
 
 func SummarizePrompt(maxWords int) string {
