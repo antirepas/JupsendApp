@@ -368,7 +368,8 @@
             });
             const data = await res.json().catch(() => ({}));
             if (!res.ok) {
-                showAIError(data.error || 'AI rewrite failed (' + res.status + ')');
+                const detail = data.error || ('AI rewrite failed (' + res.status + ')');
+                showAIError(detail);
                 return;
             }
             if (!data.text) {

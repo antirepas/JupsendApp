@@ -315,14 +315,6 @@
     flex-shrink: 0;
 }
 
-.settings-form-actions {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    padding-top: 0.25rem;
-}
-
 .guide-prose code {
     font-size: 0.8125rem;
     background: #F3F4F6;

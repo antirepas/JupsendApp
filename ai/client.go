@@ -56,15 +56,7 @@ func (c *Client) Complete(ctx context.Context, system, user string) (string, err
 		return "", fmt.Errorf("AI not configured")
 	}
 
-	payload := map[string]interface{}{
-		"model": model,
-		"messages": []map[string]string{
-			{"role": "system", "content": system},
-			{"role": "user", "content": user},
-		},
-		"max_tokens":  512,
-		"temperature": 0.7,
-	}
+	payload := buildChatCompletionPayload(model, system, user)
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return "", err

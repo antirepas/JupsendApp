@@ -2,6 +2,7 @@ package routes
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strings"
 	"unicode/utf8"
@@ -40,7 +41,7 @@ func requireAI(ctx *gin.Context) (int64, bool) {
 		return 0, false
 	}
 	userID := mustUserID(ctx)
-	cap, remaining, ok := model.ConsumeAICredit(userID)
+	cap, remaining, ok := model.AICreditsRemaining(userID)
 	if !ok {
 		ctx.JSON(http.StatusTooManyRequests, gin.H{
 			"error":     "AI credits exhausted",
@@ -50,6 +51,21 @@ func requireAI(ctx *gin.Context) (int64, bool) {
 		return 0, false
 	}
 	return userID, true
+}
+
+func chargeAI(userID int64) {
+	_, _, _ = model.ConsumeAICredit(userID)
+}
+
+func respondAIError(ctx *gin.Context, err error) {
+	log.Printf("template ai: %v", err)
+	msg := "AI request failed"
+	if err != nil {
+		if detail := strings.TrimSpace(err.Error()); detail != "" {
+			msg = detail
+		}
+	}
+	ctx.JSON(http.StatusBadGateway, gin.H{"error": msg})
 }
 
 func TemplateAIRewrite(ctx *gin.Context) {
@@ -78,15 +94,17 @@ func TemplateAIRewrite(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid action"})
 		return
 	}
-	if _, ok := requireAI(ctx); !ok {
+	userID, ok := requireAI(ctx)
+	if !ok {
 		return
 	}
 
 	out, err := templateAICompleter.Complete(ctx.Request.Context(), ai.RewritePrompt(action), text)
 	if err != nil {
-		ctx.JSON(http.StatusBadGateway, gin.H{"error": "AI request failed"})
+		respondAIError(ctx, err)
 		return
 	}
+	chargeAI(userID)
 	ctx.JSON(http.StatusOK, gin.H{"text": strings.TrimSpace(out)})
 }
 
@@ -96,7 +114,8 @@ type templateAISubjectRequest struct {
 }
 
 func TemplateAISubjectAlternatives(ctx *gin.Context) {
-	if _, ok := requireAI(ctx); !ok {
+	userID, ok := requireAI(ctx)
+	if !ok {
 		return
 	}
 	var req templateAISubjectRequest
@@ -112,9 +131,10 @@ func TemplateAISubjectAlternatives(ctx *gin.Context) {
 
 	out, err := templateAICompleter.Complete(ctx.Request.Context(), ai.SubjectAlternativesPrompt(), userMsg)
 	if err != nil {
-		ctx.JSON(http.StatusBadGateway, gin.H{"error": "AI request failed"})
+		respondAIError(ctx, err)
 		return
 	}
+	chargeAI(userID)
 
 	alts := parseJSONArray(out)
 	if len(alts) == 0 {
@@ -134,7 +154,8 @@ type templateAIPersonalizationRequest struct {
 }
 
 func TemplateAIPersonalizationHint(ctx *gin.Context) {
-	if _, ok := requireAI(ctx); !ok {
+	userID, ok := requireAI(ctx)
+	if !ok {
 		return
 	}
 	var req templateAIPersonalizationRequest
@@ -156,9 +177,10 @@ func TemplateAIPersonalizationHint(ctx *gin.Context) {
 
 	out, err := templateAICompleter.Complete(ctx.Request.Context(), ai.PersonalizationHintPrompt(), userMsg)
 	if err != nil {
-		ctx.JSON(http.StatusBadGateway, gin.H{"error": "AI request failed"})
+		respondAIError(ctx, err)
 		return
 	}
+	chargeAI(userID)
 	out = strings.TrimSpace(out)
 	if out == "" || strings.EqualFold(out, "SKIP") {
 		ctx.JSON(http.StatusOK, gin.H{"hint": ""})
@@ -173,7 +195,8 @@ type templateAIToneRequest struct {
 }
 
 func TemplateAIToneCheck(ctx *gin.Context) {
-	if _, ok := requireAI(ctx); !ok {
+	userID, ok := requireAI(ctx)
+	if !ok {
 		return
 	}
 	var req templateAIToneRequest
@@ -191,9 +214,10 @@ func TemplateAIToneCheck(ctx *gin.Context) {
 	userMsg := "Subject: " + req.Subject + "\nBody: " + truncateRunes(plain, 500)
 	out, err := templateAICompleter.Complete(ctx.Request.Context(), ai.ToneCheckPrompt(), userMsg)
 	if err != nil {
-		ctx.JSON(http.StatusBadGateway, gin.H{"error": "AI request failed"})
+		respondAIError(ctx, err)
 		return
 	}
+	chargeAI(userID)
 
 	var parsed struct {
 		Tone    string `json:"tone"`
@@ -243,7 +267,8 @@ type templateAISoftenBodyRequest struct {
 }
 
 func TemplateAISoftenBody(ctx *gin.Context) {
-	if _, ok := requireAI(ctx); !ok {
+	userID, ok := requireAI(ctx)
+	if !ok {
 		return
 	}
 	var req templateAISoftenBodyRequest
@@ -259,9 +284,10 @@ func TemplateAISoftenBody(ctx *gin.Context) {
 
 	out, err := templateAICompleter.Complete(ctx.Request.Context(), ai.SoftenBodyPrompt(), body)
 	if err != nil {
-		ctx.JSON(http.StatusBadGateway, gin.H{"error": "AI request failed"})
+		respondAIError(ctx, err)
 		return
 	}
+	chargeAI(userID)
 	ctx.JSON(http.StatusOK, gin.H{"body": strings.TrimSpace(out)})
 }
 
