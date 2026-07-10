@@ -18,7 +18,7 @@ func TestVerifyWebhookSignature(t *testing.T) {
 	payload := msgID + "." + ts + "." + string(body)
 	mac := hmac.New(sha256.New, []byte("testsecret"))
 	mac.Write([]byte(payload))
-	sig := base64.StdEncoding.EncodeToString(mac.Sum(nil))
+	sig := base64.StdEncoding.EncodeToString(mac.Sum(nil)) //
 
 	h := http.Header{}
 	h.Set("webhook-id", msgID)
