@@ -2,16 +2,18 @@ package routes
 
 import (
 	"fmt"
+	"html/template"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
+	"emailtracker.com/auth"
 	"emailtracker.com/config"
 	"emailtracker.com/db"
 	"emailtracker.com/model"
-	"emailtracker.com/auth"
+	"emailtracker.com/util"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
@@ -19,14 +21,47 @@ import (
 
 func testRouter() *gin.Engine {
 	gin.SetMode(gin.TestMode)
+	ensureTestGoogleOAuthConfig()
 	r := gin.New()
 	store := cookie.NewStore([]byte("test-session-secret"))
 	r.Use(sessions.Sessions("emailtracker_session", store))
+	r.SetFuncMap(template.FuncMap{
+		"assetURL": func(path string) string {
+			return path + "?v=" + util.StaticAssetVersion()
+		},
+	})
+	r.LoadHTMLFiles(
+		"../templates/partials/head.html",
+		"../templates/auth_login.html",
+	)
 	r.GET("/login", LoginPage)
 	r.GET("/signup", SignupPage)
 	r.POST("/signup", SignupSubmit)
 	r.POST("/logout", Logout)
 	return r
+}
+
+func ensureTestGoogleOAuthConfig() {
+	if config.GoogleClientID != "" {
+		return
+	}
+	config.GoogleClientID = "test-client-id"
+	config.GoogleClientSecret = "test-client-secret"
+	config.GoogleOAuthRedirectURI = "http://localhost/settings/gmail/callback"
+	config.GoogleAppOAuthRedirectURI = "http://localhost/auth/google/callback"
+}
+
+func TestLoginPageRenders(t *testing.T) {
+	r := testRouter()
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/login", nil)
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("login page expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "Continue with Google") {
+		t.Fatalf("login page should offer Google sign-in")
+	}
 }
 
 func TestSignupRedirectAndLogout(t *testing.T) {
