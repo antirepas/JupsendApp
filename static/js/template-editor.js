@@ -28,8 +28,8 @@
     }
     const sampleValues = { ...defaultSample };
 
-    const varRe = /\{\{\s*~?\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\|[^}]*)?\s*\}\}/g;
-    const ifVarRe = /\{%\s*if\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*%\}/g;
+    const varRe = /\{\{\s*~?\s*([a-zA-Z_][a-zA-Z0-9_ ]*)\s*(?:\|[^}]*)?\s*\}\}/g;
+    const ifVarRe = /\{%\s*if\s+([a-zA-Z_][a-zA-Z0-9_ ]*)\s*%\}/g;
 
     const quill = new Quill(editorEl, {
         theme: 'snow',
@@ -91,7 +91,8 @@
         let m;
         const re = new RegExp(varRe.source, 'g');
         while ((m = re.exec(text)) !== null) {
-            const key = m[1];
+            const key = (m[1] || '').trim();
+            if (!key) continue;
             if (!seen.has(key)) {
                 seen.add(key);
                 keys.push(key);
@@ -99,7 +100,8 @@
         }
         const ifRe = new RegExp(ifVarRe.source, 'g');
         while ((m = ifRe.exec(text)) !== null) {
-            const key = m[1];
+            const key = (m[1] || '').trim();
+            if (!key) continue;
             if (!seen.has(key)) {
                 seen.add(key);
                 keys.push(key);
@@ -146,11 +148,14 @@
     function renderSampleFields(keys) {
         if (!sampleFieldsEl) return;
         sampleFieldsEl.innerHTML = '';
-        if (keys.length === 0) {
-            sampleFieldsEl.innerHTML = '<p class="text-xs text-slate-400">Sample values appear when you add variables.</p>';
+        const keySet = new Set(keys);
+        Object.keys(sampleValues).forEach((k) => keySet.add(k));
+        const allKeys = Array.from(keySet).sort();
+        if (allKeys.length === 0) {
+            sampleFieldsEl.innerHTML = '<p class="text-xs text-slate-400">Sample values appear when you add variables or load from a contact/list.</p>';
             return;
         }
-        keys.forEach((key) => {
+        allKeys.forEach((key) => {
             if (sampleValues[key] === undefined) {
                 sampleValues[key] = defaultForKey(key);
             }
@@ -676,6 +681,36 @@
     if (previewUseAI) {
         previewUseAI.addEventListener('change', schedulePreview);
     }
+
+    const sampleContactSelect = document.getElementById('template-sample-contact');
+    const sampleListSelect = document.getElementById('template-sample-list');
+
+    async function applySampleFromSource(url) {
+        try {
+            const res = await fetch(url, { credentials: 'same-origin' });
+            if (!res.ok) return;
+            const data = await res.json();
+            const sample = data.sample || {};
+            Object.keys(sample).forEach((k) => {
+                sampleValues[k] = sample[k];
+            });
+            renderSampleFields(extractVariables());
+            schedulePreview();
+        } catch (_) {
+            /* ignore */
+        }
+    }
+
+    sampleContactSelect?.addEventListener('change', () => {
+        if (sampleListSelect) sampleListSelect.value = '';
+        const id = sampleContactSelect.value;
+        if (id) applySampleFromSource('/contacts/' + id + '/variables');
+    });
+    sampleListSelect?.addEventListener('change', () => {
+        if (sampleContactSelect) sampleContactSelect.value = '';
+        const id = sampleListSelect.value;
+        if (id) applySampleFromSource('/contacts/lists/' + id + '/variables');
+    });
 
     document.querySelectorAll('.syntax-copy').forEach((btn) => {
         btn.addEventListener('click', async () => {

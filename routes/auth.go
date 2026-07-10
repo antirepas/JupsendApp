@@ -6,37 +6,22 @@ import (
 	"strings"
 
 	"emailtracker.com/auth"
-	"emailtracker.com/config"
-	"emailtracker.com/model"
+	"emailtracker.com/googleoauth"
 	"github.com/gin-gonic/gin"
 )
 
 func LoginPage(c *gin.Context) {
 	c.HTML(http.StatusOK, "auth_login.html", gin.H{
-		"title": "Login",
-		"error": c.Query("error"),
-		"next":  c.Query("next"),
+		"title":            "Login",
+		"error":            c.Query("error"),
+		"next":             c.Query("next"),
+		"googleConfigured": googleoauth.IsConfigured(),
 	})
 }
 
 func SignupPage(c *gin.Context) {
 	// Plan-first onboarding: direct users to plan selection.
 	c.Redirect(http.StatusFound, "/signup/free")
-}
-
-func LoginSubmit(c *gin.Context) {
-	email := strings.TrimSpace(c.PostForm("email"))
-	password := c.PostForm("password")
-	next := c.PostForm("next")
-
-	user, err := model.GetUserByEmail(email)
-	if err != nil || !auth.CheckPassword(user.PasswordHash, password) {
-		c.Redirect(http.StatusFound, "/login?error=Invalid+email+or+password")
-		return
-	}
-	auth.SetUserSession(c, user.ID)
-	_ = model.SetUserAdmin(user.ID, config.IsAdminEmail(user.Email))
-	c.Redirect(http.StatusFound, safeNext(next))
 }
 
 func SignupSubmit(c *gin.Context) {

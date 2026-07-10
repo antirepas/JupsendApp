@@ -67,6 +67,35 @@ func TestParseContactsCSVSemicolonEmails(t *testing.T) {
 	}
 }
 
+func TestParseContactsExcelAutoDetectColumns(t *testing.T) {
+	f := excelize.NewFile()
+	sheet := f.GetSheetName(0)
+	headers := []string{"email", "companyname", "description"}
+	for i, h := range headers {
+		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
+		_ = f.SetCellValue(sheet, cell, h)
+	}
+	_ = f.SetCellValue(sheet, "A2", "hello@example.com")
+	_ = f.SetCellValue(sheet, "B2", "Acme Corp")
+	_ = f.SetCellValue(sheet, "C2", "We sell widgets.")
+
+	var buf bytes.Buffer
+	if err := f.Write(&buf); err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := ParseContactsExcel(bytes.NewReader(buf.Bytes()), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	if rows[0].Variables["companyname"] != "Acme Corp" {
+		t.Fatalf("unexpected vars: %+v", rows[0].Variables)
+	}
+}
+
 func TestParseContactsUploadCSV(t *testing.T) {
 	csvData := "email\nperson@example.com\n"
 	rows, err := ParseContactsUpload(strings.NewReader(csvData), "contacts.csv", nil)

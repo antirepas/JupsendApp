@@ -12,16 +12,21 @@ import (
 )
 
 func DownloadContactSample(ctx *gin.Context) {
-	templateID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
-	if err != nil {
-		ctx.String(http.StatusBadRequest, "Invalid template ID")
-		return
-	}
-
-	_, vars, err := model.GetTemplateByID(templateID, mustUserID(ctx))
-	if err != nil {
-		ctx.String(http.StatusNotFound, "Template not found")
-		return
+	userID := mustUserID(ctx)
+	var vars []string
+	idStr := ctx.Param("id")
+	if idStr != "" && idStr != "generic" {
+		templateID, err := strconv.ParseInt(idStr, 10, 64)
+		if err != nil {
+			ctx.String(http.StatusBadRequest, "Invalid template ID")
+			return
+		}
+		_, templateVars, err := model.GetTemplateByID(templateID, userID)
+		if err != nil {
+			ctx.String(http.StatusNotFound, "Template not found")
+			return
+		}
+		vars = templateVars
 	}
 
 	data, err := util.CreateContactSampleExcel(vars)
@@ -36,18 +41,58 @@ func DownloadContactSample(ctx *gin.Context) {
 	ctx.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", data)
 }
 
-func UploadContacts(ctx *gin.Context) {
+func PreviewContactsUpload(ctx *gin.Context) {
 	userID := mustUserID(ctx)
-	templateID, err := strconv.ParseInt(ctx.PostForm("template_id"), 10, 64)
-	if err != nil {
-		ctx.Redirect(http.StatusFound, "/contacts?tab=import&error=Invalid+template+selected")
-		return
+	var vars []string
+	if templateIDStr := ctx.PostForm("template_id"); templateIDStr != "" {
+		templateID, err := strconv.ParseInt(templateIDStr, 10, 64)
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid template"})
+			return
+		}
+		_, templateVars, err := model.GetTemplateByID(templateID, userID)
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "Template not found"})
+			return
+		}
+		vars = templateVars
 	}
 
-	_, vars, err := model.GetTemplateByID(templateID, userID)
+	file, err := ctx.FormFile("file")
 	if err != nil {
-		ctx.Redirect(http.StatusFound, "/contacts?tab=import&error=Template+not+found")
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "No file uploaded"})
 		return
+	}
+	src, err := file.Open()
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Could not read uploaded file"})
+		return
+	}
+	defer src.Close()
+
+	peek, err := util.PeekContactsUpload(src, file.Filename, vars)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	ctx.JSON(http.StatusOK, peek)
+}
+
+func UploadContacts(ctx *gin.Context) {
+	userID := mustUserID(ctx)
+	var vars []string
+	if templateIDStr := ctx.PostForm("template_id"); templateIDStr != "" {
+		templateID, err := strconv.ParseInt(templateIDStr, 10, 64)
+		if err != nil {
+			ctx.Redirect(http.StatusFound, "/contacts?tab=import&error=Invalid+template+selected")
+			return
+		}
+		_, templateVars, err := model.GetTemplateByID(templateID, userID)
+		if err != nil {
+			ctx.Redirect(http.StatusFound, "/contacts?tab=import&error=Template+not+found")
+			return
+		}
+		vars = templateVars
 	}
 
 	listID, _ := strconv.ParseInt(ctx.PostForm("list_id"), 10, 64)
@@ -71,14 +116,49 @@ func UploadContacts(ctx *gin.Context) {
 		return
 	}
 
-	result, err := model.ImportContactRows(userID, parseImportRowsFromExcel(rows, vars), listID)
+	importKeys := vars
+	if len(importKeys) == 0 && len(rows) > 0 {
+		importKeys = keysFromImportRows(rows)
+	}
+
+	result, err := model.ImportContactRows(userID, parseImportRowsFromExcel(rows, vars), listID, importKeys)
 	if err != nil {
-		ctx.Redirect(http.StatusFound, "/contacts?tab=import&error=Import+failed")
+		ctx.Redirect(http.StatusFound, "/contacts?tab=import&error="+url.QueryEscape(err.Error()))
 		return
 	}
 
 	msg := model.FormatImportResultMessage(result)
 	ctx.Redirect(http.StatusFound, "/contacts?tab=import&success="+url.QueryEscape(msg))
+}
+
+func keysFromImportRows(rows []util.ContactImportRow) []string {
+	seen := map[string]bool{}
+	var keys []string
+	for _, row := range rows {
+		for k := range row.Variables {
+			if k == "" || seen[k] {
+				continue
+			}
+			seen[k] = true
+			keys = append(keys, k)
+		}
+	}
+	return keys
+}
+
+func keysFromImportRowsParsed(rows []model.ImportContactRow) []string {
+	seen := map[string]bool{}
+	var keys []string
+	for _, row := range rows {
+		for k := range row.Variables {
+			if k == "" || seen[k] {
+				continue
+			}
+			seen[k] = true
+			keys = append(keys, k)
+		}
+	}
+	return keys
 }
 
 func ValidateContactsWeb(ctx *gin.Context) {

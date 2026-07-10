@@ -21,13 +21,7 @@
 <form method="POST" action="/settings" class="space-y-6">
 <div class="card space-y-4">
     <h3 class="card-title">Account</h3>
-    <p class="text-sm text-gray-600">Signed in as <strong>{{.user.Email}}</strong></p>
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div><label class="form-label">Current password</label><input type="password" name="current_password" class="form-input"></div>
-        <div><label class="form-label">New password</label><input type="password" name="new_password" class="form-input" minlength="8"></div>
-        <div><label class="form-label">Confirm new</label><input type="password" name="confirm_password" class="form-input" minlength="8"></div>
-    </div>
-    <p class="text-xs text-gray-500">Leave password fields blank to keep your current password.</p>
+    <p class="text-sm text-gray-600">Signed in as <strong>{{.user.Email}}</strong> via Google.</p>
 </div>
 
 <div class="card space-y-4">
@@ -89,18 +83,6 @@
     <button type="submit" class="btn-primary shrink-0">Save settings</button>
 </div>
 </form>
-
-{{if .gmailConnected}}
-<form method="POST" action="/settings/gmail/disconnect" class="mt-6">
-    <div class="card flex flex-wrap items-center justify-between gap-4">
-        <div>
-            <h3 class="text-sm font-semibold text-charcoal">Disconnect Gmail</h3>
-            <p class="text-xs text-gray-500 mt-1">Stop sending from this account until you connect again.</p>
-        </div>
-        <button type="submit" class="btn-secondary shrink-0">Disconnect Gmail</button>
-    </div>
-</form>
-{{end}}
 
 <div class="card mt-6 space-y-3">
     <h3 class="card-title">Account actions</h3>

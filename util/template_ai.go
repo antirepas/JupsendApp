@@ -73,7 +73,7 @@ func ApplyAIFilters(ctx context.Context, value string, ref VarRef, fullText stri
 			return result
 		}
 		context := extractFitContext(fullText, tokenPos, ref.Raw)
-		userMsg := fmt.Sprintf("Sentence context:\n%s\n\nValue to insert:\n%s", context, result)
+		userMsg := buildFitUserMessage(context, result)
 		out, err := ai.CompleteTransform(ctx, ai.FitPrompt(), userMsg)
 		if err != nil {
 			log.Printf("template ai fit user=%d: %v", userID, err)
@@ -95,6 +95,33 @@ func ApplyAIFilters(ctx context.Context, value string, ref VarRef, fullText stri
 func appendAIWarning(warnings *[]string, msg string) {
 	if warnings != nil && msg != "" {
 		*warnings = append(*warnings, msg)
+	}
+}
+
+func buildFitUserMessage(context, rawValue string) string {
+	var b strings.Builder
+	b.WriteString("Sentence context (___ marks the insertion point):\n")
+	b.WriteString(context)
+	b.WriteString("\n\nDescription to adapt:\n")
+	b.WriteString(rawValue)
+	if hint := fitGrammarHint(context); hint != "" {
+		b.WriteString("\n\n")
+		b.WriteString(hint)
+	}
+	return b.String()
+}
+
+func fitGrammarHint(context string) string {
+	lower := strings.ToLower(context)
+	switch {
+	case strings.Contains(lower, " helps ___"):
+		return "Grammar hint: after \"helps\", describe who they serve and what outcome they enable — e.g. \"therapists manage bookings and payments\". Do not start with \"B2B SaaS\" or repeat \"helping\"."
+	case strings.Contains(lower, " noticed ___"):
+		return "Grammar hint: after \"noticed\", use a natural clause — e.g. \"you are hiring\" or \"your team launched a new product\"."
+	case strings.Contains(lower, " at ___"):
+		return "Grammar hint: fit a short noun phrase that completes the preposition naturally."
+	default:
+		return ""
 	}
 }
 

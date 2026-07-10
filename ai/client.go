@@ -174,10 +174,12 @@ func ToneCheckPrompt() string {
 }
 
 func FitPrompt() string {
-	return "Rewrite the raw value so it fits grammatically into the sentence context. " +
-		"The context contains ___ where the phrase belongs. " +
-		"Return ONLY the short phrase that replaces ___ — not the full sentence, and not a standalone pitch. " +
-		"Keep it concise (typically 3-12 words). Preserve the core meaning. No quotes or explanation."
+	return "You rewrite a company or product description so it fits grammatically at ___ in the sentence context. " +
+		"Return ONLY the words that replace ___ — not the full sentence, and not a standalone pitch. " +
+		"The inserted phrase must read naturally when you read the full sentence aloud. " +
+		"Drop product-category labels (e.g. B2B SaaS, platform, bootstrapped) unless the grammar slot requires them. " +
+		"Never repeat helping/helps if the context already contains helps. " +
+		"Keep 4–15 words. Preserve who they serve and the core outcome. No quotes or explanation."
 }
 
 func SummarizePrompt(maxWords int) string {

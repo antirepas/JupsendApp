@@ -5,6 +5,7 @@ import (
 	"encoding/csv"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 
 	"github.com/xuri/excelize/v2"
@@ -17,13 +18,72 @@ type ContactImportRow struct {
 	Variables map[string]string
 }
 
+// ContactUploadPeek is a preview of columns and sample rows before import.
+type ContactUploadPeek struct {
+	Columns    []string
+	SampleRows []map[string]string
+	RowCount   int
+}
+
+// PeekContactsUpload reads headers and up to 5 sample rows without requiring a template.
+func PeekContactsUpload(reader io.Reader, filename string, templateVars []string) (ContactUploadPeek, error) {
+	rows, err := ParseContactsUpload(reader, filename, templateVars)
+	if err != nil {
+		return ContactUploadPeek{}, err
+	}
+	cols := ExpectedContactColumns(templateVars)
+	if len(templateVars) == 0 && len(rows) > 0 {
+		cols = variableKeysFromRows(rows)
+	}
+	peek := ContactUploadPeek{
+		Columns:  cols,
+		RowCount: len(rows),
+	}
+	limit := len(rows)
+	if limit > 5 {
+		limit = 5
+	}
+	for i := 0; i < limit; i++ {
+		row := map[string]string{"email": rows[i].Email}
+		for k, v := range rows[i].Variables {
+			row[k] = v
+		}
+		peek.SampleRows = append(peek.SampleRows, row)
+	}
+	return peek, nil
+}
+
+func variableKeysFromRows(rows []ContactImportRow) []string {
+	seen := map[string]bool{}
+	var keys []string
+	for _, row := range rows {
+		for k := range row.Variables {
+			if k == "" || seen[k] {
+				continue
+			}
+			seen[k] = true
+			keys = append(keys, k)
+		}
+	}
+	sort.Strings(keys)
+	return keys
+}
+
 func ExpectedContactColumns(templateVars []string) []string {
 	cols := []string{emailColumn}
 	cols = append(cols, templateVars...)
 	return cols
 }
 
+// DefaultSampleVariableColumns are used for generic sample downloads and hints.
+func DefaultSampleVariableColumns() []string {
+	return []string{"name", "company", "description"}
+}
+
 func CreateContactSampleExcel(templateVars []string) ([]byte, error) {
+	if len(templateVars) == 0 {
+		templateVars = DefaultSampleVariableColumns()
+	}
 	f := excelize.NewFile()
 	sheet := f.GetSheetName(0)
 	headers := ExpectedContactColumns(templateVars)
@@ -103,8 +163,16 @@ func parseContactRowsFromTable(rows [][]string, templateVars []string) ([]Contac
 	colIndex := mapHeaders(headerRow)
 
 	if _, ok := colIndex[emailColumn]; !ok {
-		expected := strings.Join(ExpectedContactColumns(templateVars), ", ")
-		return nil, fmt.Errorf("missing required column \"email\". Expected columns: %s", expected)
+		if len(templateVars) > 0 {
+			expected := strings.Join(ExpectedContactColumns(templateVars), ", ")
+			return nil, fmt.Errorf("missing required column \"email\". Expected columns: %s", expected)
+		}
+		return nil, fmt.Errorf("missing required column \"email\"")
+	}
+
+	varKeys := templateVars
+	if len(varKeys) == 0 {
+		varKeys = detectVariableKeysFromHeaders(headerRow)
 	}
 
 	var missing []string
@@ -130,7 +198,7 @@ func parseContactRowsFromTable(rows [][]string, templateVars []string) ([]Contac
 		}
 
 		vars := make(map[string]string)
-		for _, v := range templateVars {
+		for _, v := range varKeys {
 			idx := colIndex[normalizeHeader(v)]
 			vars[v] = cellValue(row, idx)
 		}
@@ -146,6 +214,21 @@ func parseContactRowsFromTable(rows [][]string, templateVars []string) ([]Contac
 	}
 
 	return contacts, nil
+}
+
+func detectVariableKeysFromHeaders(headerRow []string) []string {
+	var keys []string
+	seen := map[string]bool{}
+	for _, h := range headerRow {
+		key := normalizeHeader(h)
+		if key == "" || key == emailColumn || seen[key] {
+			continue
+		}
+		seen[key] = true
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func mapHeaders(headerRow []string) map[string]int {

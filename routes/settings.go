@@ -6,7 +6,6 @@ import (
 	"net/url"
 	"strconv"
 
-	"emailtracker.com/auth"
 	"emailtracker.com/googleoauth"
 	"emailtracker.com/model"
 	"emailtracker.com/util"
@@ -43,28 +42,9 @@ func SettingsPage(c *gin.Context) {
 
 func UpdateSettings(c *gin.Context) {
 	userID := mustUserID(c)
-	user, err := model.GetUserByID(userID)
-	if err != nil {
+	if _, err := model.GetUserByID(userID); err != nil {
 		c.Redirect(http.StatusFound, "/login")
 		return
-	}
-
-	currentPass := c.PostForm("current_password")
-	newPass := c.PostForm("new_password")
-	confirmPass := c.PostForm("confirm_password")
-	if newPass != "" {
-		if !auth.CheckPassword(user.PasswordHash, currentPass) {
-			c.Redirect(http.StatusFound, "/settings?error=Current+password+incorrect")
-			return
-		}
-		if newPass != confirmPass || len(newPass) < 8 {
-			c.Redirect(http.StatusFound, "/settings?error=New+password+must+match+and+be+8%2B+chars")
-			return
-		}
-		hash, err := auth.HashPassword(newPass)
-		if err == nil {
-			_ = model.UpdateUserPassword(userID, hash)
-		}
 	}
 
 	existing, err := model.GetSMTPAccountByUserID(userID)

@@ -1,0 +1,64 @@
+{{define "contacts_list_detail.html"}}
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>{{template "head" .}}</head>
+<body class="h-full bg-ivory text-charcoal">
+<div class="flex h-full">
+{{template "sidebar" .}}
+<main class="flex-1 overflow-y-auto">
+<div class="max-w-6xl mx-auto p-8">
+<div class="mb-6">
+    <a href="/contacts?tab=lists" class="text-sm text-brand-600 font-medium">← Lists</a>
+    <h2 class="text-2xl font-bold text-charcoal mt-2">{{.list.Name}}</h2>
+    <p class="text-gray-500 mt-1 text-sm">{{.list.MemberCount}} contacts in this list</p>
+</div>
+
+{{if .success}}<div class="alert-success mb-6">{{.success}}</div>{{end}}
+{{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
+
+<div class="card mb-6">
+    <h3 class="card-title">Variable schema</h3>
+    <p class="text-sm text-gray-500 mb-3">All contacts in a list must use these variable names. Missing values are allowed; extra variable names are not.</p>
+    {{if .columns}}
+    <div class="flex flex-wrap gap-2">
+        {{range .columns}}<span class="badge badge-blue">{{.}}</span>{{end}}
+    </div>
+    {{else}}
+    <p class="text-sm text-gray-400">No variable schema yet — it is set when the first contact is added or when you import with column headers.</p>
+    {{end}}
+</div>
+
+<div class="card overflow-hidden">
+    {{if .rows}}
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Email</th>
+                {{range .columns}}<th>{{.}}</th>{{end}}
+            </tr>
+        </thead>
+        <tbody>
+            {{range $row := .rows}}
+            <tr>
+                <td class="font-medium"><a href="/contacts/{{$row.ID}}" class="text-brand-600 hover:underline">{{$row.Email}}</a></td>
+                {{range $.columns}}
+                <td class="text-sm text-gray-600">{{index $row.Variables .}}</td>
+                {{end}}
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+    {{else}}
+    <div class="empty-state">
+        <p>No contacts in this list yet.</p>
+        <a href="/contacts?tab=import" class="btn-primary mt-4">Import contacts</a>
+    </div>
+    {{end}}
+</div>
+
+</div>
+</main>
+</div>
+</body>
+</html>
+{{end}}

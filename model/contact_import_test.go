@@ -33,7 +33,7 @@ func TestImportContactRows(t *testing.T) {
 	rows := []ImportContactRow{
 		{Email: "new@example.com", Variables: map[string]string{"name": "New"}},
 	}
-	r1, err := ImportContactRows(userID, rows, 0)
+	r1, err := ImportContactRows(userID, rows, 0, nil)
 	if err != nil || r1.Created != 1 {
 		t.Fatalf("create: %+v err=%v", r1, err)
 	}
@@ -41,7 +41,7 @@ func TestImportContactRows(t *testing.T) {
 	rows2 := []ImportContactRow{
 		{Email: "new@example.com", Variables: map[string]string{"name": "Updated"}},
 	}
-	r2, err := ImportContactRows(userID, rows2, 0)
+	r2, err := ImportContactRows(userID, rows2, 0, nil)
 	if err != nil || r2.Updated != 1 {
 		t.Fatalf("update: %+v err=%v", r2, err)
 	}

@@ -74,6 +74,26 @@
             <div id="template-lint-sidebar" class="template-lint-sidebar" aria-live="polite"></div>
             <div class="mt-4 pt-4 border-t border-slate-100">
                 <p class="form-label mb-2">Preview sample data</p>
+                <div class="grid grid-cols-1 gap-3 mb-3">
+                    <div>
+                        <label class="form-label text-xs">Load from contact</label>
+                        <select id="template-sample-contact" class="form-input text-sm">
+                            <option value="">—</option>
+                            {{range .contacts}}
+                            <option value="{{.ID}}">{{.Email}}</option>
+                            {{end}}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label text-xs">Load from list</label>
+                        <select id="template-sample-list" class="form-input text-sm">
+                            <option value="">—</option>
+                            {{range .lists}}
+                            <option value="{{.ID}}">{{.Name}} ({{.MemberCount}})</option>
+                            {{end}}
+                        </select>
+                    </div>
+                </div>
                 <div id="template-sample-fields" class="template-sample-fields"></div>
                 {{if .aiEnabled}}
                 <label class="flex items-center gap-2 mt-3 text-sm text-slate-600">

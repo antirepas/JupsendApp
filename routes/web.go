@@ -160,6 +160,8 @@ func ListTemplatesPage(ctx *gin.Context) {
 func NewTemplatePage(ctx *gin.Context) {
 	userID := mustUserID(ctx)
 	senderEmail, defaultSampleJSON := templateBuilderContext(userID)
+	contacts, _ := model.ListContacts(userID)
+	lists, _ := model.ListContactLists(userID)
 	ctx.HTML(http.StatusOK, "templates_form.html", gin.H{
 		"title":             "New Template",
 		"active":            "templates",
@@ -167,6 +169,8 @@ func NewTemplatePage(ctx *gin.Context) {
 		"senderEmail":       senderEmail,
 		"defaultSampleJSON": defaultSampleJSON,
 		"aiEnabled":         ai.Enabled(),
+		"contacts":          contacts,
+		"lists":             lists,
 	})
 }
 
@@ -208,6 +212,8 @@ func EditTemplatePage(ctx *gin.Context) {
 	}
 
 	senderEmail, defaultSampleJSON := templateBuilderContext(userID)
+	contacts, _ := model.ListContacts(userID)
+	lists, _ := model.ListContactLists(userID)
 	ctx.HTML(http.StatusOK, "templates_form.html", gin.H{
 		"title":             "Edit Template",
 		"active":            "templates",
@@ -216,6 +222,8 @@ func EditTemplatePage(ctx *gin.Context) {
 		"senderEmail":       senderEmail,
 		"defaultSampleJSON": defaultSampleJSON,
 		"aiEnabled":         ai.Enabled(),
+		"contacts":          contacts,
+		"lists":             lists,
 	})
 }
 
@@ -369,7 +377,13 @@ func PasteContactsQuick(ctx *gin.Context) {
 		}
 	}
 
-	result, err := model.ImportContactRows(userID, parseImportRowsFromPaste(paste, varKeys), listID)
+	parsed := parseImportRowsFromPaste(paste, varKeys)
+	importKeys := varKeys
+	if len(importKeys) == 0 && len(parsed) > 0 {
+		importKeys = keysFromImportRowsParsed(parsed)
+	}
+
+	result, err := model.ImportContactRows(userID, parsed, listID, importKeys)
 	if err != nil {
 		ctx.Redirect(http.StatusFound, "/contacts?tab=import&error=Import+failed")
 		return

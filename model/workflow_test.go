@@ -40,22 +40,6 @@ func TestValidateWorkflowGraphValid(t *testing.T) {
 	}
 }
 
-func TestDeleteWorkflow(t *testing.T) {
-	db.OpenTestDB(t)
-	userID, _ := CreateUser("wf-del@test.com", "hash", "http://localhost")
-	wid, _ := CreateWorkflow(userID, "to-delete", "")
-	if err := DeleteWorkflow(wid, userID); err != nil {
-		t.Fatalf("delete: %v", err)
-	}
-	_, err := GetWorkflowForUser(wid, userID)
-	if err == nil {
-		t.Fatal("expected workflow to be gone")
-	}
-	if err := DeleteWorkflow(wid, userID); err == nil {
-		t.Fatal("expected error deleting missing workflow")
-	}
-}
-
 func TestComputeDisplayStatus(t *testing.T) {
 	if ComputeDisplayStatus("sent", nil, false) != "sent" {
 		t.Fatal("expected sent")

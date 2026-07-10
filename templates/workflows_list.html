@@ -24,14 +24,22 @@
         {{range .workflows}}
         <tr>
             <td class="font-medium">{{.Name}}</td>
-            <td><span class="badge badge-gray">{{.Status}}</span></td>
+            <td>
+                {{if eq .Status "archived"}}
+                <span class="badge badge-gray">Archived</span>
+                {{else}}
+                <span class="badge badge-green">Active</span>
+                {{end}}
+            </td>
             <td class="text-sm text-slate-500">{{.UpdatedAt.Format "Jan 2, 2006"}}</td>
             <td class="text-right space-x-3">
+                {{if eq .Status "archived"}}
+                <a href="/workflows/{{.ID}}/analytics" class="text-brand-600 text-sm font-medium">Analytics</a>
+                {{else}}
                 <a href="/workflows/{{.ID}}/edit" class="text-brand-600 text-sm font-medium">Builder</a>
                 <a href="/workflows/{{.ID}}/analytics" class="text-brand-600 text-sm font-medium">Analytics</a>
-                <form method="POST" action="/workflows/{{.ID}}/delete" class="inline" onsubmit="return confirm('Delete this workflow? Running instances will be stopped and linked campaigns will switch to bulk mode.');">
-                    <button type="submit" class="text-red-600 text-sm font-medium">Delete</button>
-                </form>
+                <button type="button" class="text-red-600 text-sm font-medium" data-archive-workflow data-workflow-id="{{.ID}}" data-workflow-name="{{.Name}}">Archive</button>
+                {{end}}
             </td>
         </tr>
         {{end}}
@@ -44,6 +52,7 @@
 </div>
 </main>
 </div>
+{{template "workflow_archive_modal.html" .}}
 </body>
 </html>
 {{end}}

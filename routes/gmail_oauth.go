@@ -79,12 +79,6 @@ func GmailCallback(c *gin.Context) {
 	c.Redirect(http.StatusFound, "/settings?success=Gmail+connected")
 }
 
-func GmailDisconnect(c *gin.Context) {
-	userID := mustUserID(c)
-	_ = model.ClearGoogleOAuth(userID)
-	c.Redirect(http.StatusFound, "/settings?success=Gmail+disconnected")
-}
-
 func randomNonce() string {
 	b := make([]byte, 16)
 	_, _ = rand.Read(b)

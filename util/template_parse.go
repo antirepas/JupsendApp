@@ -30,8 +30,9 @@ type IfBlock struct {
 }
 
 var (
-	varRefRe = regexp.MustCompile(`\{\{\s*~?\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*(\|[^}]*)?\s*\}\}`)
-	ifBlockRe = regexp.MustCompile(`(?s)\{%\s*if\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*%\}(.*?)\{%\s*endif\s*%\}`)
+	// Variable names may contain letters, digits, underscores, and spaces.
+	varRefRe  = regexp.MustCompile(`\{\{\s*~?\s*([a-zA-Z_][a-zA-Z0-9_ ]*)\s*(\|[^}]*)?\s*\}\}`)
+	ifBlockRe = regexp.MustCompile(`(?s)\{%\s*if\s+([a-zA-Z_][a-zA-Z0-9_ ]*)\s*%\}(.*?)\{%\s*endif\s*%\}`)
 )
 
 // ParseVarRefs returns all variable references in text in document order.
@@ -39,7 +40,7 @@ func ParseVarRefs(text string) []VarRef {
 	var refs []VarRef
 	for _, loc := range varRefRe.FindAllStringSubmatchIndex(text, -1) {
 		raw := text[loc[0]:loc[1]]
-		name := text[loc[2]:loc[3]]
+		name := strings.TrimSpace(text[loc[2]:loc[3]])
 		ref := VarRef{
 			Raw:      raw,
 			Name:     name,
@@ -88,7 +89,7 @@ func ParseIfBlocks(text string) []IfBlock {
 	for _, m := range ifBlockRe.FindAllStringSubmatchIndex(text, -1) {
 		blocks = append(blocks, IfBlock{
 			Raw:      text[m[0]:m[1]],
-			VarName:  text[m[2]:m[3]],
+			VarName:  strings.TrimSpace(text[m[2]:m[3]]),
 			Inner:    text[m[4]:m[5]],
 			TokenPos: m[0],
 		})

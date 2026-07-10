@@ -1041,9 +1041,9 @@
     else showMsg('Workflow saved', true);
   }
 
-  document.getElementById('btn-save').addEventListener('click', saveGraph);
+  document.getElementById('btn-save')?.addEventListener('click', saveGraph);
 
-  document.getElementById('btn-validate').addEventListener('click', async () => {
+  document.getElementById('btn-validate')?.addEventListener('click', async () => {
     await saveGraph();
     const res = await fetch('/api/v1/workflows/' + WORKFLOW_ID + '/versions/' + VERSION_ID + '/validate', { method: 'POST' });
     const data = await res.json();
@@ -1051,7 +1051,7 @@
     else showMsg((data.errors || []).join('; '), false);
   });
 
-  document.getElementById('btn-publish').addEventListener('click', async () => {
+  document.getElementById('btn-publish')?.addEventListener('click', async () => {
     await saveGraph();
     const res = await fetch('/api/v1/workflows/' + WORKFLOW_ID + '/versions/' + VERSION_ID + '/publish', { method: 'POST' });
     const data = await res.json();

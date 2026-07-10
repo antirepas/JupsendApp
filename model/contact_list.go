@@ -81,13 +81,9 @@ func AddContactsToList(listID, userID int64, contactIDs []int64) error {
 		return err
 	}
 	for _, cid := range contactIDs {
-		if _, _, err := GetContactForUser(cid, userID); err != nil {
-			continue
+		if err := addContactToListValidated(listID, userID, cid); err != nil {
+			return err
 		}
-		_, _ = db.Exec(`
-			INSERT INTO contact_list_members (list_id, contact_id) VALUES (?, ?)
-			ON CONFLICT DO NOTHING
-		`, listID, cid)
 	}
 	return nil
 }
@@ -118,10 +114,9 @@ func SetContactLists(userID, contactID int64, listIDs []int64) error {
 		if _, err := GetContactListForUser(lid, userID); err != nil {
 			continue
 		}
-		_, _ = db.Exec(`
-			INSERT INTO contact_list_members (list_id, contact_id) VALUES (?, ?)
-			ON CONFLICT DO NOTHING
-		`, lid, contactID)
+		if err := addContactToListValidated(lid, userID, contactID); err != nil {
+			return err
+		}
 	}
 	return nil
 }

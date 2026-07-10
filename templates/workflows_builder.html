@@ -7,6 +7,9 @@
 {{template "sidebar" .}}
 <main class="flex-1 overflow-y-auto">
 <div class="max-w-7xl mx-auto p-6">
+{{if eq .workflow.Status "archived"}}
+<div class="alert-error mb-4">This workflow is archived. In-flight contacts still run, but you cannot edit or use it for new campaigns.</div>
+{{end}}
 <div class="flex items-center justify-between mb-4">
     <div>
         <a href="/workflows" class="text-sm text-brand-600">← Workflows</a>
@@ -14,12 +17,14 @@
         <p class="text-sm text-slate-500 mt-1">Drag nodes on the canvas. Drag the dot below a node to another node to connect. Hover a line and click × to remove it. Link each condition to the email it should check.</p>
     </div>
     <div class="flex gap-2">
-        <form method="POST" action="/workflows/{{.workflow.ID}}/delete" onsubmit="return confirm('Delete this workflow? Running instances will be stopped and linked campaigns will switch to bulk mode.');">
-            <button type="submit" class="btn-secondary text-red-600">Delete</button>
-        </form>
+        {{if ne .workflow.Status "archived"}}
+        <button type="button" class="btn-secondary text-red-600" data-archive-workflow data-workflow-id="{{.workflow.ID}}" data-workflow-name="{{.workflow.Name}}">Archive</button>
         <button type="button" id="btn-validate" class="btn-secondary">Validate</button>
         <button type="button" id="btn-save" class="btn-primary">Save</button>
         <button type="button" id="btn-publish" class="btn-primary">Publish</button>
+        {{else}}
+        <a href="/workflows/{{.workflow.ID}}/analytics" class="btn-secondary">Analytics</a>
+        {{end}}
     </div>
 </div>
 <div id="builder-msg" class="mb-4 hidden"></div>
@@ -101,11 +106,13 @@
 <script>
 const WORKFLOW_ID = {{.workflow.ID}};
 const VERSION_ID = {{.versionID}};
+const WORKFLOW_ARCHIVED = {{if eq .workflow.Status "archived"}}true{{else}}false{{end}};
 const TEMPLATES = [
     {{range .templates}}{ id: {{.ID}}, name: "{{.Name}}" },{{end}}
 ];
 </script>
 <script src="{{assetURL "/static/js/workflow-builder.js"}}"></script>
+{{template "workflow_archive_modal.html" .}}
 </body>
 </html>
 {{end}}

@@ -13,20 +13,16 @@
         </div>
     </div>
     <h2 class="text-lg font-semibold text-charcoal mb-1">Sign in</h2>
-    <p class="text-gray-500 text-sm mb-6">Welcome back</p>
+    <p class="text-gray-500 text-sm mb-6">Continue with the Google account you used to sign up.</p>
     {{if .error}}<div class="alert-error mb-4">{{.error}}</div>{{end}}
-    <form method="POST" action="/login" class="space-y-4">
+    {{if .googleConfigured}}
+    <form method="GET" action="/auth/google/login">
         <input type="hidden" name="next" value="{{.next}}">
-        <div>
-            <label class="form-label">Email</label>
-            <input type="email" name="email" class="form-input" required autofocus>
-        </div>
-        <div>
-            <label class="form-label">Password</label>
-            <input type="password" name="password" class="form-input" required>
-        </div>
-        <button type="submit" class="btn-primary w-full justify-center">Sign in</button>
+        <button type="submit" class="btn-primary w-full justify-center">Continue with Google</button>
     </form>
+    {{else}}
+    <div class="alert-error">Google sign-in is not configured on this server.</div>
+    {{end}}
     <p class="text-sm text-gray-500 mt-6 text-center">No account? <a href="/signup" class="text-brand-600 font-medium">Sign up</a></p>
 </div>
 </div>

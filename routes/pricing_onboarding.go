@@ -11,10 +11,15 @@ import (
 	"emailtracker.com/whop"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
+	"golang.org/x/oauth2"
 )
 
 const appGooglePlanSessionKey = "app_google_plan"
 const appGoogleStateSessionKey = "app_google_state"
+const appGoogleModeSessionKey = "app_google_mode"
+const appGoogleNextSessionKey = "app_google_next"
+const appGoogleModeLogin = "login"
+const appGoogleModeSignup = "signup"
 
 func SignupPlanPage(c *gin.Context) {
 	plan := c.Param("plan")
@@ -54,6 +59,20 @@ func SignupPlanPage(c *gin.Context) {
 	})
 }
 
+func AppGoogleLoginStart(c *gin.Context) {
+	if !googleoauth.IsConfigured() {
+		c.Redirect(http.StatusFound, "/login?error=Google+sign-in+not+configured")
+		return
+	}
+	state := randomNonce()
+	s := sessions.Default(c)
+	s.Set(appGoogleStateSessionKey, state)
+	s.Set(appGoogleModeSessionKey, appGoogleModeLogin)
+	s.Set(appGoogleNextSessionKey, c.Query("next"))
+	_ = s.Save()
+	c.Redirect(http.StatusFound, googleoauth.AppAuthURL(state))
+}
+
 func AppGoogleStart(c *gin.Context) {
 	plan := strings.TrimSpace(c.Query("plan"))
 	tier := model.PlanTier(strings.ToLower(plan))
@@ -62,13 +81,14 @@ func AppGoogleStart(c *gin.Context) {
 		return
 	}
 	if !googleoauth.IsConfigured() {
-		c.Redirect(http.StatusFound, "/settings?error=Google+OAuth+not+configured")
+		c.Redirect(http.StatusFound, "/signup/free?error=Google+sign-in+not+configured")
 		return
 	}
 
 	state := randomNonce()
 	s := sessions.Default(c)
 	s.Set(appGoogleStateSessionKey, state)
+	s.Set(appGoogleModeSessionKey, appGoogleModeSignup)
 	s.Set(appGooglePlanSessionKey, string(tier))
 	_ = s.Save()
 
@@ -78,48 +98,67 @@ func AppGoogleStart(c *gin.Context) {
 func AppGoogleCallback(c *gin.Context) {
 	state := c.Query("state")
 	code := c.Query("code")
-	if errMsg := c.Query("error"); errMsg != "" {
-		c.Redirect(http.StatusFound, "/signup/free?error=Google+OAuth+cancelled")
-		return
-	}
-	if code == "" || state == "" {
-		c.Redirect(http.StatusFound, "/signup/free?error=Invalid+OAuth+response")
-		return
-	}
 
 	s := sessions.Default(c)
 	expected, _ := s.Get(appGoogleStateSessionKey).(string)
+	mode, _ := s.Get(appGoogleModeSessionKey).(string)
 	planStr, _ := s.Get(appGooglePlanSessionKey).(string)
+	next, _ := s.Get(appGoogleNextSessionKey).(string)
 	s.Delete(appGoogleStateSessionKey)
+	s.Delete(appGoogleModeSessionKey)
 	s.Delete(appGooglePlanSessionKey)
+	s.Delete(appGoogleNextSessionKey)
 	_ = s.Save()
 
-	if expected == "" || expected != state {
-		c.Redirect(http.StatusFound, "/signup/free?error=OAuth+state+mismatch")
-		return
+	if mode == "" {
+		mode = appGoogleModeSignup
+	}
+	oauthErrRedirect := func(msg string) {
+		if mode == appGoogleModeLogin {
+			c.Redirect(http.StatusFound, "/login?error="+urlQueryEscape(msg))
+			return
+		}
+		c.Redirect(http.StatusFound, "/signup/free?error="+urlQueryEscape(msg))
 	}
 
-	tier := model.PlanTier(strings.ToLower(planStr))
-	if tier != model.PlanTierFree && tier != model.PlanTierStandard && tier != model.PlanTierPro {
-		c.Redirect(http.StatusFound, "/signup/free?error=Unknown+plan")
+	if errMsg := c.Query("error"); errMsg != "" {
+		oauthErrRedirect("Google sign-in cancelled")
+		return
+	}
+	if code == "" || state == "" {
+		oauthErrRedirect("Invalid OAuth response")
+		return
+	}
+	if expected == "" || expected != state {
+		oauthErrRedirect("OAuth state mismatch")
 		return
 	}
 
 	tok, profile, err := googleoauth.AppExchangeCode(c.Request.Context(), code)
 	if err != nil || profile.Email == "" {
-		c.Redirect(http.StatusFound, "/signup/free?error=Could+not+complete+Google+sign-in")
-		return
-	}
-	if tok.RefreshToken == "" {
-		// Without refresh token we can't store Gmail credentials for later sending.
-		c.Redirect(http.StatusFound, "/signup/free?error=Google+did+not+return+refresh+token")
+		oauthErrRedirect("Could not complete Google sign-in")
 		return
 	}
 
 	normalizedEmail := strings.TrimSpace(strings.ToLower(profile.Email))
+	if mode == appGoogleModeLogin {
+		appGoogleLoginComplete(c, normalizedEmail, profile.Name, tok, next)
+		return
+	}
+
+	tier := model.PlanTier(strings.ToLower(planStr))
+	if tier != model.PlanTierFree && tier != model.PlanTierStandard && tier != model.PlanTierPro {
+		oauthErrRedirect("Unknown plan")
+		return
+	}
+	if tok.RefreshToken == "" {
+		oauthErrRedirect("Google did not return refresh token")
+		return
+	}
+
 	userID, err := ensureUserForGoogle(normalizedEmail)
 	if err != nil {
-		c.Redirect(http.StatusFound, "/signup/free?error=Could+not+create+account")
+		oauthErrRedirect("Could not create account")
 		return
 	}
 
@@ -133,14 +172,13 @@ func AppGoogleCallback(c *gin.Context) {
 
 	encRefresh, err := googleoauth.Encrypt(tok.RefreshToken)
 	if err != nil {
-		c.Redirect(http.StatusFound, "/signup/free?error=Could+not+store+Google+token")
+		oauthErrRedirect("Could not store Google token")
 		return
 	}
 	encAccess, _ := googleoauth.Encrypt(tok.AccessToken)
 
-	// Store Gmail OAuth tokens (sending + bounce tracking later).
 	if err := model.SaveGoogleOAuthAccount(userID, normalizedEmail, fromName, encRefresh, encAccess, tok.Expiry); err != nil {
-		c.Redirect(http.StatusFound, "/signup/free?error=Could+not+save+Gmail+account")
+		oauthErrRedirect("Could not save Gmail account")
 		return
 	}
 	_ = model.ApplyPlanLimitsToUser(userID, tier)
@@ -160,6 +198,30 @@ func AppGoogleCallback(c *gin.Context) {
 		return
 	}
 	c.Redirect(http.StatusFound, purchaseURL)
+}
+
+func appGoogleLoginComplete(c *gin.Context, email, profileName string, tok *oauth2.Token, next string) {
+	user, err := model.GetUserByEmail(email)
+	if err != nil {
+		c.Redirect(http.StatusFound, "/signup/free?error=No+account+found.+Choose+a+plan+to+sign+up.")
+		return
+	}
+
+	auth.SetUserSession(c, user.ID)
+	_ = model.SetUserAdmin(user.ID, config.IsAdminEmail(user.Email))
+
+	if tok.RefreshToken != "" {
+		fromName := profileName
+		if fromName == "" {
+			fromName = email
+		}
+		if encRefresh, err := googleoauth.Encrypt(tok.RefreshToken); err == nil {
+			encAccess, _ := googleoauth.Encrypt(tok.AccessToken)
+			_ = model.SaveGoogleOAuthAccount(user.ID, email, fromName, encRefresh, encAccess, tok.Expiry)
+		}
+	}
+
+	c.Redirect(http.StatusFound, safeNext(next))
 }
 
 func OnboardingActivatePage(c *gin.Context) {

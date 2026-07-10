@@ -51,6 +51,7 @@ func runAlterSchema() {
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS goal_daily_send_cap INTEGER NOT NULL DEFAULT 0`,
 		`UPDATE smtp_accounts SET smtp_port = '465' WHERE smtp_host = 'smtp.gmail.com' AND smtp_port = '587'`,
 		`UPDATE smtp_accounts SET warmup_daily_cap = 20, warmup_increment_per_day = 20 WHERE warmup_enabled = 1 AND warmup_daily_cap = 5 AND warmup_increment_per_day = 5`,
+		`ALTER TABLE contact_lists ADD COLUMN IF NOT EXISTS variable_schema TEXT DEFAULT ''`,
 	}
 	for _, stmt := range alters {
 		if _, err := DB.Exec(stmt); err != nil {

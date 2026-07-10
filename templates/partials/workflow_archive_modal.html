@@ -1,0 +1,23 @@
+{{define "workflow_archive_modal.html"}}
+<div id="workflow-archive-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="workflow-archive-title">
+    <div class="absolute inset-0 bg-slate-900/40" data-archive-dismiss></div>
+    <div class="relative bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+        <h3 id="workflow-archive-title" class="text-lg font-semibold text-slate-900">Archive workflow?</h3>
+        <p class="text-sm text-slate-500 mt-2">Archived workflows are hidden from new campaigns. Contacts already in this workflow keep moving through it.</p>
+        <div id="workflow-archive-stats" class="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 space-y-1">
+            <p class="text-slate-400">Loading…</p>
+        </div>
+        <form id="workflow-archive-form" method="POST" class="mt-5 space-y-4">
+            <label class="flex items-start gap-2 text-sm text-slate-600">
+                <input type="checkbox" name="cancel_queued" value="1" class="mt-1 rounded border-slate-300">
+                <span>Cancel queued emails from this workflow (does not recall emails already sent)</span>
+            </label>
+            <div class="flex gap-2 justify-end pt-2">
+                <button type="button" class="btn-secondary" data-archive-dismiss>Keep workflow</button>
+                <button type="submit" class="btn-primary bg-red-600 hover:bg-red-700 border-red-600">Archive workflow</button>
+            </div>
+        </form>
+    </div>
+</div>
+<script src="{{assetURL "/static/js/workflow-archive.js"}}"></script>
+{{end}}

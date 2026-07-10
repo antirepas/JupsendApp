@@ -20,8 +20,13 @@ type ImportContactRow struct {
 	EmailStatusReason string
 }
 
-func ImportContactRows(userID int64, rows []ImportContactRow, listID int64) (ImportContactsResult, error) {
+func ImportContactRows(userID int64, rows []ImportContactRow, listID int64, importKeys []string) (ImportContactsResult, error) {
 	var result ImportContactsResult
+	if listID > 0 && len(importKeys) > 0 {
+		if err := EnsureListVariableSchema(listID, userID, importKeys); err != nil {
+			return result, err
+		}
+	}
 	for _, row := range rows {
 		email := strings.TrimSpace(row.Email)
 		if !strings.Contains(email, "@") {
@@ -57,7 +62,10 @@ func ImportContactRows(userID int64, rows []ImportContactRow, listID int64) (Imp
 			result.Updated++
 		}
 		if listID > 0 {
-			_ = AddContactsToList(listID, userID, []int64{contactID})
+			if err := addContactToListValidated(listID, userID, contactID); err != nil {
+				result.Errors++
+				continue
+			}
 		}
 	}
 	return result, nil

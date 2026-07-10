@@ -18,6 +18,17 @@ func vars(m map[string]string) []model.ContactVariables {
 	return out
 }
 
+func TestRenderTemplateMultiWordVariable(t *testing.T) {
+	tpl := `Hi {{company name}}`
+	res, err := RenderTemplate(tpl, vars(map[string]string{"company name": "Acme Corp"}), RenderOptions{BodyMode: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Text != "Hi Acme Corp" {
+		t.Fatalf("got %q", res.Text)
+	}
+}
+
 func TestRenderTemplateDefaultFallback(t *testing.T) {
 	tpl := "Hi {{name|first|default:there}}"
 	res, err := RenderTemplate(tpl, vars(map[string]string{"name": "Jane Doe"}), RenderOptions{})

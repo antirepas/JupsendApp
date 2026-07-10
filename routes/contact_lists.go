@@ -2,6 +2,7 @@ package routes
 
 import (
 	"net/http"
+	"net/url"
 	"strconv"
 
 	"emailtracker.com/model"
@@ -60,10 +61,73 @@ func AddListMembers(c *gin.Context) {
 	}
 	ids := parseContactIDs(c)
 	if err := model.AddContactsToList(listID, userID, ids); err != nil {
-		c.Redirect(http.StatusFound, "/contacts?error=Could+not+add+to+list")
+		c.Redirect(http.StatusFound, "/contacts/lists/"+strconv.FormatInt(listID, 10)+"?error="+url.QueryEscape(err.Error()))
 		return
 	}
-	c.Redirect(http.StatusFound, "/contacts?list="+strconv.FormatInt(listID, 10)+"&success=Contacts+added+to+list")
+	c.Redirect(http.StatusFound, "/contacts/lists/"+strconv.FormatInt(listID, 10)+"?success=Contacts+added+to+list")
+}
+
+func ContactListDetailPage(c *gin.Context) {
+	userID := mustUserID(c)
+	listID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.Redirect(http.StatusFound, "/contacts?tab=lists&error=Invalid+list")
+		return
+	}
+	list, rows, columns, err := model.ListContactsInList(listID, userID)
+	if err != nil {
+		c.Redirect(http.StatusFound, "/contacts?tab=lists&error=List+not+found")
+		return
+	}
+	c.HTML(http.StatusOK, "contacts_list_detail.html", gin.H{
+		"title":   list.Name,
+		"active":  "contacts",
+		"list":    list,
+		"rows":    rows,
+		"columns": columns,
+		"success": c.Query("success"),
+		"error":   c.Query("error"),
+	})
+}
+
+func ListVariablesJSON(c *gin.Context) {
+	userID := mustUserID(c)
+	listID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid list"})
+		return
+	}
+	keys, sample, err := model.ListVariableSample(listID, userID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "list not found"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"variable_keys": keys,
+		"sample":        sample,
+	})
+}
+
+func ContactVariablesJSON(c *gin.Context) {
+	userID := mustUserID(c)
+	contactID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid contact"})
+		return
+	}
+	sample, err := model.ContactVariableSample(userID, contactID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "contact not found"})
+		return
+	}
+	keys := make([]string, 0, len(sample))
+	for k := range sample {
+		keys = append(keys, k)
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"variable_keys": keys,
+		"sample":        sample,
+	})
 }
 
 func RemoveListMember(c *gin.Context) {

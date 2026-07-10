@@ -158,13 +158,13 @@
 
 <div class="card">
     <h3 class="card-title">Import from Excel or CSV</h3>
-    {{if .templates}}
-    <form method="POST" action="/contacts/upload" enctype="multipart/form-data" class="space-y-4">
+    <p class="text-sm text-gray-500 mb-4">Upload a spreadsheet with an <code class="text-xs bg-gray-100 px-1 rounded">email</code> column. Other columns become contact variables automatically — no template required.</p>
+    <form method="POST" action="/contacts/upload" enctype="multipart/form-data" class="space-y-4" id="excel-import-form">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-                <label class="form-label">Template</label>
-                <select name="template_id" id="import-template" class="form-input" required onchange="updateImportPreview()">
-                    <option value="">Select a template...</option>
+                <label class="form-label">Template (optional column guide)</label>
+                <select name="template_id" id="import-template" class="form-input" onchange="updateImportPreview()">
+                    <option value="">Auto-detect columns from file</option>
                     {{range .templates}}
                     <option value="{{.ID}}" data-vars="{{range $i, $v := .Variables}}{{if $i}},{{end}}{{$v}}{{end}}">{{.Name}}</option>
                     {{end}}
@@ -178,23 +178,26 @@
                     <option value="{{.ID}}">{{.Name}}</option>
                     {{end}}
                 </select>
+                <p class="form-hint">List members must share the same variable names.</p>
             </div>
         </div>
         <div id="import-preview" class="hidden rounded-lg border border-gray-200 bg-gray-50 p-4">
-            <p class="text-sm font-medium text-gray-700 mb-2">Required columns</p>
+            <p class="text-sm font-medium text-gray-700 mb-2">Expected / detected columns</p>
             <div id="import-columns" class="flex flex-wrap gap-2 mb-3"></div>
-            <a id="sample-download" href="#" class="text-sm text-brand-600 font-medium">Download sample spreadsheet</a>
+            <a id="sample-download" href="/contacts/upload/sample" class="text-sm text-brand-600 font-medium">Download sample spreadsheet</a>
+        </div>
+        <div id="file-preview" class="hidden rounded-lg border border-brand-200 bg-brand-50/40 p-4">
+            <p class="text-sm font-medium text-gray-700 mb-2">Detected from file <span id="file-preview-count" class="text-gray-500 font-normal"></span></p>
+            <div id="file-preview-columns" class="flex flex-wrap gap-2 mb-3"></div>
+            <div id="file-preview-sample" class="overflow-x-auto text-xs font-mono"></div>
         </div>
         <div>
             <label class="form-label">Spreadsheet (.xlsx, .xls, .csv)</label>
-            <input type="file" name="file" class="form-input" accept=".xlsx,.xls,.csv" required>
+            <input type="file" name="file" id="import-file" class="form-input" accept=".xlsx,.xls,.csv" required>
             <p class="form-hint">Email column may contain multiple addresses separated by <code class="text-xs bg-gray-100 px-1 rounded">;</code> — we pick hello@ &gt; contact@ &gt; support@.</p>
         </div>
         <button type="submit" class="btn-primary">Upload &amp; import</button>
     </form>
-    {{else}}
-    <p class="text-sm text-gray-500">Create a <a href="/templates/new" class="text-brand-600 underline">template</a> first for column-guided import.</p>
-    {{end}}
 </div>
 {{end}}
 
@@ -204,7 +207,7 @@
     <div class="card">
         <div class="flex items-start justify-between gap-2">
             <div>
-                <a href="/contacts?list={{.ID}}" class="font-semibold text-charcoal hover:text-brand-600">{{.Name}}</a>
+                <a href="/contacts/lists/{{.ID}}" class="font-semibold text-charcoal hover:text-brand-600">{{.Name}}</a>
                 <p class="text-sm text-gray-500 mt-1">{{.MemberCount}} contacts</p>
             </div>
             <form method="POST" action="/contacts/lists/{{.ID}}/delete" onsubmit="return confirm('Delete this list? Contacts are kept.');">
@@ -292,12 +295,60 @@ function updateImportPreview() {
     const sampleLink = document.getElementById('sample-download');
     if (!select) return;
     const option = select.options[select.selectedIndex];
-    if (!option || !option.value) { preview?.classList.add('hidden'); return; }
-    const vars = option.dataset.vars ? option.dataset.vars.split(',').filter(Boolean) : [];
+    const vars = option?.dataset?.vars ? option.dataset.vars.split(',').filter(Boolean) : [];
+    if (!option?.value) {
+        columns.innerHTML = ['email', 'name', 'company', 'description'].map(c => `<span class="badge badge-gray">${c}</span>`).join('');
+        if (sampleLink) sampleLink.href = '/contacts/upload/sample';
+        preview?.classList.remove('hidden');
+        return;
+    }
     columns.innerHTML = ['email'].concat(vars).map(c => `<span class="badge badge-blue">${c}</span>`).join('');
-    sampleLink.href = '/contacts/upload/sample/' + option.value;
-    preview.classList.remove('hidden');
+    if (sampleLink) sampleLink.href = '/contacts/upload/sample/' + option.value;
+    preview?.classList.remove('hidden');
 }
+async function previewImportFile(file) {
+    const box = document.getElementById('file-preview');
+    const colsEl = document.getElementById('file-preview-columns');
+    const sampleEl = document.getElementById('file-preview-sample');
+    const countEl = document.getElementById('file-preview-count');
+    if (!file || !box) return;
+    const fd = new FormData();
+    fd.append('file', file);
+    const tpl = document.getElementById('import-template');
+    if (tpl?.value) fd.append('template_id', tpl.value);
+    try {
+        const res = await fetch('/contacts/upload/preview', { method: 'POST', body: fd, credentials: 'same-origin' });
+        const data = await res.json();
+        if (!res.ok) {
+            box.classList.add('hidden');
+            return;
+        }
+        colsEl.innerHTML = (data.columns || []).map(c => `<span class="badge badge-blue">${c}</span>`).join('');
+        countEl.textContent = data.row_count ? `(${data.row_count} contacts)` : '';
+        const rows = data.sample_rows || [];
+        if (rows.length) {
+            const headers = data.columns || Object.keys(rows[0]);
+            let html = '<table class="min-w-full"><thead><tr>' + headers.map(h => `<th class="text-left pr-4 pb-1">${h}</th>`).join('') + '</tr></thead><tbody>';
+            rows.forEach(row => {
+                html += '<tr>' + headers.map(h => `<td class="pr-4 py-1 text-gray-700">${(row[h] || '').slice(0, 40)}</td>`).join('') + '</tr>';
+            });
+            sampleEl.innerHTML = html + '</tbody></table>';
+        } else {
+            sampleEl.innerHTML = '';
+        }
+        box.classList.remove('hidden');
+    } catch (_) {
+        box.classList.add('hidden');
+    }
+}
+document.getElementById('import-file')?.addEventListener('change', function() {
+    if (this.files && this.files[0]) previewImportFile(this.files[0]);
+});
+document.getElementById('import-template')?.addEventListener('change', function() {
+    const fileInput = document.getElementById('import-file');
+    if (fileInput?.files?.[0]) previewImportFile(fileInput.files[0]);
+});
+updateImportPreview();
 function updatePastePreview() {
     const select = document.getElementById('paste-template');
     const preview = document.getElementById('paste-preview');

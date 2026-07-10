@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
+	"emailtracker.com/config"
 	"emailtracker.com/db"
 	"emailtracker.com/model"
 	"emailtracker.com/auth"
-	"emailtracker.com/config"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
@@ -25,18 +25,16 @@ func testRouter() *gin.Engine {
 	r.GET("/login", LoginPage)
 	r.GET("/signup", SignupPage)
 	r.POST("/signup", SignupSubmit)
-	r.POST("/login", LoginSubmit)
 	r.POST("/logout", Logout)
 	return r
 }
 
-func TestSignupLoginLogout(t *testing.T) {
+func TestSignupRedirectAndLogout(t *testing.T) {
 	db.OpenTestDB(t)
 
 	r := testRouter()
 	email := fmt.Sprintf("auth-test-%d@test.com", time.Now().UnixNano())
 
-	// Email/password signup is disabled; ensure we redirect to plan-first onboarding.
 	signup := httptest.NewRequest(http.MethodPost, "/signup", strings.NewReader(
 		fmt.Sprintf("email=%s&password=password123&confirm_password=password123", email),
 	))
@@ -50,7 +48,6 @@ func TestSignupLoginLogout(t *testing.T) {
 		t.Fatalf("expected redirect to /signup/free, got %s", w.Header().Get("Location"))
 	}
 
-	// Create a user directly so we can test login/logout.
 	hash, err := auth.HashPassword("password123")
 	if err != nil {
 		t.Fatalf("hash password: %v", err)
@@ -60,21 +57,21 @@ func TestSignupLoginLogout(t *testing.T) {
 		t.Fatalf("create user: %v", err)
 	}
 
+	loginPage := httptest.NewRequest(http.MethodGet, "/login", nil)
+	wLogin := httptest.NewRecorder()
+	r.ServeHTTP(wLogin, loginPage)
+	if wLogin.Code != http.StatusOK {
+		t.Fatalf("login page expected 200, got %d", wLogin.Code)
+	}
+	if !strings.Contains(wLogin.Body.String(), "Continue with Google") {
+		t.Fatalf("login page should offer Google sign-in")
+	}
+
 	logout := httptest.NewRequest(http.MethodPost, "/logout", nil)
 	logout.Header.Set("Cookie", w.Header().Get("Set-Cookie"))
 	w2 := httptest.NewRecorder()
 	r.ServeHTTP(w2, logout)
 	if w2.Code != http.StatusFound || !strings.Contains(w2.Header().Get("Location"), "/login") {
 		t.Fatalf("logout failed: %d %s", w2.Code, w2.Header().Get("Location"))
-	}
-
-	login := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(
-		fmt.Sprintf("email=%s&password=password123", email),
-	))
-	login.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	w3 := httptest.NewRecorder()
-	r.ServeHTTP(w3, login)
-	if w3.Code != http.StatusFound || w3.Header().Get("Location") != "/" {
-		t.Fatalf("login failed: %d %s", w3.Code, w3.Header().Get("Location"))
 	}
 }
