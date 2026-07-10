@@ -41,9 +41,9 @@
                 <div id="template-var-chips" class="template-var-chips"></div>
                 <p class="form-hint mt-1">See <a href="#template-syntax-guide" class="text-brand-600 font-medium">syntax guide below</a> for filters and conditionals.</p>
                 <div class="mt-4 pt-4 border-t border-slate-100">
-                    <label class="form-label" for="template-sample-source">Preview from contact or list</label>
-                    <select id="template-sample-source" class="form-input text-sm max-w-md">
-                        <option value="">— Use default sample values —</option>
+                    <label class="form-label" for="template-source-columns">Browse contact or list columns</label>
+                    <select id="template-source-columns" class="form-input text-sm max-w-md">
+                        <option value="">—</option>
                         <optgroup label="Contacts">
                             {{range .contacts}}
                             <option value="contact:{{.ID}}">{{.Email}}</option>
@@ -55,7 +55,7 @@
                             {{end}}
                         </optgroup>
                     </select>
-                    <p class="form-hint mt-1">Pick a contact or list to see its columns and fill the live preview sample data.</p>
+                    <p class="form-hint mt-1">See which columns exist on a contact or list — does not change the live preview.</p>
                     <div id="template-source-vars" class="template-source-vars" hidden></div>
                 </div>
             </div>
@@ -91,6 +91,14 @@
             <div id="preview-ai-notice" class="hidden text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-3" role="status"></div>
             <div id="template-lint-sidebar" class="template-lint-sidebar" aria-live="polite"></div>
             <div class="mt-4 pt-4 border-t border-slate-100">
+                <label class="form-label" for="template-preview-contact">Preview as contact</label>
+                <select id="template-preview-contact" class="form-input text-sm mb-3">
+                    <option value="">— Default sample values —</option>
+                    {{range .contacts}}
+                    <option value="{{.ID}}">{{.Email}}</option>
+                    {{end}}
+                </select>
+                <p class="form-hint mb-3">Fills only the variables used in this template for the live preview below.</p>
                 <p class="form-label mb-2">Preview sample data</p>
                 <div id="template-sample-fields" class="template-sample-fields"></div>
                 {{if .aiEnabled}}

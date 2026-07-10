@@ -8,7 +8,8 @@
     const chipsEl = document.getElementById('template-var-chips');
     const sampleFieldsEl = document.getElementById('template-sample-fields');
     const sourceVarsEl = document.getElementById('template-source-vars');
-    const sampleSourceSelect = document.getElementById('template-sample-source');
+    const sourceColumnsSelect = document.getElementById('template-source-columns');
+    const previewContactSelect = document.getElementById('template-preview-contact');
     const previewSubject = document.getElementById('preview-subject');
     const previewFrame = document.getElementById('preview-frame');
     const editorEl = document.getElementById('template-editor');
@@ -29,6 +30,7 @@
         defaultSample = { name: 'Alex', company: 'Acme Corp' };
     }
     const sampleValues = { ...defaultSample };
+    let previewContactSample = null;
 
     const varRe = /\{\{\s*~?\s*([a-zA-Z_][a-zA-Z0-9_ ]*)\s*(?:\|[^}]*)?\s*\}\}/g;
     const ifVarRe = /\{%\s*if\s+([a-zA-Z_][a-zA-Z0-9_ ]*)\s*%\}/g;
@@ -215,13 +217,9 @@
     function renderSampleFields(keys) {
         if (!sampleFieldsEl) return;
         sampleFieldsEl.innerHTML = '';
-        const keySet = new Set(keys.filter(isValidVarKey));
-        Object.keys(sampleValues).forEach((k) => {
-            if (isValidVarKey(k)) keySet.add(k);
-        });
-        const allKeys = Array.from(keySet).sort();
+        const allKeys = keys.filter(isValidVarKey).sort();
         if (allKeys.length === 0) {
-            sampleFieldsEl.innerHTML = '<p class="text-xs text-slate-400">Sample values appear when you add variables or pick a contact/list above.</p>';
+            sampleFieldsEl.innerHTML = '<p class="text-xs text-slate-400">Add variables to the subject or body, then pick a contact above to preview with real data.</p>';
             return;
         }
         allKeys.forEach((key) => {
@@ -731,8 +729,7 @@
         toneCheckPassed = false;
         const keys = extractVariables();
         renderChips(keys);
-        renderSampleFields(keys);
-        schedulePreview();
+        applyPreviewContactSample();
         scheduleLint();
         updateStartersVisibility();
         if (aiEnabled && subjectInput.value !== lastSubjectForNudges) {
@@ -751,47 +748,75 @@
         previewUseAI.addEventListener('change', schedulePreview);
     }
 
-    async function applySampleFromSource(url, label) {
-        try {
-            const res = await fetch(url, { credentials: 'same-origin' });
-            if (!res.ok) return;
-            const data = await res.json();
-            const sample = normalizeSample(data.sample);
-            const keys = Array.isArray(data.variable_keys)
-                ? data.variable_keys.filter(isValidVarKey)
-                : Object.keys(sample);
-            resetSampleValues();
-            Object.keys(sample).forEach((k) => {
-                sampleValues[k] = sample[k];
+    function applyPreviewContactSample() {
+        const usedKeys = extractVariables();
+        if (previewContactSample) {
+            usedKeys.forEach((k) => {
+                if (previewContactSample[k] !== undefined) {
+                    sampleValues[k] = previewContactSample[k];
+                }
             });
+        }
+        renderSampleFields(usedKeys);
+        schedulePreview();
+    }
+
+    async function fetchContactSample(url) {
+        const res = await fetch(url, { credentials: 'same-origin' });
+        if (!res.ok) return null;
+        const data = await res.json();
+        return normalizeSample(data.sample);
+    }
+
+    async function loadSourceColumns(url, label) {
+        try {
+            const sample = await fetchContactSample(url);
+            if (!sample) return;
+            const keys = Object.keys(sample).filter(isValidVarKey).sort();
             renderSourceVars(keys, sample, label);
-            renderSampleFields(extractVariables());
-            schedulePreview();
         } catch (_) {
             /* ignore */
         }
     }
 
-    sampleSourceSelect?.addEventListener('change', () => {
-        const raw = sampleSourceSelect.value || '';
+    async function loadPreviewContact(contactID) {
+        try {
+            if (!contactID) {
+                previewContactSample = null;
+                resetSampleValues();
+                applyPreviewContactSample();
+                return;
+            }
+            const sample = await fetchContactSample('/contacts/' + contactID + '/variables');
+            if (!sample) return;
+            previewContactSample = sample;
+            applyPreviewContactSample();
+        } catch (_) {
+            /* ignore */
+        }
+    }
+
+    sourceColumnsSelect?.addEventListener('change', () => {
+        const raw = sourceColumnsSelect.value || '';
         if (!raw) {
-            resetSampleValues();
             renderSourceVars([], {}, '');
-            renderSampleFields(extractVariables());
-            schedulePreview();
             return;
         }
         const parts = raw.split(':');
         if (parts.length !== 2) return;
         const kind = parts[0];
         const id = parts[1];
-        const opt = sampleSourceSelect.selectedOptions[0];
+        const opt = sourceColumnsSelect.selectedOptions[0];
         const label = opt ? opt.textContent.trim() : '';
         if (kind === 'contact') {
-            applySampleFromSource('/contacts/' + id + '/variables', 'Contact: ' + label);
+            loadSourceColumns('/contacts/' + id + '/variables', 'Contact: ' + label);
         } else if (kind === 'list') {
-            applySampleFromSource('/contacts/lists/' + id + '/variables', 'List: ' + label);
+            loadSourceColumns('/contacts/lists/' + id + '/variables', 'List: ' + label);
         }
+    });
+
+    previewContactSelect?.addEventListener('change', () => {
+        loadPreviewContact(previewContactSelect.value || '');
     });
 
     document.querySelectorAll('.syntax-copy').forEach((btn) => {
