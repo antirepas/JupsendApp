@@ -96,9 +96,10 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository }}
+          # Lowercase package name must match what the droplet pulls.
+          images: ghcr.io/antirepas/emailtracker
           tags: |
-            type=sha,prefix=
+            type=sha,prefix=,format=long
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push
@@ -112,6 +113,7 @@ jobs:
             BUILD_VERSION=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
   deploy:
     name: Deploy to Droplet
     needs: docker
@@ -127,7 +129,10 @@ jobs:
           key: ${{ secrets.DROPLET_SSH_KEY }}
           passphrase: ${{ secrets.DROPLET_SSH_PASSPHRASE }}
           script: |
-            docker pull ghcr.io/antirepas/emailtracker:latest
+            set -e
+            IMAGE="ghcr.io/antirepas/emailtracker:${{ github.sha }}"
+            echo "Deploying $IMAGE"
+            docker pull "$IMAGE"
             docker stop emailtracker || true
             docker rm emailtracker || true
             docker run -d \
@@ -135,5 +140,10 @@ jobs:
               --restart unless-stopped \
               --env-file /opt/emailtracker/.env \
               -p 127.0.0.1:8080:8080 \
-              ghcr.io/antirepas/emailtracker:latest 
+              "$IMAGE"
+            sleep 2
+            docker exec emailtracker grep -q "Import contacts" /app/templates/dashboard.html
+            echo "Template check OK"
+            wget -qO- http://127.0.0.1:8080/healthz || true
+            echo
             docker image prune -f
