@@ -84,7 +84,7 @@ func runClaimedJob(item claimedJob) {
 	if !AccountCanSendNowForJob(account, job) {
 		delay := rateLimitDelayForJob(account, job)
 		if delay < time.Second {
-			delay = time.Second //
+			delay = time.Second
 		}
 		_ = model.RescheduleSendJob(job.ID, time.Now().Add(delay), "rate limited: waiting for account capacity")
 		return
