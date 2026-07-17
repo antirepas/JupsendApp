@@ -167,7 +167,7 @@ func handleReply(userID int64, match ReplyMatch, imapMessageID string) {
 		EventType:   "REPLY",
 		DedupeKey:   dedupe,
 		Metadata: map[string]interface{}{
-			"source": "imap",
+			"source": "gmail",
 		},
 		OccurredAt: time.Now(),
 	})
@@ -177,7 +177,7 @@ func handleReply(userID int64, match ReplyMatch, imapMessageID string) {
 
 func replyDedupeKey(match ReplyMatch, imapMessageID string) string {
 	if mid := normalizeMessageID(imapMessageID); mid != "" {
-		return "imap-msg:" + mid
+		return "gmail-msg:" + mid
 	}
 	if match.EmailSendID > 0 {
 		return "reply:" + strconv.FormatInt(match.EmailSendID, 10)

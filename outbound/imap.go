@@ -1,7 +1,6 @@
 package outbound
 
 import (
-	"io"
 	"log"
 	"strings"
 	"time"
@@ -12,6 +11,8 @@ import (
 	"github.com/emersion/go-imap/client"
 )
 
+// StartIMAPPoller starts inbox polling for bounces and replies.
+// Google OAuth accounts use the Gmail API (gmail.readonly); other accounts use IMAP.
 func StartIMAPPoller() {
 	LoadConfig()
 	go func() {
@@ -28,19 +29,115 @@ func pollAllAccounts() {
 		return
 	}
 	for _, acc := range accounts {
-		if acc.Status != "active" || acc.IMAPHost == "" {
+		if acc.Status != "active" {
 			continue
 		}
-		if !acc.IsGoogleOAuth() && acc.IMAPUser == "" {
+		if acc.IsGoogleOAuth() {
+			if err := pollGmailAPIAccount(acc); err != nil {
+				log.Printf("Gmail API poll account %d: %v", acc.ID, err)
+			}
 			continue
 		}
-		if err := pollAccount(acc); err != nil {
+		if acc.IMAPHost == "" || acc.IMAPUser == "" {
+			continue
+		}
+		if err := pollIMAPAccount(acc); err != nil {
 			log.Printf("IMAP poll account %d: %v", acc.ID, err)
 		}
 	}
 }
 
-func pollAccount(acc model.SMTPAccount) error {
+func pollGmailAPIAccount(acc model.SMTPAccount) error {
+	token, err := model.GmailAccessToken(acc)
+	if err != nil {
+		return err
+	}
+	ids, err := googleoauth.ListRecentInboxMessageIDs(token, 50)
+	if err != nil {
+		return err
+	}
+	ownEmail := acc.GoogleEmail
+	if ownEmail == "" {
+		ownEmail = acc.SMTPUser
+	}
+
+	for _, id := range ids {
+		msg, err := googleoauth.GetMessageFull(token, id)
+		if err != nil {
+			log.Printf("Gmail API get message %s account %d: %v", id, acc.ID, err)
+			continue
+		}
+		dedupeID := firstNonEmpty(normalizeMessageID(msg.MessageID), msg.ID)
+		if dedupeID != "" {
+			if done, _ := model.GmailMessageAlreadyProcessed(acc.UserID, dedupeID); done {
+				continue
+			}
+			if exists, _ := model.ContactEventExistsByDedupe("gmail-msg:" + dedupeID); exists {
+				_ = model.MarkGmailMessageProcessed(acc.UserID, dedupeID)
+				continue
+			}
+			if exists, _ := model.ContactEventExistsByDedupe("imap-msg:" + dedupeID); exists {
+				_ = model.MarkGmailMessageProcessed(acc.UserID, dedupeID)
+				continue
+			}
+		}
+		processInboxMessage(acc, ownEmail, inboxMessage{
+			From:       googleoauth.ExtractEmailAddress(msg.From),
+			Subject:    msg.Subject,
+			Body:       msg.Body,
+			MessageID:  msg.MessageID,
+			InReplyTo:  msg.InReplyTo,
+			References: msg.References,
+			DedupeID:   dedupeID,
+		})
+		if dedupeID != "" {
+			_ = model.MarkGmailMessageProcessed(acc.UserID, dedupeID)
+		}
+	}
+	return nil
+}
+
+type inboxMessage struct {
+	From       string
+	Subject    string
+	Body       string
+	MessageID  string
+	InReplyTo  string
+	References string
+	DedupeID   string
+}
+
+func processInboxMessage(acc model.SMTPAccount, ownEmail string, msg inboxMessage) {
+	replyRefs := []string{}
+	if msg.InReplyTo != "" {
+		replyRefs = append(replyRefs, msg.InReplyTo)
+	}
+	if msg.References != "" {
+		replyRefs = append(replyRefs, msg.References)
+	}
+	if msg.MessageID != "" && len(replyRefs) == 0 {
+		replyRefs = append(replyRefs, msg.MessageID)
+	}
+
+	if IsBounceMessage(msg.From, msg.Subject, msg.Body) {
+		handleBounce(acc, msg.From, msg.Subject, msg.Body)
+		return
+	}
+	if match, ok := MatchReply(acc.UserID, msg.From, msg.Subject, msg.Body, replyRefs, ownEmail); ok {
+		handleReply(acc.UserID, match, msg.MessageID)
+	}
+}
+
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+func pollIMAPAccount(acc model.SMTPAccount) error {
 	c, err := dialIMAP(acc)
 	if err != nil {
 		return err
@@ -70,66 +167,33 @@ func pollAccount(acc model.SMTPAccount) error {
 		done <- c.Fetch(seqset, items, messages)
 	}()
 
-	ownEmail := acc.GoogleEmail
-	if ownEmail == "" {
-		ownEmail = acc.IMAPUser
-	}
+	ownEmail := acc.IMAPUser
 	if ownEmail == "" {
 		ownEmail = acc.SMTPUser
 	}
 
-	var seenSeqNums []uint32
 	for msg := range messages {
 		if msg == nil || msg.Envelope == nil {
 			continue
-		}
-		if imapMessageSeen(msg) {
-			mid := normalizeMessageID(msg.Envelope.MessageId)
-			if mid != "" {
-				if exists, _ := model.ContactEventExistsByDedupe("imap-msg:" + mid); exists {
-					continue
-				}
-			}
 		}
 		fromAddr := ""
 		if len(msg.Envelope.From) > 0 {
 			fromAddr = msg.Envelope.From[0].Address()
 		}
 		subject := msg.Envelope.Subject
-		body := readMessageBody(msg, section)
+		body := readIMAPMessageBody(msg, section)
 		inReplyTo := msg.Envelope.InReplyTo
-		if inReplyTo == "" && msg.Envelope.MessageId != "" {
-			inReplyTo = msg.Envelope.MessageId
-		}
-		replyRefs := []string{}
-		if inReplyTo != "" {
-			replyRefs = append(replyRefs, inReplyTo)
-		}
-
-		if IsBounceMessage(fromAddr, subject, body) {
-			handleBounce(acc, fromAddr, subject, body)
-			seenSeqNums = append(seenSeqNums, msg.SeqNum)
-			continue
-		}
-		if match, ok := MatchReply(acc.UserID, fromAddr, subject, body, replyRefs, ownEmail); ok {
-			handleReply(acc.UserID, match, msg.Envelope.MessageId)
-			seenSeqNums = append(seenSeqNums, msg.SeqNum)
-		}
+		processInboxMessage(acc, ownEmail, inboxMessage{
+			From:      fromAddr,
+			Subject:   subject,
+			Body:      body,
+			MessageID: msg.Envelope.MessageId,
+			InReplyTo: inReplyTo,
+			DedupeID:  normalizeMessageID(msg.Envelope.MessageId),
+		})
 	}
 
-	if err := <-done; err != nil {
-		return err
-	}
-
-	if len(seenSeqNums) > 0 {
-		mark := new(imap.SeqSet)
-		for _, n := range seenSeqNums {
-			mark.AddNum(n)
-		}
-		item := imap.FormatFlagsOp(imap.AddFlags, true)
-		_ = c.Store(mark, item, []interface{}{imap.SeenFlag}, nil)
-	}
-	return nil
+	return <-done
 }
 
 func dialIMAP(acc model.SMTPAccount) (*client.Client, error) {
@@ -138,39 +202,26 @@ func dialIMAP(acc model.SMTPAccount) (*client.Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	if acc.IsGoogleOAuth() {
-		token, err := model.GmailAccessToken(acc)
-		if err != nil {
-			c.Logout()
-			return nil, err
-		}
-		email := acc.GoogleEmail
-		if email == "" {
-			email = acc.IMAPUser
-		}
-		if err := c.Authenticate(googleoauth.IMAPAuth(email, token)); err != nil {
-			c.Logout()
-			return nil, err
-		}
-	} else {
-		pass := acc.IMAPPassword
-		if pass == "" {
-			pass = acc.SMTPPassword
-		}
-		if err := c.Login(acc.IMAPUser, pass); err != nil {
-			c.Logout()
-			return nil, err
-		}
+	pass := acc.IMAPPassword
+	if pass == "" {
+		pass = acc.SMTPPassword
+	}
+	if err := c.Login(acc.IMAPUser, pass); err != nil {
+		c.Logout()
+		return nil, err
 	}
 	return c, nil
 }
 
 // pollAccountBounces kept for tests that may reference it.
 func pollAccountBounces(acc model.SMTPAccount) error {
-	return pollAccount(acc)
+	if acc.IsGoogleOAuth() {
+		return pollGmailAPIAccount(acc)
+	}
+	return pollIMAPAccount(acc)
 }
 
-func readMessageBody(msg *imap.Message, section *imap.BodySectionName) string {
+func readIMAPMessageBody(msg *imap.Message, section *imap.BodySectionName) string {
 	if msg == nil {
 		return ""
 	}
@@ -178,20 +229,18 @@ func readMessageBody(msg *imap.Message, section *imap.BodySectionName) string {
 	if r == nil {
 		return ""
 	}
-	b, err := io.ReadAll(r)
-	if err != nil {
-		return ""
-	}
-	return string(b)
-}
-
-func imapMessageSeen(msg *imap.Message) bool {
-	for _, flag := range msg.Flags {
-		if flag == imap.SeenFlag {
-			return true
+	b := make([]byte, 0, 4096)
+	buf := make([]byte, 4096)
+	for {
+		n, err := r.Read(buf)
+		if n > 0 {
+			b = append(b, buf[:n]...)
+		}
+		if err != nil {
+			break
 		}
 	}
-	return false
+	return string(b)
 }
 
 func handleBounce(acc model.SMTPAccount, from, subject, body string) {
@@ -224,12 +273,13 @@ func handleBounce(acc model.SMTPAccount, from, subject, body string) {
 		_ = model.SuppressContact(contactID, "bounce", source, acc.ID)
 	}
 
+	eventSource := "gmail-bounce"
 	if trackingID != "" {
-		_ = model.StoreEvent(trackingID, "bounce", "imap-bounce", "")
+		_ = model.StoreEvent(trackingID, "bounce", eventSource, "")
 	} else if sendID > 0 {
 		detail, err := model.GetEmailSendDetail(sendID)
 		if err == nil && detail.TrackingID != "" {
-			_ = model.StoreEvent(detail.TrackingID, "bounce", "imap-bounce", "")
+			_ = model.StoreEvent(detail.TrackingID, "bounce", eventSource, "")
 		}
 	}
 }
