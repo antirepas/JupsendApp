@@ -1,0 +1,49 @@
+{{define "guide_contacts.html"}}
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>{{template "head" .}}</head>
+<body class="h-full bg-ivory text-charcoal">
+<div class="flex h-full">
+{{template "sidebar" .}}
+<main class="flex-1 overflow-y-auto">
+<div class="max-w-3xl mx-auto p-8 guide-prose">
+<a href="/" class="text-sm text-brand-600 font-medium">← Dashboard</a>
+<h2 class="text-2xl font-bold text-charcoal mt-2 mb-1">{{.pageTitle}}</h2>
+<p class="text-gray-500 text-sm mb-8">{{.subtitle}}</p>
+
+<div class="card mb-6 space-y-4">
+    <h3 class="font-semibold text-charcoal">Why import contacts?</h3>
+    <p class="text-sm text-gray-600 leading-relaxed">Contacts are the people you email. Each contact has an email address plus optional variables (like name or company) that fill <code class="text-xs bg-gray-100 px-1 rounded">{{"{{placeholders}}"}}</code> in your templates. Import a list once, then reuse it across campaigns.</p>
+</div>
+
+<div class="card mb-6 space-y-4">
+    <h3 class="font-semibold text-charcoal">Step-by-step</h3>
+    <ol class="space-y-4 text-sm text-gray-600">
+        <li class="flex gap-3"><span class="onboarding-step-num shrink-0">1</span><span>Open <a href="/contacts?tab=import" class="text-brand-600 font-medium">Contacts → Import</a>.</span></li>
+        <li class="flex gap-3"><span class="onboarding-step-num shrink-0">2</span><span><strong>Paste</strong> rows from a spreadsheet (one contact per line: <code class="text-xs bg-gray-100 px-1 rounded">email</code> or <code class="text-xs bg-gray-100 px-1 rounded">email,name,company</code>), or <strong>upload an Excel file</strong> (.xlsx).</span></li>
+        <li class="flex gap-3"><span class="onboarding-step-num shrink-0">3</span><span>Optionally pick a template so column names match your variables, or let jupsend detect columns from the header row.</span></li>
+        <li class="flex gap-3"><span class="onboarding-step-num shrink-0">4</span><span>Optionally add everyone to a <strong>list</strong> so you can target them together in campaigns. List members should share the same variable names.</span></li>
+        <li class="flex gap-3"><span class="onboarding-step-num shrink-0">5</span><span>Confirm the import. You can also add one contact at a time with <a href="/contacts/new" class="text-brand-600 font-medium">New contact</a>.</span></li>
+    </ol>
+</div>
+
+<div class="card mb-6 space-y-3">
+    <h3 class="font-semibold text-charcoal">Tips</h3>
+    <ul class="text-sm text-gray-600 list-disc list-inside space-y-1">
+        <li>Always include an <strong>email</strong> column — other columns become template variables.</li>
+        <li>Use the same variable names in templates and imports (e.g. <code class="text-xs bg-gray-100 px-1 rounded">company name</code>).</li>
+        <li>Download a sample Excel file from the Import tab if you want a ready-made format.</li>
+        <li>Invalid or bounced addresses can be managed under <strong>Suppressions</strong>.</li>
+    </ul>
+</div>
+
+<div class="flex gap-3">
+    <a href="/contacts?tab=import" class="btn-primary">Import contacts</a>
+    <a href="/" class="btn-secondary">Back to dashboard</a>
+</div>
+</div>
+</main>
+</div>
+</body>
+</html>
+{{end}}

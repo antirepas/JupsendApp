@@ -47,6 +47,7 @@ func RegisterRoutes(server *gin.Engine) {
 		"templates/workflows_analytics.html",
 		"templates/suppressions_list.html",
 		"templates/guide_gmail.html",
+		"templates/guide_contacts.html",
 		"templates/guide_templates.html",
 		"templates/guide_campaigns.html",
 		"templates/guide_workflows.html",
@@ -102,6 +103,7 @@ func RegisterRoutes(server *gin.Engine) {
 		settings.GET("/settings/smtp-check", SettingsSMTPCheck)
 
 		settings.GET("/guides/gmail", GuideGmail)
+		settings.GET("/guides/contacts", GuideContacts)
 		settings.GET("/guides/templates", GuideTemplates)
 		settings.GET("/guides/campaigns", GuideCampaigns)
 		settings.GET("/guides/workflows", GuideWorkflows)

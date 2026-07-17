@@ -10,6 +10,10 @@ func GuideGmail(c *gin.Context) {
 	renderGuide(c, "guide_gmail.html", "Connect Gmail", "How to connect Gmail", "Send email and detect bounces from your own Gmail account using OAuth.")
 }
 
+func GuideContacts(c *gin.Context) {
+	renderGuide(c, "guide_contacts.html", "Import contacts", "How to import contacts", "Paste or upload recipients so templates can personalize each email.")
+}
+
 func GuideTemplates(c *gin.Context) {
 	renderGuide(c, "guide_templates.html", "Email templates", "How templates work", "Reusable email designs with personalization variables.")
 }

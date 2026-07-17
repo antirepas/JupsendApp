@@ -14,9 +14,9 @@
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
     <div class="card lg:col-span-2">
         <h2 class="text-2xl font-bold text-charcoal mb-2">Welcome{{if .user.Email}}, {{.user.Email}}{{end}}</h2>
-        <p class="text-gray-500 text-sm mb-6 max-w-lg">You're set up on jupsend. Connect Gmail, create a template, and launch your first campaign to start tracking opens and clicks.</p>
+        <p class="text-gray-500 text-sm mb-6 max-w-lg">You're set up on jupsend. Import contacts, create a template, and launch your first campaign to start tracking opens and clicks.</p>
         {{if not .gmailConnected}}
-        <div class="alert-error mb-4 text-sm">Gmail is not connected yet. <a href="/guides/gmail" class="underline font-medium">Follow the Gmail setup guide</a> before sending.</div>
+        <div class="alert-error mb-4 text-sm">Gmail sending is not ready. <a href="/settings" class="underline font-medium">Check Settings</a> before sending.</div>
         {{end}}
         <a href="/campaigns/new" class="btn-primary">Create campaign</a>
     </div>
@@ -34,10 +34,10 @@
     <h3 class="card-title">3 steps to get started</h3>
     <p class="text-sm text-gray-500 mb-6">Follow these guides, then launch your first outreach.</p>
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <a href="/guides/gmail" class="onboarding-step group hover:bg-ivory rounded-lg transition-colors">
+        <a href="/guides/contacts" class="onboarding-step group hover:bg-ivory rounded-lg transition-colors">
             <span class="onboarding-step-num">1</span>
-            <p class="font-semibold text-charcoal group-hover:text-brand-600">Connect Gmail</p>
-            <p class="text-xs text-gray-500 mt-1">OAuth send + bounce detection</p>
+            <p class="font-semibold text-charcoal group-hover:text-brand-600">Import contacts</p>
+            <p class="text-xs text-gray-500 mt-1">Paste or upload Excel</p>
         </a>
         <a href="/guides/templates" class="onboarding-step group hover:bg-ivory rounded-lg transition-colors">
             <span class="onboarding-step-num">2</span>
@@ -55,11 +55,11 @@
 <div class="mt-6">
     <h3 class="text-sm font-semibold text-charcoal mb-3">Learn how jupsend works</h3>
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <a href="/guides/gmail" class="help-card">
+        <a href="/guides/contacts" class="help-card">
             <span class="help-card-label">Guide</span>
             <div>
-                <p class="font-semibold text-charcoal">How to connect Gmail</p>
-                <p class="text-sm text-gray-500 mt-0.5">OAuth steps, permissions, and send limits</p>
+                <p class="font-semibold text-charcoal">How to import contacts</p>
+                <p class="text-sm text-gray-500 mt-0.5">Paste, Excel upload, lists, and variables</p>
             </div>
         </a>
         <a href="/guides/campaigns" class="help-card">
