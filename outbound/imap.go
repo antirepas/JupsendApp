@@ -52,7 +52,7 @@ func pollGmailAPIAccount(acc model.SMTPAccount) error {
 	if err != nil {
 		return err
 	}
-	ids, err := googleoauth.ListRecentInboxMessageIDs(token, 50)
+	ids, err := googleoauth.ListRecentMessageIDsForPolling(token, 50)
 	if err != nil {
 		return err
 	}
@@ -62,7 +62,8 @@ func pollGmailAPIAccount(acc model.SMTPAccount) error {
 	}
 
 	for _, id := range ids {
-		msg, err := googleoauth.GetMessageFull(token, id)
+		// Raw MIME includes delivery-status + original message headers needed for bounces.
+		msg, err := googleoauth.GetMessageRaw(token, id)
 		if err != nil {
 			log.Printf("Gmail API get message %s account %d: %v", id, acc.ID, err)
 			continue

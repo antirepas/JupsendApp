@@ -60,9 +60,26 @@ func TestIsBounceMessage(t *testing.T) {
 	}
 }
 
+func TestExtractFailedRecipient(t *testing.T) {
+	body := "Final-Recipient: rfc822; alice@nowhere.invalid\r\n"
+	if got := ExtractFailedRecipient(body); got != "alice@nowhere.invalid" {
+		t.Fatalf("got %q", got)
+	}
+	body2 := "X-Failed-Recipients: bad@example.com\n"
+	if got := ExtractFailedRecipient(body2); got != "bad@example.com" {
+		t.Fatalf("got %q", got)
+	}
+}
+
 func TestExtractSendIDFromBounce(t *testing.T) {
 	body := "X-EmailTracker-Send-ID: 42\r\n"
 	if ExtractSendIDFromBounce(body) != 42 {
 		t.Fatal("expected send id 42")
+	}
+}
+
+func TestIsBounceMessageUndeliverable(t *testing.T) {
+	if !IsBounceMessage("mailer-daemon@google.com", "Undeliverable: Hello", "Address not found") {
+		t.Fatal("expected bounce")
 	}
 }
