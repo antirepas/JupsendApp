@@ -7,7 +7,7 @@ import (
 )
 
 func GuideGmail(c *gin.Context) {
-	renderGuide(c, "guide_gmail.html", "Connect Gmail", "How to connect Gmail", "Send email and detect bounces from your own Gmail account using OAuth.")
+	renderGuide(c, "guide_gmail.html", "Connect Gmail", "How to connect Gmail", "Send email from your own Gmail account using OAuth.")
 }
 
 func GuideContacts(c *gin.Context) {

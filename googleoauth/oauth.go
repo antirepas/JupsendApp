@@ -16,11 +16,10 @@ import (
 const AuthTypeGoogle = "google_oauth"
 
 // Gmail OAuth scopes — must match Google Cloud Console Data Access.
-// gmail.send: Gmail API users.messages.send
-// gmail.readonly: Gmail API read (IMAP XOAUTH2 still requires https://mail.google.com/ and will not work with these scopes)
+// gmail.send only (sensitive). gmail.readonly is restricted and requires CASA;
+// inbox bounce/reply polling is disabled until a non-restricted approach is used.
 var gmailScopes = []string{
 	"https://www.googleapis.com/auth/gmail.send",
-	"https://www.googleapis.com/auth/gmail.readonly",
 	"openid",
 	"email",
 	"profile",

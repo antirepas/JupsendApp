@@ -70,7 +70,7 @@
         <div><label class="form-label">From name</label><input name="from_name" class="form-input" value="{{.account.FromName}}"></div>
     </div>
     {{else if .gmailConfigured}}
-    <p class="text-sm text-gray-600">Connect your Gmail account to send email and detect bounces via the Gmail API.</p>
+    <p class="text-sm text-gray-600">Connect your Gmail account to send email from your address.</p>
     <a href="/settings/gmail/connect" class="btn-primary inline-flex">Connect Gmail</a>
     <p class="text-xs text-gray-500">Need help? Read the <a href="/guides/gmail" class="text-brand-600 font-medium">Gmail setup guide</a>.</p>
     {{else}}

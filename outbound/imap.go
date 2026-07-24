@@ -3,7 +3,6 @@ package outbound
 import (
 	"log"
 	"strings"
-	"time"
 
 	"emailtracker.com/googleoauth"
 	"emailtracker.com/model"
@@ -11,16 +10,10 @@ import (
 	"github.com/emersion/go-imap/client"
 )
 
-// StartIMAPPoller starts inbox polling for bounces and replies.
-// Google OAuth accounts use the Gmail API (gmail.readonly); other accounts use IMAP.
+// StartIMAPPoller previously scanned Gmail for bounces/replies.
+// Disabled: gmail.readonly is a restricted scope (CASA). Sending uses gmail.send only.
 func StartIMAPPoller() {
-	LoadConfig()
-	go func() {
-		ticker := time.NewTicker(IMAPPollInterval)
-		for range ticker.C {
-			pollAllAccounts()
-		}
-	}()
+	log.Println("inbox bounce/reply polling disabled (gmail.send only; no gmail.readonly)")
 }
 
 func pollAllAccounts() {
