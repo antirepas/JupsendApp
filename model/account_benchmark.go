@@ -5,26 +5,31 @@ import "emailtracker.com/db"
 type AccountBenchmark struct {
 	PeriodDays             int
 	TotalSends             int
-	UniqueReplies          int
-	ReplyRate              float64
 	OpenRate               float64
 	ClickRate              float64
-	PersonalBestReplyRate  float64
+	OpenRateDelta          float64
+	PersonalBestOpenRate   float64
 	PersonalBestCampaignID int64
-	PriorPeriodReplyRate   float64
-	ReplyRateDelta         float64
+	// Legacy reply fields kept zeroed so older templates/tests don't panic if referenced.
+	UniqueReplies         int
+	ReplyRate             float64
+	PersonalBestReplyRate float64
+	PriorPeriodReplyRate  float64
+	ReplyRateDelta        float64
 }
 
 type RecentExperiment struct {
-	CampaignID           int64
-	Name                 string
-	Hypothesis           string
-	Variable             string
-	ReplyRate            float64
-	ABWinner             string
-	ABWinnerMethod       string
-	TemplateAName        string
-	TemplateBName        string
+	CampaignID     int64
+	Name           string
+	Hypothesis     string
+	Variable       string
+	OpenRate       float64
+	ABWinner       string
+	ABWinnerMethod string
+	TemplateAName  string
+	TemplateBName  string
+	// Legacy
+	ReplyRate float64
 }
 
 func GetAccountBenchmark(userID int64, periodDays int) AccountBenchmark {
@@ -33,8 +38,8 @@ func GetAccountBenchmark(userID int64, periodDays int) AccountBenchmark {
 	}
 	b := AccountBenchmark{PeriodDays: periodDays}
 
-	var priorSends, priorReplies int
-	var uniqueOpens, uniqueClicks int
+	var priorSends int
+	var uniqueOpens, uniqueClicks, priorOpens int
 
 	_ = db.QueryRow(`
 		SELECT
@@ -44,6 +49,7 @@ func GetAccountBenchmark(userID int64, periodDays int) AccountBenchmark {
 		FROM email_sends
 		WHERE user_id = ?
 	`, periodDays, periodDays*2, periodDays, userID).Scan(&b.TotalSends, &priorSends)
+
 	_ = db.QueryRow(`
 		SELECT COUNT(DISTINCT es.contact_id) FROM email_sends es
 		INNER JOIN email_events ee ON (ee.email_send_id = es.id OR ee.tracking_id = es.tracking_id) AND ee.event_type = 'open'
@@ -52,44 +58,40 @@ func GetAccountBenchmark(userID int64, periodDays int) AccountBenchmark {
 
 	_ = db.QueryRow(`
 		SELECT COUNT(DISTINCT es.contact_id) FROM email_sends es
+		INNER JOIN email_events ee ON (ee.email_send_id = es.id OR ee.tracking_id = es.tracking_id) AND ee.event_type = 'open'
+		WHERE es.user_id = ? AND es.sent_at >= CURRENT_TIMESTAMP - (? * INTERVAL '1 day')
+			AND es.sent_at < CURRENT_TIMESTAMP - (? * INTERVAL '1 day')
+	`, userID, periodDays*2, periodDays).Scan(&priorOpens)
+
+	_ = db.QueryRow(`
+		SELECT COUNT(DISTINCT es.contact_id) FROM email_sends es
 		INNER JOIN email_events ee ON (ee.email_send_id = es.id OR ee.tracking_id = es.tracking_id) AND ee.event_type = 'click'
 		WHERE es.user_id = ? AND es.sent_at >= CURRENT_TIMESTAMP - (? * INTERVAL '1 day')
 	`, userID, periodDays).Scan(&uniqueClicks)
 
-	_ = db.QueryRow(`
-		SELECT
-			COUNT(DISTINCT ce.contact_id) FILTER (WHERE ce.created_at >= CURRENT_TIMESTAMP - (? * INTERVAL '1 day')),
-			COUNT(DISTINCT ce.contact_id) FILTER (WHERE ce.created_at >= CURRENT_TIMESTAMP - (? * INTERVAL '1 day')
-				AND ce.created_at < CURRENT_TIMESTAMP - (? * INTERVAL '1 day'))
-		FROM contact_events ce
-		INNER JOIN email_sends es ON es.id = ce.email_send_id
-		WHERE es.user_id = ? AND ce.event_type = 'REPLY'
-	`, periodDays, periodDays*2, periodDays, userID).Scan(&b.UniqueReplies, &priorReplies)
-
 	if b.TotalSends > 0 {
-		b.ReplyRate = float64(b.UniqueReplies) / float64(b.TotalSends) * 100
 		b.OpenRate = float64(uniqueOpens) / float64(b.TotalSends) * 100
 		b.ClickRate = float64(uniqueClicks) / float64(b.TotalSends) * 100
 	}
-
+	var priorOpenRate float64
 	if priorSends > 0 {
-		b.PriorPeriodReplyRate = float64(priorReplies) / float64(priorSends) * 100
+		priorOpenRate = float64(priorOpens) / float64(priorSends) * 100
 	}
-	b.ReplyRateDelta = b.ReplyRate - b.PriorPeriodReplyRate
+	b.OpenRateDelta = b.OpenRate - priorOpenRate
 
-	b.PersonalBestReplyRate, b.PersonalBestCampaignID = findPersonalBestCampaign(userID)
+	b.PersonalBestOpenRate, b.PersonalBestCampaignID = findPersonalBestCampaignByOpen(userID)
 	return b
 }
 
-func findPersonalBestCampaign(userID int64) (float64, int64) {
+func findPersonalBestCampaignByOpen(userID int64) (float64, int64) {
 	const minSends = 20
 	rows, err := db.Query(`
 		SELECT c.id,
 			COUNT(es.id) AS sends,
-			COUNT(DISTINCT ce.contact_id) AS replies
+			COUNT(DISTINCT CASE WHEN ee.event_type = 'open' THEN es.contact_id END) AS opens
 		FROM campaigns c
 		INNER JOIN email_sends es ON es.campaign_id = c.id
-		LEFT JOIN contact_events ce ON ce.email_send_id = es.id AND ce.event_type = 'REPLY'
+		LEFT JOIN email_events ee ON (ee.email_send_id = es.id OR ee.tracking_id = es.tracking_id) AND ee.event_type = 'open'
 		WHERE c.user_id = ? AND COALESCE(c.execution_mode, 'bulk') = 'bulk'
 		GROUP BY c.id
 		HAVING COUNT(es.id) >= ?
@@ -103,11 +105,11 @@ func findPersonalBestCampaign(userID int64) (float64, int64) {
 	var bestID int64
 	for rows.Next() {
 		var id int64
-		var sends, replies int
-		if rows.Scan(&id, &sends, &replies) != nil || sends == 0 {
+		var sends, opens int
+		if rows.Scan(&id, &sends, &opens) != nil || sends == 0 {
 			continue
 		}
-		rate := float64(replies) / float64(sends) * 100
+		rate := float64(opens) / float64(sends) * 100
 		if rate > bestRate {
 			bestRate = rate
 			bestID = id
@@ -142,9 +144,9 @@ func ListRecentExperiments(userID int64, limit int) ([]RecentExperiment, error) 
 		if err := rows.Scan(&e.CampaignID, &e.Name, &e.Hypothesis, &e.Variable, &e.TemplateAName, &e.TemplateBName); err != nil {
 			return nil, err
 		}
-		sent, replies := campaignOverviewCounts(e.CampaignID)
+		sent, opens := campaignOverviewOpenCounts(e.CampaignID)
 		if sent > 0 {
-			e.ReplyRate = float64(replies) / float64(sent) * 100
+			e.OpenRate = float64(opens) / float64(sent) * 100
 		}
 		e.ABWinner, e.ABWinnerMethod = experimentABSummary(e.CampaignID)
 		out = append(out, e)
@@ -153,12 +155,5 @@ func ListRecentExperiments(userID int64, limit int) ([]RecentExperiment, error) 
 }
 
 func CountRepliesThisMonth(userID int64) int {
-	var n int
-	_ = db.QueryRow(`
-		SELECT COUNT(DISTINCT ce.contact_id) FROM contact_events ce
-		INNER JOIN email_sends es ON es.id = ce.email_send_id
-		WHERE es.user_id = ? AND ce.event_type = 'REPLY'
-			AND ce.created_at >= date_trunc('month', CURRENT_TIMESTAMP)
-	`, userID).Scan(&n)
-	return n
+	return 0
 }

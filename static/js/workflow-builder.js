@@ -103,9 +103,7 @@
   const PREDICATE_LABELS = {
     has_opened: 'Opened',
     has_not_opened: 'Not opened',
-    click_count_gte: 'Clicked',
-    has_replied: 'Replied',
-    has_not_replied: 'Not replied'
+    click_count_gte: 'Clicked'
   };
 
   function conditionPredicateSummary(n) {
@@ -116,15 +114,15 @@
       const min = params.min || 1;
       label = min > 1 ? `Clicked ≥ ${min}` : 'Clicked';
     }
-    if (pred === 'has_not_opened' || pred === 'has_not_replied') {
+    if (pred === 'has_not_opened') {
       const days = params.wait_days || 3;
-      label = (pred === 'has_not_opened' ? 'Not opened' : 'Not replied') + ` after ${days}d`;
+      label = `Not opened after ${days}d`;
     }
     return label;
   }
 
   function needsGracePeriod(pred) {
-    return pred === 'has_not_opened' || pred === 'has_not_replied';
+    return pred === 'has_not_opened';
   }
 
   function clearConditionRefsToNode(deletedKey) {
@@ -822,8 +820,6 @@
           <option value="has_opened">Has opened</option>
           <option value="has_not_opened">Has not opened (after wait)</option>
           <option value="click_count_gte">Click count ≥</option>
-          <option value="has_replied">Has replied</option>
-          <option value="has_not_replied">Has not replied (after wait)</option>
         </select>
         <label class="form-label mt-2">Condition priority</label>
         <input type="number" min="0" class="form-input" id="prop-cond-priority" value="${n.config.priority || 50}">
@@ -831,7 +827,7 @@
         <div id="prop-wait-days-wrap" class="mt-2 hidden">
           <label class="form-label">Wait before checking (days)</label>
           <input type="number" min="1" class="form-input" id="prop-wait-days" value="${waitDays}">
-          <p class="text-xs text-slate-500 mt-1">The workflow pauses on this step until the wait elapses. If they open or reply sooner, the "no" branch runs immediately.</p>
+          <p class="text-xs text-slate-500 mt-1">The workflow pauses on this step until the wait elapses. If they open sooner, the "no" branch runs immediately.</p>
         </div>
         <div id="prop-min-clicks-wrap" class="mt-2 hidden">
           <label class="form-label">Minimum clicks</label>
@@ -985,6 +981,8 @@
         if ((config.predicate === 'has_not_opened' || config.predicate === 'has_not_replied') && !config.params.wait_days) {
           config.params.wait_days = 3;
         }
+        if (config.predicate === 'has_replied') config.predicate = 'has_opened';
+        if (config.predicate === 'has_not_replied') config.predicate = 'has_not_opened';
       }
       nodes.push({
         node_key: n.NodeKey || n.node_key,

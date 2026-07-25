@@ -2,18 +2,18 @@ package model
 
 import "testing"
 
-func TestPickABWinnerReplyFirst(t *testing.T) {
-	a := VariantAnalytics{Sent: 50, UniqueReplies: 5, ReplyRate: 10, OpenRate: 20, ClickRate: 2}
-	b := VariantAnalytics{Sent: 50, UniqueReplies: 2, ReplyRate: 4, OpenRate: 30, ClickRate: 5}
+func TestPickABWinnerOpenFirst(t *testing.T) {
+	a := VariantAnalytics{Sent: 50, UniqueOpens: 15, OpenRate: 30, ClickRate: 5}
+	b := VariantAnalytics{Sent: 50, UniqueOpens: 10, OpenRate: 20, ClickRate: 2}
 	winner, method := pickABWinner(a, b, true)
-	if winner != "A" || method != "reply" {
+	if winner != "A" || method != "open" {
 		t.Fatalf("got %q %q", winner, method)
 	}
 }
 
 func TestPickABWinnerFallbackOpens(t *testing.T) {
-	a := VariantAnalytics{Sent: 50, OpenRate: 25, ClickRate: 3}
-	b := VariantAnalytics{Sent: 50, OpenRate: 15, ClickRate: 2}
+	a := VariantAnalytics{Sent: 5, OpenRate: 25, ClickRate: 3}
+	b := VariantAnalytics{Sent: 5, OpenRate: 15, ClickRate: 2}
 	winner, method := pickABWinner(a, b, true)
 	if winner != "A" || method != "opens" {
 		t.Fatalf("got %q %q", winner, method)

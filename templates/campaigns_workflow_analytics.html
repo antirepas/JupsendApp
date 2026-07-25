@@ -162,10 +162,6 @@
                 <span class="workflow-analytics-pill-value text-emerald-600">{{.analytics.Engagement.UniqueClicks}}</span>
                 <span class="workflow-analytics-pill-label">Unique clicks</span>
             </div>
-            <div class="workflow-analytics-pill">
-                <span class="workflow-analytics-pill-value text-violet-600">{{.analytics.Engagement.Replies}}</span>
-                <span class="workflow-analytics-pill-label">Replies</span>
-            </div>
         </div>
     </div>
 
@@ -186,11 +182,6 @@
             <span class="workflow-funnel-label">Clicked</span>
             <div class="workflow-funnel-track"><div class="workflow-funnel-bar workflow-funnel-bar--click" style="width: {{printf "%.1f" .analytics.Engagement.ClickPctOfSent}}%"></div></div>
             <span class="workflow-funnel-count">{{.analytics.Engagement.Funnel.Clicked}} <span class="workflow-funnel-pct">({{printf "%.0f" .analytics.Engagement.ClickPctOfSent}}%)</span></span>
-        </div>
-        <div class="workflow-funnel-row">
-            <span class="workflow-funnel-label">Replied</span>
-            <div class="workflow-funnel-track"><div class="workflow-funnel-bar workflow-funnel-bar--reply" style="width: {{printf "%.1f" .analytics.Engagement.ReplyPctOfSent}}%"></div></div>
-            <span class="workflow-funnel-count">{{.analytics.Engagement.Funnel.Replied}} <span class="workflow-funnel-pct">({{printf "%.0f" .analytics.Engagement.ReplyPctOfSent}}%)</span></span>
         </div>
     </div>
     {{else}}
@@ -220,7 +211,6 @@
                 <th>Emails sent</th>
                 <th>Opens</th>
                 <th>Clicks</th>
-                <th>Replied</th>
             </tr>
         </thead>
         <tbody>
@@ -232,7 +222,6 @@
             <td>{{.EmailsSent}}</td>
             <td class="text-blue-600">{{.OpenCount}}</td>
             <td class="text-emerald-600">{{.ClickCount}}</td>
-            <td>{{if .HasReplied}}<span class="badge badge-violet">Yes</span>{{else}}—{{end}}</td>
         </tr>
         {{end}}
         </tbody>

@@ -198,14 +198,6 @@ const recentContactActivitySQL = `
 	LEFT JOIN tracked_links tl ON tl.tracking_id = ee.tracking_id AND ee.event_type = 'click'
 	LEFT JOIN campaigns camp ON camp.id = es.campaign_id
 	WHERE es.user_id = ? AND ee.event_type IN ('open', 'click')
-	UNION ALL
-	SELECT c.id, c.email, COALESCE(ce.email_send_id, 0), 'reply',
-		'', COALESCE(camp.name, ''), ce.occurred_at
-	FROM contact_events ce
-	INNER JOIN contact c ON c.id = ce.contact_id
-	LEFT JOIN email_sends es ON es.id = ce.email_send_id
-	LEFT JOIN campaigns camp ON camp.id = es.campaign_id
-	WHERE c.user_id = ? AND ce.event_type = 'REPLY'
 `
 
 func GetRecentContactActivity(userID int64, limit int) ([]ContactActivityItem, error) {
@@ -229,7 +221,7 @@ func GetRecentContactActivityPage(userID int64, page, pageSize int) (ContactActi
 
 	countQuery := `SELECT COUNT(*) FROM (` + recentContactActivitySQL + `) activity`
 	var total int
-	if err := db.QueryRow(countQuery, userID, userID).Scan(&total); err != nil {
+	if err := db.QueryRow(countQuery, userID).Scan(&total); err != nil {
 		return ContactActivityPage{}, err
 	}
 
@@ -247,7 +239,7 @@ func GetRecentContactActivityPage(userID int64, page, pageSize int) (ContactActi
 		ORDER BY created_at DESC
 		LIMIT ? OFFSET ?
 	`
-	rows, err := db.Query(listQuery, userID, userID, pageSize, offset)
+	rows, err := db.Query(listQuery, userID, pageSize, offset)
 	if err != nil {
 		return ContactActivityPage{}, err
 	}

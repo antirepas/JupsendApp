@@ -26,24 +26,17 @@
 
 <div class="card space-y-4">
     <h3 class="card-title">Outreach goals</h3>
-    <p class="text-sm text-gray-600">Work backward from meetings to replies — your dashboard tracks progress.</p>
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <p class="text-sm text-gray-600">Optional monthly meeting target and daily send cap for planning.</p>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
             <label class="form-label">Meetings per month</label>
             <input name="goal_meetings_per_month" type="number" class="form-input" min="0" value="{{.user.GoalMeetingsPerMonth}}">
-        </div>
-        <div>
-            <label class="form-label">Replies that book a meeting (%)</label>
-            <input name="goal_reply_to_meeting_pct" type="number" class="form-input" min="1" max="100" value="{{if .user.GoalReplyToMeetingPct}}{{.user.GoalReplyToMeetingPct}}{{else}}50{{end}}">
         </div>
         <div>
             <label class="form-label">Daily send cap (optional)</label>
             <input name="goal_daily_send_cap" type="number" class="form-input" min="0" value="{{.user.GoalDailySendCap}}">
         </div>
     </div>
-    {{if .goalsPreview.HasGoals}}
-    <p class="text-xs text-gray-500">You need ~{{printf "%.0f" .goalsPreview.RepliesNeeded}} replies/month{{if gt .goalsPreview.RequiredReplyRate 0.0}} · ~{{printf "%.1f" .goalsPreview.RequiredReplyRate}}% reply rate at your cap{{end}}</p>
-    {{end}}
 </div>
 
 <div class="card space-y-4">

@@ -111,12 +111,6 @@
         <span class="kpi-value">{{printf "%.0f" .benchmark.ClickRate}}%</span>
     </div>
     <div class="kpi-card">
-        <span class="kpi-accent kpi-accent-reply"></span>
-        <span class="kpi-label">Reply rate</span>
-        <span class="kpi-value">{{printf "%.0f" .benchmark.ReplyRate}}%</span>
-        {{if .benchmark.ReplyRateDelta}}<span class="kpi-sub {{if gt .benchmark.ReplyRateDelta 0.0}}text-emerald-600{{else if lt .benchmark.ReplyRateDelta 0.0}}text-red-600{{end}}">{{if gt .benchmark.ReplyRateDelta 0.0}}+{{end}}{{printf "%.1f" .benchmark.ReplyRateDelta}}% vs prior</span>{{end}}
-    </div>
-    <div class="kpi-card">
         <span class="kpi-accent kpi-accent-opp"></span>
         <span class="kpi-label">Opportunities</span>
         <a href="/contacts/interested" class="kpi-value hover:text-brand-600 transition-colors">{{.interestedCount}}</a>
@@ -132,54 +126,38 @@
 
 <div class="mb-6">
     <h3 class="text-lg font-semibold text-charcoal">Your outreach lab</h3>
-    <p class="text-gray-500 mt-1 text-sm">Test, measure reply rate, beat your personal best</p>
+    <p class="text-gray-500 mt-1 text-sm">Test, measure opens and clicks, beat your personal best</p>
 </div>
 
-<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
     <div class="stat-card">
-        <p class="stat-label">Personal best</p>
-        <p class="stat-value text-emerald-600">{{if gt .benchmark.PersonalBestReplyRate 0.0}}{{printf "%.1f" .benchmark.PersonalBestReplyRate}}%{{else}}—{{end}}</p>
+        <p class="stat-label">Personal best open rate</p>
+        <p class="stat-value text-emerald-600">{{if gt .benchmark.PersonalBestOpenRate 0.0}}{{printf "%.1f" .benchmark.PersonalBestOpenRate}}%{{else}}—{{end}}</p>
         {{if .benchmark.PersonalBestCampaignID}}<a href="/campaigns/{{.benchmark.PersonalBestCampaignID}}/analytics" class="text-xs text-brand-600">View campaign</a>{{end}}
-    </div>
-    <div class="stat-card">
-        <p class="stat-label">Replies this month</p>
-        <p class="stat-value">{{.goalProgress.RepliesThisMonth}}</p>
-        {{if .goalProgress.HasGoals}}<p class="text-sm text-gray-500 mt-1">{{printf "%.0f" .goalProgress.RepliesProgressPct}}% of {{printf "%.0f" .goalProgress.RepliesNeeded}} goal</p>{{end}}
     </div>
     <div class="stat-card">
         <p class="stat-label">All-time sent</p>
         <p class="stat-value">{{.stats.TotalSends}}</p>
     </div>
     <div class="stat-card">
-        <p class="stat-label">All-time replies</p>
-        <p class="stat-value text-violet-600">{{.stats.TotalReplies}}</p>
-        <p class="text-sm text-gray-500 mt-1">{{printf "%.1f" .stats.ReplyRate}}% reply rate</p>
+        <p class="stat-label">All-time open rate</p>
+        <p class="stat-value text-emerald-600">{{printf "%.1f" .stats.OpenRate}}%</p>
+        <p class="text-sm text-gray-500 mt-1">{{printf "%.1f" .stats.ClickRate}}% click rate</p>
     </div>
 </div>
-
-{{if .goalProgress.HasGoals}}
-<div class="card mb-6">
-    <h3 class="card-title">Monthly goal</h3>
-    <p class="text-sm text-gray-600">Target: {{.user.GoalMeetingsPerMonth}} meetings · Need ~{{printf "%.0f" .goalProgress.RepliesNeeded}} replies this month</p>
-    <div class="mt-3 bg-slate-200 rounded-full h-2">
-        <div class="bg-violet-600 h-2 rounded-full" style="width: {{if gt .goalProgress.RepliesProgressPct 100.0}}100{{else}}{{printf "%.0f" .goalProgress.RepliesProgressPct}}{{end}}%"></div>
-    </div>
-    {{if gt .goalProgress.RequiredReplyRate 0.0}}<p class="text-xs text-gray-500 mt-2">At your send cap, you need ~{{printf "%.1f" .goalProgress.RequiredReplyRate}}% reply rate to hit this goal.</p>{{end}}
-</div>
-{{end}}
 
 {{if .recentExperiments}}
 <div class="card mb-8">
     <h3 class="card-title">Recent experiments</h3>
     <table class="data-table">
-        <thead><tr><th>Campaign</th><th>Hypothesis</th><th>Reply rate</th><th>Winner</th><th></th></tr></thead>
+        <thead><tr><th>Campaign</th><th>Hypothesis</th><th>Open rate</th><th>Winner</th><th></th></tr></thead>
         <tbody>
         {{range .recentExperiments}}
         <tr>
             <td class="font-medium">{{.Name}}</td>
             <td class="text-sm text-gray-600 max-w-xs truncate">{{if .Hypothesis}}{{.Hypothesis}}{{else}}—{{end}}</td>
-            <td>{{printf "%.1f" .ReplyRate}}%</td>
-            <td>{{if .ABWinner}}{{.ABWinner}}{{if eq .ABWinnerMethod "reply"}} <span class="text-xs text-gray-500">(replies)</span>{{end}}{{else}}—{{end}}</td>
+            <td>{{printf "%.1f" .OpenRate}}%</td>
+            <td>{{if .ABWinner}}{{.ABWinner}}{{if eq .ABWinnerMethod "opens"}} <span class="text-xs text-gray-500">(opens)</span>{{end}}{{else}}—{{end}}</td>
             <td class="text-right"><a href="/campaigns/{{.CampaignID}}/analytics" class="text-brand-600 text-sm">Analytics</a></td>
         </tr>
         {{end}}
@@ -190,7 +168,7 @@
 
 <div class="card mb-8">
     <h3 class="card-title">Contact activity</h3>
-    <p class="text-sm text-gray-500 mb-4">Recent opens, clicks, and replies</p>
+    <p class="text-sm text-gray-500 mb-4">Recent opens and clicks</p>
     {{if .contactActivity}}
     <div class="overflow-x-auto">
     <table class="data-table">
@@ -210,10 +188,10 @@
                     <a href="/contacts/{{.ContactID}}" class="text-brand-600 hover:underline">{{.ContactEmail}}</a>
                 </td>
                 <td>
-                    <span class="badge {{if eq .EventType "open"}}badge-green{{else if eq .EventType "click"}}badge-blue{{else if eq .EventType "reply"}}badge-violet{{else}}badge-gray{{end}}">{{.EventType}}</span>
+                    <span class="badge {{if eq .EventType "open"}}badge-green{{else if eq .EventType "click"}}badge-blue{{else}}badge-gray{{end}}">{{.EventType}}</span>
                 </td>
                 <td class="text-sm text-gray-600 max-w-xs truncate">
-                    {{if eq .EventType "click"}}{{if .LinkURL}}{{.LinkURL}}{{else}}—{{end}}{{else if eq .EventType "reply"}}Replied to your email{{else if eq .EventType "open"}}Opened email{{else}}{{.EventType}}{{end}}
+                    {{if eq .EventType "click"}}{{if .LinkURL}}{{.LinkURL}}{{else}}—{{end}}{{else if eq .EventType "open"}}Opened email{{else}}{{.EventType}}{{end}}
                 </td>
                 <td class="text-sm text-gray-500">{{if .CampaignName}}{{.CampaignName}}{{else}}—{{end}}</td>
                 <td class="text-sm text-gray-400 whitespace-nowrap">{{.CreatedAt.Format "Jan 2, 15:04"}}</td>
@@ -269,7 +247,7 @@
 (function () {
     const dailyStats = [
         {{range .dailyStats}}
-        { date: "{{.Date}}", sends: {{.Sends}}, opens: {{.Opens}}, uniqueOpens: {{.UniqueOpens}}, clicks: {{.Clicks}}, uniqueClicks: {{.UniqueClicks}}, replies: {{.Replies}} },
+        { date: "{{.Date}}", sends: {{.Sends}}, opens: {{.Opens}}, uniqueOpens: {{.UniqueOpens}}, clicks: {{.Clicks}}, uniqueClicks: {{.UniqueClicks}} },
         {{end}}
     ];
     const labels = dailyStats.map(d => {
@@ -281,11 +259,10 @@
         { label: 'Sent', data: dailyStats.map(d => d.sends), borderColor: '#3B82F6', backgroundColor: '#3B82F6', tension: 0.35, pointRadius: 0, borderWidth: 2 },
         { label: 'Total opens', data: dailyStats.map(d => d.opens), borderColor: '#F97316', backgroundColor: '#F97316', tension: 0.35, pointRadius: 0, borderWidth: 2 },
         { label: 'Unique opens', data: dailyStats.map(d => d.uniqueOpens), borderColor: '#84CC16', backgroundColor: '#84CC16', tension: 0.35, pointRadius: 0, borderWidth: 2 },
-        { label: 'Total replies', data: dailyStats.map(d => d.replies), borderColor: '#14B8A6', backgroundColor: '#14B8A6', tension: 0.35, pointRadius: 0, borderWidth: 2 },
         { label: 'Total clicks', data: dailyStats.map(d => d.clicks), borderColor: '#9CA3AF', backgroundColor: '#9CA3AF', tension: 0.35, pointRadius: 0, borderWidth: 2 },
         { label: 'Unique clicks', data: dailyStats.map(d => d.uniqueClicks), borderColor: '#93C5FD', backgroundColor: '#93C5FD', tension: 0.35, pointRadius: 0, borderWidth: 2 }
     ];
-    const allValues = dailyStats.flatMap(d => [d.sends, d.opens, d.uniqueOpens, d.replies, d.clicks, d.uniqueClicks]);
+    const allValues = dailyStats.flatMap(d => [d.sends, d.opens, d.uniqueOpens, d.clicks, d.uniqueClicks]);
     const dataMax = allValues.length ? Math.max(...allValues) : 0;
     const ySuggestedMax = dataMax === 0 ? 4 : Math.max(Math.ceil(dataMax * 1.35), dataMax + 1);
 

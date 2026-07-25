@@ -125,10 +125,10 @@ func GetCampaignAnalyticsFor(c Campaign, userID int64) (CampaignAnalytics, error
 
 	bench := analytics.AccountBenchmark
 	if analytics.Overview.SentCount > 0 {
-		analytics.CampaignReplyRate = float64(analytics.Overview.ReplyCount) / float64(analytics.Overview.SentCount) * 100
-		analytics.ReplyRateDelta = analytics.CampaignReplyRate - bench.ReplyRate
+		analytics.CampaignOpenRate = analytics.Overview.OpenRate
+		analytics.OpenRateDelta = analytics.CampaignOpenRate - bench.OpenRate
 	}
-	if bench.PersonalBestCampaignID == campaignID || (analytics.CampaignReplyRate > 0 && analytics.CampaignReplyRate >= bench.PersonalBestReplyRate && analytics.Overview.SentCount >= 20) {
+	if bench.PersonalBestCampaignID == campaignID || (analytics.CampaignOpenRate > 0 && analytics.CampaignOpenRate >= bench.PersonalBestOpenRate && analytics.Overview.SentCount >= 20) {
 		analytics.IsPersonalBest = true
 	}
 

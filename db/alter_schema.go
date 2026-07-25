@@ -37,7 +37,7 @@ func runAlterSchema() {
 		`ALTER TABLE contact ADD COLUMN IF NOT EXISTS replied_at TIMESTAMPTZ`,
 		`ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS experiment_variable TEXT DEFAULT ''`,
 		`ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS experiment_hypothesis TEXT DEFAULT ''`,
-		`ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS success_metric TEXT DEFAULT 'reply'`,
+		`ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS success_metric TEXT DEFAULT 'open'`,
 		`ALTER TABLE workflow_instances ADD COLUMN IF NOT EXISTS fork_root_id BIGINT`,
 		`ALTER TABLE workflow_instances ADD COLUMN IF NOT EXISTS branch_priority INTEGER NOT NULL DEFAULT 0`,
 		`CREATE TABLE IF NOT EXISTS campaign_workflow_step_templates (
