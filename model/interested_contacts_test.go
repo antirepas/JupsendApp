@@ -21,13 +21,10 @@ func TestListInterestedContactsScoring(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = InsertContactEvent(ContactEventInput{
-		ContactID:   cid,
-		CampaignID:  campaignID,
-		EmailSendID: sendID,
-		EventType:   "REPLY",
-		DedupeKey:   fmt.Sprintf("test-reply-%d", cid),
-	})
+	_, err = db.Exec(`
+		INSERT INTO email_events (email_send_id, tracking_id, event_type, created_at)
+		VALUES (?, ?, 'click', CURRENT_TIMESTAMP)
+	`, sendID, fmt.Sprintf("track-test-%d", cid))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,6 +38,9 @@ func TestListInterestedContactsScoring(t *testing.T) {
 	}
 	if list[0].Tier != "hot" {
 		t.Fatalf("tier=%q", list[0].Tier)
+	}
+	if list[0].LastSignal != "click" {
+		t.Fatalf("lastSignal=%q", list[0].LastSignal)
 	}
 }
 
