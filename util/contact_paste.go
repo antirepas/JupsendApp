@@ -10,7 +10,7 @@ func ParseContactPaste(text string) []ContactImportRow {
 	var rows []ContactImportRow
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
-		if line == "" {
+		if line == "" { //
 			continue
 		}
 		email, ok := ResolveImportEmail(line)
