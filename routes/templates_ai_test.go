@@ -130,9 +130,6 @@ func TestTemplateAIRewriteSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := model.ApplyPlanLimitsToUser(userID, model.PlanTierFree); err != nil {
-		t.Fatal(err)
-	}
 
 	gin.SetMode(gin.TestMode)
 	config.OpenAIAPIKey = "test-key"
