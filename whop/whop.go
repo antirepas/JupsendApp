@@ -42,14 +42,32 @@ func CreateCheckout(userID int64, tier model.PlanTier, redirectURL string) (stri
 	if err != nil {
 		return "", err
 	}
+	return CreateCheckoutWithPlanID(userID, planID, redirectURL, map[string]string{
+		"user_id":   strconv.FormatInt(userID, 10),
+		"plan_tier": string(tier),
+	})
+}
+
+// CreateCheckoutWithPlanID starts Whop checkout for an arbitrary plan_ id (e.g. mailbox add-on).
+func CreateCheckoutWithPlanID(userID int64, planID, redirectURL string, metadata map[string]string) (string, error) {
+	if !IsConfigured() {
+		return "", fmt.Errorf("whop not configured: set WHOP_API_KEY and WHOP_COMPANY_ID")
+	}
+	planID = strings.TrimSpace(planID)
+	if planID == "" {
+		return "", fmt.Errorf("whop plan id required")
+	}
+	if metadata == nil {
+		metadata = map[string]string{}
+	}
+	if metadata["user_id"] == "" {
+		metadata["user_id"] = strconv.FormatInt(userID, 10)
+	}
 	body := map[string]interface{}{
 		"mode":         "payment",
 		"plan_id":      planID,
 		"redirect_url": redirectURL,
-		"metadata": map[string]string{
-			"user_id":   strconv.FormatInt(userID, 10),
-			"plan_tier": string(tier),
-		},
+		"metadata":     metadata,
 	}
 	raw, _ := json.Marshal(body)
 	req, err := http.NewRequest(http.MethodPost, apiBase()+"/checkout_configurations", bytes.NewReader(raw))
@@ -80,13 +98,12 @@ func CreateCheckout(userID int64, tier model.PlanTier, redirectURL string) (stri
 }
 
 func resolvePlanIDForTier(tier model.PlanTier) (string, error) {
+	tier = model.NormalizePlanTier(string(tier))
 	switch tier {
 	case model.PlanTierPro:
 		return resolvePlanIDFromConfig(config.WhopPlanIDPro, config.WhopPlanID, config.WhopProductID)
-	case model.PlanTierStandard:
-		return resolvePlanIDFromConfig(config.WhopPlanIDStandard, config.WhopPlanID, config.WhopProductID)
 	default:
-		return resolvePlanIDFromConfig(config.WhopPlanID, config.WhopPlanID, config.WhopProductID)
+		return "", fmt.Errorf("whop checkout is only available for Pro")
 	}
 }
 

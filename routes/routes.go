@@ -17,11 +17,17 @@ func RegisterRoutes(server *gin.Engine) {
 	server.LoadHTMLFiles(
 		"templates/partials/head.html",
 		"templates/partials/sidebar.html",
+		"templates/partials/reply_pro_note.html",
 		"templates/partials/workflow_archive_modal.html",
 		"templates/auth_login.html",
 		"templates/auth_signup.html",
 		"templates/pricing_plan.html",
 		"templates/onboarding_activating.html",
+		"templates/onboarding_domain.html",
+		"templates/onboarding_domain_status.html",
+		"templates/mailboxes.html",
+		"templates/mailboxes_buy.html",
+		"templates/mailboxes_buy_domain.html",
 		"templates/settings.html",
 		"templates/billing.html",
 		"templates/dashboard.html",
@@ -75,6 +81,22 @@ func RegisterRoutes(server *gin.Engine) {
 		onboarding.GET("/onboarding/activate", OnboardingActivatePage)
 	}
 
+	mailboxOnboarding := server.Group("/")
+	mailboxOnboarding.Use(RequireAuth(), RequireSubscription())
+	{
+		mailboxOnboarding.GET("/onboarding/domain", OnboardingDomainPage)
+		mailboxOnboarding.POST("/onboarding/domain/search", OnboardingDomainSearch)
+		mailboxOnboarding.POST("/onboarding/domain/purchase", OnboardingDomainPurchase)
+		mailboxOnboarding.GET("/onboarding/domain/status", OnboardingDomainStatus)
+		mailboxOnboarding.GET("/mailboxes", MailboxesPage)
+		mailboxOnboarding.GET("/mailboxes/buy", MailboxesBuyPage)
+		mailboxOnboarding.POST("/mailboxes/buy/checkout", MailboxesBuyCheckout)
+		mailboxOnboarding.GET("/mailboxes/domains/buy", MailboxesBuyDomainPage)
+		mailboxOnboarding.POST("/mailboxes/domains/buy/search", MailboxesBuyDomainSearch)
+		mailboxOnboarding.POST("/mailboxes/domains/buy/checkout", MailboxesBuyDomainCheckout)
+		mailboxOnboarding.POST("/mailboxes/:id/default", MailboxesSetDefault)
+	}
+
 	v1 := server.Group("/api/v1")
 	v1.GET("/track/open/:id", TrackOpen)
 	v1.HEAD("/track/open/:id", TrackOpen)
@@ -110,7 +132,7 @@ func RegisterRoutes(server *gin.Engine) {
 	}
 
 	authd := server.Group("/")
-	authd.Use(RequireAuth(), RequireSubscription())
+	authd.Use(RequireAuth(), RequireSubscription(), RequireMailboxSetup())
 	{
 		authd.GET("/", Dashboard)
 		authd.GET("/test-pixel", TestTrackingPixel)
@@ -197,7 +219,7 @@ func RegisterRoutes(server *gin.Engine) {
 	}
 
 	api := server.Group("/api/v1")
-	api.Use(RequireAuth(), RequireSubscription())
+	api.Use(RequireAuth(), RequireSubscription(), RequireMailboxSetup())
 	{
 		api.POST("/template", SaveTemplate)
 		api.POST("/contact", SaveContacts)

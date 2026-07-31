@@ -113,7 +113,7 @@ func CreateCampaign(userID int64, name string, templateAID, templateBID int64, e
 		expHyp = experimentHypothesis
 	}
 	row := db.QueryRow(
-		`INSERT INTO campaigns (name, template_a_id, template_b_id, execution_mode, workflow_version_id, user_id, experiment_variable, experiment_hypothesis, success_metric) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open') RETURNING id`,
+		`INSERT INTO campaigns (name, template_a_id, template_b_id, execution_mode, workflow_version_id, user_id, experiment_variable, experiment_hypothesis, success_metric) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'reply') RETURNING id`,
 		name, templateAID, bID, executionMode, wfVer, userID, expVar, expHyp,
 	)
 	var id int64
@@ -207,7 +207,7 @@ func GetCampaign(id int64) (Campaign, error) {
 		SELECT id, COALESCE(user_id, 0), name, template_a_id, template_b_id, status, created_at, scheduled_at,
 			COALESCE(execution_mode, 'bulk'), COALESCE(workflow_version_id, 0), COALESCE(is_sending, 0),
 			COALESCE(contact_list_id, 0),
-			COALESCE(experiment_variable, ''), COALESCE(experiment_hypothesis, ''), COALESCE(success_metric, 'open')
+			COALESCE(experiment_variable, ''), COALESCE(experiment_hypothesis, ''), COALESCE(success_metric, 'reply')
 		FROM campaigns WHERE id = ?
 	`, id)
 	return scanCampaignRow(row)
@@ -218,7 +218,7 @@ func GetCampaignForUser(id, userID int64) (Campaign, error) {
 		SELECT id, COALESCE(user_id, 0), name, template_a_id, template_b_id, status, created_at, scheduled_at,
 			COALESCE(execution_mode, 'bulk'), COALESCE(workflow_version_id, 0), COALESCE(is_sending, 0),
 			COALESCE(contact_list_id, 0),
-			COALESCE(experiment_variable, ''), COALESCE(experiment_hypothesis, ''), COALESCE(success_metric, 'open')
+			COALESCE(experiment_variable, ''), COALESCE(experiment_hypothesis, ''), COALESCE(success_metric, 'reply')
 		FROM campaigns WHERE id = ? AND user_id = ?
 	`, id, userID)
 	return scanCampaignRow(row)

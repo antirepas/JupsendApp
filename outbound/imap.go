@@ -3,17 +3,26 @@ package outbound
 import (
 	"log"
 	"strings"
+	"time"
 
-	"emailtracker.com/googleoauth"
 	"emailtracker.com/model"
 	"github.com/emersion/go-imap"
 	"github.com/emersion/go-imap/client"
 )
 
-// StartIMAPPoller previously scanned Gmail for bounces/replies.
-// Disabled: gmail.readonly is a restricted scope (CASA). Sending uses gmail.send only.
+// StartIMAPPoller scans InboxKit mailboxes for bounces/replies via plain IMAP.
+// Google OAuth accounts are not polled (gmail.readonly is a restricted scope).
 func StartIMAPPoller() {
-	log.Println("inbox bounce/reply polling disabled (gmail.send only; no gmail.readonly)")
+	LoadConfig()
+	go func() {
+		pollAllAccounts()
+		ticker := time.NewTicker(IMAPPollInterval)
+		defer ticker.Stop()
+		for range ticker.C {
+			pollAllAccounts()
+		}
+	}()
+	log.Printf("IMAP poller started (interval=%s, inboxkit mailboxes only)", IMAPPollInterval)
 }
 
 func pollAllAccounts() {
@@ -25,10 +34,7 @@ func pollAllAccounts() {
 		if acc.Status != "active" {
 			continue
 		}
-		if acc.IsGoogleOAuth() {
-			if err := pollGmailAPIAccount(acc); err != nil {
-				log.Printf("Gmail API poll account %d: %v", acc.ID, err)
-			}
+		if acc.IsGoogleOAuth() || acc.MailboxSource != "inboxkit" {
 			continue
 		}
 		if acc.IMAPHost == "" || acc.IMAPUser == "" {
@@ -38,57 +44,6 @@ func pollAllAccounts() {
 			log.Printf("IMAP poll account %d: %v", acc.ID, err)
 		}
 	}
-}
-
-func pollGmailAPIAccount(acc model.SMTPAccount) error {
-	token, err := model.GmailAccessToken(acc)
-	if err != nil {
-		return err
-	}
-	ids, err := googleoauth.ListRecentMessageIDsForPolling(token, 50)
-	if err != nil {
-		return err
-	}
-	ownEmail := acc.GoogleEmail
-	if ownEmail == "" {
-		ownEmail = acc.SMTPUser
-	}
-
-	for _, id := range ids {
-		// Raw MIME includes delivery-status + original message headers needed for bounces.
-		msg, err := googleoauth.GetMessageRaw(token, id)
-		if err != nil {
-			log.Printf("Gmail API get message %s account %d: %v", id, acc.ID, err)
-			continue
-		}
-		dedupeID := firstNonEmpty(normalizeMessageID(msg.MessageID), msg.ID)
-		if dedupeID != "" {
-			if done, _ := model.GmailMessageAlreadyProcessed(acc.UserID, dedupeID); done {
-				continue
-			}
-			if exists, _ := model.ContactEventExistsByDedupe("gmail-msg:" + dedupeID); exists {
-				_ = model.MarkGmailMessageProcessed(acc.UserID, dedupeID)
-				continue
-			}
-			if exists, _ := model.ContactEventExistsByDedupe("imap-msg:" + dedupeID); exists {
-				_ = model.MarkGmailMessageProcessed(acc.UserID, dedupeID)
-				continue
-			}
-		}
-		processInboxMessage(acc, ownEmail, inboxMessage{
-			From:       googleoauth.ExtractEmailAddress(msg.From),
-			Subject:    msg.Subject,
-			Body:       msg.Body,
-			MessageID:  msg.MessageID,
-			InReplyTo:  msg.InReplyTo,
-			References: msg.References,
-			DedupeID:   dedupeID,
-		})
-		if dedupeID != "" {
-			_ = model.MarkGmailMessageProcessed(acc.UserID, dedupeID)
-		}
-	}
-	return nil
 }
 
 type inboxMessage struct {
@@ -120,15 +75,6 @@ func processInboxMessage(acc model.SMTPAccount, ownEmail string, msg inboxMessag
 	if match, ok := MatchReply(acc.UserID, msg.From, msg.Subject, msg.Body, replyRefs, ownEmail); ok {
 		handleReply(acc.UserID, match, msg.MessageID)
 	}
-}
-
-func firstNonEmpty(vals ...string) string {
-	for _, v := range vals {
-		if strings.TrimSpace(v) != "" {
-			return v
-		}
-	}
-	return ""
 }
 
 func pollIMAPAccount(acc model.SMTPAccount) error {
@@ -191,16 +137,34 @@ func pollIMAPAccount(acc model.SMTPAccount) error {
 }
 
 func dialIMAP(acc model.SMTPAccount) (*client.Client, error) {
-	addr := acc.IMAPHost + ":" + acc.IMAPPort
+	port := acc.IMAPPort
+	if port == "" {
+		port = "993"
+	}
+	addr := acc.IMAPHost + ":" + port
 	c, err := client.DialTLS(addr, nil)
 	if err != nil {
 		return nil, err
+	}
+	user := acc.IMAPUser
+	if user == "" {
+		user = acc.SMTPUser
 	}
 	pass := acc.IMAPPassword
 	if pass == "" {
 		pass = acc.SMTPPassword
 	}
-	if err := c.Login(acc.IMAPUser, pass); err != nil {
+	if acc.MailboxSource == "inboxkit" {
+		dec, err := model.DecryptSMTPPassword(acc)
+		if err != nil {
+			c.Logout()
+			return nil, err
+		}
+		if dec != "" {
+			pass = dec
+		}
+	}
+	if err := c.Login(user, pass); err != nil {
 		c.Logout()
 		return nil, err
 	}
@@ -209,8 +173,8 @@ func dialIMAP(acc model.SMTPAccount) (*client.Client, error) {
 
 // pollAccountBounces kept for tests that may reference it.
 func pollAccountBounces(acc model.SMTPAccount) error {
-	if acc.IsGoogleOAuth() {
-		return pollGmailAPIAccount(acc)
+	if acc.IsGoogleOAuth() || acc.MailboxSource != "inboxkit" {
+		return nil
 	}
 	return pollIMAPAccount(acc)
 }
@@ -267,7 +231,7 @@ func handleBounce(acc model.SMTPAccount, from, subject, body string) {
 		_ = model.SuppressContact(contactID, "bounce", source, acc.ID)
 	}
 
-	eventSource := "gmail-bounce"
+	eventSource := "imap-bounce"
 	if trackingID != "" {
 		_ = model.StoreEvent(trackingID, "bounce", eventSource, "")
 	} else if sendID > 0 {

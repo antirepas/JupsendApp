@@ -64,7 +64,7 @@
             <div id="experiment-fields" class="hidden p-4 bg-violet-50 border border-violet-100 rounded-lg space-y-4">
                 <div>
                     <p class="font-semibold text-charcoal text-sm">Run as experiment</p>
-                    <p class="text-xs text-gray-600 mt-1">Winner is decided by <strong>open rate</strong> once enough sends land (~10+ per variant).</p>
+                    <p class="text-xs text-gray-600 mt-1">Winner is decided by <strong>reply rate</strong> once enough sends land (~10+ per variant).</p>
                 </div>
                 <div>
                     <label class="form-label">What are you testing?</label>
@@ -84,7 +84,7 @@
         </div>
 
         <div id="workflow-fields" class="hidden space-y-4">
-            <p class="text-sm text-gray-600">Launching starts the workflow for every contact. You'll map templates to each send step on the campaign manage page.</p>
+            <p class="text-sm text-gray-600">Launching starts the workflow for every contact. Replies automatically stop remaining steps for that contact. You'll map templates to each send step on the campaign manage page.</p>
             {{if .workflows}}
             <fieldset class="space-y-2">
                 <legend class="form-label">Published workflow</legend>

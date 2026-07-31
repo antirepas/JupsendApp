@@ -13,24 +13,30 @@
     </div>
 
     <h1 class="text-2xl font-bold text-charcoal mb-2">{{.title}}</h1>
-    <p class="text-sm text-gray-600 mb-6">Choose your plan, then continue with Google to connect your sending account.</p>
+    <p class="text-sm text-gray-600 mb-6">{{if eq .plan "pro"}}Custom domain, mailboxes, and higher limits.{{else}}Send from our shared mailbox — upgrade anytime for your own domain.{{end}}</p>
 
     <div class="card space-y-4">
       <div>
-        <h2 class="card-title mb-1">Included limits</h2>
+        <h2 class="card-title mb-1">Included</h2>
         <div class="grid grid-cols-2 gap-4">
           <div>
             <div class="text-xs text-gray-500">Daily email cap</div>
-            <div class="text-xl font-semibold text-charcoal">{{.dailyEmails}} / day</div>
+            <div class="text-xl font-semibold text-charcoal">{{.dailyEmails}}{{if eq .plan "pro"}} / mailbox{{else}} / day{{end}}</div>
           </div>
           <div>
             <div class="text-xs text-gray-500">AI credits</div>
             <div class="text-xl font-semibold text-charcoal">{{.aiCreditsPerDay}} / day</div>
           </div>
         </div>
-        <div class="mt-3 text-sm text-gray-600">
-          Warmup: {{if .warmup}}Enabled{{else}}Disabled{{end}}
-        </div>
+        <ul class="mt-3 text-sm text-gray-600 space-y-1">
+          <li>Warmup: {{if .warmup}}Enabled (ramps to {{.dailyEmails}}/day){{else}}Disabled{{end}}</li>
+          {{if eq .plan "pro"}}
+          <li>{{.includedDomains}} custom domain + {{.includedMailboxes}} mailboxes included</li>
+          <li>Buy more domains and mailboxes anytime</li>
+          {{else}}
+          <li>Shared platform mailbox (no custom domain)</li>
+          {{end}}
+        </ul>
       </div>
 
       <div class="border-t pt-4">
@@ -39,7 +45,10 @@
           <button type="submit" class="btn-primary w-full justify-center">Continue with Google</button>
         </form>
         <p class="text-xs text-gray-500 mt-3">
-          For Standard/Pro, you will complete checkout and your account will activate after the Whop webhook.
+          {{if eq .plan "pro"}}You’ll complete Whop checkout; the app unlocks after payment confirms.{{else}}Free activates immediately after Google sign-in.{{end}}
+        </p>
+        <p class="text-xs text-gray-500 mt-2">
+          {{if eq .plan "pro"}}Looking for Free? <a href="/signup/free" class="text-brand-600">Start free</a>{{else}}Need a custom domain? <a href="/signup/pro" class="text-brand-600">Go Pro</a>{{end}}
         </p>
       </div>
     </div>
@@ -48,4 +57,3 @@
 </body>
 </html>
 {{end}}
-

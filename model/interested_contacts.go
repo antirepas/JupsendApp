@@ -32,6 +32,7 @@ func ListInterestedContacts(userID int64, limit int) ([]InterestedContact, error
 		campaignID   int64
 		openCount    int
 		hasClick     bool
+		hasReply     bool
 	}
 
 	byContact := map[int64]*agg{}
@@ -79,14 +80,50 @@ func ListInterestedContacts(userID int64, limit int) ([]InterestedContact, error
 		}
 	}
 
+	replyRows, err := db.Query(`
+		SELECT es.contact_id, c.email, es.campaign_id, COALESCE(camp.name, ''), ce.created_at
+		FROM contact_events ce
+		INNER JOIN email_sends es ON es.id = ce.email_send_id
+		INNER JOIN contact c ON c.id = es.contact_id
+		LEFT JOIN campaigns camp ON camp.id = es.campaign_id
+		WHERE es.user_id = ? AND ce.event_type = 'REPLY'
+			AND ce.created_at >= CURRENT_TIMESTAMP - (90 * INTERVAL '1 day')
+	`, userID)
+	if err == nil {
+		defer replyRows.Close()
+		for replyRows.Next() {
+			var contactID, campaignID int64
+			var email, campaignName string
+			var createdAt time.Time
+			if replyRows.Scan(&contactID, &email, &campaignID, &campaignName, &createdAt) != nil {
+				continue
+			}
+			a := byContact[contactID]
+			if a == nil {
+				a = &agg{email: email}
+				byContact[contactID] = a
+			}
+			a.hasReply = true
+			if createdAt.After(a.lastActivity) {
+				a.lastActivity = createdAt
+				a.lastSignal = "replied"
+				a.campaignName = campaignName
+				a.campaignID = campaignID
+			}
+		}
+	}
+
 	var list []InterestedContact
 	for cid, a := range byContact {
 		score := 0
 		tier := "cold"
 		switch {
+		case a.hasReply:
+			score = 100
+			tier = "hot"
 		case a.hasClick:
 			score = 40
-			tier = "hot"
+			tier = "warm"
 		case a.openCount >= 2:
 			score = 25
 			tier = "warm"

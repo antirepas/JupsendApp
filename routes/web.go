@@ -34,13 +34,14 @@ func Dashboard(ctx *gin.Context) {
 		campaigns         []model.CampaignListItem
 		benchmark         model.AccountBenchmark
 		recentExperiments []model.RecentExperiment
+		repliesThisMonth  int
 		interestedCount   int
 		acc               model.SMTPAccount
 		statsErr          error
 	)
 
 	var wg sync.WaitGroup
-	wg.Add(9)
+	wg.Add(10)
 	go func() {
 		defer wg.Done()
 		stats, statsErr = model.GetDashboardStats(userID)
@@ -71,6 +72,10 @@ func Dashboard(ctx *gin.Context) {
 	}()
 	go func() {
 		defer wg.Done()
+		repliesThisMonth = model.CountRepliesThisMonth(userID)
+	}()
+	go func() {
+		defer wg.Done()
 		interestedCount = model.CountInterestedContacts(userID)
 	}()
 	go func() {
@@ -89,6 +94,12 @@ func Dashboard(ctx *gin.Context) {
 		ctx.HTML(http.StatusInternalServerError, "error.html", gin.H{"title": "Error", "active": "dashboard", "error": "Failed to load stats"})
 		return
 	}
+
+	goalProgress := util.ComputeGoalProgress(util.OutreachGoals{
+		MeetingsPerMonth:  user.GoalMeetingsPerMonth,
+		ReplyToMeetingPct: user.GoalReplyToMeetingPct,
+		DailySendCap:      user.GoalDailySendCap,
+	}, repliesThisMonth)
 
 	isEmpty := stats.TotalSends == 0 && counts.Campaigns == 0
 
@@ -120,8 +131,11 @@ func Dashboard(ctx *gin.Context) {
 		"isEmpty":         isEmpty,
 		"benchmark":       benchmark,
 		"recentExperiments": recentExperiments,
+		"goalProgress":      goalProgress,
 		"interestedCount":   interestedCount,
 		"gmailConnected":    acc.IsGoogleOAuth(),
+		"mailboxReady":      acc.ID > 0 && acc.IsSendReady(),
+		"isPro":             model.UserIsPro(userID),
 		"warmupProgress":    warmupProgress,
 		"success":         ctx.Query("success"),
 		"error":           ctx.Query("error"),
@@ -259,11 +273,12 @@ func ListContactsPage(ctx *gin.Context) {
 	listID, _ := strconv.ParseInt(ctx.Query("list"), 10, 64)
 
 	filter := model.ContactListFilter{
-		Query:    ctx.Query("q"),
-		ListID:   listID,
-		Sort:     ctx.DefaultQuery("sort", "newest"),
-		Page:     page,
-		PageSize: 50,
+		Query:       ctx.Query("q"),
+		ListID:      listID,
+		Sort:        ctx.DefaultQuery("sort", "newest"),
+		Page:        page,
+		PageSize:    50,
+		RepliedOnly: ctx.Query("replied") == "1",
 	}
 	contactPage, err := model.ListContactsFiltered(userID, filter)
 	if err != nil {
@@ -292,10 +307,11 @@ func ListContactsPage(ctx *gin.Context) {
 		"templates":    templates,
 		"lists":        lists,
 		"suppressions": suppressions,
-		"filterQ":      filter.Query,
-		"filterList":   listID,
-		"filterSort":   filter.Sort,
-		"prevPage":     prevPage,
+		"filterQ":       filter.Query,
+		"filterList":    listID,
+		"filterSort":    filter.Sort,
+		"filterReplied": filter.RepliedOnly,
+		"prevPage":      prevPage,
 		"nextPage":     nextPage,
 		"hasPrev":      hasPrev,
 		"hasNext":      hasNext,

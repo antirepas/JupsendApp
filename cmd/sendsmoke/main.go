@@ -1,4 +1,4 @@
-// Send a smoke-test email via the user's connected Gmail account.
+// Send a smoke-test email via the user's connected Gmail account (SMTP XOAUTH2).
 // Usage: go run ./cmd/sendsmoke [user-email] [recipient]
 package main
 
@@ -10,7 +10,6 @@ import (
 
 	"emailtracker.com/config"
 	"emailtracker.com/db"
-	"emailtracker.com/googleoauth"
 	"emailtracker.com/model"
 	"emailtracker.com/util"
 )
@@ -43,15 +42,16 @@ func main() {
 	}
 
 	subject := fmt.Sprintf("jupsend smoke test %d", time.Now().Unix())
-	plain := "If you receive this, Gmail delivery is working from jupsend."
-	html := "<p>If you receive this, Gmail delivery is working from <strong>jupsend</strong>.</p>"
+	plain := "If you receive this, SMTP XOAUTH2 delivery is working from jupsend."
+	html := "<p>If you receive this, SMTP XOAUTH2 delivery is working from <strong>jupsend</strong>.</p>"
 
 	meta := util.SendMeta{
 		MessageID: fmt.Sprintf("<smoke-%d@%s>", time.Now().UnixNano(), domain(from)),
 		FromName:  acc.FromName,
 	}
 
-	fmt.Printf("Sending from %s to %s (auth=%s)...\n", from, recipient, acc.AuthType)
+	sender := util.NewEmailSender(acc.SMTPHost, acc.SMTPPort, acc.SMTPUser, acc.SMTPPassword, from)
+	fmt.Printf("Sending from %s to %s (auth=%s host=%s:%s)...\n", from, recipient, acc.AuthType, acc.SMTPHost, acc.SMTPPort)
 
 	var sendErr error
 	if acc.IsGoogleOAuth() {
@@ -60,16 +60,14 @@ func main() {
 			log.Fatalf("oauth token: %v", err)
 		}
 		fmt.Println("OAuth access token refreshed OK")
-		raw := util.BuildMultipartEmail(from, acc.FromName, recipient, subject, plain, html, meta)
-		sendErr = googleoauth.SendRawMessage(token, raw)
+		sendErr = sender.SendWithMetaOAuth(recipient, subject, plain, html, meta, token)
 	} else {
-		sender := util.NewEmailSender(acc.SMTPHost, acc.SMTPPort, acc.SMTPUser, acc.SMTPPassword, from)
 		sendErr = sender.SendWithMeta(recipient, subject, plain, html, meta)
 	}
 	if sendErr != nil {
 		log.Fatalf("send failed: %v", sendErr)
 	}
-	fmt.Println("Gmail accepted the message.")
+	fmt.Println("SMTP accepted the message.")
 	fmt.Printf("Check inbox and Gmail Sent for: %s\n", recipient)
 	fmt.Printf("Subject: %s\n", subject)
 }

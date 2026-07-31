@@ -7,13 +7,16 @@ import (
 	"emailtracker.com/db"
 )
 
-// IsSendReady reports whether this profile can send mail (active Gmail OAuth or legacy SMTP creds).
+// IsSendReady reports whether this profile can send mail (InboxKit SMTP, Gmail OAuth, or legacy SMTP).
 func (a SMTPAccount) IsSendReady() bool {
 	if a.Status != "active" {
 		return false
 	}
 	if a.IsGoogleOAuth() {
 		return a.GoogleEmail != "" && a.SMTPHost != ""
+	}
+	if a.MailboxSource == "inboxkit" || a.MailboxSource == MailboxSourceShared {
+		return a.SMTPHost != "" && a.SMTPUser != "" && a.SMTPPassword != ""
 	}
 	return a.SMTPHost != "" && a.SMTPUser != "" && a.SMTPPassword != ""
 }
@@ -30,18 +33,24 @@ func EnsureDailyCounterReset(accountID int64) error {
 func GetSendReadyAccountForUser(userID int64) (SMTPAccount, error) {
 	acc, err := GetSMTPAccountByUserID(userID)
 	if err != nil {
-		return SMTPAccount{}, fmt.Errorf("no sending profile — connect Gmail in Settings")
+		return SMTPAccount{}, fmt.Errorf("no sending mailbox — finish domain setup under Mailboxes")
 	}
 	_ = EnsureDailyCounterReset(acc.ID)
-	acc, err = GetSMTPAccountByUserID(userID)
+	acc, err = GetSMTPAccount(acc.ID)
 	if err != nil {
 		return SMTPAccount{}, err
 	}
 	if !acc.IsSendReady() {
+		if acc.MailboxSource == "inboxkit" {
+			return SMTPAccount{}, fmt.Errorf("mailbox not ready yet — check Mailboxes setup status")
+		}
+		if acc.MailboxSource == MailboxSourceShared {
+			return SMTPAccount{}, fmt.Errorf("shared sending mailbox not configured — contact support")
+		}
 		if acc.AuthType == AuthTypeGoogleOAuth || acc.GoogleEmail != "" {
 			return SMTPAccount{}, fmt.Errorf("gmail connection incomplete — reconnect Gmail in Settings")
 		}
-		return SMTPAccount{}, fmt.Errorf("connect Gmail in Settings before sending")
+		return SMTPAccount{}, fmt.Errorf("no ready sending mailbox — open Mailboxes to finish setup")
 	}
 	return acc, nil
 }

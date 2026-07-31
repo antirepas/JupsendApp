@@ -38,6 +38,9 @@ type SMTPAccount struct {
 	SendsToday             int
 	SendsTodayResetAt      *time.Time
 	LastSendAt             *time.Time
+	InboxkitMailboxID      string
+	IsDefault              bool
+	MailboxSource          string
 	CreatedAt              time.Time
 	UpdatedAt              time.Time
 }
@@ -61,7 +64,7 @@ func scanSMTPAccount(row interface{ Scan(...interface{}) error }) (SMTPAccount, 
 	var a SMTPAccount
 	var userID sql.NullInt64
 	var warmupStarted, lastSend, resetAt, oauthExpiry sql.NullTime
-	var warmupEnabled int
+	var warmupEnabled, isDefault int
 	err := row.Scan(
 		&a.ID, &userID, &a.Name, &a.SMTPHost, &a.SMTPPort, &a.SMTPUser, &a.SMTPPassword,
 		&a.FromEmail, &a.FromName, &a.IMAPHost, &a.IMAPPort, &a.IMAPUser, &a.IMAPPassword,
@@ -69,6 +72,7 @@ func scanSMTPAccount(row interface{ Scan(...interface{}) error }) (SMTPAccount, 
 		&warmupEnabled, &a.WarmupDailyCap, &a.WarmupTargetDailyCap, &a.WarmupIncrementPerDay,
 		&warmupStarted, &a.SendsToday, &resetAt, &lastSend,
 		&a.AuthType, &a.OAuthRefreshToken, &a.OAuthAccessToken, &oauthExpiry, &a.GoogleEmail,
+		&a.InboxkitMailboxID, &isDefault, &a.MailboxSource,
 		&a.CreatedAt, &a.UpdatedAt,
 	)
 	if err != nil {
@@ -78,6 +82,7 @@ func scanSMTPAccount(row interface{ Scan(...interface{}) error }) (SMTPAccount, 
 		a.UserID = userID.Int64
 	}
 	a.WarmupEnabled = warmupEnabled == 1
+	a.IsDefault = isDefault == 1
 	if warmupStarted.Valid {
 		t := warmupStarted.Time
 		a.WarmupStartedAt = &t
@@ -102,16 +107,29 @@ const smtpAccountCols = `
 	min_seconds_between_sends, warmup_enabled, warmup_daily_cap, warmup_target_daily_cap,
 	warmup_increment_per_day, warmup_started_at, sends_today, sends_today_reset_at,
 	last_send_at, auth_type, oauth_refresh_token, oauth_access_token, oauth_expiry, google_email,
+	COALESCE(inboxkit_mailbox_id, ''), COALESCE(is_default, 0), COALESCE(mailbox_source, ''),
 	created_at, updated_at
 `
 
 func GetSMTPAccountByUserID(userID int64) (SMTPAccount, error) {
-	row := db.QueryRow(`SELECT `+smtpAccountCols+` FROM smtp_accounts WHERE user_id = ?`, userID)
+	row := db.QueryRow(`
+		SELECT `+smtpAccountCols+` FROM smtp_accounts
+		WHERE user_id = ?
+		ORDER BY CASE WHEN COALESCE(is_default, 0) = 1 THEN 0 ELSE 1 END,
+			CASE WHEN status = 'active' THEN 0 ELSE 1 END,
+			id ASC
+		LIMIT 1
+	`, userID)
 	return scanSMTPAccount(row)
 }
 
 func GetActiveSMTPAccountForUser(userID int64) (SMTPAccount, error) {
-	row := db.QueryRow(`SELECT `+smtpAccountCols+` FROM smtp_accounts WHERE user_id = ? AND status = 'active'`, userID)
+	row := db.QueryRow(`
+		SELECT `+smtpAccountCols+` FROM smtp_accounts
+		WHERE user_id = ? AND status = 'active'
+		ORDER BY CASE WHEN COALESCE(is_default, 0) = 1 THEN 0 ELSE 1 END, id ASC
+		LIMIT 1
+	`, userID)
 	return scanSMTPAccount(row)
 }
 
@@ -149,27 +167,33 @@ func CreateDefaultSMTPAccountForUser(userID int64) error {
 }
 
 func SaveGoogleOAuthAccount(userID int64, email, fromName, encRefresh, encAccess string, expiry time.Time) error {
-	existing, err := GetSMTPAccountByUserID(userID)
 	now := time.Now()
 	warmup := 1
-	if err == nil {
-		_, err = db.Exec(`
+	var existingID int64
+	_ = db.QueryRow(`
+		SELECT id FROM smtp_accounts
+		WHERE user_id = ? AND auth_type = ?
+		ORDER BY id ASC
+		LIMIT 1
+	`, userID, AuthTypeGoogleOAuth).Scan(&existingID)
+	if existingID > 0 {
+		_, err := db.Exec(`
 		UPDATE smtp_accounts SET
 			name='Gmail', smtp_host='smtp.gmail.com', smtp_port='465', smtp_user=?, smtp_password='',
 				from_email=?, from_name=?, imap_host='imap.gmail.com', imap_port='993', imap_user=?, imap_password='',
 				auth_type=?, oauth_refresh_token=?, oauth_access_token=?, oauth_expiry=?, google_email=?,
-				status='active', updated_at=?
+				status='active', mailbox_source='gmail_oauth', updated_at=?
 			WHERE id=?
-		`, email, email, fromName, email, AuthTypeGoogleOAuth, encRefresh, encAccess, expiry, email, now, existing.ID)
+		`, email, email, fromName, email, AuthTypeGoogleOAuth, encRefresh, encAccess, expiry, email, now, existingID)
 		return err
 	}
-	_, err = db.Exec(`
+	_, err := db.Exec(`
 		INSERT INTO smtp_accounts (
 			user_id, name, smtp_host, smtp_port, smtp_user, from_email, from_name,
 			imap_host, imap_port, imap_user, auth_type, oauth_refresh_token, oauth_access_token,
 			oauth_expiry, google_email, status, warmup_enabled, warmup_started_at, sends_today_reset_at,
-			created_at, updated_at
-		) VALUES (?, 'Gmail', 'smtp.gmail.com', '465', ?, ?, ?, 'imap.gmail.com', '993', ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)
+			mailbox_source, is_default, created_at, updated_at
+		) VALUES (?, 'Gmail', 'smtp.gmail.com', '465', ?, ?, ?, 'imap.gmail.com', '993', ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, 'gmail_oauth', 0, ?, ?)
 	`, userID, email, email, fromName, email, AuthTypeGoogleOAuth, encRefresh, encAccess, expiry, email,
 		warmup, now, now.Format("2006-01-02"), now, now)
 	return err
@@ -202,6 +226,9 @@ func UpsertSMTPAccountForUser(userID int64, a SMTPAccount) error {
 		a.GoogleEmail = existing.GoogleEmail
 		a.SMTPUser = existing.SMTPUser
 		a.IMAPUser = existing.IMAPUser
+		a.InboxkitMailboxID = existing.InboxkitMailboxID
+		a.MailboxSource = existing.MailboxSource
+		a.IsDefault = existing.IsDefault
 		if a.FromEmail == "" {
 			a.FromEmail = existing.FromEmail
 		}

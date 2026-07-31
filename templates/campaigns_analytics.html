@@ -23,18 +23,19 @@
     {{if .analytics.ExperimentVariable}}<p class="text-xs text-slate-500 mb-3">Testing: {{.analytics.ExperimentVariable}}</p>{{end}}
     <div class="flex flex-wrap gap-6 items-center">
         <div>
-            <p class="stat-label">Campaign open rate</p>
-            <p class="text-2xl font-bold text-blue-600">{{printf "%.1f" .analytics.CampaignOpenRate}}%</p>
+            <p class="stat-label">Campaign reply rate</p>
+            <p class="text-2xl font-bold text-violet-600">{{printf "%.1f" .analytics.CampaignReplyRate}}%</p>
+            {{template "reply_pro_note" .}}
         </div>
         <div>
             <p class="stat-label">vs your 30-day avg</p>
-            <p class="text-2xl font-bold {{if gt .analytics.OpenRateDelta 0.0}}text-emerald-600{{else if lt .analytics.OpenRateDelta 0.0}}text-red-600{{else}}text-slate-600{{end}}">
-                {{if gt .analytics.OpenRateDelta 0.0}}+{{end}}{{printf "%.1f" .analytics.OpenRateDelta}}%
+            <p class="text-2xl font-bold {{if gt .analytics.ReplyRateDelta 0.0}}text-emerald-600{{else if lt .analytics.ReplyRateDelta 0.0}}text-red-600{{else}}text-slate-600{{end}}">
+                {{if gt .analytics.ReplyRateDelta 0.0}}+{{end}}{{printf "%.1f" .analytics.ReplyRateDelta}}%
             </p>
-            <p class="text-xs text-slate-500">Account avg: {{printf "%.1f" .analytics.AccountBenchmark.OpenRate}}%</p>
+            <p class="text-xs text-slate-500">Account avg: {{printf "%.1f" .analytics.AccountBenchmark.ReplyRate}}%</p>
         </div>
         {{if .analytics.IsPersonalBest}}
-        <span class="badge badge-green">Personal best open rate</span>
+        <span class="badge badge-green">Personal best reply rate</span>
         {{end}}
     </div>
 </div>
@@ -47,6 +48,7 @@
     <div class="stat-card"><p class="stat-label">Pending</p><p class="stat-value text-slate-500">{{.analytics.Overview.PendingCount}}</p></div>
     <div class="stat-card"><p class="stat-label">Unique opens</p><p class="stat-value text-blue-600">{{.analytics.Overview.UniqueOpens}}</p><p class="text-xs text-slate-500">{{printf "%.1f" .analytics.Overview.OpenRate}}% rate</p></div>
     <div class="stat-card"><p class="stat-label">Unique clicks</p><p class="stat-value text-emerald-600">{{.analytics.Overview.UniqueClicks}}</p><p class="text-xs text-slate-500">{{printf "%.1f" .analytics.Overview.ClickRate}}% rate</p></div>
+    <div class="stat-card"><p class="stat-label">Replies</p><p class="stat-value text-violet-600">{{.analytics.Overview.ReplyCount}}</p>{{template "reply_pro_note" .}}</div>
     <div class="stat-card"><p class="stat-label">Click-to-open</p><p class="stat-value">{{printf "%.1f" .analytics.Overview.ClickToOpenRate}}%</p>{{if .analytics.Overview.AvgMinutesToOpen}}<p class="text-xs text-slate-500">Avg {{printf "%.0f" .analytics.Overview.AvgMinutesToOpen}} min to open</p>{{end}}</div>
 </div>
 
@@ -70,6 +72,12 @@
             <p class="text-sm text-slate-600">Clicked</p>
             {{if gt .analytics.Funnel.Opened 0}}<p class="text-xs text-slate-500">{{printf "%.0f" .analytics.Funnel.ClickPctOfOpens}}% of opens</p>{{end}}
         </div>
+        <span class="text-slate-400 text-2xl">→</span>
+        <div class="text-center px-8 py-4 bg-violet-50 rounded-lg min-w-[120px]">
+            <p class="text-3xl font-bold text-violet-600">{{.analytics.Funnel.Replied}}</p>
+            <p class="text-sm text-slate-600">Replied</p>
+            {{template "reply_pro_note" .}}
+        </div>
     </div>
 </div>
 
@@ -79,7 +87,7 @@
         <div class="flex justify-between items-start">
             <h3 class="font-semibold">Variant A — {{.analytics.VariantA.TemplateName}}</h3>
             {{if eq .analytics.ABWinner "A"}}
-            <span class="badge badge-green">{{if or (eq .analytics.ABWinnerMethod "open") (eq .analytics.ABWinnerMethod "opens")}}Winner on opens{{else}}Winner{{end}}</span>
+            <span class="badge badge-green">{{if eq .analytics.ABWinnerMethod "reply"}}Winner on replies{{else}}Early signal: opens{{end}}</span>
             {{end}}
         </div>
         <div class="grid grid-cols-2 gap-4 mt-4 text-sm">
@@ -87,6 +95,7 @@
             <div><span class="text-slate-500">Sent / Pending</span><p class="font-bold text-lg">{{.analytics.VariantA.Sent}} / {{.analytics.VariantA.Pending}}</p></div>
             <div><span class="text-slate-500">Opens (unique)</span><p class="font-bold text-lg text-blue-600">{{.analytics.VariantA.UniqueOpens}} <span class="text-xs font-normal">({{printf "%.1f" .analytics.VariantA.OpenRate}}%)</span></p></div>
             <div><span class="text-slate-500">Clicks (unique)</span><p class="font-bold text-lg text-emerald-600">{{.analytics.VariantA.UniqueClicks}} <span class="text-xs font-normal">({{printf "%.1f" .analytics.VariantA.ClickRate}}%)</span></p></div>
+            <div><span class="text-slate-500">Replies (unique)</span><p class="font-bold text-lg text-violet-600">{{.analytics.VariantA.UniqueReplies}} <span class="text-xs font-normal">({{printf "%.1f" .analytics.VariantA.ReplyRate}}%)</span></p>{{template "reply_pro_note" .}}</div>
             <div><span class="text-slate-500">Click-to-open</span><p class="font-bold">{{printf "%.1f" .analytics.VariantA.ClickToOpenRate}}%</p></div>
             <div><span class="text-slate-500">Total events</span><p class="font-bold">{{.analytics.VariantA.Opens}} opens · {{.analytics.VariantA.Clicks}} clicks</p></div>
         </div>
@@ -96,7 +105,7 @@
         <div class="flex justify-between items-start">
             <h3 class="font-semibold">Variant B — {{.analytics.VariantB.TemplateName}}</h3>
             {{if eq .analytics.ABWinner "B"}}
-            <span class="badge badge-green">{{if or (eq .analytics.ABWinnerMethod "open") (eq .analytics.ABWinnerMethod "opens")}}Winner on opens{{else}}Winner{{end}}</span>
+            <span class="badge badge-green">{{if eq .analytics.ABWinnerMethod "reply"}}Winner on replies{{else}}Early signal: opens{{end}}</span>
             {{end}}
             {{if eq .analytics.ABWinner "Tie"}}<span class="badge badge-gray">Tie</span>{{end}}
         </div>
@@ -105,6 +114,7 @@
             <div><span class="text-slate-500">Sent / Pending</span><p class="font-bold text-lg">{{.analytics.VariantB.Sent}} / {{.analytics.VariantB.Pending}}</p></div>
             <div><span class="text-slate-500">Opens (unique)</span><p class="font-bold text-lg text-blue-600">{{.analytics.VariantB.UniqueOpens}} <span class="text-xs font-normal">({{printf "%.1f" .analytics.VariantB.OpenRate}}%)</span></p></div>
             <div><span class="text-slate-500">Clicks (unique)</span><p class="font-bold text-lg text-emerald-600">{{.analytics.VariantB.UniqueClicks}} <span class="text-xs font-normal">({{printf "%.1f" .analytics.VariantB.ClickRate}}%)</span></p></div>
+            <div><span class="text-slate-500">Replies (unique)</span><p class="font-bold text-lg text-violet-600">{{.analytics.VariantB.UniqueReplies}} <span class="text-xs font-normal">({{printf "%.1f" .analytics.VariantB.ReplyRate}}%)</span></p>{{template "reply_pro_note" .}}</div>
             <div><span class="text-slate-500">Click-to-open</span><p class="font-bold">{{printf "%.1f" .analytics.VariantB.ClickToOpenRate}}%</p></div>
             <div><span class="text-slate-500">Total events</span><p class="font-bold">{{.analytics.VariantB.Opens}} opens · {{.analytics.VariantB.Clicks}} clicks</p></div>
         </div>

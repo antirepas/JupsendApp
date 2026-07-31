@@ -303,6 +303,7 @@ func CampaignAnalyticsPage(ctx *gin.Context) {
 				"active":                   "campaigns",
 				"analytics":                analytics,
 				"experimentVariableLabel":  experimentVariableLabel(campaign.ExperimentVariable),
+				"isPro":                    model.UserIsPro(userID),
 			})
 			return
 		}
@@ -316,6 +317,7 @@ func CampaignAnalyticsPage(ctx *gin.Context) {
 			"title":     analytics.CampaignName + " Analytics",
 			"active":    "campaigns",
 			"analytics": analytics,
+			"isPro":     model.UserIsPro(userID),
 		})
 		return
 	}
@@ -331,6 +333,7 @@ func CampaignAnalyticsPage(ctx *gin.Context) {
 		"title":     analytics.Name + " Analytics",
 		"active":    "campaigns",
 		"analytics": analytics,
+		"isPro":     model.UserIsPro(userID),
 	})
 }
 

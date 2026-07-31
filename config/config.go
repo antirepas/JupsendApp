@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/joho/godotenv"
@@ -30,6 +31,17 @@ var (
 	WhopPlanIDStandard   string
 	WhopPlanIDPro        string
 	WhopProductID         string
+	WhopMailboxAddonID    string
+	WhopDomainAddonID     string
+	InboxKitAPIKey        string
+	InboxKitWorkspaceID   string
+	InboxKitBaseURL       string
+	InboxKitRedirectURL   string
+	InboxKitPlatform      string
+	InboxKitIncludedMBs   string
+	InboxKitRegistrantEmail string
+	InboxKitRegistrantName  string
+	InboxKitRegistrantOrg   string
 	AdminEmails           map[string]struct{}
 	OpenAIAPIKey          string
 	OpenAIModel           string
@@ -71,6 +83,17 @@ func reloadFromEnv() {
 	WhopPlanIDStandard = strings.TrimSpace(os.Getenv("WHOP_PLAN_ID_STANDARD"))
 	WhopPlanIDPro = strings.TrimSpace(os.Getenv("WHOP_PLAN_ID_PRO"))
 	WhopProductID = strings.TrimSpace(os.Getenv("WHOP_PRODUCT_ID"))
+	WhopMailboxAddonID = strings.TrimSpace(os.Getenv("WHOP_MAILBOX_ADDON_ID"))
+	WhopDomainAddonID = strings.TrimSpace(os.Getenv("WHOP_DOMAIN_ADDON_ID"))
+	InboxKitAPIKey = strings.TrimSpace(os.Getenv("INBOXKIT_API_KEY"))
+	InboxKitWorkspaceID = strings.TrimSpace(os.Getenv("INBOXKIT_WORKSPACE_ID"))
+	InboxKitBaseURL = strings.TrimRight(strings.TrimSpace(envOr("INBOXKIT_BASE_URL", "https://api.inboxkit.com/v1")), "/")
+	InboxKitRedirectURL = strings.TrimSpace(envOr("INBOXKIT_REDIRECT_URL", BaseURL))
+	InboxKitPlatform = strings.ToUpper(strings.TrimSpace(envOr("INBOXKIT_DEFAULT_PLATFORM", "GOOGLE")))
+	InboxKitIncludedMBs = envOr("INBOXKIT_INCLUDED_MAILBOXES", "3")
+	InboxKitRegistrantEmail = strings.TrimSpace(os.Getenv("INBOXKIT_REGISTRANT_EMAIL"))
+	InboxKitRegistrantName = strings.TrimSpace(os.Getenv("INBOXKIT_REGISTRANT_NAME"))
+	InboxKitRegistrantOrg = strings.TrimSpace(os.Getenv("INBOXKIT_REGISTRANT_ORG"))
 	AdminEmails = parseEmailList(os.Getenv("ADMIN_EMAILS"))
 	OpenAIAPIKey = strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
 	OpenAIModel = envOr("OPENAI_MODEL", "gpt-5-nano")
@@ -79,6 +102,17 @@ func reloadFromEnv() {
 
 func AIEnabled() bool {
 	return OpenAIAPIKey != ""
+}
+
+func InboxKitIncludedMailboxCount() int {
+	n, err := strconv.Atoi(strings.TrimSpace(InboxKitIncludedMBs))
+	if err != nil || n < 1 {
+		return 3
+	}
+	if n > 10 {
+		return 10
+	}
+	return n
 }
 
 func parseEmailList(raw string) map[string]struct{} {

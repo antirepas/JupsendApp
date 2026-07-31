@@ -8,6 +8,7 @@ import (
 
 	"emailtracker.com/googleoauth"
 	"emailtracker.com/model"
+	"emailtracker.com/util"
 	"github.com/gin-gonic/gin"
 )
 
@@ -19,15 +20,27 @@ func SettingsPage(c *gin.Context) {
 		return
 	}
 	acc, _ := model.GetSMTPAccountByUserID(userID)
+	mailboxReady := false
+	if acc.ID > 0 {
+		mailboxReady = acc.IsSendReady()
+	}
+	goalsPreview := util.ComputeGoalProgress(util.OutreachGoals{
+		MeetingsPerMonth:  user.GoalMeetingsPerMonth,
+		ReplyToMeetingPct: user.GoalReplyToMeetingPct,
+		DailySendCap:      user.GoalDailySendCap,
+	}, 0)
 	c.HTML(http.StatusOK, "settings.html", gin.H{
 		"title":           "Settings",
 		"active":          "settings",
 		"user":            user,
 		"account":         acc,
+		"mailboxReady":    mailboxReady,
+		"goalsPreview":    goalsPreview,
 		"gmailConnected":  acc.IsGoogleOAuth(),
 		"gmailConfigured": googleoauth.IsConfigured(),
 		"gmailError":      model.GmailSendBlocked(userID),
 		"subscribed":      model.UserHasAppAccess(user),
+		"isPro":           model.UserIsPro(userID),
 		"success":         c.Query("success"),
 		"error":           c.Query("error"),
 	})
@@ -41,20 +54,16 @@ func UpdateSettings(c *gin.Context) {
 	}
 
 	existing, err := model.GetSMTPAccountByUserID(userID)
-	if err != nil {
-		c.Redirect(http.StatusFound, "/settings?error=Failed+to+load+sending+account")
-		return
-	}
-	existing.FromName = c.PostForm("from_name")
-	if existing.IsGoogleOAuth() {
-		existing.Status = "active"
-	}
-
-	// Plan-driven email caps/warmup come from ApplyPlanLimitsToUser, not from the settings form.
-	if err := model.UpsertSMTPAccountForUser(userID, existing); err != nil {
-		log.Print(err)
-		c.Redirect(http.StatusFound, "/settings?error=Failed+to+save+settings")
-		return
+	if err == nil && existing.ID > 0 {
+		existing.FromName = c.PostForm("from_name")
+		if existing.IsGoogleOAuth() {
+			existing.Status = "active"
+		}
+		if err := model.UpsertSMTPAccountForUser(userID, existing); err != nil {
+			log.Print(err)
+			c.Redirect(http.StatusFound, "/settings?error=Failed+to+save+settings")
+			return
+		}
 	}
 
 	cooldown, _ := strconv.Atoi(c.PostForm("send_cooldown_days"))
@@ -62,8 +71,9 @@ func UpdateSettings(c *gin.Context) {
 	_ = model.UpdateUserIncludeUnsubscribeLink(userID, c.PostForm("include_unsubscribe_link") == "on")
 
 	meetings, _ := strconv.Atoi(c.PostForm("goal_meetings_per_month"))
+	replyPct, _ := strconv.Atoi(c.PostForm("goal_reply_to_meeting_pct"))
 	dailyCap, _ := strconv.Atoi(c.PostForm("goal_daily_send_cap"))
-	_ = model.UpdateUserOutreachGoals(userID, meetings, 0, dailyCap)
+	_ = model.UpdateUserOutreachGoals(userID, meetings, replyPct, dailyCap)
 
 	c.Redirect(http.StatusFound, "/settings?success=Settings+saved")
 }
@@ -71,10 +81,10 @@ func UpdateSettings(c *gin.Context) {
 func SettingsSMTPCheck(c *gin.Context) {
 	from, err := runUserSMTPCheck(mustUserID(c))
 	if err != nil {
-		c.Redirect(http.StatusFound, "/settings?error="+url.QueryEscape("Gmail SMTP test failed: "+err.Error()))
+		c.Redirect(http.StatusFound, "/settings?error="+url.QueryEscape("SMTP test failed: "+err.Error()))
 		return
 	}
-	c.Redirect(http.StatusFound, "/settings?success="+url.QueryEscape("Gmail API OK for "+from+" — sending uses HTTPS (works on cloud servers)."))
+	c.Redirect(http.StatusFound, "/settings?success="+url.QueryEscape("SMTP OK for "+from+" — ready to send."))
 }
 
 func parseSendingSettingsForm(c *gin.Context) model.SMTPAccount {

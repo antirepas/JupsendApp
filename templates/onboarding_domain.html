@@ -1,0 +1,90 @@
+{{define "onboarding_domain.html"}}
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>{{template "head" .}}</head>
+<body class="h-full bg-ivory text-charcoal">
+<div class="flex h-full">
+{{template "sidebar" .}}
+<main class="flex-1 overflow-y-auto">
+<div class="max-w-3xl mx-auto p-8">
+  <h2 class="text-2xl font-bold text-charcoal mb-2">Set up your outreach domain</h2>
+  <p class="text-gray-500 text-sm mb-6">
+    Search for a domain, pick one that’s available, and we’ll register it with
+    {{.includedCount}} starter mailboxes included in your plan.
+  </p>
+
+  {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
+  {{if .success}}<div class="alert-success mb-6">{{.success}}</div>{{end}}
+
+  {{if not .inboxkitOK}}
+  <div class="alert-error mb-6">InboxKit is not configured on this server. Ask your admin to set INBOXKIT_API_KEY.</div>
+  {{end}}
+
+  {{if .pendingDomain}}
+  <div class="card mb-6 space-y-3">
+    <h3 class="card-title">Setup in progress</h3>
+    <p class="text-sm text-gray-600">
+      Domain <strong>{{.pendingDomain.Domain}}</strong> is <strong>{{.pendingDomain.Status}}</strong>.
+    </p>
+    <a href="/onboarding/domain/status?domain_id={{.pendingDomain.ID}}" class="btn-primary inline-flex">Continue setup</a>
+  </div>
+  {{end}}
+
+  <form method="POST" action="/onboarding/domain/search" class="card space-y-4 mb-6">
+    <h3 class="card-title">Find a domain</h3>
+    <div>
+      <label class="form-label">Company or keyword</label>
+      <input name="q" class="form-input" value="{{.query}}" placeholder="acme, northwind…" required {{if not .inboxkitOK}}disabled{{end}}>
+    </div>
+    <button type="submit" class="btn-primary" {{if not .inboxkitOK}}disabled{{end}}>Search domains</button>
+  </form>
+
+  {{if .results}}
+  <form method="POST" action="/onboarding/domain/purchase" class="space-y-6">
+    <div class="card space-y-4">
+      <h3 class="card-title">Available domains</h3>
+      <p class="text-sm text-gray-600">Select a domain, then name your starter mailboxes.</p>
+      <div class="space-y-2">
+        {{range .results}}
+        <label class="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:bg-ivory cursor-pointer">
+          <input type="radio" name="domain" value="{{.Domain}}" required>
+          <span class="font-medium">{{.Domain}}</span>
+          {{if .Price}}<span class="text-xs text-gray-500 ml-auto">${{printf "%.2f" .Price}}</span>{{end}}
+        </label>
+        {{end}}
+      </div>
+    </div>
+
+    <div class="card space-y-4">
+      <h3 class="card-title">Mailbox names</h3>
+      <p class="text-sm text-gray-600">Local parts on your domain (e.g. alex@yourdomain.com). Up to {{.includedCount}} included.</p>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+          <label class="form-label">Mailbox 1</label>
+          <input name="local_1" class="form-input" placeholder="alex" value="alex">
+          <input type="hidden" name="first_name_1" value="Alex">
+          <input type="hidden" name="last_name_1" value="Outreach">
+        </div>
+        <div>
+          <label class="form-label">Mailbox 2</label>
+          <input name="local_2" class="form-input" placeholder="sam" value="sam">
+          <input type="hidden" name="first_name_2" value="Sam">
+          <input type="hidden" name="last_name_2" value="Outreach">
+        </div>
+        <div>
+          <label class="form-label">Mailbox 3</label>
+          <input name="local_3" class="form-input" placeholder="jordan" value="jordan">
+          <input type="hidden" name="first_name_3" value="Jordan">
+          <input type="hidden" name="last_name_3" value="Outreach">
+        </div>
+      </div>
+      <button type="submit" class="btn-primary">Buy &amp; set up (included)</button>
+    </div>
+  </form>
+  {{end}}
+</div>
+</main>
+</div>
+</body>
+</html>
+{{end}}

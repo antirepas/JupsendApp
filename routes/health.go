@@ -3,12 +3,13 @@ package routes
 import (
 	"fmt"
 	"net/http"
+	"strings"
 
 	"emailtracker.com/config"
 	"emailtracker.com/db"
-	"emailtracker.com/googleoauth"
 	"emailtracker.com/model"
 	"emailtracker.com/outbound"
+	"emailtracker.com/util"
 	"github.com/gin-gonic/gin"
 )
 
@@ -58,15 +59,51 @@ func runUserSMTPCheck(userID int64) (from string, err error) {
 	if from == "" {
 		return "", fmt.Errorf("no sender email configured")
 	}
+	host := acc.SMTPHost
+	if host == "" {
+		host = "smtp.gmail.com"
+	}
+	port := acc.SMTPPort
+	if port == "" {
+		port = "465"
+	}
+	if acc.MailboxSource == "inboxkit" || acc.MailboxSource == model.MailboxSourceShared || (!acc.IsGoogleOAuth() && acc.SMTPPassword != "") {
+		pass := acc.SMTPPassword
+		if acc.MailboxSource == "inboxkit" || acc.MailboxSource == model.MailboxSourceShared {
+			pass, err = model.DecryptSMTPPassword(acc)
+			if err != nil {
+				return from, err
+			}
+		}
+		if err := util.ProbeSMTPPlain(host, port, acc.SMTPUser, pass, from); err != nil {
+			return from, formatSMTPProbeError(host, port, err)
+		}
+		return from, nil
+	}
 	if !acc.IsGoogleOAuth() {
-		return from, fmt.Errorf("connect Gmail in Settings first")
+		return from, fmt.Errorf("no ready mailbox — finish setup under Mailboxes")
 	}
 	token, err := model.GmailAccessToken(acc)
 	if err != nil {
 		return from, err
 	}
-	if err := googleoauth.ProbeGmailAPI(token); err != nil {
-		return from, err
+	if err := util.ProbeSMTPAuth(host, port, from, token); err != nil {
+		return from, formatSMTPProbeError(host, port, err)
 	}
 	return from, nil
+}
+
+func formatSMTPProbeError(host, port string, err error) error {
+	if err == nil {
+		return nil
+	}
+	msg := strings.ToLower(err.Error())
+	if strings.Contains(msg, "timeout") ||
+		strings.Contains(msg, "connection refused") ||
+		strings.Contains(msg, "i/o timeout") ||
+		strings.Contains(msg, "network is unreachable") ||
+		strings.Contains(msg, "no route to host") {
+		return fmt.Errorf("cannot reach %s:%s (%v) — outbound SMTP ports 465/587 may be blocked on this host", host, port, err)
+	}
+	return fmt.Errorf("SMTP auth to %s:%s failed: %w", host, port, err)
 }

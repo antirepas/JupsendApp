@@ -5,7 +5,7 @@ Use this document as background when discussing sending limits and realistic dai
 
 WHAT THE PRODUCT IS
 -------------------
-jupsend (emailTracker) is a self-hosted cold-email / outreach app. Each user connects one Gmail account via OAuth. Outbound mail goes through Gmail (SMTP XOAUTH2 or Gmail API raw send). The app tracks opens, clicks, and replies; supports one-shot campaigns, A/B tests, and behavior-based workflow sequences (waits, open/click branches, follow-ups). There is one sending profile per user (one Gmail inbox).
+Outbound mail goes through Gmail via SMTP XOAUTH2 (OAuth tokens from Connect Gmail). The app tracks opens and clicks; supports one-shot campaigns, A/B tests, and behavior-based workflow sequences. There is one sending profile per user (one Gmail inbox).
 
 
 HOW SENDING WORKS (SHORT SUMMARY)
@@ -32,7 +32,7 @@ END-TO-END PIPELINE
    - Per-user mutex: sends for the same user are serialized through the worker
    - Before send: AccountCanSendNowForJob() checks daily cap, per-minute cap, and spacing
    - If blocked: RescheduleSendJob with delay (1s–midnight depending on reason)
-   - If allowed: executeJob() → Gmail API or SMTP, mark sent, increment counters
+   - If allowed: executeJob() → SMTP XOAUTH2 (Google OAuth) or plain SMTP, mark sent, increment counters
 
 4. POST-SEND
    - Campaign marked "sent" when no active jobs remain for that campaign

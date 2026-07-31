@@ -8,7 +8,7 @@
 <main class="flex-1 overflow-y-auto">
 <div class="max-w-3xl mx-auto p-8">
 <h2 class="text-2xl font-bold text-charcoal mb-2">Settings</h2>
-<p class="text-gray-500 text-sm mb-6">Account, Gmail, billing, and send limits.</p>
+<p class="text-gray-500 text-sm mb-6">Account, mailboxes, billing, and send limits.</p>
 {{if .success}}<div class="alert-success mb-6">{{.success}}</div>{{end}}
 {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
 {{if .gmailError}}<div class="alert-error mb-6">{{.gmailError}} <a href="/settings/gmail/connect" class="underline font-medium">Reconnect Gmail</a></div>{{end}}
@@ -16,6 +16,7 @@
 
 <div class="flex gap-4 mb-6 text-sm">
     <a href="/settings/billing" class="text-brand-600 font-medium hover:underline">Billing &amp; subscription</a>
+    <a href="/mailboxes" class="text-brand-600 font-medium hover:underline">Mailboxes</a>
 </div>
 
 <form method="POST" action="/settings" class="space-y-6">
@@ -25,18 +26,41 @@
 </div>
 
 <div class="card space-y-4">
+    <h3 class="card-title">Default sending mailbox</h3>
+    {{if .mailboxReady}}
+    <p class="text-sm text-gray-600">Sending as <strong>{{.account.SenderEmail}}</strong>{{if .account.FromName}} ({{.account.FromName}}){{end}}.</p>
+    <p class="text-xs text-gray-500">Manage domains, health, and buy more seats on the <a href="/mailboxes" class="text-brand-600 font-medium">Mailboxes</a> page.</p>
+    <a href="/settings/smtp-check" class="btn-secondary inline-flex mt-2">Test SMTP from server</a>
+    <div class="grid grid-cols-2 gap-4">
+        <div><label class="form-label">From name</label><input name="from_name" class="form-input" value="{{.account.FromName}}"></div>
+    </div>
+    {{else}}
+    <p class="text-sm text-gray-600">No outreach mailbox ready yet.</p>
+    <a href="/onboarding/domain" class="btn-primary inline-flex">Set up domain &amp; mailboxes</a>
+    {{end}}
+</div>
+
+<div class="card space-y-4">
     <h3 class="card-title">Outreach goals</h3>
-    <p class="text-sm text-gray-600">Optional monthly meeting target and daily send cap for planning.</p>
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <p class="text-sm text-gray-600">Work backward from meetings to replies — your dashboard tracks progress.</p>
+    {{template "reply_pro_note" .}}
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div>
             <label class="form-label">Meetings per month</label>
             <input name="goal_meetings_per_month" type="number" class="form-input" min="0" value="{{.user.GoalMeetingsPerMonth}}">
+        </div>
+        <div>
+            <label class="form-label">Replies that book a meeting (%)</label>
+            <input name="goal_reply_to_meeting_pct" type="number" class="form-input" min="1" max="100" value="{{if .user.GoalReplyToMeetingPct}}{{.user.GoalReplyToMeetingPct}}{{else}}50{{end}}">
         </div>
         <div>
             <label class="form-label">Daily send cap (optional)</label>
             <input name="goal_daily_send_cap" type="number" class="form-input" min="0" value="{{.user.GoalDailySendCap}}">
         </div>
     </div>
+    {{if .goalsPreview.HasGoals}}
+    <p class="text-xs text-gray-500">You need ~{{printf "%.0f" .goalsPreview.RepliesNeeded}} replies/month{{if gt .goalsPreview.RequiredReplyRate 0.0}} · ~{{printf "%.1f" .goalsPreview.RequiredReplyRate}}% reply rate at your cap{{end}}</p>
+    {{end}}
 </div>
 
 <div class="card space-y-4">
@@ -54,18 +78,13 @@
 </div>
 
 <div class="card space-y-4">
-    <h3 class="card-title">Gmail</h3>
+    <h3 class="card-title">Advanced: personal Gmail</h3>
+    <p class="text-xs text-gray-500 mb-2">Optional legacy path. Cold outreach should use provisioned mailboxes above.</p>
     {{if .gmailConnected}}
     <p class="text-sm text-gray-600">Connected as <strong>{{.account.GoogleEmail}}</strong></p>
-    <p class="text-xs text-gray-500">Sending uses the Gmail API over HTTPS (not SMTP) so it works on cloud servers that block ports 465/587.</p>
-    <a href="/settings/smtp-check" class="btn-secondary inline-flex mt-2">Test Gmail sending from server</a>
-    <div class="grid grid-cols-2 gap-4">
-        <div><label class="form-label">From name</label><input name="from_name" class="form-input" value="{{.account.FromName}}"></div>
-    </div>
+    <a href="/settings/gmail/connect" class="btn-secondary inline-flex">Reconnect Gmail</a>
     {{else if .gmailConfigured}}
-    <p class="text-sm text-gray-600">Connect your Gmail account to send email from your address.</p>
-    <a href="/settings/gmail/connect" class="btn-primary inline-flex">Connect Gmail</a>
-    <p class="text-xs text-gray-500">Need help? Read the <a href="/guides/gmail" class="text-brand-600 font-medium">Gmail setup guide</a>.</p>
+    <a href="/settings/gmail/connect" class="btn-secondary inline-flex">Connect Gmail</a>
     {{else}}
     <p class="text-sm text-amber-700">Gmail OAuth is not configured on this server.</p>
     {{end}}

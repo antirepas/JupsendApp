@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -196,15 +197,36 @@ func WhopWebhook(c *gin.Context) {
 		handleMembershipActivated(evt.Data)
 	case "membership.deactivated":
 		handleMembershipDeactivated(evt.Data)
+	case "payment.succeeded", "payment.created":
+		handlePaymentSucceeded(evt.Data)
 	case "payment.failed":
 		handlePaymentFailed(evt.Data)
 	}
 	c.Status(http.StatusOK)
 }
 
+func handlePaymentSucceeded(data json.RawMessage) {
+	var payload struct {
+		Metadata map[string]interface{} `json:"metadata"`
+		User     *struct {
+			Email string `json:"email"`
+		} `json:"user"`
+	}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return
+	}
+	if isMailboxAddonMetadata(payload.Metadata) || isDomainAddonMetadata(payload.Metadata) {
+		fulfillMailboxPurchaseFromMetadata(payload.Metadata)
+	}
+}
+
 func handleMembershipActivated(data json.RawMessage) {
 	m, err := whop.ParseMembershipActivated(data)
 	if err != nil {
+		return
+	}
+	if isMailboxAddonMetadata(m.Metadata) || isDomainAddonMetadata(m.Metadata) {
+		fulfillMailboxPurchaseFromMetadata(m.Metadata)
 		return
 	}
 	userID := whop.UserIDFromMetadata(m.Metadata)
@@ -227,6 +249,56 @@ func handleMembershipActivated(data json.RawMessage) {
 		if u, err := model.GetUserByEmail(m.User.Email); err == nil {
 			_ = model.ApplyPlanLimitsToUser(u.ID, tier)
 		}
+	}
+}
+
+func isMailboxAddonMetadata(meta map[string]interface{}) bool {
+	if meta == nil {
+		return false
+	}
+	purpose, _ := meta["purpose"].(string)
+	return purpose == "mailbox_addon"
+}
+
+func isDomainAddonMetadata(meta map[string]interface{}) bool {
+	if meta == nil {
+		return false
+	}
+	purpose, _ := meta["purpose"].(string)
+	return purpose == "domain_addon"
+}
+
+func fulfillMailboxPurchaseFromMetadata(meta map[string]interface{}) {
+	if isDomainAddonMetadata(meta) {
+		var purchaseID int64
+		switch v := meta["domain_purchase_id"].(type) {
+		case string:
+			purchaseID, _ = strconv.ParseInt(v, 10, 64)
+		case float64:
+			purchaseID = int64(v)
+		}
+		if purchaseID > 0 {
+			if err := FulfillDomainPurchase(purchaseID); err != nil {
+				log.Printf("domain purchase fulfill %d: %v", purchaseID, err)
+			}
+		}
+		return
+	}
+	if !isMailboxAddonMetadata(meta) {
+		return
+	}
+	var purchaseID int64
+	switch v := meta["mailbox_purchase_id"].(type) {
+	case string:
+		purchaseID, _ = strconv.ParseInt(v, 10, 64)
+	case float64:
+		purchaseID = int64(v)
+	}
+	if purchaseID <= 0 {
+		return
+	}
+	if err := FulfillMailboxPurchase(purchaseID); err != nil {
+		log.Printf("mailbox purchase fulfill %d: %v", purchaseID, err)
 	}
 }
 
@@ -274,17 +346,10 @@ func handlePaymentFailed(data json.RawMessage) {
 
 func planTierFromMetadata(meta map[string]interface{}) model.PlanTier {
 	if meta == nil {
-		return model.PlanTierStandard
+		return model.PlanTierPro
 	}
 	if v, ok := meta["plan_tier"].(string); ok {
-		switch strings.ToLower(v) {
-		case string(model.PlanTierFree):
-			return model.PlanTierFree
-		case string(model.PlanTierPro):
-			return model.PlanTierPro
-		default:
-			return model.PlanTierStandard
-		}
+		return model.NormalizePlanTier(v)
 	}
-	return model.PlanTierStandard
+	return model.PlanTierPro
 }

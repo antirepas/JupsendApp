@@ -22,16 +22,13 @@ const appGoogleModeLogin = "login"
 const appGoogleModeSignup = "signup"
 
 func SignupPlanPage(c *gin.Context) {
-	plan := c.Param("plan")
-	var tier model.PlanTier
-	switch strings.ToLower(plan) {
-	case string(model.PlanTierFree):
-		tier = model.PlanTierFree
-	case string(model.PlanTierStandard):
-		tier = model.PlanTierStandard
-	case string(model.PlanTierPro):
-		tier = model.PlanTierPro
-	default:
+	plan := strings.ToLower(c.Param("plan"))
+	if plan == "standard" {
+		c.Redirect(http.StatusFound, "/signup/pro")
+		return
+	}
+	tier := model.NormalizePlanTier(plan)
+	if plan != string(model.PlanTierFree) && plan != string(model.PlanTierPro) {
 		c.Redirect(http.StatusFound, "/signup/free")
 		return
 	}
@@ -42,20 +39,21 @@ func SignupPlanPage(c *gin.Context) {
 		return
 	}
 
-	planLower := strings.ToLower(plan)
-	planDisplay := planLower
-	if len(planLower) > 0 {
-		planDisplay = strings.ToUpper(planLower[:1]) + planLower[1:]
+	planDisplay := "Free"
+	if tier == model.PlanTierPro {
+		planDisplay = "Pro"
 	}
 
 	c.HTML(http.StatusOK, "pricing_plan.html", gin.H{
-		"title":             "Pricing: " + planDisplay,
+		"title":            "Pricing: " + planDisplay,
 		"active":           "pricing",
-		"plan":             plan,
+		"plan":             string(tier),
 		"dailyEmails":      spec.DailyEmailCap,
 		"aiCreditsPerDay":  spec.AICreditsPerDay,
 		"warmup":           spec.WarmupEnabled,
-		"stripeLikeNote":   "Whop checkout is used for Standard/Pro.",
+		"includedDomains":  spec.IncludedDomains,
+		"includedMailboxes": spec.IncludedMailboxes,
+		"stripeLikeNote":   "Whop checkout is used for Pro.",
 	})
 }
 
@@ -75,8 +73,11 @@ func AppGoogleLoginStart(c *gin.Context) {
 
 func AppGoogleStart(c *gin.Context) {
 	plan := strings.TrimSpace(c.Query("plan"))
-	tier := model.PlanTier(strings.ToLower(plan))
-	if tier != model.PlanTierFree && tier != model.PlanTierStandard && tier != model.PlanTierPro {
+	if strings.EqualFold(plan, "standard") {
+		plan = string(model.PlanTierPro)
+	}
+	tier := model.NormalizePlanTier(plan)
+	if plan != string(model.PlanTierFree) && plan != string(model.PlanTierPro) {
 		c.Redirect(http.StatusFound, "/signup/free")
 		return
 	}
@@ -146,8 +147,8 @@ func AppGoogleCallback(c *gin.Context) {
 		return
 	}
 
-	tier := model.PlanTier(strings.ToLower(planStr))
-	if tier != model.PlanTierFree && tier != model.PlanTierStandard && tier != model.PlanTierPro {
+	tier := model.NormalizePlanTier(planStr)
+	if planStr != "" && planStr != string(model.PlanTierFree) && planStr != string(model.PlanTierPro) && !strings.EqualFold(planStr, "standard") {
 		oauthErrRedirect("Unknown plan")
 		return
 	}

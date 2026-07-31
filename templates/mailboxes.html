@@ -1,0 +1,98 @@
+{{define "mailboxes.html"}}
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>{{template "head" .}}</head>
+<body class="h-full bg-ivory text-charcoal">
+<div class="flex h-full">
+{{template "sidebar" .}}
+<main class="flex-1 overflow-y-auto">
+<div class="max-w-4xl mx-auto p-8">
+  <div class="flex flex-wrap items-start justify-between gap-4 mb-6">
+    <div>
+      <h2 class="text-2xl font-bold text-charcoal mb-1">Mailboxes</h2>
+      <p class="text-gray-500 text-sm">{{if .isPro}}Outreach domains and sending mailboxes. Campaigns send from your default mailbox.{{else}}Free plan uses a shared sending address. Upgrade to Pro for your own domain and mailboxes.{{end}}</p>
+    </div>
+    <div class="flex flex-wrap gap-2">
+      {{if .isPro}}
+        {{if not .domains}}
+        <a href="/onboarding/domain" class="btn-primary">Set up domain</a>
+        {{else}}
+        <a href="/mailboxes/buy" class="btn-primary">Buy more mailboxes</a>
+        <a href="/mailboxes/domains/buy" class="btn-secondary">Buy domain</a>
+        {{end}}
+      {{else}}
+        <a href="/settings/billing" class="btn-primary">Upgrade to Pro</a>
+      {{end}}
+    </div>
+  </div>
+
+  {{if .success}}<div class="alert-success mb-6">{{.success}}</div>{{end}}
+  {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
+  {{if not .inboxkitOK}}
+  <div class="alert-error mb-6">InboxKit is not configured — domain search and provisioning are unavailable.</div>
+  {{end}}
+
+  {{if .domains}}
+  <div class="card mb-6 space-y-3">
+    <h3 class="card-title">Domains</h3>
+    <ul class="space-y-2 text-sm">
+      {{range .domains}}
+      <li class="flex flex-wrap justify-between gap-2">
+        <span class="font-medium">{{.Domain}}</span>
+        <span class="text-gray-500">{{.Status}}{{if .Included}} · included{{end}}</span>
+      </li>
+      {{end}}
+    </ul>
+  </div>
+  {{end}}
+
+  <div class="card space-y-4">
+    <h3 class="card-title">Mailboxes</h3>
+    {{if .mailboxes}}
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm text-left">
+        <thead>
+          <tr class="text-gray-500 border-b border-gray-200">
+            <th class="py-2 pr-3 font-medium">Email</th>
+            <th class="py-2 pr-3 font-medium">Status</th>
+            <th class="py-2 pr-3 font-medium">Warmup</th>
+            <th class="py-2 pr-3 font-medium">Default</th>
+            <th class="py-2 font-medium"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .mailboxRows}}
+          <tr class="border-b border-gray-100">
+            <td class="py-3 pr-3">
+              <div class="font-medium">{{.Email}}</div>
+              {{if .InsightsHint}}<div class="text-xs text-gray-500 mt-1">{{.InsightsHint}}</div>{{end}}
+            </td>
+            <td class="py-3 pr-3 text-gray-600">{{.Status}}</td>
+            <td class="py-3 pr-3 text-gray-600 text-xs">{{.WarmupLabel}}</td>
+            <td class="py-3 pr-3">{{if .IsDefault}}Yes{{else}}—{{end}}</td>
+            <td class="py-3">
+              {{if and (eq .Status "ready") (not .IsDefault)}}
+              <form method="POST" action="/mailboxes/{{.ID}}/default">
+                <button type="submit" class="text-brand-600 font-medium hover:underline">Make default</button>
+              </form>
+              {{end}}
+            </td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{else}}
+    <p class="text-sm text-gray-600">No mailboxes yet. <a href="/onboarding/domain" class="text-brand-600 font-medium">Set up a domain</a> to get {{.includedCount}} included.</p>
+    {{end}}
+  </div>
+
+  <p class="text-xs text-gray-500 mt-6">
+    <a href="/settings/smtp-check" class="text-brand-600 font-medium">Test SMTP</a> from this server using your default mailbox.
+  </p>
+</div>
+</main>
+</div>
+</body>
+</html>
+{{end}}

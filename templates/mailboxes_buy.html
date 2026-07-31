@@ -1,0 +1,56 @@
+{{define "mailboxes_buy.html"}}
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>{{template "head" .}}</head>
+<body class="h-full bg-ivory text-charcoal">
+<div class="flex h-full">
+{{template "sidebar" .}}
+<main class="flex-1 overflow-y-auto">
+<div class="max-w-xl mx-auto p-8">
+  <h2 class="text-2xl font-bold text-charcoal mb-2">Buy more mailboxes</h2>
+  <p class="text-gray-500 text-sm mb-6">Add seats on an existing outreach domain.{{if .whopOK}} You’ll complete payment via Whop.{{else}} Provisioning runs immediately when Whop add-on is not configured.{{end}}</p>
+
+  {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
+
+  <form method="POST" action="/mailboxes/buy/checkout" class="card space-y-4">
+    <div>
+      <label class="form-label">Domain</label>
+      <select name="domain_id" class="form-input" required>
+        {{range .domains}}
+        <option value="{{.ID}}">{{.Domain}} ({{.Status}})</option>
+        {{end}}
+      </select>
+    </div>
+    <div>
+      <label class="form-label">Quantity</label>
+      <input name="quantity" type="number" class="form-input" min="1" max="10" value="1" required>
+    </div>
+    <div class="grid grid-cols-1 gap-3">
+      <div>
+        <label class="form-label">Mailbox 1 local part</label>
+        <input name="local_1" class="form-input" placeholder="sales" value="sales">
+        <input type="hidden" name="first_name_1" value="Sales">
+        <input type="hidden" name="last_name_1" value="Team">
+      </div>
+      <div>
+        <label class="form-label">Mailbox 2 local part (if qty ≥ 2)</label>
+        <input name="local_2" class="form-input" placeholder="hello">
+        <input type="hidden" name="first_name_2" value="Hello">
+        <input type="hidden" name="last_name_2" value="Team">
+      </div>
+      <div>
+        <label class="form-label">Mailbox 3 local part (if qty ≥ 3)</label>
+        <input name="local_3" class="form-input" placeholder="team">
+        <input type="hidden" name="first_name_3" value="Team">
+        <input type="hidden" name="last_name_3" value="Seat">
+      </div>
+    </div>
+    <button type="submit" class="btn-primary w-full justify-center">{{if .whopOK}}Continue to checkout{{else}}Provision mailboxes{{end}}</button>
+    <a href="/mailboxes" class="btn-secondary inline-flex w-full justify-center">Cancel</a>
+  </form>
+</div>
+</main>
+</div>
+</body>
+</html>
+{{end}}

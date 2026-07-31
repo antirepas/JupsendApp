@@ -6,7 +6,7 @@ Email Tracker is a self-hosted email outreach and analytics application built wi
 
 - **Email templates** with `{{variable}}` personalization
 - **Contact management** with per-contact variables
-- **Email sending** via Gmail OAuth (XOAUTH2 SMTP + IMAP bounces)
+- **Email sending** via provisioned InboxKit mailboxes (plain SMTP) or legacy Gmail OAuth (XOAUTH2)
 - **Open tracking** via 1x1 tracking pixel
 - **Click tracking** with automatic link rewriting and redirect
 - **Dashboard** with stats, charts, and event timelines
@@ -53,13 +53,15 @@ go run .
 
 6. Open [http://localhost:8080/signup](http://localhost:8080/signup) to create an account, then subscribe under **Billing** and connect Gmail in **Settings**.
 
-### Production (DigitalOcean VPS + Supabase)
+### Production (VPS + Supabase)
 
 Keep the app on your VPS; use Supabase for managed PostgreSQL with Table Editor, SQL metrics, and backups.
 
+**Outbound SMTP:** the app sends via **SMTP XOAUTH2** to `smtp.gmail.com` (ports **465/587**). Your VPS must allow outbound SMTP (e.g. Hostinger KVM). Many cloud hosts (including some DigitalOcean droplets) block these ports — if Settings → **Test SMTP** times out, fix the host before sending.
+
 1. Create a [Supabase](https://supabase.com) project.
 2. In **Project Settings → Database**, copy the **Connection pooling** URI (port `6543`, host `*.pooler.supabase.com`).
-3. Add to `/opt/emailtracker/.env` on your droplet:
+3. Add to `/opt/emailtracker/.env` on your VPS:
 
 ```env
 DATABASE_URL=postgres://postgres.[project-ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres?sslmode=require
@@ -68,6 +70,15 @@ BASE_URL=https://your-public-url
 ```
 
 4. Deploy/restart the app container. Schema tables are created automatically on first connect.
+
+#### Post-deploy Gmail / SMTP check
+
+1. Sign in → **Settings** → **Connect Gmail** (Google OAuth; tokens are the SMTP credentials).
+2. Click **Test SMTP from server** — must succeed (XOAUTH2 to `smtp.gmail.com`).
+3. Send a test email (campaign or `go run ./cmd/sendsmoke`).
+4. App logs should show delivery `via smtp-xoauth2` (not `gmail-api`).
+
+If the SMTP test reports ports blocked, open outbound 465/587 on the VPS or move the app to a host that allows SMTP.
 
 **Supabase SQL examples** (SQL Editor):
 
@@ -97,11 +108,11 @@ Each user connects Gmail under **Settings → Connect Gmail**. Manual SMTP/IMAP 
 
 1. Create a project in [Google Cloud Console](https://console.cloud.google.com/).
 2. Enable the **Gmail API**.
-3. Configure the **OAuth consent screen** (External). Add scope `https://mail.google.com/` plus `openid`, `email`, `profile`.
+3. Configure the **OAuth consent screen** (External). Add scope `https://www.googleapis.com/auth/gmail.send` plus `openid`, `email`, `profile`.
 4. Create **OAuth client ID** (Web application).
 5. Add authorized redirect URI: `https://your-domain.com/settings/gmail/callback` (must match `GOOGLE_OAUTH_REDIRECT_URI`).
 
-> The `mail.google.com` scope is restricted. Test users work in development; production requires Google app verification.
+> `gmail.send` is a sensitive scope. Test users work in development; production may require Google app verification.
 
 ### Env vars
 
@@ -132,8 +143,17 @@ Full app access requires an active Whop subscription. After signup, users land o
 | `WHOP_API_BASE` | API base URL — production: `https://api.whop.com/api/v1` (default); sandbox: `https://sandbox-api.whop.com/api/v1` |
 | `WHOP_WEBHOOK_SECRET` | Webhook signing secret (`whsec_...`) |
 | `WHOP_COMPANY_ID` | Company ID (`biz_...`) |
-| `WHOP_PLAN_ID` | Plan ID for checkout (`plan_...`) |
+| `WHOP_PLAN_ID` | Plan ID for checkout (`plan_...`) — Pro fallback |
+| `WHOP_PLAN_ID_PRO` | Pro plan ID (`plan_...`) |
 | `WHOP_PRODUCT_ID` | Product ID (`prod_...`) if you don't have a plan ID — app fetches the plan automatically |
+| `WHOP_MAILBOX_ADDON_ID` | Whop plan ID for extra mailbox purchases (`plan_...`) |
+| `WHOP_DOMAIN_ADDON_ID` | Whop plan ID for extra domain purchases (`plan_...`) |
+| `INBOXKIT_API_KEY` | InboxKit platform API key (domain + mailbox provisioning) |
+| `INBOXKIT_WORKSPACE_ID` | Optional InboxKit workspace id |
+| `INBOXKIT_BASE_URL` | InboxKit API base (default `https://api.inboxkit.com/v1`) |
+| `INBOXKIT_DEFAULT_PLATFORM` | Mailbox platform — `GOOGLE` (default) |
+| `INBOXKIT_INCLUDED_MAILBOXES` | Starter mailboxes included with domain (default `3`) |
+| `INBOXKIT_REGISTRANT_EMAIL` / `_NAME` / `_ORG` | Domain WHOIS contact defaults |
 
 Checkout metadata includes `user_id` so webhooks can match the app account. Email matching is a fallback only.
 
@@ -217,9 +237,9 @@ Email sends go through a **PostgreSQL-backed job queue** processed by a backgrou
 
 ### Gmail OAuth profile per user
 
-- Connect Gmail under **Settings** (one sending profile per account).
-- Outbound worker uses XOAUTH2 for SMTP; IMAP bounce polling uses the same OAuth token.
-- Rate limits and warmup apply per profile.
+- Connect Gmail under **Settings** (one sending profile per account). OAuth tokens are used as SMTP credentials (XOAUTH2) — no app password.
+- Outbound worker sends via SMTP XOAUTH2 to `smtp.gmail.com` (logs: `smtp-xoauth2`). IMAP bounce polling is disabled while only `gmail.send` is requested.
+- Rate limits apply per profile.
 - If OAuth expires, Settings and the Sends page show a reconnect warning.
 
 ### Rate limits & warmup (defaults per account)

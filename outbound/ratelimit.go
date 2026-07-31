@@ -22,7 +22,8 @@ func resetDailyIfNeeded(account *model.SMTPAccount) {
 
 func accountUnderDailyCap(account model.SMTPAccount) bool {
 	resetDailyIfNeeded(&account)
-	cap := EffectiveDailyCap(account)
+	analytics := model.GetMailboxAnalyticsBySMTPAccountID(account.ID)
+	cap := EffectiveDailyCapWithInsights(account, analytics)
 	return account.SendsToday < cap
 }
 

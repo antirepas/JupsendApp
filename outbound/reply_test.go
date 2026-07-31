@@ -37,8 +37,16 @@ func TestExtractSendIDFromReplyHeader(t *testing.T) {
 
 func TestReplyDedupeKeyPrefersMessageID(t *testing.T) {
 	key := replyDedupeKey(ReplyMatch{EmailSendID: 42}, "<abc@mail.test>")
-	if key != "gmail-msg:abc@mail.test" {
+	if key != "imap-msg:abc@mail.test" {
 		t.Fatalf("got %q", key)
+	}
+}
+
+func TestIsReplyMessageByTrackingMessageID(t *testing.T) {
+	body := "On Mon someone wrote\n"
+	refs := []string{"<track-uuid-123@emailtracker>"}
+	if !IsReplyMessage("bob@client.com", "Re: Hello", body, refs, "me@acme.com") {
+		t.Fatal("expected reply for @emailtracker Message-ID")
 	}
 }
 

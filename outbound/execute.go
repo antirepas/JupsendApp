@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"emailtracker.com/googleoauth"
 	"emailtracker.com/model"
 	"emailtracker.com/util"
 )
@@ -92,7 +91,15 @@ func executeJob(job model.SendJob, account model.SMTPAccount) error {
 	if from == "" {
 		return fmt.Errorf("smtp account %d has no sender email configured", account.ID)
 	}
-	sender := util.NewEmailSender(account.SMTPHost, account.SMTPPort, account.SMTPUser, account.SMTPPassword, from)
+	smtpPass := account.SMTPPassword
+	if account.MailboxSource == "inboxkit" || account.MailboxSource == model.MailboxSourceShared {
+		dec, err := model.DecryptSMTPPassword(account)
+		if err != nil {
+			return fmt.Errorf("mailbox credentials: %w", err)
+		}
+		smtpPass = dec
+	}
+	sender := util.NewEmailSender(account.SMTPHost, account.SMTPPort, account.SMTPUser, smtpPass, from)
 	messageID := fmt.Sprintf("<%s@%s>", trackID, messageIDDomain(from))
 	meta := util.SendMeta{
 		MessageID:          messageID,
@@ -105,8 +112,7 @@ func executeJob(job model.SendJob, account model.SMTPAccount) error {
 		if err != nil {
 			return fmt.Errorf("gmail oauth: %w", err)
 		}
-		raw := util.BuildMultipartEmail(from, account.FromName, contact.Email, newSubject, plainBody, replacedLinksBody, meta)
-		sendErr = googleoauth.SendRawMessage(token, raw)
+		sendErr = sender.SendWithMetaOAuth(contact.Email, newSubject, plainBody, replacedLinksBody, meta, token)
 	} else {
 		sendErr = sender.SendWithMeta(contact.Email, newSubject, plainBody, replacedLinksBody, meta)
 	}
@@ -137,8 +143,14 @@ func messageIDDomain(from string) string {
 }
 
 func sendTransport(account model.SMTPAccount) string {
+	if account.MailboxSource == model.MailboxSourceShared {
+		return "smtp-shared"
+	}
+	if account.MailboxSource == "inboxkit" {
+		return "smtp-inboxkit"
+	}
 	if account.IsGoogleOAuth() {
-		return "gmail-api"
+		return "smtp-xoauth2"
 	}
 	return "smtp"
 }

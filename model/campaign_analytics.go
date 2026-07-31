@@ -115,8 +115,6 @@ type CampaignAnalytics struct {
 	ExperimentHypothesis string
 	CampaignReplyRate   float64
 	ReplyRateDelta      float64
-	CampaignOpenRate    float64
-	OpenRateDelta       float64
 	IsPersonalBest      bool
 	AccountBenchmark    AccountBenchmark
 }
@@ -191,19 +189,14 @@ func loadVariantMetrics(campaignID int64, variant string, va *VariantAnalytics) 
 	}
 }
 
-func campaignOverviewOpenCounts(campaignID int64) (sent, opens int) {
+func campaignOverviewCounts(campaignID int64) (sent, replies int) {
 	_ = db.QueryRow(`SELECT COUNT(*) FROM email_sends WHERE campaign_id = ?`, campaignID).Scan(&sent)
 	_ = db.QueryRow(`
-		SELECT COUNT(DISTINCT es.contact_id) FROM email_sends es
-		INNER JOIN email_events ee ON (ee.email_send_id = es.id OR ee.tracking_id = es.tracking_id) AND ee.event_type = 'open'
-		WHERE es.campaign_id = ?
-	`, campaignID).Scan(&opens)
-	return sent, opens
-}
-
-// campaignOverviewCounts kept for any remaining callers; returns open counts under the old name slots.
-func campaignOverviewCounts(campaignID int64) (sent, replies int) {
-	return campaignOverviewOpenCounts(campaignID)
+		SELECT COUNT(DISTINCT ce.contact_id) FROM contact_events ce
+		INNER JOIN email_sends es ON es.id = ce.email_send_id
+		WHERE es.campaign_id = ? AND ce.event_type = 'REPLY'
+	`, campaignID).Scan(&replies)
+	return sent, replies
 }
 
 func experimentABSummary(campaignID int64) (winner, method string) {
@@ -567,23 +560,15 @@ func pickABWinner(a, b VariantAnalytics, hasB bool) (string, string) {
 	}
 
 	const minSends = 10
-	if a.Sent >= minSends && b.Sent >= minSends {
-		if a.OpenRate > b.OpenRate+0.01 {
-			return "A", "open"
+	if a.Sent >= minSends && b.Sent >= minSends && (a.UniqueReplies > 0 || b.UniqueReplies > 0) {
+		if a.ReplyRate > b.ReplyRate+0.01 {
+			return "A", "reply"
 		}
-		if b.OpenRate > a.OpenRate+0.01 {
-			return "B", "open"
+		if b.ReplyRate > a.ReplyRate+0.01 {
+			return "B", "reply"
 		}
-		if a.UniqueOpens == b.UniqueOpens && a.UniqueOpens > 0 {
-			scoreA := a.OpenRate*0.6 + a.ClickRate*0.4
-			scoreB := b.OpenRate*0.6 + b.ClickRate*0.4
-			if scoreA > scoreB+0.5 {
-				return "A", "open"
-			}
-			if scoreB > scoreA+0.5 {
-				return "B", "open"
-			}
-			return "Tie", "open"
+		if a.UniqueReplies == b.UniqueReplies && a.UniqueReplies > 0 {
+			return "Tie", "reply"
 		}
 	}
 

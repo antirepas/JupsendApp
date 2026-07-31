@@ -28,6 +28,17 @@ type WarmupProgress struct {
 }
 
 func EffectiveDailyCap(account model.SMTPAccount) int {
+	return EffectiveDailyCapWithInsights(account, "")
+}
+
+// EffectiveDailyCapWithInsights applies the Pro warmup schedule, then optional InboxKit clamps.
+func EffectiveDailyCapWithInsights(account model.SMTPAccount, analyticsJSON string) int {
+	schedule := scheduleDailyCap(account)
+	cap, _ := ApplyInsightsToCap(schedule, account, analyticsJSON)
+	return cap
+}
+
+func scheduleDailyCap(account model.SMTPAccount) int {
 	if !account.WarmupEnabled {
 		return account.DailyLimit
 	}

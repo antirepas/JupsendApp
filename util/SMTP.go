@@ -78,6 +78,15 @@ func ProbeSMTPAuth(host, port, from, accessToken string) error {
 	return sendMailAttempt(host, port, auth, from, nil, nil, ProbeSMTPSendTimeout)
 }
 
+// ProbeSMTPPlain verifies username/password SMTP login without sending a message.
+func ProbeSMTPPlain(host, port, username, password, from string) error {
+	if username == "" {
+		username = from
+	}
+	auth := smtp.PlainAuth("", username, password, host)
+	return sendMailAttempt(host, port, auth, from, nil, nil, ProbeSMTPSendTimeout)
+}
+
 func sendMailWithTimeout(host, port string, auth smtp.Auth, from string, to []string, msg []byte) error {
 	return sendMailAttempt(host, port, auth, from, to, msg, DefaultSMTPSendTimeout)
 }

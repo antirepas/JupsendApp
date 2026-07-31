@@ -13,10 +13,10 @@
 
 <div class="card mb-6 space-y-4">
     <h3 class="font-semibold text-charcoal">Why connect Gmail?</h3>
-    <p class="text-sm text-gray-600 leading-relaxed">jupsend sends outreach through your Gmail account (not a shared SMTP password). Opens and clicks are tracked via your jupsend domain, while delivery uses Google's servers — better deliverability and fewer auth issues.</p>
+    <p class="text-sm text-gray-600 leading-relaxed">jupsend connects your Gmail with Google OAuth (no shared SMTP password). Credentials are OAuth tokens; delivery uses SMTP XOAUTH2 to <code class="text-xs bg-gray-100 px-1 rounded">smtp.gmail.com</code>. Opens and clicks are tracked on your jupsend domain.</p>
     <ul class="text-sm text-gray-600 list-disc list-inside space-y-1">
         <li>Send campaigns and one-off emails from your address</li>
-        <li>Rate limits and warmup to protect your sender reputation</li>
+        <li>Daily send limits protect your sender reputation</li>
     </ul>
 </div>
 
@@ -26,13 +26,14 @@
         <li class="flex gap-3"><span class="onboarding-step-num shrink-0">1</span><span>Go to <a href="/settings" class="text-brand-600 font-medium">Settings</a> and find the <strong>Gmail</strong> section.</span></li>
         <li class="flex gap-3"><span class="onboarding-step-num shrink-0">2</span><span>Click <strong>Connect Gmail</strong>. You'll be redirected to Google to sign in and approve access.</span></li>
         <li class="flex gap-3"><span class="onboarding-step-num shrink-0">3</span><span>Grant permission to <strong>send email</strong> on your behalf (jupsend does not read your inbox).</span></li>
-        <li class="flex gap-3"><span class="onboarding-step-num shrink-0">4</span><span>After redirect back, Settings will show your connected email. Set your <strong>From name</strong> and adjust send limits if needed, then click <strong>Save settings</strong>.</span></li>
+        <li class="flex gap-3"><span class="onboarding-step-num shrink-0">4</span><span>After redirect back, click <strong>Test SMTP from server</strong> to confirm ports 465/587 work from your host.</span></li>
+        <li class="flex gap-3"><span class="onboarding-step-num shrink-0">5</span><span>Set your <strong>From name</strong> if needed, then click <strong>Save settings</strong>.</span></li>
     </ol>
 </div>
 
 <div class="card mb-6 space-y-3">
     <h3 class="font-semibold text-charcoal">Tips</h3>
-    <p class="text-sm text-gray-600">Start with low daily limits (warmup is on by default) and increase gradually. If Google asks for app verification in production, test users can connect during development.</p>
+    <p class="text-sm text-gray-600">Your VPS must allow outbound SMTP (465/587). If the SMTP test times out or says ports are blocked, fix the host network before sending campaigns.</p>
     <p class="text-sm text-gray-600">To revoke access, remove jupsend from your Google Account permissions at <a href="https://myaccount.google.com/permissions" class="text-brand-600 font-medium" target="_blank" rel="noopener">myaccount.google.com/permissions</a>.</p>
 </div>
 

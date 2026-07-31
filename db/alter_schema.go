@@ -37,7 +37,7 @@ func runAlterSchema() {
 		`ALTER TABLE contact ADD COLUMN IF NOT EXISTS replied_at TIMESTAMPTZ`,
 		`ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS experiment_variable TEXT DEFAULT ''`,
 		`ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS experiment_hypothesis TEXT DEFAULT ''`,
-		`ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS success_metric TEXT DEFAULT 'open'`,
+		`ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS success_metric TEXT DEFAULT 'reply'`,
 		`ALTER TABLE workflow_instances ADD COLUMN IF NOT EXISTS fork_root_id BIGINT`,
 		`ALTER TABLE workflow_instances ADD COLUMN IF NOT EXISTS branch_priority INTEGER NOT NULL DEFAULT 0`,
 		`CREATE TABLE IF NOT EXISTS campaign_workflow_step_templates (
@@ -58,10 +58,62 @@ func runAlterSchema() {
 			processed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			PRIMARY KEY (user_id, message_key)
 		)`,
+		`CREATE TABLE IF NOT EXISTS outreach_domains (
+			id BIGSERIAL PRIMARY KEY,
+			user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			domain TEXT NOT NULL,
+			inboxkit_order_id TEXT DEFAULT '',
+			status TEXT NOT NULL DEFAULT 'pending',
+			included BOOLEAN NOT NULL DEFAULT TRUE,
+			redirect_url TEXT DEFAULT '',
+			created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE (user_id, domain)
+		)`,
+		`CREATE TABLE IF NOT EXISTS outreach_mailboxes (
+			id BIGSERIAL PRIMARY KEY,
+			user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			domain_id BIGINT REFERENCES outreach_domains(id) ON DELETE SET NULL,
+			smtp_account_id BIGINT REFERENCES smtp_accounts(id) ON DELETE SET NULL,
+			inboxkit_mailbox_id TEXT DEFAULT '',
+			email TEXT NOT NULL,
+			first_name TEXT DEFAULT '',
+			last_name TEXT DEFAULT '',
+			platform TEXT NOT NULL DEFAULT 'GOOGLE',
+			status TEXT NOT NULL DEFAULT 'pending',
+			is_default BOOLEAN NOT NULL DEFAULT FALSE,
+			health_json TEXT DEFAULT '{}',
+			analytics_json TEXT DEFAULT '{}',
+			included BOOLEAN NOT NULL DEFAULT TRUE,
+			created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`CREATE TABLE IF NOT EXISTS mailbox_purchases (
+			id BIGSERIAL PRIMARY KEY,
+			user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			domain_id BIGINT REFERENCES outreach_domains(id) ON DELETE SET NULL,
+			quantity INTEGER NOT NULL DEFAULT 1,
+			status TEXT NOT NULL DEFAULT 'pending_payment',
+			whop_checkout_id TEXT DEFAULT '',
+			whop_membership_id TEXT DEFAULT '',
+			inboxkit_order_id TEXT DEFAULT '',
+			payload_json TEXT DEFAULT '{}',
+			error_message TEXT DEFAULT '',
+			created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_outreach_mailboxes_user ON outreach_mailboxes(user_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_outreach_domains_user ON outreach_domains(user_id)`,
 	}
 	for _, stmt := range alters {
 		if _, err := DB.Exec(stmt); err != nil {
 			log.Printf("alter schema note: %v", err)
 		}
 	}
+
+	// Allow multiple smtp_accounts per user (InboxKit mailboxes).
+	_, _ = DB.Exec(`DROP INDEX IF EXISTS idx_smtp_accounts_user`)
+	_, _ = DB.Exec(`ALTER TABLE smtp_accounts ADD COLUMN IF NOT EXISTS inboxkit_mailbox_id TEXT DEFAULT ''`)
+	_, _ = DB.Exec(`ALTER TABLE smtp_accounts ADD COLUMN IF NOT EXISTS is_default SMALLINT NOT NULL DEFAULT 0`)
+	_, _ = DB.Exec(`ALTER TABLE smtp_accounts ADD COLUMN IF NOT EXISTS mailbox_source TEXT NOT NULL DEFAULT ''`)
 }

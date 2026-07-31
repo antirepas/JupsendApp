@@ -239,6 +239,9 @@ func runSchema() {
 			oauth_access_token TEXT DEFAULT '',
 			oauth_expiry TIMESTAMPTZ,
 			google_email TEXT DEFAULT '',
+			inboxkit_mailbox_id TEXT DEFAULT '',
+			is_default SMALLINT NOT NULL DEFAULT 0,
+			mailbox_source TEXT NOT NULL DEFAULT '',
 			created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 		)`,
@@ -280,10 +283,57 @@ func runSchema() {
 		`CREATE INDEX IF NOT EXISTS idx_contact_events_instance ON contact_events(workflow_instance_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_send_jobs_status_sched ON send_jobs(status, scheduled_at)`,
 		`CREATE INDEX IF NOT EXISTS idx_send_jobs_campaign ON send_jobs(campaign_id, status)`,
-		`CREATE UNIQUE INDEX IF NOT EXISTS idx_smtp_accounts_user ON smtp_accounts(user_id) WHERE user_id IS NOT NULL`,
+		`CREATE INDEX IF NOT EXISTS idx_smtp_accounts_user_id ON smtp_accounts(user_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_contact_user_email ON contact(user_id, email)`,
 		`CREATE INDEX IF NOT EXISTS idx_contact_list_members_contact ON contact_list_members(contact_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_email_sends_user_contact_sent ON email_sends(user_id, contact_id, sent_at)`,
+
+		`CREATE TABLE IF NOT EXISTS outreach_domains (
+			id BIGSERIAL PRIMARY KEY,
+			user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			domain TEXT NOT NULL,
+			inboxkit_order_id TEXT DEFAULT '',
+			status TEXT NOT NULL DEFAULT 'pending',
+			included BOOLEAN NOT NULL DEFAULT TRUE,
+			redirect_url TEXT DEFAULT '',
+			created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE (user_id, domain)
+		)`,
+		`CREATE TABLE IF NOT EXISTS outreach_mailboxes (
+			id BIGSERIAL PRIMARY KEY,
+			user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			domain_id BIGINT REFERENCES outreach_domains(id) ON DELETE SET NULL,
+			smtp_account_id BIGINT REFERENCES smtp_accounts(id) ON DELETE SET NULL,
+			inboxkit_mailbox_id TEXT DEFAULT '',
+			email TEXT NOT NULL,
+			first_name TEXT DEFAULT '',
+			last_name TEXT DEFAULT '',
+			platform TEXT NOT NULL DEFAULT 'GOOGLE',
+			status TEXT NOT NULL DEFAULT 'pending',
+			is_default BOOLEAN NOT NULL DEFAULT FALSE,
+			health_json TEXT DEFAULT '{}',
+			analytics_json TEXT DEFAULT '{}',
+			included BOOLEAN NOT NULL DEFAULT TRUE,
+			created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`CREATE TABLE IF NOT EXISTS mailbox_purchases (
+			id BIGSERIAL PRIMARY KEY,
+			user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			domain_id BIGINT REFERENCES outreach_domains(id) ON DELETE SET NULL,
+			quantity INTEGER NOT NULL DEFAULT 1,
+			status TEXT NOT NULL DEFAULT 'pending_payment',
+			whop_checkout_id TEXT DEFAULT '',
+			whop_membership_id TEXT DEFAULT '',
+			inboxkit_order_id TEXT DEFAULT '',
+			payload_json TEXT DEFAULT '{}',
+			error_message TEXT DEFAULT '',
+			created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_outreach_mailboxes_user ON outreach_mailboxes(user_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_outreach_domains_user ON outreach_domains(user_id)`,
 	}
 
 	for _, stmt := range stmts {

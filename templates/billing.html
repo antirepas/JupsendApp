@@ -44,7 +44,7 @@
 
 {{if not .isAdmin}}
 <h3 class="text-lg font-semibold text-charcoal mb-3">Change plan</h3>
-<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
     {{range .plans}}
     <div class="card {{if .Current}}ring-2 ring-brand-500{{end}}">
         <div class="flex items-center justify-between mb-2">
@@ -52,9 +52,14 @@
             {{if .Current}}<span class="badge badge-blue text-xs">Current</span>{{end}}
         </div>
         <ul class="text-sm text-slate-600 space-y-1 mb-4">
-            <li>{{.DailyEmails}} emails / day</li>
+            <li>{{.DailyEmails}} emails / day{{if eq .Tier "pro"}} per mailbox{{end}}</li>
             <li>{{.AICredits}} AI credits / day</li>
             <li>Warmup {{if .Warmup}}on{{else}}off{{end}}</li>
+            {{if eq .Tier "pro"}}
+            <li>1 domain + 3 mailboxes included</li>
+            {{else}}
+            <li>Shared sending mailbox</li>
+            {{end}}
         </ul>
         {{if .Current}}
         <p class="text-xs text-slate-400">Your active plan</p>
@@ -62,7 +67,7 @@
             {{if $.hasPaidMembership}}
             <p class="text-xs text-slate-500 mb-2">Cancel your paid subscription below to return to Free limits.</p>
             {{else}}
-            <p class="text-xs text-slate-400">Sign up free from the landing page</p>
+            <p class="text-xs text-slate-400">You’re on Free when not subscribed to Pro</p>
             {{end}}
         {{else if $.whopConfigured}}
         <form method="POST" action="/settings/billing/checkout">
