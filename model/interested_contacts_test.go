@@ -36,11 +36,14 @@ func TestListInterestedContactsScoring(t *testing.T) {
 	if len(list) == 0 {
 		t.Fatal("expected interested contact")
 	}
-	if list[0].Tier != "hot" {
+	if list[0].Tier != "warm" {
 		t.Fatalf("tier=%q", list[0].Tier)
 	}
 	if list[0].LastSignal != "click" {
 		t.Fatalf("lastSignal=%q", list[0].LastSignal)
+	}
+	if list[0].Score != 40 {
+		t.Fatalf("score=%d want 40", list[0].Score)
 	}
 }
 
