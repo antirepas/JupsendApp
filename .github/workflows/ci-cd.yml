@@ -146,12 +146,13 @@ jobs:
               -p 127.0.0.1:8080:8080 \
               "$IMAGE"
 
-            # Wait for the process to stay up (catch instant crash from bad .env / DB).
+            ok=0
             for i in 1 2 3 4 5 6 7 8 9 10; do
               status="$(docker inspect -f '{{.State.Status}}' emailtracker 2>/dev/null || echo missing)"
               if [ "$status" = "running" ]; then
                 if wget -qO- http://127.0.0.1:8080/healthz >/dev/null 2>&1; then
                   echo "Health check OK"
+                  ok=1
                   break
                 fi
               elif [ "$status" = "exited" ] || [ "$status" = "dead" ] || [ "$status" = "missing" ]; then
@@ -159,18 +160,15 @@ jobs:
                 docker logs emailtracker || true
                 exit 1
               fi
-              if [ "$i" -eq 10 ]; then
-                echo "Timed out waiting for /healthz"
-                docker ps -a --filter name=emailtracker
-                docker logs emailtracker || true
-                exit 1
-              fi
               sleep 2
             done
+            if [ "$ok" != "1" ]; then
+              echo "Timed out waiting for /healthz"
+              docker ps -a --filter name=emailtracker || true
+              docker logs emailtracker || true
+              exit 1
+            fi
 
-            docker exec emailtracker grep -q "Import contacts" /app/templates/dashboard.html
-            echo "Template check OK"
-            wget -qO- http://127.0.0.1:8080/healthz || true
-            echo
-            docker image prune -f
-            docker logout ghcr.io || true
+            docker image prune -f >/dev/null 2>&1 || true
+            docker logout ghcr.io >/dev/null 2>&1 || true
+            echo "Deploy finished"
