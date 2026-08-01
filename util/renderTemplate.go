@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"html"
-	"regexp"
 	"strings"
 
 	"emailtracker.com/ai"
@@ -191,24 +190,31 @@ func RewriteLinks(htmlBody string, emailSendId int64) string {
 }
 
 func RewriteLinksWithBase(htmlBody string, emailSendId int64, baseURL string) string {
-	re := regexp.MustCompile(`href="([^"]+)"`)
+	htmlBody = AutolinkBareURLs(htmlBody)
 
-	return re.ReplaceAllStringFunc(htmlBody, func(match string) string {
-		originalURL := re.FindStringSubmatch(match)[1]
+	return hrefAttrRe.ReplaceAllStringFunc(htmlBody, func(match string) string {
+		sub := hrefAttrRe.FindStringSubmatch(match)
+		if len(sub) < 4 {
+			return match
+		}
+		originalURL := sub[2]
+		if originalURL == "" {
+			originalURL = sub[3]
+		}
 		if shouldSkipLinkTracking(originalURL) {
 			return match
 		}
-		if _, ok := SafeRedirectURL(originalURL); !ok {
+		dest, ok := normalizeTrackableURL(originalURL)
+		if !ok {
 			return match
 		}
 
 		linkTrackingID := GenerateLinkTrackingID()
-		_, err := model.SaveTrackLink(emailSendId, linkTrackingID, originalURL)
+		_, err := model.SaveTrackLink(emailSendId, linkTrackingID, dest)
 		if err != nil {
 			return match
 		}
 
-		trackingURL := fmt.Sprintf(`href="%s"`, TrackClickURL(baseURL, linkTrackingID))
-		return trackingURL
+		return fmt.Sprintf(`href="%s"`, TrackClickURL(baseURL, linkTrackingID))
 	})
 }
