@@ -104,6 +104,9 @@ func runAlterSchema() {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_outreach_mailboxes_user ON outreach_mailboxes(user_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_outreach_domains_user ON outreach_domains(user_id)`,
+		// Allow campaigns to be stopped mid-flight (cancel queued sends).
+		`ALTER TABLE campaigns DROP CONSTRAINT IF EXISTS campaigns_status_check`,
+		`ALTER TABLE campaigns ADD CONSTRAINT campaigns_status_check CHECK (status IN ('draft', 'sent', 'stopped'))`,
 	}
 	for _, stmt := range alters {
 		if _, err := DB.Exec(stmt); err != nil {

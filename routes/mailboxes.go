@@ -22,8 +22,9 @@ func RequireMailboxSetup() gin.HandlerFunc {
 		userID := mustUserID(c)
 
 		// Free: ensure shared SMTP is attached, then allow app use without domain onboarding.
+		// Do not call ApplyPlanLimitsToUser on every request — it used to reset sends_today.
 		if !model.UserIsPro(userID) {
-			_ = model.ApplyPlanLimitsToUser(userID, model.PlanTierFree)
+			_ = model.EnsureFreeSharedMailbox(userID)
 			if model.UserHasReadyMailbox(userID) {
 				c.Next()
 				return

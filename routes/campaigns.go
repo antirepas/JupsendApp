@@ -152,7 +152,7 @@ func SaveCampaignWorkflowTemplatesWeb(ctx *gin.Context) {
 		ctx.Redirect(http.StatusFound, "/campaigns?error=Campaign+not+found")
 		return
 	}
-	if campaign.Status == "sent" || campaign.Status == "sending" {
+	if campaign.Status == "sent" || campaign.Status == "sending" || campaign.Status == "stopped" {
 		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error=Cannot+edit+templates+after+launch")
 		return
 	}
@@ -220,6 +220,13 @@ func CampaignDetailPage(ctx *gin.Context) {
 
 	isWorkflow := (detail.ExecutionMode == "workflow" || detail.ExecutionMode == "workflow_ab") && detail.WorkflowVersionID > 0
 
+	canStop := detail.DisplayStatus == "sending" || detail.DisplayStatus == "scheduled"
+	if !canStop && detail.DisplayStatus != "stopped" {
+		if ok, _ := model.CampaignHasCancellableWork(detail.ID); ok {
+			canStop = true
+		}
+	}
+
 	var scheduledAtLocal string
 	if detail.ScheduledAt != nil {
 		scheduledAtLocal = detail.ScheduledAt.Format("2006-01-02T15:04")
@@ -236,10 +243,11 @@ func CampaignDetailPage(ctx *gin.Context) {
 		"success":          ctx.Query("success"),
 		"error":            ctx.Query("error"),
 		"isWorkflow":       isWorkflow,
+		"canStop":          canStop,
 	}
 
 	if isWorkflow {
-		canEditMappings := detail.DisplayStatus != "sent" && detail.DisplayStatus != "sending"
+		canEditMappings := detail.DisplayStatus != "sent" && detail.DisplayStatus != "sending" && detail.DisplayStatus != "stopped"
 		pageData["workflowInfo"] = pageExtras.WorkflowInfo
 		pageData["workflowGraphTree"] = wrapWorkflowGraphNode(
 			pageExtras.WorkflowGraphTree,
@@ -473,6 +481,30 @@ func SendCampaign(ctx *gin.Context) {
 	ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?success="+url.QueryEscape(msg))
 }
 
+func StopCampaign(ctx *gin.Context) {
+	campaignID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
+	if err != nil {
+		ctx.Redirect(http.StatusFound, "/campaigns?error=Invalid+campaign")
+		return
+	}
+
+	result, err := model.StopCampaign(campaignID, mustUserID(ctx))
+	if err != nil {
+		log.Print(err)
+		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error="+url.QueryEscape(err.Error()))
+		return
+	}
+	if result.AlreadyStopped {
+		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?success="+url.QueryEscape("Campaign already stopped"))
+		return
+	}
+	msg := fmt.Sprintf("Campaign stopped. Cancelled %d queued emails", result.CancelledJobs)
+	if result.CancelledInstances > 0 {
+		msg += fmt.Sprintf(" and %d workflow runs", result.CancelledInstances)
+	}
+	ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?success="+url.QueryEscape(msg))
+}
+
 func ScheduleCampaign(ctx *gin.Context) {
 	campaignID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
 	if err != nil {
@@ -526,6 +558,9 @@ func executeCampaignSend(userID, campaignID int64) (outbound.EnqueueResult, erro
 	if campaign.Status == "sent" {
 		return outbound.EnqueueResult{}, fmt.Errorf("campaign already sent")
 	}
+	if campaign.Status == "stopped" {
+		return outbound.EnqueueResult{}, fmt.Errorf("campaign was stopped")
+	}
 	if campaign.IsSending {
 		return outbound.EnqueueResult{}, fmt.Errorf("campaign is already sending")
 	}
@@ -570,6 +605,9 @@ func launchCampaign(userID, campaignID int64) (outbound.EnqueueResult, error) {
 	}
 	if campaign.Status == "sent" {
 		return outbound.EnqueueResult{}, fmt.Errorf("campaign already sent")
+	}
+	if campaign.Status == "stopped" {
+		return outbound.EnqueueResult{}, fmt.Errorf("campaign was stopped")
 	}
 	if (campaign.ExecutionMode == "workflow" || campaign.ExecutionMode == "workflow_ab") && campaign.WorkflowVersionID > 0 {
 		sent, failed, err := startWorkflowCampaign(campaignID, campaign)

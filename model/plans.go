@@ -144,7 +144,6 @@ func ApplyPlanLimitsToUser(userID int64, tier PlanTier) error {
 	}
 
 	now := time.Now()
-	today := now.Format("2006-01-02")
 
 	var warmupStartedAt any = nil
 	if spec.WarmupEnabled {
@@ -172,7 +171,9 @@ func ApplyPlanLimitsToUser(userID int64, tier PlanTier) error {
 		`, now, userID, MailboxSourceShared)
 	}
 
-	// Reset daily pacing counters so the new plan limits take effect immediately for the current day.
+	// Sync limit fields only. Never reset sends_today/last_send_at here — RequireMailboxSetup
+	// and billing webhooks call this often; wiping counters let Free users exceed the daily cap.
+	// Day rollover is handled by ResetAccountDailyIfNeeded.
 	if _, err := tx.Exec(`
 		UPDATE smtp_accounts SET
 			daily_limit=?,
@@ -182,15 +183,16 @@ func ApplyPlanLimitsToUser(userID int64, tier PlanTier) error {
 			warmup_daily_cap=?,
 			warmup_target_daily_cap=?,
 			warmup_increment_per_day=?,
-			warmup_started_at=?,
-			sends_today=0,
-			sends_today_reset_at=?,
-			last_send_at=NULL,
+			warmup_started_at=CASE
+				WHEN ? = 1 AND COALESCE(warmup_enabled, 0) = 0 THEN ?
+				WHEN ? = 0 THEN NULL
+				ELSE warmup_started_at
+			END,
 			updated_at=?
 		WHERE user_id=? AND COALESCE(mailbox_source,'') <> ?
 	`, spec.DailyEmailCap, spec.PerMinuteLimit, spec.MinSecondsBetweenSends,
 		warmupEnabledInt, spec.WarmupDailyCap, spec.WarmupTargetDailyCap, spec.WarmupIncrementPerDay,
-		warmupStartedAt, today, now, userID, MailboxSourceShared); err != nil {
+		warmupEnabledInt, warmupStartedAt, warmupEnabledInt, now, userID, MailboxSourceShared); err != nil {
 		return err
 	}
 
@@ -207,17 +209,23 @@ func ApplyPlanLimitsToUser(userID int64, tier PlanTier) error {
 				warmup_started_at=NULL,
 				status='active',
 				is_default=1,
-				sends_today=0,
-				sends_today_reset_at=?,
-				last_send_at=NULL,
 				updated_at=?
 			WHERE user_id=? AND mailbox_source=?
-		`, spec.DailyEmailCap, spec.PerMinuteLimit, spec.MinSecondsBetweenSends, today, now, userID, MailboxSourceShared); err != nil {
+		`, spec.DailyEmailCap, spec.PerMinuteLimit, spec.MinSecondsBetweenSends, now, userID, MailboxSourceShared); err != nil {
 			return err
 		}
 	}
 
 	return tx.Commit()
+}
+
+// EnsureFreeSharedMailbox attaches/refreshes the Free plan shared SMTP without resetting send counters.
+func EnsureFreeSharedMailbox(userID int64) error {
+	spec, err := PlanSpecForTier(PlanTierFree)
+	if err != nil {
+		return err
+	}
+	return EnsureSharedSMTPAccountForUser(userID, spec)
 }
 
 // EnsureSharedSMTPAccountForUser attaches the platform shared SMTP profile for Free users.

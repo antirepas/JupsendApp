@@ -88,7 +88,15 @@ func runClaimedJob(item claimedJob) {
 		}
 		_ = model.RescheduleSendJob(job.ID, time.Now().Add(delay), "rate limited: waiting for account capacity")
 		return
-	} //
+	}
+
+	if job.CampaignID > 0 && model.CampaignIsStopped(job.CampaignID) {
+		_ = model.FailSendJob(job.ID, "cancelled: campaign stopped", "failed")
+		if job.EmailSendID > 0 {
+			_ = model.MarkEmailSendFailed(job.EmailSendID)
+		}
+		return
+	}
 
 	if err := executeJob(job, account); err != nil {
 		log.Printf("outbound job %d failed: %v", job.ID, err)

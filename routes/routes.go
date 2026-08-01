@@ -213,6 +213,7 @@ func RegisterRoutes(server *gin.Engine) {
 		authd.GET("/campaigns/:id/sample", DownloadCampaignSample)
 		authd.POST("/campaigns/:id/workflow-templates", SaveCampaignWorkflowTemplatesWeb)
 		authd.POST("/campaigns/:id/send", SendCampaign)
+		authd.POST("/campaigns/:id/stop", StopCampaign)
 
 		authd.GET("/sends", ListSendsPage)
 		authd.GET("/sends/new", NewSendPage)

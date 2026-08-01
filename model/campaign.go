@@ -74,6 +74,9 @@ type CampaignContactItem struct {
 }
 
 func ComputeDisplayStatus(status string, scheduledAt *time.Time, isSending bool) string {
+	if status == "stopped" {
+		return "stopped"
+	}
 	if status == "sent" {
 		return "sent"
 	}

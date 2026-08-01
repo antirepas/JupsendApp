@@ -64,7 +64,7 @@ func runSchema() {
 			name TEXT NOT NULL,
 			template_a_id BIGINT NOT NULL REFERENCES template(id),
 			template_b_id BIGINT REFERENCES template(id),
-			status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'sent')),
+			status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'sent', 'stopped')),
 			created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
 			scheduled_at TIMESTAMPTZ,
 			workflow_version_id BIGINT,

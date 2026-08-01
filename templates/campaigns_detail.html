@@ -14,22 +14,25 @@
         <p class="text-slate-500 mt-1">
             {{.campaign.ContactCount}} contacts ·
             {{if .isWorkflow}}<span class="badge badge-violet">Workflow</span>{{if .isWorkflowAB}}<span class="badge badge-violet ml-1">A/B first email</span>{{end}}{{else}}<span class="badge badge-blue">One-time</span>{{end}}
-            <span class="badge {{if eq .campaign.DisplayStatus "sent"}}badge-green{{else if eq .campaign.DisplayStatus "scheduled"}}badge-amber{{else if eq .campaign.DisplayStatus "sending"}}badge-blue{{else}}badge-gray{{end}} ml-1">{{.campaign.DisplayStatus}}</span>
+            <span class="badge {{if eq .campaign.DisplayStatus "sent"}}badge-green{{else if eq .campaign.DisplayStatus "stopped"}}badge-gray{{else if eq .campaign.DisplayStatus "scheduled"}}badge-amber{{else if eq .campaign.DisplayStatus "sending"}}badge-blue{{else}}badge-gray{{end}} ml-1">{{.campaign.DisplayStatus}}</span>
             {{if .campaign.ScheduledAt}}<span class="text-sm text-slate-500 ml-2">· {{if .isWorkflow}}starts{{else}}sends{{end}} {{.campaign.ScheduledAt.Format "Jan 2, 2006 15:04"}}</span>{{end}}
         </p>
     </div>
     <div class="flex gap-3 items-center flex-wrap justify-end">
         <a href="/campaigns/{{.campaign.ID}}/analytics" class="btn-secondary">{{if .isWorkflowAB}}Analytics{{else if .isWorkflow}}Workflow analytics{{else}}Campaign analytics{{end}}</a>
+        {{if .canStop}}
+        <form method="POST" action="/campaigns/{{.campaign.ID}}/stop" onsubmit="return confirm('Stop this campaign? Queued emails will not be sent.');">
+            <button type="submit" class="btn-secondary text-red-600">Stop campaign</button>
+        </form>
+        {{end}}
         <form method="POST" action="/campaigns/{{.campaign.ID}}/delete" onsubmit="return confirm('Delete this campaign?');">
             <button type="submit" class="btn-secondary text-red-600">Delete</button>
         </form>
         {{if gt .campaign.ContactCount 0}}
-        {{if ne .campaign.DisplayStatus "sent"}}
-        {{if ne .campaign.DisplayStatus "sending"}}
+        {{if and (ne .campaign.DisplayStatus "sent") (ne .campaign.DisplayStatus "stopped") (ne .campaign.DisplayStatus "sending")}}
         <form method="POST" action="/campaigns/{{.campaign.ID}}/send" onsubmit="return confirm('{{if .isWorkflow}}Start workflow for{{else}}Send to{{end}} all {{.campaign.ContactCount}} contacts now?');">
             <button type="submit" class="btn-primary">{{if .isWorkflow}}Start workflow{{else}}Send now{{end}}</button>
         </form>
-        {{end}}
         {{end}}
         {{end}}
     </div>
@@ -54,6 +57,7 @@
 {{end}}
 
 {{if ne .campaign.DisplayStatus "sent"}}
+{{if ne .campaign.DisplayStatus "stopped"}}
 {{if gt .campaign.ContactCount 0}}
 <div class="card mb-6">
     <h3 class="card-title">{{if .isWorkflow}}Schedule workflow start{{else}}Schedule send{{end}}</h3>
@@ -73,6 +77,7 @@
         <button type="submit" class="btn-primary">{{if .campaign.ScheduledAt}}Update schedule{{else}}{{if .isWorkflow}}Schedule workflow{{else}}Schedule campaign{{end}}{{end}}</button>
     </form>
 </div>
+{{end}}
 {{end}}
 {{end}}
 
