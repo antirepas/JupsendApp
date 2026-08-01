@@ -11,7 +11,7 @@
 <p class="text-gray-500 text-sm mb-6">Account, mailboxes, billing, and send limits.</p>
 {{if .success}}<div class="alert-success mb-6">{{.success}}</div>{{end}}
 {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
-{{if .gmailError}}<div class="alert-error mb-6">{{.gmailError}} <a href="/settings/gmail/connect" class="underline font-medium">Reconnect Gmail</a></div>{{end}}
+{{if .gmailError}}<div class="alert-error mb-6">{{.gmailError}} Use <a href="/mailboxes" class="underline font-medium">Mailboxes</a> for sending.</div>{{end}}
 {{if not .subscribed}}<div class="alert-error mb-6">Your subscription is inactive. <a href="/settings/billing" class="underline font-medium">Subscribe to unlock the app</a>.</div>{{end}}
 
 <div class="flex gap-4 mb-6 text-sm">
@@ -75,19 +75,6 @@
         <input type="checkbox" name="include_unsubscribe_link" {{if .user.IncludeUnsubscribeLink}}checked{{end}}>
         Include unsubscribe link in outbound emails
     </label>
-</div>
-
-<div class="card space-y-4">
-    <h3 class="card-title">Advanced: personal Gmail</h3>
-    <p class="text-xs text-gray-500 mb-2">Optional legacy path. Cold outreach should use provisioned mailboxes above.</p>
-    {{if .gmailConnected}}
-    <p class="text-sm text-gray-600">Connected as <strong>{{.account.GoogleEmail}}</strong></p>
-    <a href="/settings/gmail/connect" class="btn-secondary inline-flex">Reconnect Gmail</a>
-    {{else if .gmailConfigured}}
-    <a href="/settings/gmail/connect" class="btn-secondary inline-flex">Connect Gmail</a>
-    {{else}}
-    <p class="text-sm text-amber-700">Gmail OAuth is not configured on this server.</p>
-    {{end}}
 </div>
 
 <div class="card flex flex-wrap items-center justify-between gap-4">

@@ -15,10 +15,15 @@ import (
 
 const AuthTypeGoogle = "google_oauth"
 
-// Gmail OAuth scopes — must match Google Cloud Console Data Access.
-// gmail.send only (sensitive). gmail.readonly is restricted and requires CASA;
-// inbox bounce/reply polling is disabled until a non-restricted approach is used.
-var gmailScopes = []string{
+// Login scopes only — used for signup/sign-in. No Gmail send access (avoids sensitive-scope verification).
+var loginScopes = []string{
+	"openid",
+	"email",
+	"profile",
+}
+
+// Legacy Gmail-send scopes (kept for token refresh of old connected accounts).
+var gmailSendScopes = []string{
 	"https://www.googleapis.com/auth/gmail.send",
 	"openid",
 	"email",
@@ -30,19 +35,18 @@ func Config() *oauth2.Config {
 		ClientID:     config.GoogleClientID,
 		ClientSecret: config.GoogleClientSecret,
 		RedirectURL:  config.GoogleOAuthRedirectURI,
-		Scopes:       gmailScopes,
+		Scopes:       gmailSendScopes,
 		Endpoint:     google.Endpoint,
 	}
 }
 
-// AppConfig is used for app sign-in flows that need a different redirect URI
-// than the Gmail connection callback.
+// AppConfig is used for app sign-in / signup (identity only).
 func AppConfig() *oauth2.Config {
 	return &oauth2.Config{
 		ClientID:     config.GoogleClientID,
 		ClientSecret: config.GoogleClientSecret,
 		RedirectURL:  config.GoogleAppOAuthRedirectURI,
-		Scopes:       gmailScopes,
+		Scopes:       loginScopes,
 		Endpoint:     google.Endpoint,
 	}
 }
@@ -52,12 +56,7 @@ func AuthURL(state string) string {
 }
 
 func AppAuthURL(state string) string {
-	return AppConfig().AuthCodeURL(state, oauth2.AccessTypeOffline, oauth2.ApprovalForce)
-}
-
-type googleProfile struct {
-	Email string `json:"email"`
-	Name  string `json:"name"`
+	return AppConfig().AuthCodeURL(state, oauth2.AccessTypeOnline)
 }
 
 func ExchangeCode(ctx context.Context, code string) (*oauth2.Token, googleProfile, error) {
@@ -79,8 +78,13 @@ func AppExchangeCode(ctx context.Context, code string) (*oauth2.Token, googlePro
 	return tok, profile, err
 }
 
+type googleProfile struct {
+	Email string `json:"email"`
+	Name  string `json:"name"`
+}
+
 func fetchProfile(ctx context.Context, tok *oauth2.Token) (googleProfile, error) {
-	client := Config().Client(ctx, tok)
+	client := oauth2.NewClient(ctx, oauth2.StaticTokenSource(tok))
 	resp, err := client.Get("https://www.googleapis.com/oauth2/v2/userinfo")
 	if err != nil {
 		return googleProfile{}, err
@@ -153,7 +157,7 @@ func SMTPAuth(email, accessToken string) smtp.Auth {
 }
 
 func IsConfigured() bool {
-	return config.GoogleClientID != "" && config.GoogleClientSecret != "" && config.GoogleOAuthRedirectURI != ""
+	return config.GoogleClientID != "" && config.GoogleClientSecret != "" && config.GoogleAppOAuthRedirectURI != ""
 }
 
 func EncodeState(userID int64, nonce string) string {

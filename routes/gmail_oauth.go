@@ -14,17 +14,8 @@ import (
 const oauthStateSessionKey = "gmail_oauth_state"
 
 func GmailConnect(c *gin.Context) {
-	userID := mustUserID(c)
-	if !googleoauth.IsConfigured() {
-		c.Redirect(http.StatusFound, "/settings?error=Gmail+OAuth+not+configured")
-		return
-	}
-	nonce := randomNonce()
-	state := googleoauth.EncodeState(userID, nonce)
-	s := sessions.Default(c)
-	s.Set(oauthStateSessionKey, nonce)
-	_ = s.Save()
-	c.Redirect(http.StatusFound, googleoauth.AuthURL(state))
+	// Personal Gmail send via OAuth is deprecated; outreach uses shared SMTP / InboxKit.
+	c.Redirect(http.StatusFound, "/mailboxes?error=Use+Mailboxes+for+sending.+Google+sign-in+is+only+for+accounts.")
 }
 
 func GmailCallback(c *gin.Context) {

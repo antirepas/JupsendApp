@@ -100,19 +100,18 @@ Supabase Auth is **not** used by this app — only PostgreSQL hosting.
 
 Protected routes redirect to login; unsubscribed users are redirected to billing. JSON API routes under `/api/v1/*` return `401` when unauthenticated and `402` when subscription is inactive. Tracking endpoints (`/api/v1/track/*`) and the Whop webhook remain public.
 
-## Gmail OAuth
+## Google sign-in (accounts only)
 
-Each user connects Gmail under **Settings → Connect Gmail**. Manual SMTP/IMAP password fields are no longer used.
+Google OAuth is used for **login and signup only** (`openid`, `email`, `profile`). Sending uses Free shared SMTP or Pro InboxKit mailboxes — not Gmail send scopes.
 
 ### Google Cloud setup
 
 1. Create a project in [Google Cloud Console](https://console.cloud.google.com/).
-2. Enable the **Gmail API**.
-3. Configure the **OAuth consent screen** (External). Add scope `https://www.googleapis.com/auth/gmail.send` plus `openid`, `email`, `profile`.
-4. Create **OAuth client ID** (Web application).
-5. Add authorized redirect URI: `https://your-domain.com/settings/gmail/callback` (must match `GOOGLE_OAUTH_REDIRECT_URI`).
+2. Configure the **OAuth consent screen** (External). Add non-sensitive scopes: `openid`, `email`, `profile` only. Remove `gmail.send` if it was added earlier.
+3. Create **OAuth client ID** (Web application).
+4. Add authorized redirect URI: `https://your-domain.com/auth/google/callback` (must match `GOOGLE_APP_OAUTH_REDIRECT_URI` / `BASE_URL`).
 
-> `gmail.send` is a sensitive scope. Test users work in development; production may require Google app verification.
+No app verification is required for these login scopes when the consent screen is published.
 
 ### Env vars
 
@@ -120,10 +119,8 @@ Each user connects Gmail under **Settings → Connect Gmail**. Manual SMTP/IMAP 
 |----------|-------------|
 | `GOOGLE_CLIENT_ID` | OAuth client ID |
 | `GOOGLE_CLIENT_SECRET` | OAuth client secret |
-| `GOOGLE_OAUTH_REDIRECT_URI` | Callback URL, e.g. `https://your-domain.com/settings/gmail/callback` |
-| `TOKEN_ENCRYPTION_KEY` | Optional 32-byte key for encrypting refresh tokens at rest (falls back to `SESSION_SECRET`) |
-
-Refresh tokens are encrypted in PostgreSQL before storage.
+| `GOOGLE_APP_OAUTH_REDIRECT_URI` | Optional; defaults to `{BASE_URL}/auth/google/callback` |
+| `TOKEN_ENCRYPTION_KEY` | Encrypts mailbox SMTP secrets at rest (falls back to `SESSION_SECRET`) |
 
 ## Whop billing
 

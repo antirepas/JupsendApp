@@ -12,34 +12,24 @@
 <p class="text-gray-500 text-sm mb-8">{{.subtitle}}</p>
 
 <div class="card mb-6 space-y-4">
-    <h3 class="font-semibold text-charcoal">Why connect Gmail?</h3>
-    <p class="text-sm text-gray-600 leading-relaxed">jupsend connects your Gmail with Google OAuth (no shared SMTP password). Credentials are OAuth tokens; delivery uses SMTP XOAUTH2 to <code class="text-xs bg-gray-100 px-1 rounded">smtp.gmail.com</code>. Opens and clicks are tracked on your jupsend domain.</p>
-    <ul class="text-sm text-gray-600 list-disc list-inside space-y-1">
-        <li>Send campaigns and one-off emails from your address</li>
-        <li>Daily send limits protect your sender reputation</li>
-    </ul>
+    <h3 class="font-semibold text-charcoal">Google for accounts only</h3>
+    <p class="text-sm text-gray-600 leading-relaxed">jupsend uses Google sign-in to create and log into your account (<code class="text-xs bg-gray-100 px-1 rounded">openid</code>, <code class="text-xs bg-gray-100 px-1 rounded">email</code>, <code class="text-xs bg-gray-100 px-1 rounded">profile</code>). It does <strong>not</strong> request Gmail send access.</p>
+    <p class="text-sm text-gray-600 leading-relaxed">Outbound email uses your Free shared mailbox or Pro InboxKit mailboxes — manage those under <a href="/mailboxes" class="text-brand-600 font-medium">Mailboxes</a>.</p>
 </div>
 
 <div class="card mb-6 space-y-4">
     <h3 class="font-semibold text-charcoal">Step-by-step</h3>
     <ol class="space-y-4 text-sm text-gray-600">
-        <li class="flex gap-3"><span class="onboarding-step-num shrink-0">1</span><span>Go to <a href="/settings" class="text-brand-600 font-medium">Settings</a> and find the <strong>Gmail</strong> section.</span></li>
-        <li class="flex gap-3"><span class="onboarding-step-num shrink-0">2</span><span>Click <strong>Connect Gmail</strong>. You'll be redirected to Google to sign in and approve access.</span></li>
-        <li class="flex gap-3"><span class="onboarding-step-num shrink-0">3</span><span>Grant permission to <strong>send email</strong> on your behalf (jupsend does not read your inbox).</span></li>
-        <li class="flex gap-3"><span class="onboarding-step-num shrink-0">4</span><span>After redirect back, click <strong>Test SMTP from server</strong> to confirm ports 465/587 work from your host.</span></li>
-        <li class="flex gap-3"><span class="onboarding-step-num shrink-0">5</span><span>Set your <strong>From name</strong> if needed, then click <strong>Save settings</strong>.</span></li>
+        <li class="flex gap-3"><span class="onboarding-step-num shrink-0">1</span><span>Choose Free or Pro on the pricing page, then continue with Google.</span></li>
+        <li class="flex gap-3"><span class="onboarding-step-num shrink-0">2</span><span>Sign in with Google and allow basic profile/email access.</span></li>
+        <li class="flex gap-3"><span class="onboarding-step-num shrink-0">3</span><span>Set up sending on <a href="/mailboxes" class="text-brand-600 font-medium">Mailboxes</a> (shared SMTP on Free, domain + mailboxes on Pro).</span></li>
+        <li class="flex gap-3"><span class="onboarding-step-num shrink-0">4</span><span>Optional: <a href="/settings/smtp-check" class="text-brand-600 font-medium">Test SMTP from server</a> to confirm outbound mail works from your host.</span></li>
     </ol>
 </div>
 
-<div class="card mb-6 space-y-3">
-    <h3 class="font-semibold text-charcoal">Tips</h3>
-    <p class="text-sm text-gray-600">Your VPS must allow outbound SMTP (465/587). If the SMTP test times out or says ports are blocked, fix the host network before sending campaigns.</p>
-    <p class="text-sm text-gray-600">To revoke access, remove jupsend from your Google Account permissions at <a href="https://myaccount.google.com/permissions" class="text-brand-600 font-medium" target="_blank" rel="noopener">myaccount.google.com/permissions</a>.</p>
-</div>
-
 <div class="flex gap-3">
-    <a href="/settings" class="btn-primary">Open Settings</a>
-    <a href="/" class="btn-secondary">Back to dashboard</a>
+    <a href="/signup/free" class="btn-primary">Sign up</a>
+    <a href="/mailboxes" class="btn-secondary">Mailboxes</a>
 </div>
 </div>
 </main>
