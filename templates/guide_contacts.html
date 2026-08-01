@@ -20,9 +20,9 @@
     <h3 class="font-semibold text-charcoal">Step-by-step</h3>
     <ol class="space-y-4 text-sm text-gray-600">
         <li class="flex gap-3"><span class="onboarding-step-num shrink-0">1</span><span>Open <a href="/contacts?tab=import" class="text-brand-600 font-medium">Contacts → Import</a>.</span></li>
-        <li class="flex gap-3"><span class="onboarding-step-num shrink-0">2</span><span><strong>Paste</strong> rows from a spreadsheet (one contact per line: <code class="text-xs bg-gray-100 px-1 rounded">email</code> or <code class="text-xs bg-gray-100 px-1 rounded">email,name,company</code>), or <strong>upload an Excel file</strong> (.xlsx).</span></li>
-        <li class="flex gap-3"><span class="onboarding-step-num shrink-0">3</span><span>Optionally pick a template so column names match your variables, or let jupsend detect columns from the header row.</span></li>
-        <li class="flex gap-3"><span class="onboarding-step-num shrink-0">4</span><span>Optionally add everyone to a <strong>list</strong> so you can target them together in campaigns. List members should share the same variable names.</span></li>
+        <li class="flex gap-3"><span class="onboarding-step-num shrink-0">2</span><span><strong>Paste</strong> rows or <strong>upload Excel/CSV</strong>. Column names do not need to be exact — you’ll map them.</span></li>
+        <li class="flex gap-3"><span class="onboarding-step-num shrink-0">3</span><span>In the mapping dialog, pick which column is <strong>email</strong>, skip unused columns, and keep the rest as variables (name, company, …).</span></li>
+        <li class="flex gap-3"><span class="onboarding-step-num shrink-0">4</span><span>Optionally add everyone to a <strong>list</strong> so you can target them together in campaigns.</span></li>
         <li class="flex gap-3"><span class="onboarding-step-num shrink-0">5</span><span>Confirm the import. You can also add one contact at a time with <a href="/contacts/new" class="text-brand-600 font-medium">New contact</a>.</span></li>
     </ol>
 </div>
@@ -30,8 +30,9 @@
 <div class="card mb-6 space-y-3">
     <h3 class="font-semibold text-charcoal">Tips</h3>
     <ul class="text-sm text-gray-600 list-disc list-inside space-y-1">
-        <li>Always include an <strong>email</strong> column — other columns become template variables.</li>
-        <li>Use the same variable names in templates and imports (e.g. <code class="text-xs bg-gray-100 px-1 rounded">company name</code>).</li>
+        <li>Headers like <code class="text-xs bg-gray-100 px-1 rounded">Email Address</code> work — map them to Email in the dialog.</li>
+        <li>Skip columns you don’t need; map others to variable names that match your templates.</li>
+        <li>If a cell has several emails separated by <code class="text-xs bg-gray-100 px-1 rounded">,</code> or <code class="text-xs bg-gray-100 px-1 rounded">;</code>, we keep one preferred address per row (<code class="text-xs bg-gray-100 px-1 rounded">hello@</code> → <code class="text-xs bg-gray-100 px-1 rounded">contact@</code> → <code class="text-xs bg-gray-100 px-1 rounded">support@</code> → first valid).</li>
         <li>Download a sample Excel file from the Import tab if you want a ready-made format.</li>
         <li>Invalid or bounced addresses can be managed under <strong>Suppressions</strong>.</li>
     </ul>

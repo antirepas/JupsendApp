@@ -379,7 +379,19 @@ func PasteContactsQuick(ctx *gin.Context) {
 		}
 	}
 
-	parsed := parseImportRowsFromPaste(paste, varKeys)
+	colMap := parseColumnMapForm(ctx)
+	var parsed []model.ImportContactRow
+	if len(colMap) > 0 {
+		utilRows, err := util.ParseContactPasteWithMap(paste, colMap)
+		if err != nil {
+			ctx.Redirect(http.StatusFound, "/contacts?tab=import&error="+url.QueryEscape(err.Error()))
+			return
+		}
+		parsed = parseImportRowsFromExcel(utilRows, nil)
+	} else {
+		parsed = parseImportRowsFromPaste(paste, varKeys)
+	}
+
 	importKeys := varKeys
 	if len(importKeys) == 0 && len(parsed) > 0 {
 		importKeys = keysFromImportRowsParsed(parsed)

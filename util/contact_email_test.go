@@ -12,6 +12,26 @@ func TestResolveImportEmailSemicolonRanking(t *testing.T) {
 	}
 }
 
+func TestResolveImportEmailCommaRanking(t *testing.T) {
+	got, ok := ResolveImportEmail("a@x.com, hello@x.com")
+	if !ok {
+		t.Fatal("expected ok")
+	}
+	if got != "hello@x.com" {
+		t.Fatalf("got %q want hello@x.com", got)
+	}
+}
+
+func TestResolveImportEmailMixedSeparators(t *testing.T) {
+	got, ok := ResolveImportEmail("a@x.com; hello@x.com, contact@x.com")
+	if !ok {
+		t.Fatal("expected ok")
+	}
+	if got != "hello@x.com" {
+		t.Fatalf("got %q want hello@x.com", got)
+	}
+}
+
 func TestResolveImportEmailNormalizeDedupe(t *testing.T) {
 	got, ok := ResolveImportEmail("Hello@Acme.com;HELLO@acme.com")
 	if !ok {

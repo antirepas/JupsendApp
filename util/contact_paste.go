@@ -1,8 +1,68 @@
 package util
 
 import (
+	"fmt"
 	"strings"
 )
+
+// ParsePasteAsTable treats the first non-empty line as headers when it has 2+ columns.
+// Returns ok=false for email-per-line pastes.
+func ParsePasteAsTable(paste string) (ContactUploadTable, bool) {
+	lines := strings.Split(paste, "\n")
+	var nonEmpty []string
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			nonEmpty = append(nonEmpty, line)
+		}
+	}
+	if len(nonEmpty) == 0 {
+		return ContactUploadTable{}, false
+	}
+	headers := splitCSVLine(nonEmpty[0])
+	if len(headers) < 2 {
+		return ContactUploadTable{}, false
+	}
+	for i := range headers {
+		headers[i] = strings.TrimSpace(headers[i])
+	}
+	var data [][]string
+	for _, line := range nonEmpty[1:] {
+		data = append(data, padRow(splitCSVLine(line), len(headers)))
+	}
+	return ContactUploadTable{Headers: headers, DataRows: data}, true
+}
+
+// PeekContactPasteRaw returns a mapping preview when paste looks headered.
+func PeekContactPasteRaw(paste string, templateVars []string) (ContactUploadRawPeek, bool, error) {
+	table, ok := ParsePasteAsTable(paste)
+	if !ok {
+		return ContactUploadRawPeek{}, false, nil
+	}
+	peek := ContactUploadRawPeek{
+		Headers:      table.Headers,
+		RowCount:     len(table.DataRows),
+		SuggestedMap: SuggestContactColumnMap(table.Headers, templateVars),
+		TemplateVars: append([]string(nil), templateVars...),
+	}
+	limit := len(table.DataRows)
+	if limit > 5 {
+		limit = 5
+	}
+	for i := 0; i < limit; i++ {
+		peek.SampleRows = append(peek.SampleRows, table.DataRows[i])
+	}
+	return peek, true, nil
+}
+
+// ParseContactPasteWithMap imports a headered paste using an explicit column map.
+func ParseContactPasteWithMap(paste string, colMap map[string]string) ([]ContactImportRow, error) {
+	table, ok := ParsePasteAsTable(paste)
+	if !ok {
+		return nil, fmt.Errorf("paste does not look like a headered table")
+	}
+	return ApplyContactColumnMap(table.Headers, table.DataRows, colMap)
+}
 
 // ParseContactPaste imports email-only rows (one email per line).
 func ParseContactPaste(text string) []ContactImportRow {

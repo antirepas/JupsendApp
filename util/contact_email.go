@@ -12,12 +12,14 @@ var preferredEmailLocalParts = map[string]int{
 	"support": 3,
 }
 
-// SplitEmailCandidates splits a raw email cell on ';' into candidate addresses.
+// SplitEmailCandidates splits a raw email cell on ';' or ',' into candidate addresses.
 func SplitEmailCandidates(raw string) []string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return nil
 	}
+	// Normalize commas to semicolons so one splitter handles both separators.
+	raw = strings.ReplaceAll(raw, ",", ";")
 	parts := strings.Split(raw, ";")
 	out := make([]string, 0, len(parts))
 	for _, p := range parts {
@@ -79,7 +81,7 @@ func emailPreferenceScore(email string) int {
 	return 100
 }
 
-// ResolveImportEmail splits on ';', normalizes, dedupes, validates, and ranks emails.
+// ResolveImportEmail splits on ';' or ',', normalizes, dedupes, validates, and ranks emails.
 func ResolveImportEmail(raw string) (string, bool) {
 	candidates := SplitEmailCandidates(raw)
 	if len(candidates) == 0 {

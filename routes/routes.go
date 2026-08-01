@@ -19,6 +19,7 @@ func RegisterRoutes(server *gin.Engine) {
 		"templates/partials/sidebar.html",
 		"templates/partials/reply_pro_note.html",
 		"templates/partials/workflow_archive_modal.html",
+		"templates/partials/contact_import_map_modal.html",
 		"templates/auth_login.html",
 		"templates/auth_signup.html",
 		"templates/pricing_plan.html",
@@ -168,6 +169,7 @@ func RegisterRoutes(server *gin.Engine) {
 		authd.POST("/contacts/bulk-delete", BulkDeleteContacts)
 		authd.POST("/contacts/validate", ValidateContactsWeb)
 		authd.POST("/contacts/paste", PasteContactsQuick)
+		authd.POST("/contacts/paste/preview", PreviewContactsPaste)
 		authd.GET("/contacts/paste", func(c *gin.Context) { c.Redirect(http.StatusFound, "/contacts") })
 		authd.GET("/contacts/upload/sample/:id", DownloadContactSample)
 		authd.GET("/contacts/upload/sample", DownloadContactSample)

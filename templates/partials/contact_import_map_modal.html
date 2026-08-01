@@ -1,0 +1,19 @@
+{{define "contact_import_map_modal.html"}}
+<div id="contact-import-map-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="contact-import-map-title">
+    <div class="absolute inset-0 bg-slate-900/40" data-import-map-dismiss></div>
+    <div class="relative bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+        <div class="px-6 pt-6 pb-3 border-b border-slate-100">
+            <h3 id="contact-import-map-title" class="text-lg font-semibold text-slate-900">Map columns</h3>
+            <p class="text-sm text-slate-500 mt-1">Choose which column is email. Skip columns you don’t need. Other columns become contact variables.</p>
+            <p id="contact-import-map-meta" class="text-xs text-slate-400 mt-2"></p>
+            <p id="contact-import-map-multi" class="hidden text-xs text-amber-700 mt-2">Multiple emails in one cell (comma or semicolon) import as one preferred address: hello@ → contact@ → support@ → first valid.</p>
+        </div>
+        <div id="contact-import-map-rows" class="px-6 py-4 overflow-y-auto space-y-3 flex-1"></div>
+        <div class="px-6 py-4 border-t border-slate-100 flex flex-wrap gap-2 justify-end bg-slate-50">
+            <button type="button" class="btn-secondary" data-import-map-dismiss>Cancel</button>
+            <button type="button" id="contact-import-map-confirm" class="btn-primary" disabled>Import contacts</button>
+        </div>
+    </div>
+</div>
+<script src="{{assetURL "/static/js/contact-import-map.js"}}"></script>
+{{end}}
