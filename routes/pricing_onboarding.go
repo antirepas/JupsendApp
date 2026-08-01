@@ -11,7 +11,6 @@ import (
 	"emailtracker.com/whop"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
-	"golang.org/x/oauth2"
 )
 
 const appGooglePlanSessionKey = "app_google_plan"
@@ -135,7 +134,7 @@ func AppGoogleCallback(c *gin.Context) {
 		return
 	}
 
-	tok, profile, err := googleoauth.AppExchangeCode(c.Request.Context(), code)
+	_, profile, err := googleoauth.AppExchangeCode(c.Request.Context(), code)
 	if err != nil || profile.Email == "" {
 		oauthErrRedirect("Could not complete Google sign-in")
 		return
@@ -143,17 +142,13 @@ func AppGoogleCallback(c *gin.Context) {
 
 	normalizedEmail := strings.TrimSpace(strings.ToLower(profile.Email))
 	if mode == appGoogleModeLogin {
-		appGoogleLoginComplete(c, normalizedEmail, profile.Name, tok, next)
+		appGoogleLoginComplete(c, normalizedEmail, next)
 		return
 	}
 
 	tier := model.NormalizePlanTier(planStr)
 	if planStr != "" && planStr != string(model.PlanTierFree) && planStr != string(model.PlanTierPro) && !strings.EqualFold(planStr, "standard") {
 		oauthErrRedirect("Unknown plan")
-		return
-	}
-	if tok.RefreshToken == "" {
-		oauthErrRedirect("Google did not return refresh token")
 		return
 	}
 
@@ -164,25 +159,10 @@ func AppGoogleCallback(c *gin.Context) {
 	}
 
 	auth.SetUserSession(c, userID)
-	_ = model.ApplyPlanLimitsToUser(userID, tier)
-
-	fromName := profile.Name
-	if fromName == "" {
-		fromName = normalizedEmail
-	}
-
-	encRefresh, err := googleoauth.Encrypt(tok.RefreshToken)
-	if err != nil {
-		oauthErrRedirect("Could not store Google token")
+	if err := model.ApplyPlanLimitsToUser(userID, tier); err != nil && tier == model.PlanTierFree {
+		oauthErrRedirect("Free plan sending is not configured yet: " + err.Error())
 		return
 	}
-	encAccess, _ := googleoauth.Encrypt(tok.AccessToken)
-
-	if err := model.SaveGoogleOAuthAccount(userID, normalizedEmail, fromName, encRefresh, encAccess, tok.Expiry); err != nil {
-		oauthErrRedirect("Could not save Gmail account")
-		return
-	}
-	_ = model.ApplyPlanLimitsToUser(userID, tier)
 
 	if tier == model.PlanTierFree {
 		_ = model.UpdateUserSubscription(userID, model.SubStatusActive, "", "", nil)
@@ -201,7 +181,7 @@ func AppGoogleCallback(c *gin.Context) {
 	c.Redirect(http.StatusFound, purchaseURL)
 }
 
-func appGoogleLoginComplete(c *gin.Context, email, profileName string, tok *oauth2.Token, next string) {
+func appGoogleLoginComplete(c *gin.Context, email, next string) {
 	user, err := model.GetUserByEmail(email)
 	if err != nil {
 		c.Redirect(http.StatusFound, "/signup/free?error=No+account+found.+Choose+a+plan+to+sign+up.")
@@ -210,16 +190,9 @@ func appGoogleLoginComplete(c *gin.Context, email, profileName string, tok *oaut
 
 	auth.SetUserSession(c, user.ID)
 	_ = model.SetUserAdmin(user.ID, config.IsAdminEmail(user.Email))
-
-	if tok.RefreshToken != "" {
-		fromName := profileName
-		if fromName == "" {
-			fromName = email
-		}
-		if encRefresh, err := googleoauth.Encrypt(tok.RefreshToken); err == nil {
-			encAccess, _ := googleoauth.Encrypt(tok.AccessToken)
-			_ = model.SaveGoogleOAuthAccount(user.ID, email, fromName, encRefresh, encAccess, tok.Expiry)
-		}
+	// Re-apply Free shared SMTP if needed (no Gmail send account — Google is identity only).
+	if model.NormalizePlanTier(user.PlanTier) == model.PlanTierFree {
+		_ = model.ApplyPlanLimitsToUser(user.ID, model.PlanTierFree)
 	}
 
 	c.Redirect(http.StatusFound, safeNext(next))

@@ -47,7 +47,12 @@ func UserHasReadyMailbox(userID int64) bool {
 		SELECT COUNT(*) FROM outreach_mailboxes
 		WHERE user_id = ? AND status = 'ready'
 	`, userID).Scan(&n)
-	return n > 0
+	if n > 0 {
+		return true
+	}
+	// Free shared SMTP (and any other send-ready profile) counts as ready without InboxKit rows.
+	acc, err := GetSMTPAccountByUserID(userID)
+	return err == nil && acc.IsSendReady()
 }
 
 func UserHasOutreachDomain(userID int64) bool {

@@ -20,13 +20,28 @@ import (
 func RequireMailboxSetup() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID := mustUserID(c)
-		if model.UserHasReadyMailbox(userID) {
-			c.Next()
+
+		// Free: ensure shared SMTP is attached, then allow app use without domain onboarding.
+		if !model.UserIsPro(userID) {
+			_ = model.ApplyPlanLimitsToUser(userID, model.PlanTierFree)
+			if model.UserHasReadyMailbox(userID) {
+				c.Next()
+				return
+			}
+			path := c.Request.URL.Path
+			if strings.HasPrefix(path, "/settings") ||
+				strings.HasPrefix(path, "/mailboxes") ||
+				strings.HasPrefix(path, "/guides") ||
+				strings.HasPrefix(path, "/onboarding/") {
+				c.Next()
+				return
+			}
+			c.Redirect(http.StatusFound, "/settings?error="+url.QueryEscape("Shared sending mailbox is not configured on this server. Contact support or check SMTP_* env vars."))
+			c.Abort()
 			return
 		}
-		// Free shared SMTP users skip custom-domain onboarding.
-		if acc, err := model.GetSMTPAccountByUserID(userID); err == nil &&
-			acc.MailboxSource == model.MailboxSourceShared && acc.IsSendReady() {
+
+		if model.UserHasReadyMailbox(userID) {
 			c.Next()
 			return
 		}
@@ -36,11 +51,6 @@ func RequireMailboxSetup() gin.HandlerFunc {
 			strings.HasPrefix(path, "/settings") ||
 			strings.HasPrefix(path, "/guides") {
 			c.Next()
-			return
-		}
-		if !model.UserIsPro(userID) {
-			c.Redirect(http.StatusFound, "/settings/billing?error="+url.QueryEscape("Upgrade to Pro for a custom domain and mailboxes"))
-			c.Abort()
 			return
 		}
 		c.Redirect(http.StatusFound, "/onboarding/domain")
@@ -223,6 +233,14 @@ func MailboxesPage(c *gin.Context) {
 	mailboxes, _ = model.ListOutreachMailboxes(userID)
 	user, _ := model.GetUserByID(userID)
 	isPro := model.UserIsPro(userID)
+	sharedReady := false
+	sharedEmail := ""
+	if !isPro {
+		if acc, err := model.GetSMTPAccountByUserID(userID); err == nil && acc.MailboxSource == model.MailboxSourceShared {
+			sharedReady = acc.IsSendReady()
+			sharedEmail = acc.SenderEmail()
+		}
+	}
 
 	type mailboxRow struct {
 		ID           int64
@@ -262,6 +280,8 @@ func MailboxesPage(c *gin.Context) {
 		"mailboxes":     mailboxes,
 		"mailboxRows":   rows,
 		"isPro":         isPro,
+		"sharedReady":   sharedReady,
+		"sharedEmail":   sharedEmail,
 		"inboxkitOK":    inboxkit.Configured(),
 		"whopAddon":     config.WhopMailboxAddonID != "" && whop.IsConfigured(),
 		"success":       c.Query("success"),

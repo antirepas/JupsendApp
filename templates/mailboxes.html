@@ -28,8 +28,18 @@
 
   {{if .success}}<div class="alert-success mb-6">{{.success}}</div>{{end}}
   {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
-  {{if not .inboxkitOK}}
+  {{if and .isPro (not .inboxkitOK)}}
   <div class="alert-error mb-6">InboxKit is not configured — domain search and provisioning are unavailable.</div>
+  {{end}}
+  {{if not .isPro}}
+  <div class="card mb-6 space-y-2">
+    <h3 class="card-title">Free shared mailbox</h3>
+    {{if .sharedReady}}
+    <p class="text-sm text-gray-600">Sending as <strong>{{.sharedEmail}}</strong>. Domain setup is Pro-only.</p>
+    {{else}}
+    <p class="text-sm text-amber-700">Shared SMTP is not configured on this server yet. Set <code class="text-xs">SMTP_HOST</code>, <code class="text-xs">SMTP_USER</code>, and <code class="text-xs">APP_PASSWORD</code>, then reload.</p>
+    {{end}}
+  </div>
   {{end}}
 
   {{if .domains}}
@@ -83,7 +93,13 @@
       </table>
     </div>
     {{else}}
-    <p class="text-sm text-gray-600">No mailboxes yet. <a href="/onboarding/domain" class="text-brand-600 font-medium">Set up a domain</a> to get {{.includedCount}} included.</p>
+    <p class="text-sm text-gray-600">
+      {{if .isPro}}
+      No mailboxes yet. <a href="/onboarding/domain" class="text-brand-600 font-medium">Set up a domain</a> to get {{.includedCount}} included.
+      {{else}}
+      Free plan sends from the shared mailbox above. Upgrade to Pro for your own domain and seats.
+      {{end}}
+    </p>
     {{end}}
   </div>
 

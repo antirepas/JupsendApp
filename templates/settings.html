@@ -35,8 +35,13 @@
         <div><label class="form-label">From name</label><input name="from_name" class="form-input" value="{{.account.FromName}}"></div>
     </div>
     {{else}}
-    <p class="text-sm text-gray-600">No outreach mailbox ready yet.</p>
+    <p class="text-sm text-gray-600">{{if .isPro}}No outreach mailbox ready yet.{{else}}Free plan uses a shared sending address — no domain setup needed.{{end}}</p>
+    {{if .isPro}}
     <a href="/onboarding/domain" class="btn-primary inline-flex">Set up domain &amp; mailboxes</a>
+    {{else}}
+    <a href="/mailboxes" class="btn-secondary inline-flex">View mailboxes</a>
+    <a href="/settings/billing" class="btn-primary inline-flex">Upgrade to Pro</a>
+    {{end}}
     {{end}}
 </div>
 
