@@ -11,86 +11,91 @@
 {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
 
 {{if .isEmpty}}
-<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-    <div class="card lg:col-span-2">
-        <h2 class="text-2xl font-bold text-charcoal mb-2">Welcome{{if .user.Email}}, {{.user.Email}}{{end}}</h2>
-        <p class="text-gray-500 text-sm mb-6 max-w-lg">You're set up on jupsend. Import contacts, create a template, and launch your first campaign to start tracking opens and clicks.</p>
-        {{if not .mailboxReady}}
-        <div class="alert-error mb-4 text-sm">
-            {{if .isPro}}
-            No outreach mailbox ready. <a href="/onboarding/domain" class="underline font-medium">Set up your domain</a> before sending.
-            {{else}}
-            Shared sending mailbox is not ready. Check <a href="/mailboxes" class="underline font-medium">Mailboxes</a> or contact support.
+{{if gt .stepsLeft 0}}
+<div class="dash-setup-strip mb-6">
+    <div>
+        <p class="dash-setup-strip-title">
+            {{if eq .stepsLeft 1}}You’re 1 step from first send{{else}}You’re {{.stepsLeft}} steps from first send{{end}}
+        </p>
+        <p class="dash-setup-strip-sub">Finish setup, then launch — opens and clicks will show here.</p>
+    </div>
+    <a href="{{.nextSetupHref}}" class="btn-primary shrink-0">Continue setup</a>
+</div>
+{{else}}
+<div class="dash-setup-strip mb-6">
+    <div>
+        <p class="dash-setup-strip-title">Ready to send</p>
+        <p class="dash-setup-strip-sub">Everything’s in place. Launch your first campaign to unlock live analytics.</p>
+    </div>
+    <a href="/campaigns/new" class="btn-primary shrink-0">Create campaign</a>
+</div>
+{{end}}
+
+<div class="dash-empty-hero card mb-6">
+    <div class="dash-empty-hero-main">
+        <p class="dash-empty-kicker">First campaign</p>
+        <h2 class="dash-empty-title">Send your first outreach email</h2>
+        <p class="dash-empty-copy">Pick a template, add contacts, and hit send. jupsend tracks opens and link clicks so you know who engaged.</p>
+        <ul class="dash-setup-checklist">
+            {{range .setupSteps}}
+            <li class="dash-setup-check {{if .Done}}done{{end}}">
+                <span class="dash-setup-check-mark" aria-hidden="true">{{if .Done}}✓{{else}}○{{end}}</span>
+                <div>
+                    <a href="{{.Href}}" class="dash-setup-check-label">{{.Label}}</a>
+                    <p class="dash-setup-check-hint">{{.Hint}}</p>
+                </div>
+            </li>
+            {{end}}
+        </ul>
+        <div class="dash-empty-actions">
+            <a href="/campaigns/new" class="btn-primary">Create campaign</a>
+            {{if not .mailboxReady}}
+            <a href="{{if .isPro}}/onboarding/domain{{else}}/mailboxes{{end}}" class="btn-secondary">{{if .isPro}}Set up domain{{else}}Check mailbox{{end}}</a>
+            {{else if eq .counts.Contacts 0}}
+            <a href="/contacts?tab=import" class="btn-secondary">Import contacts</a>
+            {{else if eq .counts.Templates 0}}
+            <a href="/templates/new" class="btn-secondary">Create template</a>
             {{end}}
         </div>
-        {{end}}
-        <a href="/campaigns/new" class="btn-primary">Create campaign</a>
     </div>
-    <div class="card bg-gradient-to-br from-emerald to-emerald-dark text-charcoal p-8 flex flex-col justify-center">
-        <p class="font-semibold text-lg mb-4">Track opens &amp; link clicks per contact</p>
-        <ul class="feature-highlight-list opacity-90">
-            <li>See exactly who opened each send</li>
-            <li>Track which links each contact clicked</li>
-            <li>Review activity by campaign on your dashboard</li>
+    <aside class="dash-plan-value">
+        <p class="dash-plan-value-label">Your {{.plan.Name}} plan</p>
+        <ul class="dash-plan-value-list">
+            <li>
+                <span class="dash-plan-value-num">{{.plan.DailyEmails}}</span>
+                <span class="dash-plan-value-desc">emails / day{{if eq .plan.Tier "pro"}} per mailbox{{end}}</span>
+            </li>
+            {{if eq .plan.Tier "pro"}}
+            <li>
+                <span class="dash-plan-value-num">{{.plan.Domains}}</span>
+                <span class="dash-plan-value-desc">domain included</span>
+            </li>
+            <li>
+                <span class="dash-plan-value-num">{{.plan.Mailboxes}}</span>
+                <span class="dash-plan-value-desc">mailboxes included</span>
+            </li>
+            <li>
+                <span class="dash-plan-value-num">{{.plan.AICredits}}</span>
+                <span class="dash-plan-value-desc">AI credits / day</span>
+            </li>
+            {{else}}
+            <li>
+                <span class="dash-plan-value-num">Shared</span>
+                <span class="dash-plan-value-desc">sending mailbox included</span>
+            </li>
+            <li>
+                <span class="dash-plan-value-num">{{.plan.AICredits}}</span>
+                <span class="dash-plan-value-desc">AI credits / day</span>
+            </li>
+            <li>
+                <a href="/settings/billing" class="text-sm text-brand-600 font-medium">Upgrade to Pro →</a>
+            </li>
+            {{end}}
         </ul>
-    </div>
+    </aside>
 </div>
 
-<div class="card mt-6">
-    <h3 class="card-title">3 steps to get started</h3>
-    <p class="text-sm text-gray-500 mb-6">Follow these guides, then launch your first outreach.</p>
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <a href="/guides/contacts" class="onboarding-step group hover:bg-ivory rounded-lg transition-colors">
-            <span class="onboarding-step-num">1</span>
-            <p class="font-semibold text-charcoal group-hover:text-brand-600">Import contacts</p>
-            <p class="text-xs text-gray-500 mt-1">Paste or upload Excel</p>
-        </a>
-        <a href="/guides/templates" class="onboarding-step group hover:bg-ivory rounded-lg transition-colors">
-            <span class="onboarding-step-num">2</span>
-            <p class="font-semibold text-charcoal group-hover:text-brand-600">Create a template</p>
-            <p class="text-xs text-gray-500 mt-1">Subject, body, variables</p>
-        </a>
-        <a href="/guides/campaigns" class="onboarding-step group hover:bg-ivory rounded-lg transition-colors">
-            <span class="onboarding-step-num">3</span>
-            <p class="font-semibold text-charcoal group-hover:text-brand-600">Launch a campaign</p>
-            <p class="text-xs text-gray-500 mt-1">Add contacts and send</p>
-        </a>
-    </div>
-</div>
-
-<div class="mt-6">
-    <h3 class="text-sm font-semibold text-charcoal mb-3">Learn how jupsend works</h3>
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <a href="/guides/contacts" class="help-card">
-            <span class="help-card-label">Guide</span>
-            <div>
-                <p class="font-semibold text-charcoal">How to import contacts</p>
-                <p class="text-sm text-gray-500 mt-0.5">Paste, Excel upload, lists, and variables</p>
-            </div>
-        </a>
-        <a href="/guides/campaigns" class="help-card">
-            <span class="help-card-label">Guide</span>
-            <div>
-                <p class="font-semibold text-charcoal">How campaigns work</p>
-                <p class="text-sm text-gray-500 mt-0.5">Templates, contacts, A/B sends, analytics</p>
-            </div>
-        </a>
-        <a href="/guides/templates" class="help-card">
-            <span class="help-card-label">Guide</span>
-            <div>
-                <p class="font-semibold text-charcoal">How templates work</p>
-                <p class="text-sm text-gray-500 mt-0.5">Variables, HTML body, click tracking</p>
-            </div>
-        </a>
-        <a href="/guides/workflows" class="help-card">
-            <span class="help-card-label">Guide</span>
-            <div>
-                <p class="font-semibold text-charcoal">How workflows work</p>
-                <p class="text-sm text-gray-500 mt-0.5">Follow-ups, delays, open/click branches</p>
-            </div>
-        </a>
-    </div>
-</div>
+<p class="text-xs text-slate-500 mb-8">Analytics unlock after your first send — no empty charts until then.</p>
 
 {{template "warmup_progress_widget" .}}
 

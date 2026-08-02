@@ -78,6 +78,8 @@ type PlanInfo struct {
 	DailyEmails int
 	AICredits   int
 	Warmup      bool
+	Domains     int
+	Mailboxes   int
 }
 
 func PlanInfoForTier(tier PlanTier) PlanInfo {
@@ -97,6 +99,8 @@ func PlanInfoForTier(tier PlanTier) PlanInfo {
 		DailyEmails: spec.DailyEmailCap,
 		AICredits:   spec.AICreditsPerDay,
 		Warmup:      spec.WarmupEnabled,
+		Domains:     spec.IncludedDomains,
+		Mailboxes:   spec.IncludedMailboxes,
 	}
 }
 

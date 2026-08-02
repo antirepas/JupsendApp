@@ -101,7 +101,68 @@ func Dashboard(ctx *gin.Context) {
 		DailySendCap:      user.GoalDailySendCap,
 	}, repliesThisMonth)
 
-	isEmpty := stats.TotalSends == 0 && counts.Campaigns == 0
+	mailboxReady := acc.ID > 0 && acc.IsSendReady()
+	isPro := model.UserIsPro(userID)
+	plan := model.PlanInfoForTier(model.NormalizePlanTier(user.PlanTier))
+	// Until the first email goes out, show setup — not blank analytics.
+	isEmpty := stats.TotalSends == 0
+
+	type setupStep struct {
+		Key     string
+		Label   string
+		Hint    string
+		Href    string
+		Done    bool
+		Primary bool
+	}
+	steps := []setupStep{
+		{
+			Key:   "mailbox",
+			Label: "Ready to send",
+			Hint:  "Shared mailbox connected",
+			Href:  "/mailboxes",
+			Done:  mailboxReady,
+		},
+		{
+			Key:   "contacts",
+			Label: "Add contacts",
+			Hint:  "Import or paste your list",
+			Href:  "/contacts?tab=import",
+			Done:  counts.Contacts > 0,
+		},
+		{
+			Key:   "template",
+			Label: "Create a template",
+			Hint:  "Subject, body, and a link to track",
+			Href:  "/templates/new",
+			Done:  counts.Templates > 0,
+		},
+		{
+			Key:     "campaign",
+			Label:   "Launch your first campaign",
+			Hint:    "Pick a template, add contacts, send",
+			Href:    "/campaigns/new",
+			Done:    stats.TotalSends > 0,
+			Primary: true,
+		},
+	}
+	if isPro {
+		steps[0].Hint = "Domain & mailboxes set up"
+		if !mailboxReady {
+			steps[0].Href = "/onboarding/domain"
+			steps[0].Hint = "Set up your domain & included mailboxes"
+		}
+	}
+	stepsLeft := 0
+	nextHref := "/campaigns/new"
+	for _, s := range steps {
+		if !s.Done {
+			stepsLeft++
+			if stepsLeft == 1 {
+				nextHref = s.Href
+			}
+		}
+	}
 
 	activityHasPrev := contactActivityPage.Page > 1
 	activityHasNext := contactActivityPage.TotalPages > 0 && contactActivityPage.Page < contactActivityPage.TotalPages
@@ -113,11 +174,11 @@ func Dashboard(ctx *gin.Context) {
 	}
 
 	ctx.HTML(http.StatusOK, "dashboard.html", gin.H{
-		"title":           "Dashboard",
-		"active":          "dashboard",
-		"user":            user,
-		"stats":           stats,
-		"contactActivity": contactActivityPage.Items,
+		"title":               "Dashboard",
+		"active":              "dashboard",
+		"user":                user,
+		"stats":               stats,
+		"contactActivity":     contactActivityPage.Items,
 		"contactActivityPage": contactActivityPage,
 		"activityHasPrev":     activityHasPrev,
 		"activityHasNext":     activityHasNext,
@@ -125,20 +186,24 @@ func Dashboard(ctx *gin.Context) {
 		"activityNextPage":    contactActivityPage.Page + 1,
 		"activityRangeStart":  activityRangeStart,
 		"activityRangeEnd":    activityRangeEnd,
-		"dailyStats":      daily,
-		"counts":          counts,
-		"campaigns":       campaigns,
-		"isEmpty":         isEmpty,
-		"benchmark":       benchmark,
-		"recentExperiments": recentExperiments,
-		"goalProgress":      goalProgress,
-		"interestedCount":   interestedCount,
-		"gmailConnected":    acc.IsGoogleOAuth(),
-		"mailboxReady":      acc.ID > 0 && acc.IsSendReady(),
-		"isPro":             model.UserIsPro(userID),
-		"warmupProgress":    warmupProgress,
-		"success":         ctx.Query("success"),
-		"error":           ctx.Query("error"),
+		"dailyStats":          daily,
+		"counts":              counts,
+		"campaigns":           campaigns,
+		"isEmpty":             isEmpty,
+		"setupSteps":          steps,
+		"stepsLeft":           stepsLeft,
+		"nextSetupHref":       nextHref,
+		"plan":                plan,
+		"benchmark":           benchmark,
+		"recentExperiments":   recentExperiments,
+		"goalProgress":        goalProgress,
+		"interestedCount":     interestedCount,
+		"gmailConnected":      acc.IsGoogleOAuth(),
+		"mailboxReady":        mailboxReady,
+		"isPro":               isPro,
+		"warmupProgress":      warmupProgress,
+		"success":             ctx.Query("success"),
+		"error":               ctx.Query("error"),
 	})
 }
 
@@ -260,9 +325,10 @@ func InterestedContactsPage(ctx *gin.Context) {
 		return
 	}
 	ctx.HTML(http.StatusOK, "contacts_interested.html", gin.H{
-		"title":    "Interested contacts",
-		"active":   "contacts",
-		"contacts": contacts,
+		"title":            "Interested contacts",
+		"active":           "interested",
+		"contacts":         contacts,
+		"interestedCount":  len(contacts),
 	})
 }
 
