@@ -99,6 +99,7 @@ func RegisterRoutes(server *gin.Engine) {
 		mailboxOnboarding.POST("/mailboxes/domains/buy/search", MailboxesBuyDomainSearch)
 		mailboxOnboarding.POST("/mailboxes/domains/buy/checkout", MailboxesBuyDomainCheckout)
 		mailboxOnboarding.POST("/mailboxes/:id/default", MailboxesSetDefault)
+		mailboxOnboarding.POST("/mailboxes/:id/from-name", MailboxesUpdateFromName)
 	}
 
 	v1 := server.Group("/api/v1")

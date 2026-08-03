@@ -8,7 +8,7 @@
 <main class="flex-1 overflow-y-auto">
 <div class="max-w-xl mx-auto p-8">
   <h2 class="text-2xl font-bold text-charcoal mb-2">Buy more mailboxes</h2>
-  <p class="text-gray-500 text-sm mb-6">Add seats on an existing outreach domain.{{if .whopOK}} You’ll complete payment via Whop.{{else}} Provisioning runs immediately when Whop add-on is not configured.{{end}}</p>
+  <p class="text-gray-500 text-sm mb-6">Add seats on an existing outreach domain. First and last name become the From name recipients see.{{if .whopOK}} You’ll complete payment via Whop.{{else}} Provisioning runs immediately when Whop add-on is not configured.{{end}}</p>
 
   {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
 
@@ -23,26 +23,48 @@
     </div>
     <div>
       <label class="form-label">Quantity</label>
-      <input name="quantity" type="number" class="form-input" min="1" max="10" value="1" required>
+      <input name="quantity" type="number" class="form-input" min="1" max="5" value="1" required>
     </div>
-    <div class="grid grid-cols-1 gap-3">
-      <div>
-        <label class="form-label">Mailbox 1 local part</label>
-        <input name="local_1" class="form-input" placeholder="sales" value="sales">
-        <input type="hidden" name="first_name_1" value="Sales">
-        <input type="hidden" name="last_name_1" value="Team">
+    <div class="space-y-4">
+      <div class="rounded-lg border border-gray-200 p-3 space-y-2">
+        <p class="text-sm font-medium">Mailbox 1</p>
+        <div class="grid grid-cols-1 gap-2">
+          <input name="first_name_1" class="form-input" required placeholder="First name">
+          <input name="last_name_1" class="form-input" required placeholder="Last name">
+          <input name="local_1" class="form-input" required placeholder="local part (e.g. sales)">
+        </div>
       </div>
-      <div>
-        <label class="form-label">Mailbox 2 local part (if qty ≥ 2)</label>
-        <input name="local_2" class="form-input" placeholder="hello">
-        <input type="hidden" name="first_name_2" value="Hello">
-        <input type="hidden" name="last_name_2" value="Team">
+      <div class="rounded-lg border border-gray-200 p-3 space-y-2">
+        <p class="text-sm font-medium">Mailbox 2 <span class="text-gray-400 font-normal">(if qty ≥ 2)</span></p>
+        <div class="grid grid-cols-1 gap-2">
+          <input name="first_name_2" class="form-input" placeholder="First name">
+          <input name="last_name_2" class="form-input" placeholder="Last name">
+          <input name="local_2" class="form-input" placeholder="local part">
+        </div>
       </div>
-      <div>
-        <label class="form-label">Mailbox 3 local part (if qty ≥ 3)</label>
-        <input name="local_3" class="form-input" placeholder="team">
-        <input type="hidden" name="first_name_3" value="Team">
-        <input type="hidden" name="last_name_3" value="Seat">
+      <div class="rounded-lg border border-gray-200 p-3 space-y-2">
+        <p class="text-sm font-medium">Mailbox 3 <span class="text-gray-400 font-normal">(if qty ≥ 3)</span></p>
+        <div class="grid grid-cols-1 gap-2">
+          <input name="first_name_3" class="form-input" placeholder="First name">
+          <input name="last_name_3" class="form-input" placeholder="Last name">
+          <input name="local_3" class="form-input" placeholder="local part">
+        </div>
+      </div>
+      <div class="rounded-lg border border-gray-200 p-3 space-y-2">
+        <p class="text-sm font-medium">Mailbox 4 <span class="text-gray-400 font-normal">(if qty ≥ 4)</span></p>
+        <div class="grid grid-cols-1 gap-2">
+          <input name="first_name_4" class="form-input" placeholder="First name">
+          <input name="last_name_4" class="form-input" placeholder="Last name">
+          <input name="local_4" class="form-input" placeholder="local part">
+        </div>
+      </div>
+      <div class="rounded-lg border border-gray-200 p-3 space-y-2">
+        <p class="text-sm font-medium">Mailbox 5 <span class="text-gray-400 font-normal">(if qty ≥ 5)</span></p>
+        <div class="grid grid-cols-1 gap-2">
+          <input name="first_name_5" class="form-input" placeholder="First name">
+          <input name="last_name_5" class="form-input" placeholder="Last name">
+          <input name="local_5" class="form-input" placeholder="local part">
+        </div>
       </div>
     </div>
     <button type="submit" class="btn-primary w-full justify-center">{{if .whopOK}}Continue to checkout{{else}}Provision mailboxes{{end}}</button>

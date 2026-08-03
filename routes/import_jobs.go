@@ -87,6 +87,7 @@ func ListImportJobsAPI(ctx *gin.Context) {
 			CampaignID:    j.CampaignID,
 		})
 	}
+	ctx.Header("Cache-Control", "no-store")
 	ctx.JSON(http.StatusOK, gin.H{"jobs": out})
 }
 

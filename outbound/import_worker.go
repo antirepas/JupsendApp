@@ -8,7 +8,8 @@ import (
 	"emailtracker.com/model"
 )
 
-const importChunkSize = 100
+// Small chunks so processed_rows / progress % update often enough for the UI poll.
+const importChunkSize = 15
 
 var importWake = make(chan struct{}, 1)
 
@@ -68,14 +69,46 @@ func processImportJob(job model.ImportJob) {
 }
 
 func processListSnapshotJob(job model.ImportJob, payload model.ImportJobPayload) {
-	n, err := model.SnapshotListToCampaign(payload.SnapshotListID, payload.CampaignID, job.UserID)
+	listID := payload.SnapshotListID
+	campaignID := payload.CampaignID
+	if campaignID == 0 {
+		campaignID = job.CampaignID
+	}
+	if _, err := model.GetContactListForUser(listID, job.UserID); err != nil {
+		_ = model.FinishImportJob(job.ID, model.ImportStatusFailed, "", err.Error(), model.ImportContactsResult{}, 0)
+		return
+	}
+	if _, err := model.GetCampaignForUser(campaignID, job.UserID); err != nil {
+		_ = model.FinishImportJob(job.ID, model.ImportStatusFailed, "", err.Error(), model.ImportContactsResult{}, 0)
+		return
+	}
+	ids, err := model.ListMemberContactIDs(listID, job.UserID)
 	if err != nil {
 		_ = model.FinishImportJob(job.ID, model.ImportStatusFailed, "", err.Error(), model.ImportContactsResult{}, 0)
 		return
 	}
-	result := model.ImportContactsResult{Created: n}
-	msg := "Added " + strconv.Itoa(n) + " contacts from list"
-	_ = model.FinishImportJob(job.ID, model.ImportStatusDone, msg, "", result, n)
+	if err := model.UpdateImportJobProgress(job.ID, 0, 0, 0, 0, 0); err != nil {
+		log.Printf("import job %d progress: %v", job.ID, err)
+	}
+	processed := 0
+	for i := 0; i < len(ids); i += importChunkSize {
+		end := i + importChunkSize
+		if end > len(ids) {
+			end = len(ids)
+		}
+		if err := model.AddContactsToCampaign(campaignID, ids[i:end]); err != nil {
+			_ = model.FinishImportJob(job.ID, model.ImportStatusFailed, "", err.Error(), model.ImportContactsResult{Created: processed}, processed)
+			return
+		}
+		processed = end
+		if err := model.UpdateImportJobProgress(job.ID, processed, processed, 0, 0, 0); err != nil {
+			log.Printf("import job %d progress: %v", job.ID, err)
+		}
+	}
+	_ = model.SetCampaignContactList(campaignID, job.UserID, listID)
+	result := model.ImportContactsResult{Created: processed}
+	msg := "Added " + strconv.Itoa(processed) + " contacts from list"
+	_ = model.FinishImportJob(job.ID, model.ImportStatusDone, msg, "", result, processed)
 }
 
 func processRowsImportJob(job model.ImportJob, payload model.ImportJobPayload) {
@@ -88,6 +121,10 @@ func processRowsImportJob(job model.ImportJob, payload model.ImportJobPayload) {
 	campaignID := payload.CampaignID
 	if campaignID == 0 {
 		campaignID = job.CampaignID
+	}
+
+	if err := model.UpdateImportJobProgress(job.ID, 0, 0, 0, 0, 0); err != nil {
+		log.Printf("import job %d progress: %v", job.ID, err)
 	}
 
 	var result model.ImportContactsResult
@@ -114,7 +151,9 @@ func processRowsImportJob(job model.ImportJob, payload model.ImportJobPayload) {
 			}
 		}
 		processed = end
-		_ = model.UpdateImportJobProgress(job.ID, processed, result.Created, result.Updated, result.Skipped, result.Errors)
+		if err := model.UpdateImportJobProgress(job.ID, processed, result.Created, result.Updated, result.Skipped, result.Errors); err != nil {
+			log.Printf("import job %d progress: %v", job.ID, err)
+		}
 
 		if campaignID > 0 && len(chunkResult.ContactIDs) > 0 {
 			if err := model.AddContactsToCampaign(campaignID, chunkResult.ContactIDs); err != nil {

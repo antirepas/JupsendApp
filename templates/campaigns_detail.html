@@ -255,6 +255,19 @@
     </table>
     </div>
     </form>
+    {{if and .memberPage (gt .memberPage.TotalPages 1)}}
+    <div class="px-4 py-3 border-t border-gray-100 flex items-center justify-between text-sm text-gray-500">
+        <span>Page {{.memberPage.Page}} of {{.memberPage.TotalPages}} ({{.memberPage.Total}} contacts)</span>
+        <div class="flex gap-2">
+            {{if .memberPage.HasPrev}}
+            <a href="/campaigns/{{.campaign.ID}}?member_page={{.memberPage.PrevPage}}&member_q={{.memberQ}}&member_filter={{.memberFilter}}" class="btn-secondary text-xs">Previous</a>
+            {{end}}
+            {{if .memberPage.HasNext}}
+            <a href="/campaigns/{{.campaign.ID}}?member_page={{.memberPage.NextPage}}&member_q={{.memberQ}}&member_filter={{.memberFilter}}" class="btn-secondary text-xs">Next</a>
+            {{end}}
+        </div>
+    </div>
+    {{end}}
     {{else}}
     <p class="text-slate-400 text-sm py-4 px-4">{{if or .memberQ .memberFilter}}No contacts match this filter.{{else}}No contacts yet. Add them below.{{end}}</p>
     {{end}}
@@ -407,6 +420,19 @@
     </table>
     </div>
     </form>
+    {{if and .memberPage (gt .memberPage.TotalPages 1)}}
+    <div class="px-4 py-3 border-t border-gray-100 flex items-center justify-between text-sm text-gray-500">
+        <span>Page {{.memberPage.Page}} of {{.memberPage.TotalPages}} ({{.memberPage.Total}} contacts)</span>
+        <div class="flex gap-2">
+            {{if .memberPage.HasPrev}}
+            <a href="/campaigns/{{.campaign.ID}}?member_page={{.memberPage.PrevPage}}&member_q={{.memberQ}}&member_filter={{.memberFilter}}" class="btn-secondary text-xs">Previous</a>
+            {{end}}
+            {{if .memberPage.HasNext}}
+            <a href="/campaigns/{{.campaign.ID}}?member_page={{.memberPage.NextPage}}&member_q={{.memberQ}}&member_filter={{.memberFilter}}" class="btn-secondary text-xs">Next</a>
+            {{end}}
+        </div>
+    </div>
+    {{end}}
     {{else}}
     <p class="text-slate-400 text-sm py-4 px-4">{{if or .memberQ .memberFilter}}No contacts match this filter.{{else}}No contacts yet. Add them below.{{end}}</p>
     {{end}}
@@ -482,7 +508,7 @@
             </div>
             <button type="submit" class="btn-secondary text-sm">Filter</button>
         </form>
-        <p class="text-xs text-gray-500 mb-2">Showing contacts not already on this campaign ({{.pickerPage.Total}} match).</p>
+        <p class="text-xs text-gray-500 mb-2">Showing contacts not already on this campaign ({{.pickerPage.Total}} match{{if gt .pickerPage.TotalPages 1}}, page {{.pickerPage.Page}} of {{.pickerPage.TotalPages}}{{end}}).</p>
         <form method="POST" action="/campaigns/{{.campaign.ID}}/contacts" class="space-y-2">
             <div class="flex gap-2 mb-2">
                 <button type="button" id="select-all-visible" class="text-sm text-brand-600 font-medium">Select all on page</button>

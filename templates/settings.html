@@ -29,7 +29,7 @@
     <h3 class="card-title">Default sending mailbox</h3>
     {{if .mailboxReady}}
     <p class="text-sm text-gray-600">Sending as <strong>{{.account.SenderEmail}}</strong>{{if .account.FromName}} ({{.account.FromName}}){{end}}.</p>
-    <p class="text-xs text-gray-500">Manage domains, health, and buy more seats on the <a href="/mailboxes" class="text-brand-600 font-medium">Mailboxes</a> page.</p>
+    <p class="text-xs text-gray-500">This From name is for the <strong>default</strong> mailbox only. Edit each seat on <a href="/mailboxes" class="text-brand-600 font-medium">Mailboxes</a>.</p>
     <a href="/settings/smtp-check" class="btn-secondary inline-flex mt-2">Test SMTP from server</a>
     <div class="grid grid-cols-2 gap-4">
         <div><label class="form-label">From name</label><input name="from_name" class="form-input" value="{{.account.FromName}}"></div>

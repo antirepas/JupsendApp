@@ -8,7 +8,7 @@
 <main class="flex-1 overflow-y-auto">
 <div class="max-w-3xl mx-auto p-8">
   <h2 class="text-2xl font-bold text-charcoal mb-2">Buy another domain</h2>
-  <p class="text-gray-500 text-sm mb-6">Pro add-on: register an extra outreach domain{{if .includedCount}} with up to {{.includedCount}} starter mailboxes{{end}}.</p>
+  <p class="text-gray-500 text-sm mb-6">Pro add-on: register an extra outreach domain{{if .includedCount}} with up to {{.includedCount}} starter mailboxes{{end}}. First and last name become the From name recipients see.</p>
   {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
   {{if not .inboxkitOK}}<div class="alert-error mb-6">InboxKit is not configured.</div>{{end}}
 
@@ -29,16 +29,33 @@
       </label>
       {{end}}
     </div>
-    <div class="card space-y-3">
-      <h3 class="card-title">Starter mailbox local parts</h3>
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <input name="local_1" class="form-input" value="alex" placeholder="alex">
-        <input name="local_2" class="form-input" value="sam" placeholder="sam">
-        <input name="local_3" class="form-input" value="jordan" placeholder="jordan">
+    <div class="card space-y-4">
+      <h3 class="card-title">Starter mailboxes</h3>
+      <p class="text-sm text-gray-600">Enter real first and last names for each seat you want.</p>
+      <div class="rounded-lg border border-gray-200 p-4 space-y-3">
+        <p class="text-sm font-medium">Mailbox 1</p>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <input name="first_name_1" class="form-input" required placeholder="First name">
+          <input name="last_name_1" class="form-input" required placeholder="Last name">
+          <input name="local_1" class="form-input" required placeholder="local part">
+        </div>
       </div>
-      <input type="hidden" name="first_name_1" value="Alex"><input type="hidden" name="last_name_1" value="Outreach">
-      <input type="hidden" name="first_name_2" value="Sam"><input type="hidden" name="last_name_2" value="Outreach">
-      <input type="hidden" name="first_name_3" value="Jordan"><input type="hidden" name="last_name_3" value="Outreach">
+      <div class="rounded-lg border border-gray-200 p-4 space-y-3">
+        <p class="text-sm font-medium">Mailbox 2 <span class="text-gray-400 font-normal">(optional)</span></p>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <input name="first_name_2" class="form-input" placeholder="First name">
+          <input name="last_name_2" class="form-input" placeholder="Last name">
+          <input name="local_2" class="form-input" placeholder="local part">
+        </div>
+      </div>
+      <div class="rounded-lg border border-gray-200 p-4 space-y-3">
+        <p class="text-sm font-medium">Mailbox 3 <span class="text-gray-400 font-normal">(optional)</span></p>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <input name="first_name_3" class="form-input" placeholder="First name">
+          <input name="last_name_3" class="form-input" placeholder="Last name">
+          <input name="local_3" class="form-input" placeholder="local part">
+        </div>
+      </div>
       <button type="submit" class="btn-primary">{{if .whopOK}}Continue to checkout{{else}}Order domain{{end}}</button>
     </div>
   </form>

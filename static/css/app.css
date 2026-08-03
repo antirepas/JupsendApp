@@ -252,8 +252,8 @@
 }
 
 .badge-blue {
-    background: #D1FAE5;
-    color: #047857;
+    background: #DBEAFE;
+    color: #1D4ED8;
 }
 
 .badge-green {
@@ -369,9 +369,18 @@
 .import-job-bar span {
     display: block;
     height: 100%;
+    min-width: 0;
     background: #10B981;
     border-radius: 999px;
-    transition: width 0.3s ease;
+    transition: width 0.25s ease;
+}
+.import-job-bar--indeterminate span {
+    width: 35% !important;
+    animation: import-job-indeterminate 1.1s ease-in-out infinite;
+}
+@keyframes import-job-indeterminate {
+    0% { transform: translateX(-120%); }
+    100% { transform: translateX(320%); }
 }
 
 .empty-state {
@@ -2222,4 +2231,63 @@ g.wf-edge-hovering .wf-edge-delete-btn {
         width: 100%;
         justify-content: space-between;
     }
+}
+
+.contact-timeline {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+.contact-timeline-item {
+    position: relative;
+    display: grid;
+    grid-template-columns: 1rem 1fr;
+    gap: 0.875rem;
+    padding: 0 0 1.25rem 0.25rem;
+}
+.contact-timeline-item:last-child {
+    padding-bottom: 0;
+}
+.contact-timeline-item:not(:last-child)::before {
+    content: "";
+    position: absolute;
+    left: 0.4rem;
+    top: 1rem;
+    bottom: 0;
+    width: 2px;
+    background: #E5E7EB;
+}
+.contact-timeline-dot {
+    width: 0.75rem;
+    height: 0.75rem;
+    border-radius: 999px;
+    margin-top: 0.2rem;
+    background: #9CA3AF;
+    box-shadow: 0 0 0 3px #fff;
+    z-index: 1;
+}
+.contact-timeline-item--open .contact-timeline-dot { background: #3B82F6; }
+.contact-timeline-item--click .contact-timeline-dot { background: #F59E0B; }
+.contact-timeline-item--reply .contact-timeline-dot { background: #8B5CF6; }
+.contact-timeline-item--send .contact-timeline-dot { background: #6B7280; }
+.contact-timeline-item--bounce .contact-timeline-dot { background: #EF4444; }
+.contact-timeline-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 0.75rem;
+}
+.contact-timeline-time {
+    font-size: 0.75rem;
+    color: #6B7280;
+}
+.contact-timeline-detail {
+    margin: 0.35rem 0 0;
+    font-size: 0.8125rem;
+    color: #4B5563;
+    line-height: 1.4;
+    word-break: break-word;
 }

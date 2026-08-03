@@ -10,10 +10,39 @@
 <a href="/contacts" class="text-sm text-brand-600 font-medium">← Contacts</a>
 <h2 class="text-2xl font-bold text-charcoal mt-2 mb-1">{{.summary.Contact.Email}}</h2>
 {{if .summary.Suppressed}}<span class="badge badge-red mb-4">Suppressed</span>{{end}}
-{{if .summary.RepliedAt}}<span class="badge badge-green mb-4 ml-1">Replied {{.summary.RepliedAt.Format "Jan 2, 2006"}}</span>{{end}}
+{{if .summary.RepliedAt}}<span class="badge badge-violet mb-4 ml-1">Replied {{.summary.RepliedAt.Format "Jan 2, 2006"}}</span>{{end}}
 
 {{if .success}}<div class="alert-success mb-6">{{.success}}</div>{{end}}
 {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
+
+<div class="card mb-6">
+    <h3 class="card-title">Activity timeline</h3>
+    <p class="text-sm text-gray-500 mb-4">Opens, clicks, replies, and sends for this lead</p>
+    {{if .summary.Timeline}}
+    <ol class="contact-timeline">
+        {{range .summary.Timeline}}
+        <li class="contact-timeline-item contact-timeline-item--{{.Type}}">
+            <div class="contact-timeline-dot" aria-hidden="true"></div>
+            <div class="contact-timeline-body">
+                <div class="contact-timeline-head">
+                    <span class="badge {{.BadgeClass}}">{{.Label}}</span>
+                    <time class="contact-timeline-time" datetime="{{.At.Format "2006-01-02T15:04:05Z07:00"}}">{{.At.Format "Jan 2, 2006 · 15:04"}}</time>
+                </div>
+                {{if .Detail}}
+                <p class="contact-timeline-detail">
+                    {{if .CampaignID}}<a href="/campaigns/{{.CampaignID}}" class="text-brand-600 hover:underline">{{.CampaignName}}</a>{{if or .Subject .TemplateName .URL}} · {{end}}{{end}}
+                    {{if .Subject}}{{.Subject}}{{else if .TemplateName}}{{.TemplateName}}{{end}}
+                    {{if .URL}}{{if or .CampaignID .Subject .TemplateName}} · {{end}}<a href="{{.URL}}" class="text-brand-600 hover:underline break-all" target="_blank" rel="noopener">{{.URL}}</a>{{end}}
+                </p>
+                {{end}}
+            </div>
+        </li>
+        {{end}}
+    </ol>
+    {{else}}
+    <p class="text-gray-400 text-sm">No opens, clicks, or replies yet. Activity shows up here after you send to this contact.</p>
+    {{end}}
+</div>
 
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
     <div class="card">

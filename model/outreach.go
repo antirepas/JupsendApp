@@ -277,6 +277,37 @@ func SetDefaultOutreachMailbox(userID, mailboxID int64) error {
 	return err
 }
 
+// UpdateMailboxFromName sets the display name recipients see in From (and stores first/last on the outreach row).
+func UpdateMailboxFromName(userID, mailboxID int64, fromName string) error {
+	fromName = strings.TrimSpace(fromName)
+	if fromName == "" {
+		return fmt.Errorf("from name is required")
+	}
+	m, err := GetOutreachMailbox(mailboxID, userID)
+	if err != nil {
+		return err
+	}
+	parts := strings.Fields(fromName)
+	fn, ln := fromName, ""
+	if len(parts) >= 1 {
+		fn = parts[0]
+	}
+	if len(parts) >= 2 {
+		ln = strings.Join(parts[1:], " ")
+	}
+	now := time.Now()
+	if _, err := db.Exec(`
+		UPDATE outreach_mailboxes SET first_name=?, last_name=?, updated_at=? WHERE id=? AND user_id=?
+	`, fn, ln, now, mailboxID, userID); err != nil {
+		return err
+	}
+	if m.SMTPAccountID > 0 {
+		_, err = db.Exec(`UPDATE smtp_accounts SET from_name=?, updated_at=? WHERE id=? AND user_id=?`, fromName, now, m.SMTPAccountID, userID)
+		return err
+	}
+	return nil
+}
+
 // UpsertInboxKitSMTPAccount creates/updates an smtp_accounts row for plain SMTP sending.
 func UpsertInboxKitSMTPAccount(userID int64, email, host, port, user, password, fromName, inboxkitID string, isDefault bool, dailyLimit int, imapHost, imapPort string) (int64, error) {
 	encPass, err := googleoauth.Encrypt(password)

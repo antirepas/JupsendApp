@@ -70,6 +70,7 @@
         <thead>
           <tr class="text-gray-500 border-b border-gray-200">
             <th class="py-2 pr-3 font-medium">Email</th>
+            <th class="py-2 pr-3 font-medium">From name</th>
             <th class="py-2 pr-3 font-medium">Status</th>
             <th class="py-2 pr-3 font-medium">Warmup</th>
             <th class="py-2 pr-3 font-medium">Default</th>
@@ -78,10 +79,16 @@
         </thead>
         <tbody>
           {{range .mailboxRows}}
-          <tr class="border-b border-gray-100">
+          <tr class="border-b border-gray-100 align-top">
             <td class="py-3 pr-3">
               <div class="font-medium">{{.Email}}</div>
               {{if .InsightsHint}}<div class="text-xs text-gray-500 mt-1">{{.InsightsHint}}</div>{{end}}
+            </td>
+            <td class="py-3 pr-3">
+              <form method="POST" action="/mailboxes/{{.ID}}/from-name" class="flex flex-wrap items-center gap-2">
+                <input name="from_name" class="form-input text-sm py-1.5 min-w-[10rem]" value="{{.FromName}}" required placeholder="First Last">
+                <button type="submit" class="text-brand-600 font-medium hover:underline text-xs">Save</button>
+              </form>
             </td>
             <td class="py-3 pr-3 text-gray-600">{{.Status}}</td>
             <td class="py-3 pr-3 text-gray-600 text-xs">{{.WarmupLabel}}</td>
@@ -98,6 +105,7 @@
         </tbody>
       </table>
     </div>
+    <p class="text-xs text-gray-500">From name is what recipients see (e.g. <code>Antanas Kupstas &lt;antanas@…&gt;</code>). Change it anytime per mailbox.</p>
     {{else}}
     <p class="text-sm text-gray-600">
       {{if .isPro}}
@@ -120,7 +128,7 @@
       </div>
       <div>
         <label class="form-label">From name</label>
-        <input name="from_name" class="form-input" placeholder="Alex at Acme">
+        <input name="from_name" class="form-input" required placeholder="Antanas Kupstas">
       </div>
       <div>
         <label class="form-label">SMTP host</label>

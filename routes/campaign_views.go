@@ -366,6 +366,87 @@ func filterWorkflowCampaignContactRows(rows []WorkflowCampaignContactRowView, q,
 	return out
 }
 
+// memberListPage is pagination for campaign manage-page contact tables.
+type memberListPage struct {
+	Page       int
+	PageSize   int
+	Total      int
+	TotalPages int
+	HasPrev    bool
+	HasNext    bool
+	PrevPage   int
+	NextPage   int
+}
+
+func pageCampaignContactRows(rows []CampaignContactRowView, page, pageSize int) ([]CampaignContactRowView, memberListPage) {
+	meta := buildMemberListPage(len(rows), page, pageSize)
+	if meta.Total == 0 {
+		return nil, meta
+	}
+	start := (meta.Page - 1) * meta.PageSize
+	end := start + meta.PageSize
+	if start >= len(rows) {
+		return nil, meta
+	}
+	if end > len(rows) {
+		end = len(rows)
+	}
+	out := rows[start:end]
+	for i := range out {
+		out[i].Index = start + i + 1
+	}
+	return out, meta
+}
+
+func pageWorkflowCampaignContactRows(rows []WorkflowCampaignContactRowView, page, pageSize int) ([]WorkflowCampaignContactRowView, memberListPage) {
+	meta := buildMemberListPage(len(rows), page, pageSize)
+	if meta.Total == 0 {
+		return nil, meta
+	}
+	start := (meta.Page - 1) * meta.PageSize
+	end := start + meta.PageSize
+	if start >= len(rows) {
+		return nil, meta
+	}
+	if end > len(rows) {
+		end = len(rows)
+	}
+	out := rows[start:end]
+	for i := range out {
+		out[i].Index = start + i + 1
+	}
+	return out, meta
+}
+
+func buildMemberListPage(total, page, pageSize int) memberListPage {
+	if pageSize < 1 {
+		pageSize = 50
+	}
+	if pageSize > 200 {
+		pageSize = 200
+	}
+	if page < 1 {
+		page = 1
+	}
+	totalPages := 0
+	if total > 0 {
+		totalPages = (total + pageSize - 1) / pageSize
+	}
+	if totalPages > 0 && page > totalPages {
+		page = totalPages
+	}
+	return memberListPage{
+		Page:       page,
+		PageSize:   pageSize,
+		Total:      total,
+		TotalPages: totalPages,
+		HasPrev:    page > 1,
+		HasNext:    totalPages > 0 && page < totalPages,
+		PrevPage:   page - 1,
+		NextPage:   page + 1,
+	}
+}
+
 func truncatePreview(s string, max int) string {
 	if len(s) <= max {
 		return s

@@ -219,7 +219,7 @@ func CampaignDetailPage(ctx *gin.Context) {
 		Engagement: ctx.Query("picker_engagement"),
 		Sort:       ctx.DefaultQuery("picker_sort", "email"),
 		Page:       page,
-		PageSize:   50,
+		PageSize:   25,
 		Lite:       true,
 	}
 	addTab := ctx.DefaultQuery("add_tab", "list")
@@ -228,6 +228,8 @@ func CampaignDetailPage(ctx *gin.Context) {
 	}
 	memberQ := ctx.Query("member_q")
 	memberFilter := ctx.Query("member_filter")
+	memberPageNum, _ := strconv.Atoi(ctx.DefaultQuery("member_page", "1"))
+	const memberPageSize = 50
 
 	pageExtras, err := loadCampaignDetailPageData(userID, detail, pickerFilter)
 	if err != nil {
@@ -295,8 +297,10 @@ func CampaignDetailPage(ctx *gin.Context) {
 		pageData["experimentHypothesis"] = detail.ExperimentHypothesis
 		pageData["experimentVariableLabel"] = experimentVariableLabel(detail.ExperimentVariable)
 		wfRows := filterWorkflowCampaignContactRows(pageExtras.WorkflowContactRows, memberQ, memberFilter)
-		pageData["workflowContactRows"] = wfRows
-		pageData["workflowContactTotal"] = len(pageExtras.WorkflowContactRows)
+		pagedWf, memberPage := pageWorkflowCampaignContactRows(wfRows, memberPageNum, memberPageSize)
+		pageData["workflowContactRows"] = pagedWf
+		pageData["workflowContactTotal"] = len(wfRows)
+		pageData["memberPage"] = memberPage
 		pageData["memberQ"] = memberQ
 		pageData["memberFilter"] = memberFilter
 		pageData["missingVarsCount"] = 0
@@ -318,8 +322,10 @@ func CampaignDetailPage(ctx *gin.Context) {
 			}
 		}
 		rows := filterCampaignContactRows(allRows, memberQ, memberFilter)
-		pageData["contactRows"] = rows
-		pageData["contactRowTotal"] = len(allRows)
+		pagedRows, memberPage := pageCampaignContactRows(rows, memberPageNum, memberPageSize)
+		pageData["contactRows"] = pagedRows
+		pageData["contactRowTotal"] = len(rows)
+		pageData["memberPage"] = memberPage
 		pageData["memberQ"] = memberQ
 		pageData["memberFilter"] = memberFilter
 		pageData["missingVarsCount"] = missingCount

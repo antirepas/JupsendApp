@@ -71,9 +71,15 @@
     const el = document.getElementById('import-jobs-banner');
     if (!el) return;
     let timer = null;
+    const POLL_BUSY_MS = 750;
+    const POLL_IDLE_MS = 4000;
     function dismiss(id) {
-        fetch('/api/v1/import-jobs/' + id + '/dismiss', { method: 'POST', credentials: 'same-origin' })
+        fetch('/api/v1/import-jobs/' + id + '/dismiss', { method: 'POST', credentials: 'same-origin', cache: 'no-store' })
             .then(() => refresh());
+    }
+    function setPoll(ms) {
+        if (timer) clearInterval(timer);
+        timer = setInterval(refresh, ms);
     }
     function render(jobs) {
         if (!jobs || !jobs.length) {
@@ -90,28 +96,45 @@
                 : (j.message || j.error_message || j.status);
             const link = j.campaign_id ? (' <a href="/campaigns/' + j.campaign_id + '">Open campaign</a>') : '';
             const dismissBtn = active ? '' : (' <button type="button" class="import-job-dismiss" data-id="' + j.id + '">Dismiss</button>');
-            return '<div class="' + cls + '"><strong>' + j.kind_label + '</strong> — ' + detail + link + dismissBtn +
-                (active ? '<div class="import-job-bar"><span style="width:' + j.progress + '%"></span></div>' : '') +
-                '</div>';
+            const barCls = (active && (!j.progress || j.progress < 1)) ? 'import-job-bar import-job-bar--indeterminate' : 'import-job-bar';
+            const bar = active
+                ? ('<div class="' + barCls + '" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + (j.progress || 0) + '"><span style="width:' + Math.max(j.progress || 0, 0) + '%"></span></div>')
+                : '';
+            return '<div class="' + cls + '"><strong>' + j.kind_label + '</strong> — ' + detail + link + dismissBtn + bar + '</div>';
         }).join('');
         el.querySelectorAll('.import-job-dismiss').forEach(btn => {
             btn.addEventListener('click', () => dismiss(btn.getAttribute('data-id')));
         });
     }
     function refresh() {
-        fetch('/api/v1/import-jobs', { credentials: 'same-origin' })
-            .then(r => r.ok ? r.json() : null)
+        fetch('/api/v1/import-jobs', { credentials: 'same-origin', cache: 'no-store' })
+            .then(r => {
+                if (!r.ok) return null;
+                const ct = (r.headers.get('content-type') || '');
+                if (ct.indexOf('application/json') === -1) return null;
+                return r.json();
+            })
             .then(data => {
                 if (!data) return;
                 render(data.jobs || []);
                 const busy = (data.jobs || []).some(j => j.status === 'pending' || j.status === 'processing');
-                if (busy && !timer) timer = setInterval(refresh, 2500);
-                if (!busy && timer) { clearInterval(timer); timer = null; }
+                setPoll(busy ? POLL_BUSY_MS : POLL_IDLE_MS);
             })
             .catch(() => {});
     }
+    window.__refreshImportJobs = refresh;
     refresh();
-    setTimeout(refresh, 800);
+    setTimeout(refresh, 400);
+    // After enqueue redirect, keep a fast poll until the job appears / finishes.
+    try {
+        const q = new URLSearchParams(window.location.search);
+        const success = (q.get('success') || '').toLowerCase();
+        if (success.indexOf('import') !== -1 || success.indexOf('background') !== -1) {
+            setPoll(POLL_BUSY_MS);
+            setTimeout(refresh, 200);
+            setTimeout(refresh, 1000);
+        }
+    } catch (e) {}
 })();
 </script>
 {{end}}

@@ -68,6 +68,7 @@ type ContactSummary struct {
 	RepliedAt   *time.Time
 	RecentSends []EmailSendListItem
 	Campaigns   []ContactCampaignRef
+	Timeline    []ContactTimelineItem
 }
 
 func (c *Contact) SaveContact(userID int64, variables []ContactVariables) (int64, error) {
@@ -323,6 +324,7 @@ func GetContactSummary(userID, contactID int64) (ContactSummary, error) {
 	}
 
 	sends, _ := ListEmailSendsForContact(userID, contactID, 10)
+	timeline, _ := ListContactTimeline(userID, contactID, 150)
 
 	campaignRows, _ := db.Query(`
 		SELECT DISTINCT camp.id, camp.name FROM campaign_contacts cc
@@ -349,6 +351,7 @@ func GetContactSummary(userID, contactID int64) (ContactSummary, error) {
 		RepliedAt:   repliedAt,
 		RecentSends: sends,
 		Campaigns:   campaigns,
+		Timeline:    timeline,
 	}, nil
 }
 

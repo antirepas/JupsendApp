@@ -195,7 +195,7 @@ func OnboardingDomainSearch(c *gin.Context) {
 	})
 }
 
-func collectStarterMailboxSpecs(c *gin.Context) []model.StarterMailboxSpec {
+func collectStarterMailboxSpecs(c *gin.Context) ([]model.StarterMailboxSpec, error) {
 	n := config.InboxKitIncludedMailboxCount()
 	var specs []model.StarterMailboxSpec
 	for i := 1; i <= n; i++ {
@@ -205,15 +205,15 @@ func collectStarterMailboxSpecs(c *gin.Context) []model.StarterMailboxSpec {
 		if fn == "" && ln == "" && local == "" {
 			continue
 		}
-		if fn == "" {
-			fn = "Team"
-		}
-		if ln == "" {
-			ln = fmt.Sprintf("%d", i)
+		if fn == "" || ln == "" || local == "" {
+			return nil, fmt.Errorf("mailbox %d needs first name, last name, and email local part (recipients see the name as From)", i)
 		}
 		specs = append(specs, model.StarterMailboxSpec{FirstName: fn, LastName: ln, LocalPart: local})
 	}
-	return specs
+	if len(specs) == 0 {
+		return nil, fmt.Errorf("add at least one mailbox with first name, last name, and local part")
+	}
+	return specs, nil
 }
 
 func OnboardingDomainPurchase(c *gin.Context) {
@@ -228,23 +228,10 @@ func OnboardingDomainPurchase(c *gin.Context) {
 		c.Redirect(http.StatusFound, onboardingDomainErrorURL("Pick a valid domain", ""))
 		return
 	}
-	specs := collectStarterMailboxSpecs(c)
-	if len(specs) == 0 {
-		user, _ := model.GetUserByID(userID)
-		base := strings.Split(user.Email, "@")[0]
-		specs = []model.StarterMailboxSpec{
-			{FirstName: "Alex", LastName: "Outreach", LocalPart: "alex"},
-			{FirstName: "Sam", LastName: "Outreach", LocalPart: "sam"},
-			{FirstName: "Jordan", LastName: "Outreach", LocalPart: "jordan"},
-		}
-		if base != "" {
-			specs[0].LocalPart = base
-			specs[0].FirstName = base
-		}
-		n := config.InboxKitIncludedMailboxCount()
-		if len(specs) > n {
-			specs = specs[:n]
-		}
+	specs, err := collectStarterMailboxSpecs(c)
+	if err != nil {
+		c.Redirect(http.StatusFound, onboardingDomainErrorURL(err.Error(), domain))
+		return
 	}
 	domainID, orderID, err := model.PlaceStarterDomainOrder(userID, domain, specs)
 	if err != nil {
@@ -267,14 +254,10 @@ func OnboardingDomainConnect(c *gin.Context) {
 		c.Redirect(http.StatusFound, onboardingDomainErrorURL("Enter a valid domain you already own", ""))
 		return
 	}
-	specs := collectStarterMailboxSpecs(c)
-	if len(specs) == 0 {
-		user, _ := model.GetUserByID(userID)
-		base := strings.Split(user.Email, "@")[0]
-		if base == "" {
-			base = "hello"
-		}
-		specs = []model.StarterMailboxSpec{{FirstName: base, LastName: "Outreach", LocalPart: base}}
+	specs, err := collectStarterMailboxSpecs(c)
+	if err != nil {
+		c.Redirect(http.StatusFound, onboardingDomainErrorURL(err.Error(), "")+"&domain="+url.QueryEscape(domain))
+		return
 	}
 	domainID, _, _, err := model.PlaceConnectExistingDomainOrder(userID, domain, specs)
 	if err != nil {
@@ -375,14 +358,19 @@ func MailboxesPage(c *gin.Context) {
 		Email        string
 		Status       string
 		IsDefault    bool
+		FromName     string
 		WarmupLabel  string
 		InsightsHint string
 	}
 	var rows []mailboxRow
 	for _, m := range mailboxes {
-		row := mailboxRow{ID: m.ID, Email: m.Email, Status: m.Status, IsDefault: m.IsDefault}
+		fromName := strings.TrimSpace(m.FirstName + " " + m.LastName)
+		row := mailboxRow{ID: m.ID, Email: m.Email, Status: m.Status, IsDefault: m.IsDefault, FromName: fromName}
 		if m.SMTPAccountID > 0 {
 			if acc, err := model.GetSMTPAccount(m.SMTPAccountID); err == nil {
+				if strings.TrimSpace(acc.FromName) != "" {
+					row.FromName = acc.FromName
+				}
 				schedule := outbound.EffectiveDailyCap(acc)
 				cap, hint := outbound.ApplyInsightsToCap(schedule, acc, m.AnalyticsJSON)
 				if acc.WarmupEnabled {
@@ -428,6 +416,10 @@ func MailboxesAttachManual(c *gin.Context) {
 	}
 	email := strings.TrimSpace(c.PostForm("email"))
 	fromName := strings.TrimSpace(c.PostForm("from_name"))
+	if fromName == "" {
+		c.Redirect(http.StatusFound, "/mailboxes?error="+url.QueryEscape("From name is required — recipients see this on every email"))
+		return
+	}
 	smtpHost := strings.TrimSpace(c.PostForm("smtp_host"))
 	smtpPort := strings.TrimSpace(c.PostForm("smtp_port"))
 	imapHost := strings.TrimSpace(c.PostForm("imap_host"))
@@ -451,6 +443,17 @@ func MailboxesSetDefault(c *gin.Context) {
 		return
 	}
 	c.Redirect(http.StatusFound, "/mailboxes?success="+url.QueryEscape("Default mailbox updated"))
+}
+
+func MailboxesUpdateFromName(c *gin.Context) {
+	userID := mustUserID(c)
+	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
+	fromName := strings.TrimSpace(c.PostForm("from_name"))
+	if err := model.UpdateMailboxFromName(userID, id, fromName); err != nil {
+		c.Redirect(http.StatusFound, "/mailboxes?error="+url.QueryEscape(err.Error()))
+		return
+	}
+	c.Redirect(http.StatusFound, "/mailboxes?success="+url.QueryEscape("From name updated"))
 }
 
 func MailboxesBuyPage(c *gin.Context) {
@@ -497,11 +500,9 @@ func MailboxesBuyCheckout(c *gin.Context) {
 		fn := strings.TrimSpace(c.PostForm(fmt.Sprintf("first_name_%d", i)))
 		ln := strings.TrimSpace(c.PostForm(fmt.Sprintf("last_name_%d", i)))
 		local := strings.TrimSpace(c.PostForm(fmt.Sprintf("local_%d", i)))
-		if fn == "" {
-			fn = "Seat"
-		}
-		if ln == "" {
-			ln = fmt.Sprintf("%d", i)
+		if fn == "" || ln == "" || local == "" {
+			c.Redirect(http.StatusFound, "/mailboxes/buy?error="+url.QueryEscape(fmt.Sprintf("Mailbox %d needs first name, last name, and local part (recipients see this as From)", i)))
+			return
 		}
 		specs = append(specs, model.StarterMailboxSpec{FirstName: fn, LastName: ln, LocalPart: local})
 	}
@@ -624,13 +625,18 @@ func MailboxesBuyDomainCheckout(c *gin.Context) {
 		local := strings.TrimSpace(c.PostForm(fmt.Sprintf("local_%d", i)))
 		fn := strings.TrimSpace(c.PostForm(fmt.Sprintf("first_name_%d", i)))
 		ln := strings.TrimSpace(c.PostForm(fmt.Sprintf("last_name_%d", i)))
-		if fn == "" {
-			fn = "Team"
+		if fn == "" && ln == "" && local == "" {
+			continue
 		}
-		if ln == "" {
-			ln = fmt.Sprintf("%d", i)
+		if fn == "" || ln == "" || local == "" {
+			c.Redirect(http.StatusFound, "/mailboxes/domains/buy?error="+url.QueryEscape(fmt.Sprintf("Mailbox %d needs first name, last name, and local part", i)))
+			return
 		}
 		specs = append(specs, model.StarterMailboxSpec{FirstName: fn, LastName: ln, LocalPart: local})
+	}
+	if len(specs) == 0 {
+		c.Redirect(http.StatusFound, "/mailboxes/domains/buy?error="+url.QueryEscape("Add at least one mailbox with first name, last name, and local part"))
+		return
 	}
 	payload, _ := json.Marshal(model.DomainPurchasePayload{Kind: "domain", Domain: domain, Mailboxes: specs})
 	purchaseID, err := model.CreateMailboxPurchase(userID, 0, len(specs), string(payload))
