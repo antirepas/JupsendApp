@@ -22,21 +22,43 @@ type Client struct {
 }
 
 func NewClient() *Client {
+	base := strings.TrimRight(config.InboxKitBaseURL, "/")
+	if base == "" {
+		base = defaultBaseURL
+	}
 	return &Client{
 		APIKey:      config.InboxKitAPIKey,
 		WorkspaceID: config.InboxKitWorkspaceID,
-		BaseURL:     strings.TrimRight(config.InboxKitBaseURL, "/"),
+		BaseURL:     base,
 		HTTP:        &http.Client{Timeout: 60 * time.Second},
 	}
 }
 
 func Configured() bool {
-	return strings.TrimSpace(config.InboxKitAPIKey) != ""
+	return strings.TrimSpace(config.InboxKitAPIKey) != "" &&
+		strings.TrimSpace(config.InboxKitWorkspaceID) != ""
+}
+
+func ConfiguredHint() string {
+	missing := []string{}
+	if strings.TrimSpace(config.InboxKitAPIKey) == "" {
+		missing = append(missing, "INBOXKIT_API_KEY")
+	}
+	if strings.TrimSpace(config.InboxKitWorkspaceID) == "" {
+		missing = append(missing, "INBOXKIT_WORKSPACE_ID")
+	}
+	if len(missing) == 0 {
+		return ""
+	}
+	return "InboxKit is not configured — set " + strings.Join(missing, " and ")
 }
 
 func (c *Client) do(method, path string, body any, out any) error {
 	if c.APIKey == "" {
 		return fmt.Errorf("INBOXKIT_API_KEY not configured")
+	}
+	if c.WorkspaceID == "" {
+		return fmt.Errorf("INBOXKIT_WORKSPACE_ID not configured")
 	}
 	var rdr io.Reader
 	if body != nil {
@@ -53,9 +75,7 @@ func (c *Client) do(method, path string, body any, out any) error {
 	req.Header.Set("Authorization", "Bearer "+c.APIKey)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
-	if c.WorkspaceID != "" {
-		req.Header.Set("X-Workspace-Id", c.WorkspaceID)
-	}
+	req.Header.Set("X-Workspace-Id", c.WorkspaceID)
 	res, err := c.HTTP.Do(req)
 	if err != nil {
 		return err
@@ -82,29 +102,66 @@ func truncate(s string, n int) string {
 }
 
 type DomainSearchResult struct {
-	Domain      string  `json:"domain"`
-	Name        string  `json:"name"`
-	Available   bool    `json:"available"`
-	Price       float64 `json:"price"`
-	TLD         string  `json:"tld"`
-	Premium     bool    `json:"premium"`
-	RawDomain   string  `json:"domain_name"`
+	Domain    string  `json:"domain"`
+	Name      string  `json:"name"`
+	Available bool    `json:"available"`
+	Price     float64 `json:"price"`
+	TLD       string  `json:"tld"`
+	Premium   bool    `json:"premium"`
+	IsPremium bool    `json:"is_premium"`
+	Banned    bool    `json:"banned"`
+	RawDomain string  `json:"domain_name"`
+}
+
+func (d DomainSearchResult) ResolvedDomain() string {
+	if d.Domain != "" {
+		return d.Domain
+	}
+	if d.Name != "" {
+		return d.Name
+	}
+	return d.RawDomain
 }
 
 type domainSearchResponse struct {
+	Error   bool                 `json:"error"`
+	Message string               `json:"message"`
 	Domains []DomainSearchResult `json:"domains"`
 	Results []DomainSearchResult `json:"results"`
 	Data    []DomainSearchResult `json:"data"`
 }
 
 func (c *Client) SearchDomains(query string) ([]DomainSearchResult, error) {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return nil, fmt.Errorf("enter a keyword to search")
+	}
+	body := map[string]any{
+		"keyword":                                 query,
+		"page":                                    1,
+		"num":                                     20,
+		"show_unavailable":                        false,
+		"check_banned":                            true,
+		"check_google_workspace_availability":     true,
+		"check_ms365_workspace_availability":      false,
+		"tlds":                                    []string{".com", ".net", ".io", ".co", ".org", ".ai"},
+	}
+	// Exact domain lookups also accept the "domain" field.
+	if strings.Contains(query, ".") {
+		body["domain"] = query
+	}
+
 	var resp domainSearchResponse
-	err := c.do("POST", "/api/domains/search", map[string]any{
-		"query": query,
-		"q":     query,
-	}, &resp)
+	err := c.do("POST", "/api/domains/search", body, &resp)
 	if err != nil {
 		return nil, err
+	}
+	if resp.Error {
+		msg := strings.TrimSpace(resp.Message)
+		if msg == "" {
+			msg = "domain search failed"
+		}
+		return nil, fmt.Errorf("%s", msg)
 	}
 	list := resp.Domains
 	if len(list) == 0 {
@@ -113,27 +170,42 @@ func (c *Client) SearchDomains(query string) ([]DomainSearchResult, error) {
 	if len(list) == 0 {
 		list = resp.Data
 	}
-	for i := range list {
-		if list[i].Domain == "" {
-			list[i].Domain = list[i].Name
+	out := make([]DomainSearchResult, 0, len(list))
+	for _, item := range list {
+		item.Domain = item.ResolvedDomain()
+		if item.Domain == "" || item.Banned {
+			continue
 		}
-		if list[i].Domain == "" {
-			list[i].Domain = list[i].RawDomain
+		if item.IsPremium {
+			item.Premium = true
 		}
-		if !list[i].Available && list[i].Domain != "" {
-			// API may omit available=true; treat listed search hits as selectable unless premium-blocked.
-			list[i].Available = true
+		// API may omit available=true for listed hits.
+		if !item.Available {
+			item.Available = true
 		}
+		out = append(out, item)
 	}
-	return list, nil
+	return out, nil
 }
 
 type OrderMailbox struct {
 	FirstName     string `json:"first_name"`
 	LastName      string `json:"last_name"`
 	Email         string `json:"email"`
+	Username      string `json:"username,omitempty"`
 	Platform      string `json:"platform"`
 	ProfilePicURL string `json:"profile_pic_url,omitempty"`
+}
+
+func (m OrderMailbox) ResolvedUsername() string {
+	if m.Username != "" {
+		return strings.ToLower(strings.TrimSpace(m.Username))
+	}
+	email := strings.ToLower(strings.TrimSpace(m.Email))
+	if i := strings.Index(email, "@"); i > 0 {
+		return email[:i]
+	}
+	return email
 }
 
 type OrderDomain struct {
@@ -169,11 +241,11 @@ func (c *Client) CreateOrder(req CreateOrderRequest) (CreateOrderResponse, error
 }
 
 type OrderStatus struct {
-	OrderID  string          `json:"order_id"`
-	ID       string          `json:"id"`
-	Status   string          `json:"status"`
-	Domains  json.RawMessage `json:"domains"`
-	Raw      json.RawMessage `json:"-"`
+	OrderID string          `json:"order_id"`
+	ID      string          `json:"id"`
+	Status  string          `json:"status"`
+	Domains json.RawMessage `json:"domains"`
+	Raw     json.RawMessage `json:"-"`
 }
 
 func (c *Client) GetOrder(orderID string) (OrderStatus, error) {
@@ -195,35 +267,72 @@ func (o OrderStatus) IsError() bool {
 	return s == "error" || s == "failed"
 }
 
+// BuyMailboxItem matches POST /api/mailboxes/buy.
+type BuyMailboxItem struct {
+	FirstName      string `json:"first_name"`
+	LastName       string `json:"last_name"`
+	Username       string `json:"username"`
+	Platform       string `json:"platform"`
+	DomainName     string `json:"domain_name"`
+	ProfilePicture string `json:"profile_picture,omitempty"`
+}
+
 type BuyMailboxesRequest struct {
-	Domain    string         `json:"domain"`
-	Mailboxes []OrderMailbox `json:"mailboxes"`
+	Mailboxes        []BuyMailboxItem `json:"mailboxes"`
+	UseWalletBalance bool             `json:"use_wallet_balance,omitempty"`
 }
 
 type BuyMailboxesResponse struct {
-	OrderID string `json:"order_id"`
-	ID      string `json:"id"`
-	Status  string `json:"status"`
+	Error     bool   `json:"error"`
+	Message   string `json:"message"`
+	OrderID   string `json:"order_id"`
+	ID        string `json:"id"`
+	Status    string `json:"status"`
+	Mailboxes []struct {
+		UID        string `json:"uid"`
+		DomainName string `json:"domain_name"`
+		Username   string `json:"username"`
+		Status     string `json:"status"`
+	} `json:"mailboxes"`
+}
+
+func BuyItemsFromOrderMailboxes(domain string, mailboxes []OrderMailbox) []BuyMailboxItem {
+	domain = strings.ToLower(strings.TrimSpace(domain))
+	out := make([]BuyMailboxItem, 0, len(mailboxes))
+	for _, m := range mailboxes {
+		user := m.ResolvedUsername()
+		if user == "" {
+			continue
+		}
+		platform := m.Platform
+		if platform == "" {
+			platform = "GOOGLE"
+		}
+		out = append(out, BuyMailboxItem{
+			FirstName:  m.FirstName,
+			LastName:   m.LastName,
+			Username:   user,
+			Platform:   platform,
+			DomainName: domain,
+		})
+	}
+	return out
 }
 
 func (c *Client) BuyMailboxes(req BuyMailboxesRequest) (BuyMailboxesResponse, error) {
 	var resp BuyMailboxesResponse
-	// Prefer dedicated buy endpoint; fall back to orders with empty registration.
 	err := c.do("POST", "/api/mailboxes/buy", req, &resp)
-	if err == nil {
-		return resp, nil
+	if err != nil {
+		return resp, err
 	}
-	order, orderErr := c.CreateOrder(CreateOrderRequest{
-		Domains: []OrderDomain{{
-			Name:        req.Domain,
-			RedirectURL: config.InboxKitRedirectURL,
-			Mailboxes:   req.Mailboxes,
-		}},
-	})
-	if orderErr != nil {
-		return BuyMailboxesResponse{}, fmt.Errorf("mailboxes/buy: %v; orders fallback: %w", err, orderErr)
+	if resp.Error {
+		msg := strings.TrimSpace(resp.Message)
+		if msg == "" {
+			msg = "mailbox purchase failed"
+		}
+		return resp, fmt.Errorf("%s", msg)
 	}
-	return BuyMailboxesResponse{OrderID: order.ResolvedID(), Status: order.Status}, nil
+	return resp, nil
 }
 
 type MailboxCredentials struct {
@@ -263,10 +372,21 @@ func (c *Client) GetMailboxCredentials(mailboxID string) (MailboxCredentials, er
 
 type MailboxListItem struct {
 	ID     string `json:"id"`
+	UID    string `json:"uid"`
 	UUID   string `json:"uuid"`
 	Email  string `json:"email"`
 	Status string `json:"status"`
 	Domain string `json:"domain"`
+}
+
+func (m MailboxListItem) ResolvedID() string {
+	if m.ID != "" {
+		return m.ID
+	}
+	if m.UID != "" {
+		return m.UID
+	}
+	return m.UUID
 }
 
 type mailboxListResponse struct {
@@ -275,9 +395,13 @@ type mailboxListResponse struct {
 }
 
 func (c *Client) ListMailboxes(domain string) ([]MailboxListItem, error) {
-	body := map[string]any{}
+	body := map[string]any{
+		"page":  1,
+		"limit": 100,
+	}
 	if domain != "" {
 		body["domain"] = domain
+		body["domain_name"] = domain
 	}
 	var resp mailboxListResponse
 	err := c.do("POST", "/api/mailboxes/list", body, &resp)
@@ -290,7 +414,7 @@ func (c *Client) ListMailboxes(domain string) ([]MailboxListItem, error) {
 	}
 	for i := range list {
 		if list[i].ID == "" {
-			list[i].ID = list[i].UUID
+			list[i].ID = list[i].ResolvedID()
 		}
 	}
 	return list, nil
@@ -298,64 +422,120 @@ func (c *Client) ListMailboxes(domain string) ([]MailboxListItem, error) {
 
 type NameserverResult struct {
 	Domain      string   `json:"domain"`
+	UID         string   `json:"uid"`
 	Nameservers []string `json:"nameservers"`
 	Propagated  bool     `json:"propagated"`
 	Ready       bool     `json:"ready"`
 	Status      string   `json:"status"`
 }
 
-type nameserverAPIResponse struct {
-	Domain      string   `json:"domain"`
-	Nameservers []string `json:"nameservers"`
-	NS          []string `json:"ns"`
-	Data        []string `json:"data"`
-	Propagated  bool     `json:"propagated"`
-	Ready       bool     `json:"ready"`
-	Status      string   `json:"status"`
-	Result      struct {
+type nameserverCreateResponse struct {
+	Error   bool   `json:"error"`
+	Message string `json:"message"`
+	Result  []struct {
+		Domain      string   `json:"domain"`
 		Nameservers []string `json:"nameservers"`
-		Propagated  bool     `json:"propagated"`
+		UID         string   `json:"uid"`
 	} `json:"result"`
 }
 
-func parseNameserverResponse(resp nameserverAPIResponse, domain string) NameserverResult {
-	out := NameserverResult{
-		Domain:     domain,
-		Propagated: resp.Propagated || resp.Ready || resp.Result.Propagated,
-		Ready:      resp.Ready || resp.Propagated,
-		Status:     resp.Status,
-	}
-	out.Nameservers = resp.Nameservers
-	if len(out.Nameservers) == 0 {
-		out.Nameservers = resp.NS
-	}
-	if len(out.Nameservers) == 0 {
-		out.Nameservers = resp.Data
-	}
-	if len(out.Nameservers) == 0 {
-		out.Nameservers = resp.Result.Nameservers
-	}
-	return out
-}
-
-// GetNameservers returns InboxKit nameservers the customer should set at their registrar.
-func (c *Client) GetNameservers(domain string) (NameserverResult, error) {
-	var resp nameserverAPIResponse
-	err := c.do("POST", "/api/domains/nameservers", map[string]any{"domain": domain, "domains": []string{domain}}, &resp)
+// ConnectDomainNameservers registers an existing domain for connection and returns InboxKit nameservers.
+func (c *Client) ConnectDomainNameservers(domain string) (NameserverResult, error) {
+	domain = strings.ToLower(strings.TrimSpace(domain))
+	var resp nameserverCreateResponse
+	err := c.do("POST", "/api/domains/nameservers", map[string]any{
+		"domains": []string{domain},
+	}, &resp)
 	if err != nil {
 		return NameserverResult{}, err
 	}
-	return parseNameserverResponse(resp, domain), nil
+	if resp.Error {
+		msg := strings.TrimSpace(resp.Message)
+		if msg == "" {
+			msg = "failed to create domain nameservers"
+		}
+		return NameserverResult{}, fmt.Errorf("%s", msg)
+	}
+	for _, item := range resp.Result {
+		name := strings.ToLower(strings.TrimSpace(item.Domain))
+		if name == "" || name == domain {
+			return NameserverResult{
+				Domain:      domain,
+				UID:         item.UID,
+				Nameservers: item.Nameservers,
+			}, nil
+		}
+	}
+	if len(resp.Result) > 0 {
+		item := resp.Result[0]
+		return NameserverResult{
+			Domain:      domain,
+			UID:         item.UID,
+			Nameservers: item.Nameservers,
+		}, nil
+	}
+	return NameserverResult{}, fmt.Errorf("no nameservers returned for %s", domain)
+}
+
+// GetNameservers is an alias for ConnectDomainNameservers (creates/returns NS for connection).
+func (c *Client) GetNameservers(domain string) (NameserverResult, error) {
+	return c.ConnectDomainNameservers(domain)
+}
+
+type nameserverCheckResponse struct {
+	Error   bool   `json:"error"`
+	Message string `json:"message"`
+	Result  []struct {
+		UID        string `json:"uid"`
+		Name       string `json:"name"`
+		Status     string `json:"status"`
+		Propagated bool   `json:"propagated"`
+	} `json:"result"`
 }
 
 // CheckNameservers reports whether registrar NS have propagated to InboxKit.
 func (c *Client) CheckNameservers(domain string) (NameserverResult, error) {
-	var resp nameserverAPIResponse
-	err := c.do("POST", "/api/domains/nameservers/check", map[string]any{"domain": domain, "domains": []string{domain}}, &resp)
+	domain = strings.ToLower(strings.TrimSpace(domain))
+	var resp nameserverCheckResponse
+	err := c.do("POST", "/api/domains/nameservers/check-propagation", map[string]any{
+		"domains": []string{domain},
+	}, &resp)
 	if err != nil {
 		return NameserverResult{}, err
 	}
-	return parseNameserverResponse(resp, domain), nil
+	if resp.Error {
+		msg := strings.TrimSpace(resp.Message)
+		if msg == "" {
+			msg = "nameserver check failed"
+		}
+		return NameserverResult{}, fmt.Errorf("%s", msg)
+	}
+	for _, item := range resp.Result {
+		name := strings.ToLower(strings.TrimSpace(item.Name))
+		if name != "" && name != domain {
+			continue
+		}
+		active := item.Propagated || strings.EqualFold(item.Status, "active")
+		return NameserverResult{
+			Domain:     domain,
+			UID:        item.UID,
+			Propagated: active,
+			Ready:      active,
+			Status:     item.Status,
+		}, nil
+	}
+	if len(resp.Result) > 0 {
+		item := resp.Result[0]
+		active := item.Propagated || strings.EqualFold(item.Status, "active")
+		return NameserverResult{
+			Domain:     domain,
+			UID:        item.UID,
+			Propagated: active,
+			Ready:      active,
+			Status:     item.Status,
+		}, nil
+	}
+	return NameserverResult{Domain: domain}, nil
 }
 
 // Insights fetches best-effort analytics JSON for a mailbox (shape varies by InboxKit).
@@ -400,4 +580,17 @@ func DefaultRegistrant() map[string]any {
 		out["company"] = config.InboxKitRegistrantOrg
 	}
 	return out
+}
+
+// IsConnectOrderID marks domains connected via nameservers (not purchased orders).
+func IsConnectOrderID(orderID string) bool {
+	return strings.HasPrefix(orderID, "connect:")
+}
+
+func ConnectOrderID(uid, domain string) string {
+	uid = strings.TrimSpace(uid)
+	if uid != "" {
+		return "connect:" + uid
+	}
+	return "connect:" + strings.ToLower(strings.TrimSpace(domain))
 }

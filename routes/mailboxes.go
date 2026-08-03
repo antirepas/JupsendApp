@@ -96,6 +96,7 @@ func OnboardingDomainPage(c *gin.Context) {
 		"active":           "mailboxes",
 		"user":             user,
 		"inboxkitOK":       inboxkit.Configured(),
+		"inboxkitHint":     inboxkit.ConfiguredHint(),
 		"includedCount":    config.InboxKitIncludedMailboxCount(),
 		"pendingDomain":    pending,
 		"error":            c.Query("error"),
@@ -105,7 +106,9 @@ func OnboardingDomainPage(c *gin.Context) {
 }
 
 func OnboardingDomainSearch(c *gin.Context) {
-	if !model.UserIsPro(mustUserID(c)) {
+	userID := mustUserID(c)
+	ensureAdminPro(userID)
+	if !model.UserIsPro(userID) {
 		c.Redirect(http.StatusFound, "/settings/billing?error="+url.QueryEscape("Custom domains require Pro"))
 		return
 	}
@@ -118,16 +121,21 @@ func OnboardingDomainSearch(c *gin.Context) {
 		return
 	}
 	if !inboxkit.Configured() {
-		c.Redirect(http.StatusFound, "/onboarding/domain?error="+url.QueryEscape("InboxKit is not configured on this server"))
+		hint := inboxkit.ConfiguredHint()
+		if hint == "" {
+			hint = "InboxKit is not configured on this server"
+		}
+		c.Redirect(http.StatusFound, "/onboarding/domain?error="+url.QueryEscape(hint)+"&q="+url.QueryEscape(q))
 		return
 	}
 	client := inboxkit.NewClient()
 	results, err := client.SearchDomains(q)
 	if err != nil {
+		log.Printf("inboxkit domain search %q: %v", q, err)
 		c.Redirect(http.StatusFound, "/onboarding/domain?error="+url.QueryEscape(err.Error())+"&q="+url.QueryEscape(q))
 		return
 	}
-	user, _ := model.GetUserByID(mustUserID(c))
+	user, _ := model.GetUserByID(userID)
 	c.HTML(http.StatusOK, "onboarding_domain.html", gin.H{
 		"title":         "Set up outreach domain",
 		"active":        "mailboxes",
@@ -136,6 +144,7 @@ func OnboardingDomainSearch(c *gin.Context) {
 		"includedCount": config.InboxKitIncludedMailboxCount(),
 		"query":         q,
 		"results":       results,
+		"searched":      true,
 	})
 }
 
@@ -222,6 +231,7 @@ func OnboardingDomainConnect(c *gin.Context) {
 	}
 	domainID, _, _, err := model.PlaceConnectExistingDomainOrder(userID, domain, specs)
 	if err != nil {
+		log.Printf("connect domain %s: %v", domain, err)
 		c.Redirect(http.StatusFound, "/onboarding/domain?error="+url.QueryEscape(err.Error())+"&q="+url.QueryEscape(domain))
 		return
 	}
@@ -244,29 +254,35 @@ func OnboardingDomainStatus(c *gin.Context) {
 		return
 	}
 	mailboxes, _ := model.ListOutreachMailboxes(userID)
-	var nameservers []string
+	nameservers := d.Nameservers()
 	nsPropagated := false
-	if inboxkit.Configured() && d.Domain != "" && (d.Status == "connecting" || d.Status == "ordering" || d.Status == "processing") {
+	needsNS := inboxkit.IsConnectOrderID(d.InboxkitOrderID) || d.Status == "connecting"
+	if inboxkit.Configured() && d.Domain != "" && needsNS {
 		client := inboxkit.NewClient()
-		if ns, nsErr := client.GetNameservers(d.Domain); nsErr == nil {
-			nameservers = ns.Nameservers
-		}
 		if check, checkErr := client.CheckNameservers(d.Domain); checkErr == nil {
 			nsPropagated = check.Propagated || check.Ready
-			if len(nameservers) == 0 {
-				nameservers = check.Nameservers
+		} else {
+			log.Printf("domain status check NS %s: %v", d.Domain, checkErr)
+		}
+		// Only create/fetch NS if we never stored them (legacy rows).
+		if len(nameservers) == 0 {
+			if ns, nsErr := client.ConnectDomainNameservers(d.Domain); nsErr == nil {
+				nameservers = ns.Nameservers
+				_ = model.SetOutreachDomainNameservers(d.ID, nameservers)
+			} else {
+				log.Printf("domain status nameservers %s: %v", d.Domain, nsErr)
 			}
 		}
 	}
 	c.HTML(http.StatusOK, "onboarding_domain_status.html", gin.H{
-		"title":         "Setting up domain",
-		"active":        "mailboxes",
-		"domain":        d,
-		"mailboxes":     mailboxes,
-		"nameservers":   nameservers,
-		"nsPropagated":  nsPropagated,
-		"needsNS":       d.Status == "connecting" || len(nameservers) > 0,
-		"error":         c.Query("error"),
+		"title":        "Setting up domain",
+		"active":       "mailboxes",
+		"domain":       d,
+		"mailboxes":    mailboxes,
+		"nameservers":  nameservers,
+		"nsPropagated": nsPropagated,
+		"needsNS":      needsNS,
+		"error":        c.Query("error"),
 	})
 }
 

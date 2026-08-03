@@ -3,6 +3,7 @@ package model
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 
 	"emailtracker.com/config"
@@ -18,7 +19,7 @@ type StarterMailboxSpec struct {
 // PlaceStarterDomainOrder buys a domain + included mailboxes via InboxKit.
 func PlaceStarterDomainOrder(userID int64, domain string, specs []StarterMailboxSpec) (domainID int64, orderID string, err error) {
 	if !inboxkit.Configured() {
-		return 0, "", fmt.Errorf("InboxKit is not configured")
+		return 0, "", fmt.Errorf("%s", inboxkit.ConfiguredHint())
 	}
 	n := config.InboxKitIncludedMailboxCount()
 	if len(specs) == 0 {
@@ -49,6 +50,7 @@ func PlaceStarterDomainOrder(userID int64, domain string, specs []StarterMailbox
 			FirstName: s.FirstName,
 			LastName:  s.LastName,
 			Email:     local + "@" + domain,
+			Username:  local,
 			Platform:  platform,
 		})
 	}
@@ -90,10 +92,10 @@ func PlaceStarterDomainOrder(userID int64, domain string, specs []StarterMailbox
 }
 
 // PlaceConnectExistingDomainOrder connects a domain you already own (no registration purchase).
-// InboxKit provisions mailboxes; you point the domain's nameservers at InboxKit.
+// Step 1: InboxKit creates Cloudflare NS for the domain. Step 2: after NS propagate, mailboxes are bought.
 func PlaceConnectExistingDomainOrder(userID int64, domain string, specs []StarterMailboxSpec) (domainID int64, orderID string, nameservers []string, err error) {
 	if !inboxkit.Configured() {
-		return 0, "", nil, fmt.Errorf("InboxKit is not configured")
+		return 0, "", nil, fmt.Errorf("%s", inboxkit.ConfiguredHint())
 	}
 	domain = strings.ToLower(strings.TrimSpace(domain))
 	if domain == "" || !strings.Contains(domain, ".") {
@@ -128,40 +130,27 @@ func PlaceConnectExistingDomainOrder(userID int64, domain string, specs []Starte
 			FirstName: s.FirstName,
 			LastName:  s.LastName,
 			Email:     local + "@" + domain,
+			Username:  local,
 			Platform:  platform,
 		})
 	}
 
 	client := inboxkit.NewClient()
-	// No RegistrationYears — domain is already owned; InboxKit configures DNS via nameservers.
-	resp, err := client.CreateOrder(inboxkit.CreateOrderRequest{
-		Domains: []inboxkit.OrderDomain{{
-			Name:           domain,
-			RedirectURL:    redirect,
-			Mailboxes:      mboxes,
-			ContactDetails: inboxkit.DefaultRegistrant(),
-		}},
-		ContactDetails: inboxkit.DefaultRegistrant(),
-	})
+	ns, err := client.ConnectDomainNameservers(domain)
 	if err != nil {
-		// Fallback: buy mailboxes on domain name only (some workspaces accept this for external domains).
-		buy, buyErr := client.BuyMailboxes(inboxkit.BuyMailboxesRequest{Domain: domain, Mailboxes: mboxes})
-		if buyErr != nil {
-			return 0, "", nil, fmt.Errorf("connect domain: %v; mailbox buy: %w", err, buyErr)
-		}
-		orderID = buy.OrderID
-		if orderID == "" {
-			orderID = buy.ID
-		}
-	} else {
-		orderID = resp.ResolvedID()
+		return 0, "", nil, fmt.Errorf("connect domain: %w", err)
 	}
+	nameservers = ns.Nameservers
+	orderID = inboxkit.ConnectOrderID(ns.UID, domain)
 
 	domainID, err = CreateOutreachDomain(userID, domain, orderID, redirect, true)
 	if err != nil {
-		return 0, orderID, nil, err
+		return 0, orderID, nameservers, err
 	}
 	_ = UpdateOutreachDomainStatus(domainID, "connecting", orderID)
+	if len(nameservers) > 0 {
+		_ = SetOutreachDomainNameservers(domainID, nameservers)
+	}
 	for i, mb := range mboxes {
 		isDef := i == 0
 		_, _ = CreateOutreachMailbox(OutreachMailbox{
@@ -177,10 +166,70 @@ func PlaceConnectExistingDomainOrder(userID int64, domain string, specs []Starte
 		})
 	}
 
-	if ns, nsErr := client.GetNameservers(domain); nsErr == nil {
-		nameservers = ns.Nameservers
+	// If NS already propagated (re-connect), try buying mailboxes immediately.
+	if check, checkErr := client.CheckNameservers(domain); checkErr == nil && (check.Propagated || check.Ready) {
+		if buyErr := buyPendingMailboxesForDomain(userID, domainID, domain, platform); buyErr != nil {
+			log.Printf("connect domain %s: buy mailboxes after NS ready: %v", domain, buyErr)
+		}
 	}
+
 	return domainID, orderID, nameservers, nil
+}
+
+func buyPendingMailboxesForDomain(userID, domainID int64, domain, platform string) error {
+	mailboxes, err := ListOutreachMailboxes(userID)
+	if err != nil {
+		return err
+	}
+	var pending []inboxkit.OrderMailbox
+	for _, m := range mailboxes {
+		if m.DomainID != domainID {
+			continue
+		}
+		if m.InboxkitMailboxID != "" || m.Status == "ready" {
+			continue
+		}
+		local := sanitizeLocalPart(strings.Split(m.Email, "@")[0])
+		fn, ln := m.FirstName, m.LastName
+		if fn == "" {
+			fn = "Team"
+		}
+		if ln == "" {
+			ln = "Outreach"
+		}
+		pending = append(pending, inboxkit.OrderMailbox{
+			FirstName: fn,
+			LastName:  ln,
+			Email:     m.Email,
+			Username:  local,
+			Platform:  platform,
+		})
+	}
+	if len(pending) == 0 {
+		return nil
+	}
+	client := inboxkit.NewClient()
+	resp, err := client.BuyMailboxes(inboxkit.BuyMailboxesRequest{
+		Mailboxes: inboxkit.BuyItemsFromOrderMailboxes(domain, pending),
+	})
+	if err != nil {
+		return err
+	}
+	for _, bought := range resp.Mailboxes {
+		email := strings.ToLower(bought.Username + "@" + bought.DomainName)
+		for _, m := range mailboxes {
+			if m.DomainID != domainID {
+				continue
+			}
+			if strings.ToLower(m.Email) != email && !strings.EqualFold(sanitizeLocalPart(strings.Split(m.Email, "@")[0]), bought.Username) {
+				continue
+			}
+			if bought.UID != "" {
+				_ = UpdateOutreachMailboxReady(m.ID, bought.UID, m.SMTPAccountID, "provisioning")
+			}
+		}
+	}
+	return nil
 }
 
 // SyncInboxKitOrder pulls order/mailbox state and stores SMTP credentials when ready.
@@ -188,6 +237,9 @@ func SyncInboxKitOrder(userID, domainID int64) error {
 	d, err := GetOutreachDomain(domainID, userID)
 	if err != nil {
 		return err
+	}
+	if inboxkit.IsConnectOrderID(d.InboxkitOrderID) || d.Status == "connecting" {
+		return syncConnectedDomain(userID, domainID, d)
 	}
 	if d.InboxkitOrderID == "" {
 		return fmt.Errorf("missing inboxkit order id")
@@ -207,14 +259,60 @@ func SyncInboxKitOrder(userID, domainID int64) error {
 	}
 	_ = UpdateOutreachDomainStatus(domainID, status, d.InboxkitOrderID)
 
-	list, err := client.ListMailboxes(d.Domain)
+	if err := syncMailboxCredentials(userID, domainID, d.Domain); err != nil {
+		return err
+	}
+
+	if order.IsDone() {
+		_ = UpdateOutreachDomainStatus(domainID, "ready", d.InboxkitOrderID)
+	}
+	return nil
+}
+
+func syncConnectedDomain(userID, domainID int64, d OutreachDomain) error {
+	client := inboxkit.NewClient()
+	check, err := client.CheckNameservers(d.Domain)
+	if err != nil {
+		log.Printf("sync connected domain %s: check NS: %v", d.Domain, err)
+		_ = UpdateOutreachDomainStatus(domainID, "connecting", d.InboxkitOrderID)
+		return nil
+	}
+	if !check.Propagated && !check.Ready {
+		_ = UpdateOutreachDomainStatus(domainID, "connecting", d.InboxkitOrderID)
+		return nil
+	}
+
+	platform := config.InboxKitPlatform
+	if platform == "" {
+		platform = "GOOGLE"
+	}
+	if buyErr := buyPendingMailboxesForDomain(userID, domainID, d.Domain, platform); buyErr != nil {
+		log.Printf("sync connected domain %s: buy mailboxes: %v", d.Domain, buyErr)
+		_ = UpdateOutreachDomainStatus(domainID, "connecting", d.InboxkitOrderID)
+		// Keep trying on later polls; domain may still be warming up.
+	}
+
+	if err := syncMailboxCredentials(userID, domainID, d.Domain); err != nil {
+		return err
+	}
+	if UserHasReadyMailbox(userID) {
+		_ = UpdateOutreachDomainStatus(domainID, "ready", d.InboxkitOrderID)
+	} else {
+		_ = UpdateOutreachDomainStatus(domainID, "connecting", d.InboxkitOrderID)
+	}
+	return nil
+}
+
+func syncMailboxCredentials(userID, domainID int64, domain string) error {
+	client := inboxkit.NewClient()
+	list, err := client.ListMailboxes(domain)
 	if err != nil {
 		return err
 	}
 	existing, _ := ListOutreachMailboxes(userID)
 	byEmail := map[string]OutreachMailbox{}
 	for _, m := range existing {
-		if m.DomainID == domainID || strings.HasSuffix(strings.ToLower(m.Email), "@"+strings.ToLower(d.Domain)) {
+		if m.DomainID == domainID || strings.HasSuffix(strings.ToLower(m.Email), "@"+strings.ToLower(domain)) {
 			byEmail[strings.ToLower(m.Email)] = m
 		}
 	}
@@ -228,13 +326,16 @@ func SyncInboxKitOrder(userID, domainID int64) error {
 
 	for i, item := range list {
 		email := strings.ToLower(item.Email)
+		if email == "" && item.Domain != "" {
+			// Some list payloads may omit email; skip until we can match.
+			continue
+		}
 		local, ok := byEmail[email]
 		if !ok {
-			// Create row if InboxKit returned extras
 			id, cErr := CreateOutreachMailbox(OutreachMailbox{
 				UserID:            userID,
 				DomainID:          domainID,
-				InboxkitMailboxID: item.ID,
+				InboxkitMailboxID: item.ResolvedID(),
 				Email:             item.Email,
 				Platform:          config.InboxKitPlatform,
 				Status:            "provisioning",
@@ -246,8 +347,9 @@ func SyncInboxKitOrder(userID, domainID int64) error {
 			}
 			local, _ = GetOutreachMailbox(id, userID)
 		}
-		if item.ID != "" && local.InboxkitMailboxID == "" {
-			local.InboxkitMailboxID = item.ID
+		mbID := item.ResolvedID()
+		if mbID != "" && local.InboxkitMailboxID == "" {
+			local.InboxkitMailboxID = mbID
 		}
 		if local.InboxkitMailboxID == "" {
 			continue
@@ -269,10 +371,6 @@ func SyncInboxKitOrder(userID, domainID int64) error {
 		if insights, iErr := client.MailboxInsights(local.InboxkitMailboxID); iErr == nil {
 			_ = SetMailboxAnalytics(local.ID, "{}", string(insights))
 		}
-	}
-
-	if order.IsDone() {
-		_ = UpdateOutreachDomainStatus(domainID, "ready", d.InboxkitOrderID)
 	}
 	return nil
 }
@@ -296,11 +394,14 @@ func PlaceExtraMailboxesOrder(userID, domainID int64, specs []StarterMailboxSpec
 			FirstName: s.FirstName,
 			LastName:  s.LastName,
 			Email:     local + "@" + d.Domain,
+			Username:  local,
 			Platform:  platform,
 		})
 	}
 	client := inboxkit.NewClient()
-	resp, err := client.BuyMailboxes(inboxkit.BuyMailboxesRequest{Domain: d.Domain, Mailboxes: mboxes})
+	resp, err := client.BuyMailboxes(inboxkit.BuyMailboxesRequest{
+		Mailboxes: inboxkit.BuyItemsFromOrderMailboxes(d.Domain, mboxes),
+	})
 	if err != nil {
 		return "", err
 	}

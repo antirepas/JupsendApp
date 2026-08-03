@@ -146,7 +146,7 @@ Full app access requires an active Whop subscription. After signup, users land o
 | `WHOP_MAILBOX_ADDON_ID` | Whop plan ID for extra mailbox purchases (`plan_...`) |
 | `WHOP_DOMAIN_ADDON_ID` | Whop plan ID for extra domain purchases (`plan_...`) |
 | `INBOXKIT_API_KEY` | InboxKit platform API key (domain + mailbox provisioning) |
-| `INBOXKIT_WORKSPACE_ID` | Optional InboxKit workspace id |
+| `INBOXKIT_WORKSPACE_ID` | InboxKit workspace id (**required** with API key) |
 | `INBOXKIT_BASE_URL` | InboxKit API base (default `https://api.inboxkit.com/v1`) |
 | `INBOXKIT_DEFAULT_PLATFORM` | Mailbox platform — `GOOGLE` (default) |
 | `INBOXKIT_INCLUDED_MAILBOXES` | Starter mailboxes included with domain (default `3`) |

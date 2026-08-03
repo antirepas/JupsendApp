@@ -136,6 +136,7 @@ func runAlterSchema() {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_import_jobs_user_status ON import_jobs(user_id, status)`,
 		`CREATE INDEX IF NOT EXISTS idx_import_jobs_pending ON import_jobs(status, id) WHERE status IN ('pending', 'processing')`,
+		`ALTER TABLE outreach_domains ADD COLUMN IF NOT EXISTS nameservers_json TEXT DEFAULT ''`,
 	}
 	for _, stmt := range alters {
 		if _, err := DB.Exec(stmt); err != nil {

@@ -17,7 +17,7 @@
   {{if .success}}<div class="alert-success mb-6">{{.success}}</div>{{end}}
 
   {{if not .inboxkitOK}}
-  <div class="alert-error mb-6">InboxKit is not configured on this server. Ask your admin to set INBOXKIT_API_KEY. You can still attach SMTP/IMAP credentials under Mailboxes.</div>
+  <div class="alert-error mb-6">{{if .inboxkitHint}}{{.inboxkitHint}}{{else}}InboxKit is not configured on this server. Set INBOXKIT_API_KEY and INBOXKIT_WORKSPACE_ID.{{end}} You can still attach SMTP/IMAP credentials under Mailboxes.</div>
   {{end}}
 
   {{if .pendingDomain}}
@@ -35,7 +35,7 @@
     <p class="text-sm text-gray-600">Enter your domain. We’ll provision mailboxes; you’ll point nameservers at InboxKit at your registrar (no domain purchase).</p>
     <div>
       <label class="form-label">Domain</label>
-      <input name="domain" class="form-input" value="{{.query}}" placeholder="yourcompany.com" required {{if not .inboxkitOK}}disabled{{end}}>
+      <input name="domain" class="form-input" value="{{.connectDomain}}" placeholder="yourcompany.com" required {{if not .inboxkitOK}}disabled{{end}}>
     </div>
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
       <div>
@@ -79,6 +79,7 @@
         <label class="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:bg-ivory cursor-pointer">
           <input type="radio" name="domain" value="{{.Domain}}" required>
           <span class="font-medium">{{.Domain}}</span>
+          {{if .Premium}}<span class="text-xs text-amber-700 ml-2">premium</span>{{end}}
           {{if .Price}}<span class="text-xs text-gray-500 ml-auto">${{printf "%.2f" .Price}}</span>{{end}}
         </label>
         {{end}}
@@ -111,6 +112,10 @@
       <button type="submit" class="btn-primary">Buy &amp; set up (included)</button>
     </div>
   </form>
+  {{else if .searched}}
+  <div class="card mb-6">
+    <p class="text-sm text-gray-600">No available domains found for <strong>{{.query}}</strong>. Try another keyword or a shorter root (e.g. <code>acme</code> instead of a full URL).</p>
+  </div>
   {{end}}
 
   <p class="text-xs text-gray-500 mt-4">

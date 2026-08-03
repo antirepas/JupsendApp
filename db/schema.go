@@ -296,6 +296,7 @@ func runSchema() {
 			status TEXT NOT NULL DEFAULT 'pending',
 			included BOOLEAN NOT NULL DEFAULT TRUE,
 			redirect_url TEXT DEFAULT '',
+			nameservers_json TEXT DEFAULT '',
 			created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
 			UNIQUE (user_id, domain)

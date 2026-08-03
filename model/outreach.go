@@ -2,6 +2,7 @@ package model
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -11,15 +12,16 @@ import (
 )
 
 type OutreachDomain struct {
-	ID              int64
-	UserID          int64
-	Domain          string
-	InboxkitOrderID string
-	Status          string
-	Included        bool
-	RedirectURL     string
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
+	ID               int64
+	UserID           int64
+	Domain           string
+	InboxkitOrderID  string
+	Status           string
+	Included         bool
+	RedirectURL      string
+	NameserversJSON  string
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
 }
 
 type OutreachMailbox struct {
@@ -84,6 +86,32 @@ func UpdateOutreachDomainStatus(id int64, status, orderID string) error {
 	return err
 }
 
+func SetOutreachDomainNameservers(id int64, nameservers []string) error {
+	raw := "[]"
+	if len(nameservers) > 0 {
+		b, err := json.Marshal(nameservers)
+		if err != nil {
+			return err
+		}
+		raw = string(b)
+	}
+	_, err := db.Exec(`
+		UPDATE outreach_domains SET nameservers_json=?, updated_at=? WHERE id=?
+	`, raw, time.Now(), id)
+	return err
+}
+
+func (d OutreachDomain) Nameservers() []string {
+	if strings.TrimSpace(d.NameserversJSON) == "" {
+		return nil
+	}
+	var out []string
+	if err := json.Unmarshal([]byte(d.NameserversJSON), &out); err != nil {
+		return nil
+	}
+	return out
+}
+
 func MarkOutreachDomainPaid(id int64) error {
 	_, err := db.Exec(`UPDATE outreach_domains SET included=FALSE, updated_at=? WHERE id=?`, time.Now(), id)
 	return err
@@ -106,7 +134,8 @@ func GetMailboxAnalyticsBySMTPAccountID(smtpAccountID int64) string {
 
 func GetOutreachDomain(id, userID int64) (OutreachDomain, error) {
 	row := db.QueryRow(`
-		SELECT id, user_id, domain, COALESCE(inboxkit_order_id,''), status, included, COALESCE(redirect_url,''), created_at, updated_at
+		SELECT id, user_id, domain, COALESCE(inboxkit_order_id,''), status, included, COALESCE(redirect_url,''),
+			COALESCE(nameservers_json,''), created_at, updated_at
 		FROM outreach_domains WHERE id=? AND user_id=?
 	`, id, userID)
 	return scanOutreachDomain(row)
@@ -114,7 +143,8 @@ func GetOutreachDomain(id, userID int64) (OutreachDomain, error) {
 
 func GetOutreachDomainByName(userID int64, domain string) (OutreachDomain, error) {
 	row := db.QueryRow(`
-		SELECT id, user_id, domain, COALESCE(inboxkit_order_id,''), status, included, COALESCE(redirect_url,''), created_at, updated_at
+		SELECT id, user_id, domain, COALESCE(inboxkit_order_id,''), status, included, COALESCE(redirect_url,''),
+			COALESCE(nameservers_json,''), created_at, updated_at
 		FROM outreach_domains WHERE user_id=? AND domain=?
 	`, userID, strings.ToLower(domain))
 	return scanOutreachDomain(row)
@@ -122,7 +152,8 @@ func GetOutreachDomainByName(userID int64, domain string) (OutreachDomain, error
 
 func ListOutreachDomains(userID int64) ([]OutreachDomain, error) {
 	rows, err := db.Query(`
-		SELECT id, user_id, domain, COALESCE(inboxkit_order_id,''), status, included, COALESCE(redirect_url,''), created_at, updated_at
+		SELECT id, user_id, domain, COALESCE(inboxkit_order_id,''), status, included, COALESCE(redirect_url,''),
+			COALESCE(nameservers_json,''), created_at, updated_at
 		FROM outreach_domains WHERE user_id=? ORDER BY id ASC
 	`, userID)
 	if err != nil {
@@ -142,7 +173,8 @@ func ListOutreachDomains(userID int64) ([]OutreachDomain, error) {
 
 func scanOutreachDomain(row interface{ Scan(...interface{}) error }) (OutreachDomain, error) {
 	var d OutreachDomain
-	err := row.Scan(&d.ID, &d.UserID, &d.Domain, &d.InboxkitOrderID, &d.Status, &d.Included, &d.RedirectURL, &d.CreatedAt, &d.UpdatedAt)
+	err := row.Scan(&d.ID, &d.UserID, &d.Domain, &d.InboxkitOrderID, &d.Status, &d.Included, &d.RedirectURL,
+		&d.NameserversJSON, &d.CreatedAt, &d.UpdatedAt)
 	return d, err
 }
 
