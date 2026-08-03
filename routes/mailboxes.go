@@ -73,8 +73,10 @@ func OnboardingDomainPage(c *gin.Context) {
 		c.Redirect(http.StatusFound, "/settings/billing?error="+url.QueryEscape("Custom domains require Pro"))
 		return
 	}
-	// Allow reconnect/setup even when a mailbox already exists (e.g. manual attach).
-	if model.UserHasReadyMailbox(userID) && c.Query("new") != "1" {
+	// Stay on this page when showing flash messages or forcing a new setup.
+	// Otherwise users with any ready mailbox (including shared/manual) never see errors.
+	hasFlash := c.Query("error") != "" || c.Query("success") != "" || c.Query("q") != ""
+	if model.UserHasReadyMailbox(userID) && c.Query("new") != "1" && !hasFlash {
 		c.Redirect(http.StatusFound, "/mailboxes")
 		return
 	}
@@ -92,17 +94,62 @@ func OnboardingDomainPage(c *gin.Context) {
 		}
 	}
 	c.HTML(http.StatusOK, "onboarding_domain.html", gin.H{
-		"title":            "Set up outreach domain",
-		"active":           "mailboxes",
-		"user":             user,
-		"inboxkitOK":       inboxkit.Configured(),
-		"inboxkitHint":     inboxkit.ConfiguredHint(),
-		"includedCount":    config.InboxKitIncludedMailboxCount(),
-		"pendingDomain":    pending,
-		"error":            c.Query("error"),
-		"success":          c.Query("success"),
-		"query":            c.Query("q"),
+		"title":         "Set up outreach domain",
+		"active":        "mailboxes",
+		"user":          user,
+		"inboxkitOK":    inboxkit.Configured(),
+		"inboxkitHint":  inboxkit.ConfiguredHint(),
+		"includedCount": config.InboxKitIncludedMailboxCount(),
+		"pendingDomain": pending,
+		"error":         humanizeInboxKitError(c.Query("error")),
+		"success":       c.Query("success"),
+		"query":         c.Query("q"),
+		"connectDomain": c.Query("domain"),
 	})
+}
+
+func onboardingDomainErrorURL(msg, q string) string {
+	u := "/onboarding/domain?new=1&error=" + url.QueryEscape(humanizeInboxKitError(msg))
+	if q != "" {
+		u += "&q=" + url.QueryEscape(q)
+	}
+	return u
+}
+
+func humanizeInboxKitError(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	lower := strings.ToLower(raw)
+	switch {
+	case strings.Contains(lower, "invalid workspace"):
+		return "InboxKit rejected the workspace ID. In the InboxKit dashboard open Settings → Workspaces, copy the workspace UUID (not the team name), and set INBOXKIT_WORKSPACE_ID to that value, then restart the app."
+	case strings.Contains(lower, "unauthorized") || strings.Contains(lower, "401"):
+		return "InboxKit API key was rejected. Check INBOXKIT_API_KEY in your environment and restart the app."
+	case strings.Contains(lower, "inboxkit_workspace_id not configured"):
+		return "Set INBOXKIT_WORKSPACE_ID to your InboxKit workspace UUID, then restart the app."
+	case strings.Contains(lower, "inboxkit_api_key not configured"):
+		return "Set INBOXKIT_API_KEY, then restart the app."
+	default:
+		// Prefer the API message body when present.
+		if i := strings.Index(raw, "—"); i >= 0 {
+			tail := strings.TrimSpace(raw[i+len("—"):])
+			if strings.HasPrefix(tail, "{") {
+				var payload struct {
+					Message string `json:"message"`
+					Code    int    `json:"code"`
+				}
+				if json.Unmarshal([]byte(tail), &payload) == nil && payload.Message != "" {
+					if strings.EqualFold(payload.Message, "Invalid workspace") {
+						return humanizeInboxKitError("Invalid workspace")
+					}
+					return "InboxKit: " + payload.Message
+				}
+			}
+		}
+		return raw
+	}
 }
 
 func OnboardingDomainSearch(c *gin.Context) {
@@ -117,7 +164,7 @@ func OnboardingDomainSearch(c *gin.Context) {
 		q = strings.TrimSpace(c.Query("q"))
 	}
 	if q == "" {
-		c.Redirect(http.StatusFound, "/onboarding/domain?error="+url.QueryEscape("Enter a company or keyword"))
+		c.Redirect(http.StatusFound, onboardingDomainErrorURL("Enter a company or keyword", ""))
 		return
 	}
 	if !inboxkit.Configured() {
@@ -125,14 +172,14 @@ func OnboardingDomainSearch(c *gin.Context) {
 		if hint == "" {
 			hint = "InboxKit is not configured on this server"
 		}
-		c.Redirect(http.StatusFound, "/onboarding/domain?error="+url.QueryEscape(hint)+"&q="+url.QueryEscape(q))
+		c.Redirect(http.StatusFound, onboardingDomainErrorURL(hint, q))
 		return
 	}
 	client := inboxkit.NewClient()
 	results, err := client.SearchDomains(q)
 	if err != nil {
 		log.Printf("inboxkit domain search %q: %v", q, err)
-		c.Redirect(http.StatusFound, "/onboarding/domain?error="+url.QueryEscape(err.Error())+"&q="+url.QueryEscape(q))
+		c.Redirect(http.StatusFound, onboardingDomainErrorURL(err.Error(), q))
 		return
 	}
 	user, _ := model.GetUserByID(userID)
@@ -178,7 +225,7 @@ func OnboardingDomainPurchase(c *gin.Context) {
 	}
 	domain := strings.ToLower(strings.TrimSpace(c.PostForm("domain")))
 	if domain == "" || !strings.Contains(domain, ".") {
-		c.Redirect(http.StatusFound, "/onboarding/domain?error="+url.QueryEscape("Pick a valid domain"))
+		c.Redirect(http.StatusFound, onboardingDomainErrorURL("Pick a valid domain", ""))
 		return
 	}
 	specs := collectStarterMailboxSpecs(c)
@@ -201,7 +248,7 @@ func OnboardingDomainPurchase(c *gin.Context) {
 	}
 	domainID, orderID, err := model.PlaceStarterDomainOrder(userID, domain, specs)
 	if err != nil {
-		c.Redirect(http.StatusFound, "/onboarding/domain?error="+url.QueryEscape(err.Error()))
+		c.Redirect(http.StatusFound, onboardingDomainErrorURL(err.Error(), domain))
 		return
 	}
 	_ = orderID
@@ -217,7 +264,7 @@ func OnboardingDomainConnect(c *gin.Context) {
 	}
 	domain := strings.ToLower(strings.TrimSpace(c.PostForm("domain")))
 	if domain == "" || !strings.Contains(domain, ".") {
-		c.Redirect(http.StatusFound, "/onboarding/domain?error="+url.QueryEscape("Enter a valid domain you already own"))
+		c.Redirect(http.StatusFound, onboardingDomainErrorURL("Enter a valid domain you already own", ""))
 		return
 	}
 	specs := collectStarterMailboxSpecs(c)
@@ -232,7 +279,7 @@ func OnboardingDomainConnect(c *gin.Context) {
 	domainID, _, _, err := model.PlaceConnectExistingDomainOrder(userID, domain, specs)
 	if err != nil {
 		log.Printf("connect domain %s: %v", domain, err)
-		c.Redirect(http.StatusFound, "/onboarding/domain?error="+url.QueryEscape(err.Error())+"&q="+url.QueryEscape(domain))
+		c.Redirect(http.StatusFound, onboardingDomainErrorURL(err.Error(), "")+"&domain="+url.QueryEscape(domain))
 		return
 	}
 	c.Redirect(http.StatusFound, "/onboarding/domain/status?domain_id="+strconv.FormatInt(domainID, 10))
@@ -244,7 +291,7 @@ func OnboardingDomainStatus(c *gin.Context) {
 	domainID, _ := strconv.ParseInt(c.Query("domain_id"), 10, 64)
 	d, err := model.GetOutreachDomain(domainID, userID)
 	if err != nil {
-		c.Redirect(http.StatusFound, "/onboarding/domain?error="+url.QueryEscape("Domain setup not found"))
+		c.Redirect(http.StatusFound, onboardingDomainErrorURL("Domain setup not found", ""))
 		return
 	}
 	_ = model.SyncInboxKitOrder(userID, domainID)
