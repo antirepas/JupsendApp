@@ -56,7 +56,9 @@ func shouldPollMailbox(acc model.SMTPAccount) bool {
 	if acc.Status != "active" || acc.IsGoogleOAuth() {
 		return false
 	}
-	return acc.MailboxSource == model.MailboxSourceInboxKit || acc.MailboxSource == model.MailboxSourceShared
+	return acc.MailboxSource == model.MailboxSourceInboxKit ||
+		acc.MailboxSource == model.MailboxSourceShared ||
+		acc.MailboxSource == model.MailboxSourceManual
 }
 
 func prepareMailboxForPoll(acc *model.SMTPAccount) {
@@ -231,7 +233,7 @@ func dialIMAP(acc model.SMTPAccount) (*client.Client, error) {
 	if pass == "" {
 		pass = acc.SMTPPassword
 	}
-	if acc.MailboxSource == model.MailboxSourceInboxKit || acc.MailboxSource == model.MailboxSourceShared {
+	if acc.MailboxSource == model.MailboxSourceInboxKit || acc.MailboxSource == model.MailboxSourceShared || acc.MailboxSource == model.MailboxSourceManual {
 		dec, err := model.DecryptSMTPPassword(acc)
 		if err != nil {
 			c.Logout()

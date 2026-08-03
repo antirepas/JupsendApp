@@ -32,12 +32,19 @@ func DevLogin(c *gin.Context) {
 
 	auth.SetUserSession(c, userID)
 	_ = model.SetUserAdmin(userID, config.IsAdminEmail(email))
+	if config.IsAdminEmail(email) {
+		_ = model.EnsureAdminProAccess(userID)
+	}
 	c.Redirect(http.StatusFound, safeNext(c.Query("next")))
 }
 
 func ensureDevUser(email string) (int64, error) {
 	if user, err := model.GetUserByEmail(email); err == nil {
-		_ = model.ApplyPlanLimitsToUser(user.ID, model.PlanTierFree)
+		if config.IsAdminEmail(email) {
+			_ = model.EnsureAdminProAccess(user.ID)
+		} else {
+			_ = model.ApplyPlanLimitsToUser(user.ID, model.PlanTierFree)
+		}
 		_ = model.UpdateUserSubscription(user.ID, model.SubStatusActive, "", "", nil)
 		return user.ID, nil
 	}

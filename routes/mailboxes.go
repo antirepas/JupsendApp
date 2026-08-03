@@ -20,6 +20,7 @@ import (
 func RequireMailboxSetup() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID := mustUserID(c)
+		ensureAdminPro(userID)
 
 		// Free: ensure shared SMTP is attached, then allow app use without domain onboarding.
 		// Do not call ApplyPlanLimitsToUser on every request — it used to reset sends_today.
@@ -59,13 +60,21 @@ func RequireMailboxSetup() gin.HandlerFunc {
 	}
 }
 
+func ensureAdminPro(userID int64) {
+	if u, err := model.GetUserByID(userID); err == nil && model.UserIsAdmin(u) {
+		_ = model.EnsureAdminProAccess(userID)
+	}
+}
+
 func OnboardingDomainPage(c *gin.Context) {
 	userID := mustUserID(c)
+	ensureAdminPro(userID)
 	if !model.UserIsPro(userID) {
 		c.Redirect(http.StatusFound, "/settings/billing?error="+url.QueryEscape("Custom domains require Pro"))
 		return
 	}
-	if model.UserHasReadyMailbox(userID) {
+	// Allow reconnect/setup even when a mailbox already exists (e.g. manual attach).
+	if model.UserHasReadyMailbox(userID) && c.Query("new") != "1" {
 		c.Redirect(http.StatusFound, "/mailboxes")
 		return
 	}
@@ -130,17 +139,7 @@ func OnboardingDomainSearch(c *gin.Context) {
 	})
 }
 
-func OnboardingDomainPurchase(c *gin.Context) {
-	userID := mustUserID(c)
-	if !model.UserIsPro(userID) {
-		c.Redirect(http.StatusFound, "/settings/billing?error="+url.QueryEscape("Custom domains require Pro"))
-		return
-	}
-	domain := strings.ToLower(strings.TrimSpace(c.PostForm("domain")))
-	if domain == "" || !strings.Contains(domain, ".") {
-		c.Redirect(http.StatusFound, "/onboarding/domain?error="+url.QueryEscape("Pick a valid domain"))
-		return
-	}
+func collectStarterMailboxSpecs(c *gin.Context) []model.StarterMailboxSpec {
 	n := config.InboxKitIncludedMailboxCount()
 	var specs []model.StarterMailboxSpec
 	for i := 1; i <= n; i++ {
@@ -158,6 +157,22 @@ func OnboardingDomainPurchase(c *gin.Context) {
 		}
 		specs = append(specs, model.StarterMailboxSpec{FirstName: fn, LastName: ln, LocalPart: local})
 	}
+	return specs
+}
+
+func OnboardingDomainPurchase(c *gin.Context) {
+	userID := mustUserID(c)
+	ensureAdminPro(userID)
+	if !model.UserIsPro(userID) {
+		c.Redirect(http.StatusFound, "/settings/billing?error="+url.QueryEscape("Custom domains require Pro"))
+		return
+	}
+	domain := strings.ToLower(strings.TrimSpace(c.PostForm("domain")))
+	if domain == "" || !strings.Contains(domain, ".") {
+		c.Redirect(http.StatusFound, "/onboarding/domain?error="+url.QueryEscape("Pick a valid domain"))
+		return
+	}
+	specs := collectStarterMailboxSpecs(c)
 	if len(specs) == 0 {
 		user, _ := model.GetUserByID(userID)
 		base := strings.Split(user.Email, "@")[0]
@@ -170,6 +185,7 @@ func OnboardingDomainPurchase(c *gin.Context) {
 			specs[0].LocalPart = base
 			specs[0].FirstName = base
 		}
+		n := config.InboxKitIncludedMailboxCount()
 		if len(specs) > n {
 			specs = specs[:n]
 		}
@@ -183,8 +199,38 @@ func OnboardingDomainPurchase(c *gin.Context) {
 	c.Redirect(http.StatusFound, "/onboarding/domain/status?domain_id="+strconv.FormatInt(domainID, 10))
 }
 
+func OnboardingDomainConnect(c *gin.Context) {
+	userID := mustUserID(c)
+	ensureAdminPro(userID)
+	if !model.UserIsPro(userID) {
+		c.Redirect(http.StatusFound, "/settings/billing?error="+url.QueryEscape("Custom domains require Pro"))
+		return
+	}
+	domain := strings.ToLower(strings.TrimSpace(c.PostForm("domain")))
+	if domain == "" || !strings.Contains(domain, ".") {
+		c.Redirect(http.StatusFound, "/onboarding/domain?error="+url.QueryEscape("Enter a valid domain you already own"))
+		return
+	}
+	specs := collectStarterMailboxSpecs(c)
+	if len(specs) == 0 {
+		user, _ := model.GetUserByID(userID)
+		base := strings.Split(user.Email, "@")[0]
+		if base == "" {
+			base = "hello"
+		}
+		specs = []model.StarterMailboxSpec{{FirstName: base, LastName: "Outreach", LocalPart: base}}
+	}
+	domainID, _, _, err := model.PlaceConnectExistingDomainOrder(userID, domain, specs)
+	if err != nil {
+		c.Redirect(http.StatusFound, "/onboarding/domain?error="+url.QueryEscape(err.Error())+"&q="+url.QueryEscape(domain))
+		return
+	}
+	c.Redirect(http.StatusFound, "/onboarding/domain/status?domain_id="+strconv.FormatInt(domainID, 10))
+}
+
 func OnboardingDomainStatus(c *gin.Context) {
 	userID := mustUserID(c)
+	ensureAdminPro(userID)
 	domainID, _ := strconv.ParseInt(c.Query("domain_id"), 10, 64)
 	d, err := model.GetOutreachDomain(domainID, userID)
 	if err != nil {
@@ -198,17 +244,35 @@ func OnboardingDomainStatus(c *gin.Context) {
 		return
 	}
 	mailboxes, _ := model.ListOutreachMailboxes(userID)
+	var nameservers []string
+	nsPropagated := false
+	if inboxkit.Configured() && d.Domain != "" && (d.Status == "connecting" || d.Status == "ordering" || d.Status == "processing") {
+		client := inboxkit.NewClient()
+		if ns, nsErr := client.GetNameservers(d.Domain); nsErr == nil {
+			nameservers = ns.Nameservers
+		}
+		if check, checkErr := client.CheckNameservers(d.Domain); checkErr == nil {
+			nsPropagated = check.Propagated || check.Ready
+			if len(nameservers) == 0 {
+				nameservers = check.Nameservers
+			}
+		}
+	}
 	c.HTML(http.StatusOK, "onboarding_domain_status.html", gin.H{
-		"title":     "Setting up domain",
-		"active":    "mailboxes",
-		"domain":    d,
-		"mailboxes": mailboxes,
-		"error":     c.Query("error"),
+		"title":         "Setting up domain",
+		"active":        "mailboxes",
+		"domain":        d,
+		"mailboxes":     mailboxes,
+		"nameservers":   nameservers,
+		"nsPropagated":  nsPropagated,
+		"needsNS":       d.Status == "connecting" || len(nameservers) > 0,
+		"error":         c.Query("error"),
 	})
 }
 
 func MailboxesPage(c *gin.Context) {
 	userID := mustUserID(c)
+	ensureAdminPro(userID)
 	if pid, _ := strconv.ParseInt(c.Query("purchase_id"), 10, 64); pid > 0 {
 		if p, err := model.GetMailboxPurchase(pid); err == nil && p.UserID == userID {
 			if err := FulfillMailboxPurchase(pid); err != nil {
@@ -281,6 +345,7 @@ func MailboxesPage(c *gin.Context) {
 		"mailboxes":     mailboxes,
 		"mailboxRows":   rows,
 		"isPro":         isPro,
+		"isAdmin":       model.UserIsAdmin(user),
 		"sharedReady":   sharedReady,
 		"sharedEmail":   sharedEmail,
 		"inboxkitOK":    inboxkit.Configured(),
@@ -289,6 +354,30 @@ func MailboxesPage(c *gin.Context) {
 		"error":         c.Query("error"),
 		"includedCount": config.InboxKitIncludedMailboxCount(),
 	})
+}
+
+func MailboxesAttachManual(c *gin.Context) {
+	userID := mustUserID(c)
+	ensureAdminPro(userID)
+	if !model.UserIsPro(userID) {
+		c.Redirect(http.StatusFound, "/settings/billing?error="+url.QueryEscape("Custom mailboxes require Pro"))
+		return
+	}
+	email := strings.TrimSpace(c.PostForm("email"))
+	fromName := strings.TrimSpace(c.PostForm("from_name"))
+	smtpHost := strings.TrimSpace(c.PostForm("smtp_host"))
+	smtpPort := strings.TrimSpace(c.PostForm("smtp_port"))
+	imapHost := strings.TrimSpace(c.PostForm("imap_host"))
+	imapPort := strings.TrimSpace(c.PostForm("imap_port"))
+	username := strings.TrimSpace(c.PostForm("username"))
+	password := c.PostForm("password")
+	isDefault := c.PostForm("is_default") == "1" || c.PostForm("is_default") == "on"
+	_, err := model.AttachManualSendingMailbox(userID, email, fromName, smtpHost, smtpPort, imapHost, imapPort, username, password, isDefault)
+	if err != nil {
+		c.Redirect(http.StatusFound, "/mailboxes?error="+url.QueryEscape(err.Error()))
+		return
+	}
+	c.Redirect(http.StatusFound, "/mailboxes?success="+url.QueryEscape("Mailbox connected — sending and reply tracking use these SMTP/IMAP credentials"))
 }
 
 func MailboxesSetDefault(c *gin.Context) {

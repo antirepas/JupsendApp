@@ -15,7 +15,7 @@ func (a SMTPAccount) IsSendReady() bool {
 	if a.IsGoogleOAuth() {
 		return a.GoogleEmail != "" && a.SMTPHost != ""
 	}
-	if a.MailboxSource == "inboxkit" || a.MailboxSource == MailboxSourceShared {
+	if a.MailboxSource == "inboxkit" || a.MailboxSource == MailboxSourceShared || a.MailboxSource == MailboxSourceManual {
 		return a.SMTPHost != "" && a.SMTPUser != "" && a.SMTPPassword != ""
 	}
 	return a.SMTPHost != "" && a.SMTPUser != "" && a.SMTPPassword != ""

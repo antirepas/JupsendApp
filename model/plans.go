@@ -15,6 +15,7 @@ const (
 	DefaultWarmupIncrementPerDay = 20
 	MailboxSourceShared          = "shared"
 	MailboxSourceInboxKit        = "inboxkit"
+	MailboxSourceManual          = "manual"
 )
 
 type planSpec struct {
@@ -126,7 +127,28 @@ func UserIsPro(userID int64) bool {
 	if err != nil {
 		return false
 	}
+	if UserIsAdmin(u) {
+		return true
+	}
 	return NormalizePlanTier(u.PlanTier) == PlanTierPro && UserHasAppAccess(u)
+}
+
+// EnsureAdminProAccess marks the user as admin (if needed) and applies Pro sending limits.
+func EnsureAdminProAccess(userID int64) error {
+	u, err := GetUserByID(userID)
+	if err != nil {
+		return err
+	}
+	if !UserIsAdmin(u) {
+		return nil
+	}
+	if !u.IsAdmin {
+		_ = SetUserAdmin(userID, true)
+	}
+	if NormalizePlanTier(u.PlanTier) != PlanTierPro {
+		return ApplyPlanLimitsToUser(userID, PlanTierPro)
+	}
+	return nil
 }
 
 // ApplyPlanLimitsToUser sets plan_tier + synchronizes smtp_accounts sending limits and warmup behavior.

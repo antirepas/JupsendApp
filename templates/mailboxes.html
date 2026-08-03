@@ -15,9 +15,10 @@
     <div class="flex flex-wrap gap-2">
       {{if .isPro}}
         {{if not .domains}}
-        <a href="/onboarding/domain" class="btn-primary">Set up domain</a>
+        <a href="/onboarding/domain?new=1" class="btn-primary">Set up domain</a>
         {{else}}
         <a href="/mailboxes/buy" class="btn-primary">Buy more mailboxes</a>
+        <a href="/onboarding/domain?new=1" class="btn-secondary">Connect domain</a>
         <a href="/mailboxes/domains/buy" class="btn-secondary">Buy domain</a>
         {{end}}
       {{else}}
@@ -29,7 +30,7 @@
   {{if .success}}<div class="alert-success mb-6">{{.success}}</div>{{end}}
   {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
   {{if and .isPro (not .inboxkitOK)}}
-  <div class="alert-error mb-6">InboxKit is not configured — domain search and provisioning are unavailable.</div>
+  <div class="alert-error mb-6">InboxKit is not configured — domain search and provisioning are unavailable. You can still attach SMTP/IMAP below.</div>
   {{end}}
   {{if not .isPro}}
   <div class="card mb-6 space-y-2">
@@ -49,7 +50,12 @@
       {{range .domains}}
       <li class="flex flex-wrap justify-between gap-2">
         <span class="font-medium">{{.Domain}}</span>
-        <span class="text-gray-500">{{.Status}}{{if .Included}} · included{{end}}</span>
+        <span class="text-gray-500">
+          {{.Status}}{{if .Included}} · included{{end}}
+          {{if and (ne .Status "ready") (ne .Status "error")}}
+          · <a href="/onboarding/domain/status?domain_id={{.ID}}" class="text-brand-600 font-medium">Continue</a>
+          {{end}}
+        </span>
       </li>
       {{end}}
     </ul>
@@ -95,13 +101,59 @@
     {{else}}
     <p class="text-sm text-gray-600">
       {{if .isPro}}
-      No mailboxes yet. <a href="/onboarding/domain" class="text-brand-600 font-medium">Set up a domain</a> to get {{.includedCount}} included.
+      No mailboxes yet. <a href="/onboarding/domain?new=1" class="text-brand-600 font-medium">Set up a domain</a> to get {{.includedCount}} included, or attach SMTP/IMAP below.
       {{else}}
       Free plan sends from the shared mailbox above. Upgrade to Pro for your own domain and seats.
       {{end}}
     </p>
     {{end}}
   </div>
+
+  {{if .isPro}}
+  <form method="POST" action="/mailboxes/attach" class="card space-y-4 mt-6">
+    <h3 class="card-title">Attach existing mailbox (SMTP / IMAP)</h3>
+    <p class="text-sm text-gray-600">Use credentials from Google Workspace, Microsoft 365, or another provider. IMAP enables bounce and reply tracking.</p>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <label class="form-label">Email</label>
+        <input name="email" class="form-input" type="email" required placeholder="you@yourdomain.com">
+      </div>
+      <div>
+        <label class="form-label">From name</label>
+        <input name="from_name" class="form-input" placeholder="Alex at Acme">
+      </div>
+      <div>
+        <label class="form-label">SMTP host</label>
+        <input name="smtp_host" class="form-input" placeholder="smtp.gmail.com" value="smtp.gmail.com">
+      </div>
+      <div>
+        <label class="form-label">SMTP port</label>
+        <input name="smtp_port" class="form-input" placeholder="587" value="587">
+      </div>
+      <div>
+        <label class="form-label">IMAP host</label>
+        <input name="imap_host" class="form-input" placeholder="imap.gmail.com" value="imap.gmail.com">
+      </div>
+      <div>
+        <label class="form-label">IMAP port</label>
+        <input name="imap_port" class="form-input" placeholder="993" value="993">
+      </div>
+      <div>
+        <label class="form-label">Username</label>
+        <input name="username" class="form-input" placeholder="Same as email if blank">
+      </div>
+      <div>
+        <label class="form-label">Password / app password</label>
+        <input name="password" class="form-input" type="password" required autocomplete="new-password">
+      </div>
+    </div>
+    <label class="flex items-center gap-2 text-sm">
+      <input type="checkbox" name="is_default" value="1" checked>
+      Make this the default sending mailbox
+    </label>
+    <button type="submit" class="btn-primary">Connect mailbox</button>
+  </form>
+  {{end}}
 
   <p class="text-xs text-gray-500 mt-6">
     <a href="/settings/smtp-check" class="text-brand-600 font-medium">Test SMTP</a> from this server using your default mailbox.

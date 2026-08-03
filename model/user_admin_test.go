@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"emailtracker.com/config"
+	"emailtracker.com/db"
 )
 
 func TestUserIsAdmin(t *testing.T) {
@@ -15,6 +16,23 @@ func TestUserIsAdmin(t *testing.T) {
 	u2 := User{Email: "other@example.com", IsAdmin: true}
 	if !UserIsAdmin(u2) {
 		t.Fatal("expected db admin flag")
+	}
+}
+
+func TestUserIsProTreatsAdminAsPro(t *testing.T) {
+	db.OpenTestDB(t)
+	config.AdminEmails = map[string]struct{}{"admin-pro@test.com": {}}
+	userID, err := CreateUser("admin-pro@test.com", "hash", "http://localhost")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = ApplyPlanLimitsToUser(userID, PlanTierFree)
+	if !UserIsPro(userID) {
+		t.Fatal("admin must be treated as Pro even on free plan_tier")
+	}
+	u, _ := GetUserByID(userID)
+	if !UserIsAdmin(u) {
+		t.Fatal("expected admin flag from ADMIN_EMAILS / CreateUser")
 	}
 }
 

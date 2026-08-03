@@ -8,7 +8,13 @@
 <main class="flex-1 overflow-y-auto">
 <div class="max-w-xl mx-auto p-8">
   <h2 class="text-2xl font-bold text-charcoal mb-2">Setting up {{.domain.Domain}}</h2>
-  <p class="text-gray-500 text-sm mb-6">We’re registering the domain and provisioning mailboxes. This page refreshes automatically.</p>
+  <p class="text-gray-500 text-sm mb-6">
+    {{if .needsNS}}
+    Point this domain’s nameservers at InboxKit (no domain purchase). Provisioning continues after DNS propagates.
+    {{else}}
+    We’re registering the domain and provisioning mailboxes. This page refreshes automatically.
+    {{end}}
+  </p>
 
   {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
 
@@ -17,6 +23,23 @@
       <div>Status: <span class="font-semibold">{{.domain.Status}}</span></div>
       {{if .domain.InboxkitOrderID}}<div class="text-xs text-gray-500 mt-1">Order {{.domain.InboxkitOrderID}}</div>{{end}}
     </div>
+
+    {{if .nameservers}}
+    <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 space-y-2">
+      <h3 class="font-semibold text-sm text-charcoal">Update nameservers at your registrar</h3>
+      <p class="text-xs text-gray-600">Replace your current NS records with these. Propagation can take a few minutes to 48 hours.</p>
+      <ul class="font-mono text-sm space-y-1">
+        {{range .nameservers}}
+        <li class="bg-white/80 px-2 py-1 rounded border border-amber-100">{{.}}</li>
+        {{end}}
+      </ul>
+      {{if .nsPropagated}}
+      <p class="text-xs text-green-700 font-medium">Nameservers look propagated — waiting for mailboxes…</p>
+      {{else}}
+      <p class="text-xs text-amber-800">Not detected yet — save NS changes, then refresh.</p>
+      {{end}}
+    </div>
+    {{end}}
 
     {{if .mailboxes}}
     <ul class="space-y-2 text-sm">
@@ -30,7 +53,7 @@
     {{end}}
 
     <a href="/onboarding/domain/status?domain_id={{.domain.ID}}" class="btn-secondary inline-flex w-full justify-center">Refresh status</a>
-    <p class="text-xs text-gray-500">Provisioning usually finishes within a few minutes.</p>
+    <p class="text-xs text-gray-500">Provisioning usually finishes within a few minutes after nameservers propagate.</p>
   </div>
 </div>
 </main>

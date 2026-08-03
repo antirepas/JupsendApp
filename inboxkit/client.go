@@ -296,6 +296,68 @@ func (c *Client) ListMailboxes(domain string) ([]MailboxListItem, error) {
 	return list, nil
 }
 
+type NameserverResult struct {
+	Domain      string   `json:"domain"`
+	Nameservers []string `json:"nameservers"`
+	Propagated  bool     `json:"propagated"`
+	Ready       bool     `json:"ready"`
+	Status      string   `json:"status"`
+}
+
+type nameserverAPIResponse struct {
+	Domain      string   `json:"domain"`
+	Nameservers []string `json:"nameservers"`
+	NS          []string `json:"ns"`
+	Data        []string `json:"data"`
+	Propagated  bool     `json:"propagated"`
+	Ready       bool     `json:"ready"`
+	Status      string   `json:"status"`
+	Result      struct {
+		Nameservers []string `json:"nameservers"`
+		Propagated  bool     `json:"propagated"`
+	} `json:"result"`
+}
+
+func parseNameserverResponse(resp nameserverAPIResponse, domain string) NameserverResult {
+	out := NameserverResult{
+		Domain:     domain,
+		Propagated: resp.Propagated || resp.Ready || resp.Result.Propagated,
+		Ready:      resp.Ready || resp.Propagated,
+		Status:     resp.Status,
+	}
+	out.Nameservers = resp.Nameservers
+	if len(out.Nameservers) == 0 {
+		out.Nameservers = resp.NS
+	}
+	if len(out.Nameservers) == 0 {
+		out.Nameservers = resp.Data
+	}
+	if len(out.Nameservers) == 0 {
+		out.Nameservers = resp.Result.Nameservers
+	}
+	return out
+}
+
+// GetNameservers returns InboxKit nameservers the customer should set at their registrar.
+func (c *Client) GetNameservers(domain string) (NameserverResult, error) {
+	var resp nameserverAPIResponse
+	err := c.do("POST", "/api/domains/nameservers", map[string]any{"domain": domain, "domains": []string{domain}}, &resp)
+	if err != nil {
+		return NameserverResult{}, err
+	}
+	return parseNameserverResponse(resp, domain), nil
+}
+
+// CheckNameservers reports whether registrar NS have propagated to InboxKit.
+func (c *Client) CheckNameservers(domain string) (NameserverResult, error) {
+	var resp nameserverAPIResponse
+	err := c.do("POST", "/api/domains/nameservers/check", map[string]any{"domain": domain, "domains": []string{domain}}, &resp)
+	if err != nil {
+		return NameserverResult{}, err
+	}
+	return parseNameserverResponse(resp, domain), nil
+}
+
 // Insights fetches best-effort analytics JSON for a mailbox (shape varies by InboxKit).
 func (c *Client) MailboxInsights(mailboxID string) (json.RawMessage, error) {
 	var raw json.RawMessage

@@ -190,8 +190,10 @@ func appGoogleLoginComplete(c *gin.Context, email, next string) {
 
 	auth.SetUserSession(c, user.ID)
 	_ = model.SetUserAdmin(user.ID, config.IsAdminEmail(user.Email))
-	// Re-apply Free shared SMTP if needed (no Gmail send account — Google is identity only).
-	if model.NormalizePlanTier(user.PlanTier) == model.PlanTierFree {
+	if config.IsAdminEmail(user.Email) || user.IsAdmin {
+		_ = model.EnsureAdminProAccess(user.ID)
+	} else if model.NormalizePlanTier(user.PlanTier) == model.PlanTierFree {
+		// Re-apply Free shared SMTP if needed (no Gmail send account — Google is identity only).
 		_ = model.ApplyPlanLimitsToUser(user.ID, model.PlanTierFree)
 	}
 

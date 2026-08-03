@@ -9,15 +9,15 @@
 <div class="max-w-3xl mx-auto p-8">
   <h2 class="text-2xl font-bold text-charcoal mb-2">Set up your outreach domain</h2>
   <p class="text-gray-500 text-sm mb-6">
-    Search for a domain, pick one that’s available, and we’ll register it with
-    {{.includedCount}} starter mailboxes included in your plan.
+    Connect a domain you already own, or search for a new one. Your plan includes
+    {{.includedCount}} starter mailbox{{if ne .includedCount 1}}es{{end}}.
   </p>
 
   {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
   {{if .success}}<div class="alert-success mb-6">{{.success}}</div>{{end}}
 
   {{if not .inboxkitOK}}
-  <div class="alert-error mb-6">InboxKit is not configured on this server. Ask your admin to set INBOXKIT_API_KEY.</div>
+  <div class="alert-error mb-6">InboxKit is not configured on this server. Ask your admin to set INBOXKIT_API_KEY. You can still attach SMTP/IMAP credentials under Mailboxes.</div>
   {{end}}
 
   {{if .pendingDomain}}
@@ -30,13 +30,43 @@
   </div>
   {{end}}
 
+  <form method="POST" action="/onboarding/domain/connect" class="card space-y-4 mb-6">
+    <h3 class="card-title">I already own a domain</h3>
+    <p class="text-sm text-gray-600">Enter your domain. We’ll provision mailboxes; you’ll point nameservers at InboxKit at your registrar (no domain purchase).</p>
+    <div>
+      <label class="form-label">Domain</label>
+      <input name="domain" class="form-input" value="{{.query}}" placeholder="yourcompany.com" required {{if not .inboxkitOK}}disabled{{end}}>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div>
+        <label class="form-label">Mailbox 1</label>
+        <input name="local_1" class="form-input" placeholder="alex" value="alex">
+        <input type="hidden" name="first_name_1" value="Alex">
+        <input type="hidden" name="last_name_1" value="Outreach">
+      </div>
+      <div>
+        <label class="form-label">Mailbox 2</label>
+        <input name="local_2" class="form-input" placeholder="sam" value="sam">
+        <input type="hidden" name="first_name_2" value="Sam">
+        <input type="hidden" name="last_name_2" value="Outreach">
+      </div>
+      <div>
+        <label class="form-label">Mailbox 3</label>
+        <input name="local_3" class="form-input" placeholder="jordan" value="jordan">
+        <input type="hidden" name="first_name_3" value="Jordan">
+        <input type="hidden" name="last_name_3" value="Outreach">
+      </div>
+    </div>
+    <button type="submit" class="btn-primary" {{if not .inboxkitOK}}disabled{{end}}>Connect domain</button>
+  </form>
+
   <form method="POST" action="/onboarding/domain/search" class="card space-y-4 mb-6">
-    <h3 class="card-title">Find a domain</h3>
+    <h3 class="card-title">Or find a new domain</h3>
     <div>
       <label class="form-label">Company or keyword</label>
-      <input name="q" class="form-input" value="{{.query}}" placeholder="acme, northwind…" required {{if not .inboxkitOK}}disabled{{end}}>
+      <input name="q" class="form-input" value="{{.query}}" placeholder="acme, northwind…" {{if not .inboxkitOK}}disabled{{end}}>
     </div>
-    <button type="submit" class="btn-primary" {{if not .inboxkitOK}}disabled{{end}}>Search domains</button>
+    <button type="submit" class="btn-secondary" {{if not .inboxkitOK}}disabled{{end}}>Search domains</button>
   </form>
 
   {{if .results}}
@@ -82,6 +112,10 @@
     </div>
   </form>
   {{end}}
+
+  <p class="text-xs text-gray-500 mt-4">
+    Prefer your own SMTP provider? <a href="/mailboxes" class="text-brand-600 font-medium">Attach credentials on Mailboxes</a>.
+  </p>
 </div>
 </main>
 </div>

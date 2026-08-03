@@ -89,6 +89,100 @@ func PlaceStarterDomainOrder(userID int64, domain string, specs []StarterMailbox
 	return domainID, orderID, nil
 }
 
+// PlaceConnectExistingDomainOrder connects a domain you already own (no registration purchase).
+// InboxKit provisions mailboxes; you point the domain's nameservers at InboxKit.
+func PlaceConnectExistingDomainOrder(userID int64, domain string, specs []StarterMailboxSpec) (domainID int64, orderID string, nameservers []string, err error) {
+	if !inboxkit.Configured() {
+		return 0, "", nil, fmt.Errorf("InboxKit is not configured")
+	}
+	domain = strings.ToLower(strings.TrimSpace(domain))
+	if domain == "" || !strings.Contains(domain, ".") {
+		return 0, "", nil, fmt.Errorf("enter a valid domain")
+	}
+	n := config.InboxKitIncludedMailboxCount()
+	if len(specs) == 0 {
+		return 0, "", nil, fmt.Errorf("at least one mailbox is required")
+	}
+	if len(specs) > n {
+		specs = specs[:n]
+	}
+	platform := config.InboxKitPlatform
+	if platform == "" {
+		platform = "GOOGLE"
+	}
+	redirect := config.InboxKitRedirectURL
+	if redirect == "" {
+		redirect = config.BaseURL
+	}
+
+	var mboxes []inboxkit.OrderMailbox
+	for _, s := range specs {
+		local := sanitizeLocalPart(s.LocalPart)
+		if local == "" {
+			local = sanitizeLocalPart(s.FirstName + "." + s.LastName)
+		}
+		if local == "" {
+			local = "hello"
+		}
+		mboxes = append(mboxes, inboxkit.OrderMailbox{
+			FirstName: s.FirstName,
+			LastName:  s.LastName,
+			Email:     local + "@" + domain,
+			Platform:  platform,
+		})
+	}
+
+	client := inboxkit.NewClient()
+	// No RegistrationYears — domain is already owned; InboxKit configures DNS via nameservers.
+	resp, err := client.CreateOrder(inboxkit.CreateOrderRequest{
+		Domains: []inboxkit.OrderDomain{{
+			Name:           domain,
+			RedirectURL:    redirect,
+			Mailboxes:      mboxes,
+			ContactDetails: inboxkit.DefaultRegistrant(),
+		}},
+		ContactDetails: inboxkit.DefaultRegistrant(),
+	})
+	if err != nil {
+		// Fallback: buy mailboxes on domain name only (some workspaces accept this for external domains).
+		buy, buyErr := client.BuyMailboxes(inboxkit.BuyMailboxesRequest{Domain: domain, Mailboxes: mboxes})
+		if buyErr != nil {
+			return 0, "", nil, fmt.Errorf("connect domain: %v; mailbox buy: %w", err, buyErr)
+		}
+		orderID = buy.OrderID
+		if orderID == "" {
+			orderID = buy.ID
+		}
+	} else {
+		orderID = resp.ResolvedID()
+	}
+
+	domainID, err = CreateOutreachDomain(userID, domain, orderID, redirect, true)
+	if err != nil {
+		return 0, orderID, nil, err
+	}
+	_ = UpdateOutreachDomainStatus(domainID, "connecting", orderID)
+	for i, mb := range mboxes {
+		isDef := i == 0
+		_, _ = CreateOutreachMailbox(OutreachMailbox{
+			UserID:    userID,
+			DomainID:  domainID,
+			Email:     mb.Email,
+			FirstName: mb.FirstName,
+			LastName:  mb.LastName,
+			Platform:  platform,
+			Status:    "provisioning",
+			IsDefault: isDef,
+			Included:  true,
+		})
+	}
+
+	if ns, nsErr := client.GetNameservers(domain); nsErr == nil {
+		nameservers = ns.Nameservers
+	}
+	return domainID, orderID, nameservers, nil
+}
+
 // SyncInboxKitOrder pulls order/mailbox state and stores SMTP credentials when ready.
 func SyncInboxKitOrder(userID, domainID int64) error {
 	d, err := GetOutreachDomain(domainID, userID)

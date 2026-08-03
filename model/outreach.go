@@ -303,9 +303,9 @@ func UpsertInboxKitSMTPAccount(userID int64, email, host, port, user, password, 
 	return id, err
 }
 
-// DecryptSMTPPassword returns plaintext password for InboxKit/shared-sourced accounts.
+// DecryptSMTPPassword returns plaintext password for InboxKit/shared/manual-sourced accounts.
 func DecryptSMTPPassword(acc SMTPAccount) (string, error) {
-	if acc.MailboxSource != MailboxSourceInboxKit && acc.MailboxSource != MailboxSourceShared && acc.AuthType != "" {
+	if acc.MailboxSource != MailboxSourceInboxKit && acc.MailboxSource != MailboxSourceShared && acc.MailboxSource != MailboxSourceManual && acc.AuthType != "" {
 		return acc.SMTPPassword, nil
 	}
 	if acc.SMTPPassword == "" {
@@ -317,6 +317,134 @@ func DecryptSMTPPassword(acc SMTPAccount) (string, error) {
 		return acc.SMTPPassword, nil
 	}
 	return plain, nil
+}
+
+// AttachManualSendingMailbox attaches SMTP/IMAP credentials for a mailbox you already operate
+// (admin/Pro escape hatch when not provisioning via InboxKit purchase).
+func AttachManualSendingMailbox(userID int64, email, fromName, smtpHost, smtpPort, imapHost, imapPort, username, password string, isDefault bool) (int64, error) {
+	email = strings.ToLower(strings.TrimSpace(email))
+	if email == "" || !strings.Contains(email, "@") {
+		return 0, fmt.Errorf("valid email is required")
+	}
+	if password == "" {
+		return 0, fmt.Errorf("password is required")
+	}
+	if username == "" {
+		username = email
+	}
+	if smtpHost == "" {
+		smtpHost = "smtp.gmail.com"
+	}
+	if smtpPort == "" {
+		smtpPort = "587"
+	}
+	if imapHost == "" {
+		imapHost = "imap.gmail.com"
+	}
+	if imapPort == "" {
+		imapPort = "993"
+	}
+	if fromName == "" {
+		fromName = email
+	}
+	encPass, err := googleoauth.Encrypt(password)
+	if err != nil {
+		return 0, fmt.Errorf("encrypt password: %w", err)
+	}
+	now := time.Now()
+	def := 0
+	if isDefault {
+		def = 1
+		_, _ = db.Exec(`UPDATE smtp_accounts SET is_default=0 WHERE user_id=?`, userID)
+	}
+	daily := 50
+	if spec, err := PlanSpecForTier(PlanTierPro); err == nil && spec.DailyEmailCap > 0 {
+		daily = spec.DailyEmailCap
+	}
+
+	var existingID int64
+	_ = db.QueryRow(`
+		SELECT id FROM smtp_accounts
+		WHERE user_id=? AND LOWER(from_email)=? AND mailbox_source=?
+		ORDER BY id ASC LIMIT 1
+	`, userID, email, MailboxSourceManual).Scan(&existingID)
+	if existingID > 0 {
+		_, err = db.Exec(`
+			UPDATE smtp_accounts SET
+				name=?, smtp_host=?, smtp_port=?, smtp_user=?, smtp_password=?, from_email=?, from_name=?,
+				imap_host=?, imap_port=?, imap_user=?, imap_password=?,
+				status='active', auth_type='', is_default=?, mailbox_source=?, daily_limit=?,
+				warmup_enabled=1, updated_at=?
+			WHERE id=?
+		`, email, smtpHost, smtpPort, username, encPass, email, fromName,
+			imapHost, imapPort, username, encPass, def, MailboxSourceManual, daily, now, existingID)
+		if err != nil {
+			return 0, err
+		}
+		_ = ensureManualOutreachMailbox(userID, email, fromName, existingID, isDefault)
+		return existingID, nil
+	}
+
+	var id int64
+	err = db.QueryRow(`
+		INSERT INTO smtp_accounts (
+			user_id, name, smtp_host, smtp_port, smtp_user, smtp_password, from_email, from_name,
+			imap_host, imap_port, imap_user, imap_password,
+			status, daily_limit, per_minute_limit, min_seconds_between_sends, warmup_enabled,
+			auth_type, is_default, mailbox_source, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, 2, 30, 1, '', ?, ?, ?, ?)
+		RETURNING id
+	`, userID, email, smtpHost, smtpPort, username, encPass, email, fromName,
+		imapHost, imapPort, username, encPass, daily, def, MailboxSourceManual, now, now).Scan(&id)
+	if err != nil {
+		return 0, err
+	}
+	_ = ensureManualOutreachMailbox(userID, email, fromName, id, isDefault)
+	return id, nil
+}
+
+func ensureManualOutreachMailbox(userID int64, email, fromName string, smtpAccountID int64, isDefault bool) error {
+	parts := strings.Fields(fromName)
+	fn, ln := "Manual", "Mailbox"
+	if len(parts) >= 1 {
+		fn = parts[0]
+	}
+	if len(parts) >= 2 {
+		ln = strings.Join(parts[1:], " ")
+	}
+	var mbID int64
+	_ = db.QueryRow(`
+		SELECT id FROM outreach_mailboxes
+		WHERE user_id=? AND LOWER(email)=?
+		ORDER BY id ASC LIMIT 1
+	`, userID, email).Scan(&mbID)
+	if mbID > 0 {
+		if err := UpdateOutreachMailboxReady(mbID, "", smtpAccountID, "ready"); err != nil {
+			return err
+		}
+		if isDefault {
+			return SetDefaultOutreachMailbox(userID, mbID)
+		}
+		return nil
+	}
+	id, err := CreateOutreachMailbox(OutreachMailbox{
+		UserID:        userID,
+		SMTPAccountID: smtpAccountID,
+		Email:         email,
+		FirstName:     fn,
+		LastName:      ln,
+		Platform:      "MANUAL",
+		Status:        "ready",
+		IsDefault:     false,
+		Included:      false,
+	})
+	if err != nil {
+		return err
+	}
+	if isDefault {
+		return SetDefaultOutreachMailbox(userID, id)
+	}
+	return nil
 }
 
 func nullInt64(v int64) any {

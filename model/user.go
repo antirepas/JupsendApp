@@ -52,12 +52,22 @@ func CreateUser(email, passwordHash, baseURL string) (int64, error) {
 	}
 	email = strings.TrimSpace(strings.ToLower(email))
 	isAdmin := config.IsAdminEmail(email)
+	planTier := string(PlanTierFree)
+	if isAdmin {
+		planTier = string(PlanTierPro)
+	}
 	row := db.QueryRow(`
-		INSERT INTO users (email, password_hash, base_url, is_admin) VALUES (?, ?, ?, ?) RETURNING id
-	`, email, passwordHash, strings.TrimRight(baseURL, "/"), isAdmin)
+		INSERT INTO users (email, password_hash, base_url, is_admin, plan_tier) VALUES (?, ?, ?, ?, ?) RETURNING id
+	`, email, passwordHash, strings.TrimRight(baseURL, "/"), isAdmin, planTier)
 	var id int64
 	err := row.Scan(&id)
-	return id, err
+	if err != nil {
+		return 0, err
+	}
+	if isAdmin {
+		_ = ApplyPlanLimitsToUser(id, PlanTierPro)
+	}
+	return id, nil
 }
 
 func GetUserByEmail(email string) (User, error) {
@@ -151,6 +161,7 @@ func SyncAdminEmailsFromConfig() {
 		if !u.IsAdmin {
 			_ = SetUserAdmin(u.ID, true)
 		}
+		_ = EnsureAdminProAccess(u.ID)
 	}
 }
 
