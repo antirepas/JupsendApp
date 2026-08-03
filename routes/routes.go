@@ -211,6 +211,8 @@ func RegisterRoutes(server *gin.Engine) {
 		authd.POST("/campaigns/:id/promote-winner", PromoteCampaignWinner)
 		authd.GET("/campaigns/:id", CampaignDetailPage)
 		authd.POST("/campaigns/:id/contacts", AddCampaignContacts)
+		authd.POST("/campaigns/:id/contacts/remove", RemoveCampaignContacts)
+		authd.POST("/campaigns/:id/contacts/remove-missing", RemoveCampaignContactsMissingVars)
 		authd.POST("/campaigns/:id/add-list", AddCampaignList)
 		authd.POST("/campaigns/:id/refresh-list", RefreshCampaignList)
 		authd.POST("/campaigns/:id/paste", PasteCampaignContacts)
@@ -233,6 +235,8 @@ func RegisterRoutes(server *gin.Engine) {
 		api.POST("/contact", SaveContacts)
 		api.POST("/send", Email_send)
 		api.GET("/send-jobs", GetSendJobsAPI)
+		api.GET("/import-jobs", ListImportJobsAPI)
+		api.POST("/import-jobs/:id/dismiss", DismissImportJobAPI)
 		api.GET("/smtp-check", OpsSMTPCheck)
 		RegisterWorkflowAPI(api)
 	}

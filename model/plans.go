@@ -254,6 +254,8 @@ func EnsureSharedSMTPAccountForUser(userID int64, spec planSpec) error {
 		daily = 10
 	}
 	now := time.Now()
+	imapHost := config.SharedIMAPHost()
+	imapPort := config.SharedIMAPPort()
 
 	var existingID int64
 	_ = db.QueryRow(`
@@ -268,12 +270,14 @@ func EnsureSharedSMTPAccountForUser(userID int64, spec planSpec) error {
 		_, err = db.Exec(`
 			UPDATE smtp_accounts SET
 				name=?, smtp_host=?, smtp_port=?, smtp_user=?, smtp_password=?, from_email=?, from_name=?,
+				imap_host=?, imap_port=?, imap_user=?, imap_password=?,
 				status='active', auth_type='', oauth_refresh_token='', oauth_access_token='', google_email='',
 				is_default=1, mailbox_source=?, daily_limit=?, per_minute_limit=?, min_seconds_between_sends=?,
 				warmup_enabled=0, warmup_daily_cap=0, warmup_target_daily_cap=0, warmup_increment_per_day=0,
 				warmup_started_at=NULL, updated_at=?
 			WHERE id=?
 		`, from, config.SMTPHost, port, config.SMTPUser, encPass, from, "jupsend",
+			imapHost, imapPort, config.SMTPUser, encPass,
 			MailboxSourceShared, daily, spec.PerMinuteLimit, spec.MinSecondsBetweenSends, now, existingID)
 		return err
 	}
@@ -281,10 +285,12 @@ func EnsureSharedSMTPAccountForUser(userID int64, spec planSpec) error {
 	_, err = db.Exec(`
 		INSERT INTO smtp_accounts (
 			user_id, name, smtp_host, smtp_port, smtp_user, smtp_password, from_email, from_name,
+			imap_host, imap_port, imap_user, imap_password,
 			status, daily_limit, per_minute_limit, min_seconds_between_sends, warmup_enabled,
 			auth_type, is_default, mailbox_source, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, 0, '', 1, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, 0, '', 1, ?, ?, ?)
 	`, userID, from, config.SMTPHost, port, config.SMTPUser, encPass, from, "jupsend",
+		imapHost, imapPort, config.SMTPUser, encPass,
 		daily, spec.PerMinuteLimit, spec.MinSecondsBetweenSends, MailboxSourceShared, now, now)
 	return err
 }

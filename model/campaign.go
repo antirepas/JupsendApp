@@ -432,6 +432,27 @@ func AddContactsToCampaign(campaignID int64, contactIDs []int64) error {
 	return nil
 }
 
+// RemoveContactsFromCampaign unlinks contacts from a campaign (does not delete sends or contacts).
+func RemoveContactsFromCampaign(campaignID int64, contactIDs []int64) (int, error) {
+	if campaignID <= 0 || len(contactIDs) == 0 {
+		return 0, nil
+	}
+	n := 0
+	for _, cid := range contactIDs {
+		if cid <= 0 {
+			continue
+		}
+		res, err := db.Exec(`DELETE FROM campaign_contacts WHERE campaign_id = ? AND contact_id = ?`, campaignID, cid)
+		if err != nil {
+			return n, err
+		}
+		if aff, _ := res.RowsAffected(); aff > 0 {
+			n++
+		}
+	}
+	return n, nil
+}
+
 func MarkCampaignSent(id int64) error {
 	_, err := db.Exec(`UPDATE campaigns SET status = 'sent', scheduled_at = NULL, is_sending = 0 WHERE id = ?`, id)
 	return err

@@ -113,6 +113,29 @@ func runAlterSchema() {
 			dismissed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			PRIMARY KEY (user_id, contact_id)
 		)`,
+		`CREATE TABLE IF NOT EXISTS import_jobs (
+			id BIGSERIAL PRIMARY KEY,
+			user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			kind TEXT NOT NULL,
+			status TEXT NOT NULL DEFAULT 'pending',
+			list_id BIGINT DEFAULT 0,
+			campaign_id BIGINT DEFAULT 0,
+			payload_json TEXT NOT NULL DEFAULT '{}',
+			total_rows INTEGER NOT NULL DEFAULT 0,
+			processed_rows INTEGER NOT NULL DEFAULT 0,
+			created_count INTEGER NOT NULL DEFAULT 0,
+			updated_count INTEGER NOT NULL DEFAULT 0,
+			skipped_count INTEGER NOT NULL DEFAULT 0,
+			error_count INTEGER NOT NULL DEFAULT 0,
+			message TEXT DEFAULT '',
+			error_message TEXT DEFAULT '',
+			created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			started_at TIMESTAMPTZ,
+			finished_at TIMESTAMPTZ
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_import_jobs_user_status ON import_jobs(user_id, status)`,
+		`CREATE INDEX IF NOT EXISTS idx_import_jobs_pending ON import_jobs(status, id) WHERE status IN ('pending', 'processing')`,
 	}
 	for _, stmt := range alters {
 		if _, err := DB.Exec(stmt); err != nil {

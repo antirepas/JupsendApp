@@ -2,6 +2,7 @@ package model
 
 import (
 	"database/sql"
+	"strings"
 	"time"
 
 	"emailtracker.com/db"
@@ -47,6 +48,27 @@ func FindRecentSendToContact(userID, contactID int64, withinDays int) (int64, er
 		return 0, nil
 	}
 	return id, err
+}
+
+// FindRecentSendByRecipientEmail finds the latest send to an email (any user) for bounce correlation.
+func FindRecentSendByRecipientEmail(email string, withinDays int) (contactID int64, trackingID string, userID int64, err error) {
+	email = strings.ToLower(strings.TrimSpace(email))
+	if email == "" {
+		return 0, "", 0, sql.ErrNoRows
+	}
+	if withinDays <= 0 {
+		withinDays = 14
+	}
+	cutoff := time.Now().AddDate(0, 0, -withinDays)
+	err = db.QueryRow(`
+		SELECT es.contact_id, COALESCE(es.tracking_id, ''), es.user_id
+		FROM email_sends es
+		INNER JOIN contact c ON c.id = es.contact_id
+		WHERE LOWER(c.email) = ? AND es.sent_at IS NOT NULL AND es.sent_at >= ?
+		ORDER BY es.sent_at DESC
+		LIMIT 1
+	`, email, cutoff).Scan(&contactID, &trackingID, &userID)
+	return contactID, trackingID, userID, err
 }
 
 func GetContactEmailStatus(contactID int64) (status, reason string, err error) {

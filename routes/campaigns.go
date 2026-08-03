@@ -226,6 +226,8 @@ func CampaignDetailPage(ctx *gin.Context) {
 	if pickerFilter.Query != "" || listID > 0 || pickerFilter.Engagement != "" || page > 1 {
 		addTab = "select"
 	}
+	memberQ := ctx.Query("member_q")
+	memberFilter := ctx.Query("member_filter")
 
 	pageExtras, err := loadCampaignDetailPageData(userID, detail, pickerFilter)
 	if err != nil {
@@ -292,7 +294,12 @@ func CampaignDetailPage(ctx *gin.Context) {
 		pageData["experimentVariable"] = detail.ExperimentVariable
 		pageData["experimentHypothesis"] = detail.ExperimentHypothesis
 		pageData["experimentVariableLabel"] = experimentVariableLabel(detail.ExperimentVariable)
-		pageData["workflowContactRows"] = pageExtras.WorkflowContactRows
+		wfRows := filterWorkflowCampaignContactRows(pageExtras.WorkflowContactRows, memberQ, memberFilter)
+		pageData["workflowContactRows"] = wfRows
+		pageData["workflowContactTotal"] = len(pageExtras.WorkflowContactRows)
+		pageData["memberQ"] = memberQ
+		pageData["memberFilter"] = memberFilter
+		pageData["missingVarsCount"] = 0
 		if detail.ExecutionMode == "workflow_ab" {
 			pageData["templateA"] = pageExtras.TemplateA
 			pageData["templateB"] = pageExtras.TemplateB
@@ -303,7 +310,19 @@ func CampaignDetailPage(ctx *gin.Context) {
 		pageData["templateA"] = pageExtras.TemplateA
 		pageData["templateB"] = pageExtras.TemplateB
 		pageData["hasB"] = pageExtras.HasB
-		pageData["contactRows"] = pageExtras.ContactRows
+		allRows := pageExtras.ContactRows
+		missingCount := 0
+		for _, r := range allRows {
+			if len(r.MissingVars) > 0 {
+				missingCount++
+			}
+		}
+		rows := filterCampaignContactRows(allRows, memberQ, memberFilter)
+		pageData["contactRows"] = rows
+		pageData["contactRowTotal"] = len(allRows)
+		pageData["memberQ"] = memberQ
+		pageData["memberFilter"] = memberFilter
+		pageData["missingVarsCount"] = missingCount
 		pageData["mergedVars"] = pageExtras.MergedVars
 	}
 
@@ -416,54 +435,105 @@ func AddCampaignContacts(ctx *gin.Context) {
 	ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?success=Contacts+added")
 }
 
+func RemoveCampaignContacts(ctx *gin.Context) {
+	userID := mustUserID(ctx)
+	campaignID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
+	if err != nil {
+		ctx.Redirect(http.StatusFound, "/campaigns?error=Invalid+campaign")
+		return
+	}
+	if _, err := model.GetCampaignForUser(campaignID, userID); err != nil {
+		ctx.Redirect(http.StatusFound, "/campaigns?error=Campaign+not+found")
+		return
+	}
+	ids := parseContactIDs(ctx)
+	if len(ids) == 0 {
+		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error="+url.QueryEscape("Select contacts to remove"))
+		return
+	}
+	n, err := model.RemoveContactsFromCampaign(campaignID, ids)
+	if err != nil {
+		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error="+url.QueryEscape(err.Error()))
+		return
+	}
+	ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?success="+url.QueryEscape("Removed "+strconv.Itoa(n)+" contacts from campaign"))
+}
+
+func RemoveCampaignContactsMissingVars(ctx *gin.Context) {
+	userID := mustUserID(ctx)
+	campaignID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
+	if err != nil {
+		ctx.Redirect(http.StatusFound, "/campaigns?error=Invalid+campaign")
+		return
+	}
+	campaign, err := model.GetCampaignForUser(campaignID, userID)
+	if err != nil {
+		ctx.Redirect(http.StatusFound, "/campaigns?error=Campaign+not+found")
+		return
+	}
+	if (campaign.ExecutionMode == "workflow" || campaign.ExecutionMode == "workflow_ab") && campaign.WorkflowVersionID > 0 {
+		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error="+url.QueryEscape("Missing-variable cleanup is for A/B template campaigns"))
+		return
+	}
+	detail, err := model.GetCampaignDetail(campaignID, userID)
+	if err != nil {
+		ctx.Redirect(http.StatusFound, "/campaigns?error=Campaign+not+found")
+		return
+	}
+	ids, err := model.GetCampaignContactIDs(campaignID)
+	if err != nil {
+		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error=Could+not+load+contacts")
+		return
+	}
+	rows := buildCampaignContactRows(campaign, userID, ids, detail.TemplateAName, detail.TemplateBName)
+	var removeIDs []int64
+	for _, row := range rows {
+		if len(row.MissingVars) > 0 {
+			removeIDs = append(removeIDs, row.ID)
+		}
+	}
+	if len(removeIDs) == 0 {
+		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?success="+url.QueryEscape("No contacts missing template variables"))
+		return
+	}
+	n, err := model.RemoveContactsFromCampaign(campaignID, removeIDs)
+	if err != nil {
+		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error="+url.QueryEscape(err.Error()))
+		return
+	}
+	ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?success="+url.QueryEscape("Removed "+strconv.Itoa(n)+" contacts missing template variables"))
+}
+
 func PasteCampaignContacts(ctx *gin.Context) {
+	userID := mustUserID(ctx)
 	campaignID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
 	if err != nil {
 		ctx.Redirect(http.StatusFound, "/campaigns?error=Invalid+campaign")
 		return
 	}
 
-	campaign, err := model.GetCampaignForUser(campaignID, mustUserID(ctx))
+	campaign, err := model.GetCampaignForUser(campaignID, userID)
 	if err != nil {
 		ctx.Redirect(http.StatusFound, "/campaigns?error=Campaign+not+found")
 		return
 	}
 
-	vars, _ := model.MergeTemplateVariables(mustUserID(ctx), []int64{campaign.TemplateAID, campaign.TemplateBID})
+	vars, _ := model.MergeTemplateVariables(userID, []int64{campaign.TemplateAID, campaign.TemplateBID})
 	paste := ctx.PostForm("paste")
-	rows := util.ParseContactPasteWithHeaders(paste, vars)
-
-	added := 0
-	var contactIDs []int64
-	for _, row := range rows {
-		var cvs []model.ContactVariables
-		for _, key := range vars {
-			cvs = append(cvs, model.ContactVariables{Key: key, Value: row.Variables[key]})
-		}
-		_, cid, err := model.UpsertContact(mustUserID(ctx), row.Email, cvs)
-		if err != nil {
-			continue
-		}
-		contactIDs = append(contactIDs, cid)
-		added++
-	}
-
-	if len(contactIDs) > 0 {
-		_ = model.AddContactsToCampaign(campaignID, contactIDs)
-	}
-
-	msg := fmt.Sprintf("Added %d contacts", added)
-	ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?success="+url.QueryEscape(msg))
+	utilRows := util.ParseContactPasteWithHeaders(paste, vars)
+	parsed := parseImportRowsFromExcel(utilRows, vars)
+	ctx.Redirect(http.StatusFound, enqueueCampaignImport(userID, campaignID, model.ImportKindCampaignPaste, parsed, vars))
 }
 
 func UploadCampaignContacts(ctx *gin.Context) {
+	userID := mustUserID(ctx)
 	campaignID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
 	if err != nil {
 		ctx.Redirect(http.StatusFound, "/campaigns?error=Invalid+campaign")
 		return
 	}
 
-	campaign, err := model.GetCampaignForUser(campaignID, mustUserID(ctx))
+	campaign, err := model.GetCampaignForUser(campaignID, userID)
 	if err != nil {
 		ctx.Redirect(http.StatusFound, "/campaigns?error=Campaign+not+found")
 		return
@@ -481,32 +551,14 @@ func UploadCampaignContacts(ctx *gin.Context) {
 	}
 	defer src.Close()
 
-	vars, _ := model.MergeTemplateVariables(mustUserID(ctx), []int64{campaign.TemplateAID, campaign.TemplateBID})
+	vars, _ := model.MergeTemplateVariables(userID, []int64{campaign.TemplateAID, campaign.TemplateBID})
 	rows, err := util.ParseContactsUpload(src, file.Filename, vars)
 	if err != nil {
 		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error="+url.QueryEscape(err.Error()))
 		return
 	}
-
-	var contactIDs []int64
-	for _, row := range rows {
-		var cvs []model.ContactVariables
-		for _, key := range vars {
-			cvs = append(cvs, model.ContactVariables{Key: key, Value: row.Variables[key]})
-		}
-		_, cid, err := model.UpsertContact(mustUserID(ctx), row.Email, cvs)
-		if err != nil {
-			continue
-		}
-		contactIDs = append(contactIDs, cid)
-	}
-
-	if len(contactIDs) > 0 {
-		_ = model.AddContactsToCampaign(campaignID, contactIDs)
-	}
-
-	msg := fmt.Sprintf("Imported %d contacts", len(contactIDs))
-	ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?success="+url.QueryEscape(msg))
+	parsed := parseImportRowsFromExcel(rows, vars)
+	ctx.Redirect(http.StatusFound, enqueueCampaignImport(userID, campaignID, model.ImportKindCampaignUpload, parsed, vars))
 }
 
 func SendCampaign(ctx *gin.Context) {

@@ -82,4 +82,21 @@ func TestIsBounceMessageUndeliverable(t *testing.T) {
 	if !IsBounceMessage("mailer-daemon@google.com", "Undeliverable: Hello", "Address not found") {
 		t.Fatal("expected bounce")
 	}
+	if !IsBounceMessage("mailer-daemon@googlemail.com", "Delivery Status Notification (Failure)", "The email account that you tried to reach does not exist") {
+		t.Fatal("expected bounce for does not exist")
+	}
+	if !IsBounceMessage("mailer-daemon@google.com", "Undeliverable", "Your message wasn't delivered to gone@example.com because the address no longer exists") {
+		t.Fatal("expected bounce for no longer exists")
+	}
+}
+
+func TestExtractFailedRecipientGmailBody(t *testing.T) {
+	body := "Your message wasn't delivered to gone@example.com because the address couldn't be found"
+	if got := ExtractFailedRecipient(body); got != "gone@example.com" {
+		t.Fatalf("got %q", got)
+	}
+	body2 := "Address not found\r\n\r\nsomeone@nowhere.invalid is unable to receive mail"
+	if got := ExtractFailedRecipient(body2); got != "someone@nowhere.invalid" {
+		t.Fatalf("fallback got %q", got)
+	}
 }

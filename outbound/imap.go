@@ -5,16 +5,20 @@ import (
 	"strings"
 	"time"
 
+	"emailtracker.com/config"
 	"emailtracker.com/model"
 	"github.com/emersion/go-imap"
 	"github.com/emersion/go-imap/client"
 )
 
-// StartIMAPPoller scans InboxKit mailboxes for bounces/replies via plain IMAP.
+const imapLookbackMessages uint32 = 200
+
+// StartIMAPPoller scans InboxKit + Free shared mailboxes for bounces/replies via plain IMAP.
 // Google OAuth accounts are not polled (gmail.readonly is a restricted scope).
 func StartIMAPPoller() {
 	LoadConfig()
 	go func() {
+		syncSharedMailboxIMAPSettings()
 		pollAllAccounts()
 		ticker := time.NewTicker(IMAPPollInterval)
 		defer ticker.Stop()
@@ -22,7 +26,58 @@ func StartIMAPPoller() {
 			pollAllAccounts()
 		}
 	}()
-	log.Printf("IMAP poller started (interval=%s, inboxkit mailboxes only)", IMAPPollInterval)
+	log.Printf("IMAP poller started (interval=%s, inboxkit+shared mailboxes)", IMAPPollInterval)
+}
+
+// syncSharedMailboxIMAPSettings persists IMAP host/user on Free shared accounts so bounce polling can connect.
+func syncSharedMailboxIMAPSettings() {
+	if config.SMTPUser == "" || config.SMTPHost == "" {
+		return
+	}
+	imapHost := config.SharedIMAPHost()
+	imapPort := config.SharedIMAPPort()
+	accounts, err := model.ListActiveSMTPAccounts()
+	if err != nil {
+		return
+	}
+	for _, acc := range accounts {
+		if acc.MailboxSource != model.MailboxSourceShared {
+			continue
+		}
+		if acc.IMAPHost != "" && acc.IMAPUser != "" {
+			continue
+		}
+		pass := acc.SMTPPassword
+		_ = model.UpdateSharedAccountIMAP(acc.ID, imapHost, imapPort, config.SMTPUser, pass)
+	}
+}
+
+func shouldPollMailbox(acc model.SMTPAccount) bool {
+	if acc.Status != "active" || acc.IsGoogleOAuth() {
+		return false
+	}
+	return acc.MailboxSource == model.MailboxSourceInboxKit || acc.MailboxSource == model.MailboxSourceShared
+}
+
+func prepareMailboxForPoll(acc *model.SMTPAccount) {
+	if acc.MailboxSource != model.MailboxSourceShared {
+		return
+	}
+	if acc.IMAPHost == "" {
+		acc.IMAPHost = config.SharedIMAPHost()
+	}
+	if acc.IMAPPort == "" {
+		acc.IMAPPort = config.SharedIMAPPort()
+	}
+	if acc.IMAPUser == "" {
+		acc.IMAPUser = acc.SMTPUser
+		if acc.IMAPUser == "" {
+			acc.IMAPUser = config.SMTPUser
+		}
+	}
+	if acc.IMAPPassword == "" {
+		acc.IMAPPassword = acc.SMTPPassword
+	}
 }
 
 func pollAllAccounts() {
@@ -30,18 +85,24 @@ func pollAllAccounts() {
 	if err != nil {
 		return
 	}
+	seenShared := map[string]bool{}
 	for _, acc := range accounts {
-		if acc.Status != "active" {
+		if !shouldPollMailbox(acc) {
 			continue
 		}
-		if acc.IsGoogleOAuth() || acc.MailboxSource != "inboxkit" {
-			continue
-		}
+		prepareMailboxForPoll(&acc)
 		if acc.IMAPHost == "" || acc.IMAPUser == "" {
 			continue
 		}
+		if acc.MailboxSource == model.MailboxSourceShared {
+			key := strings.ToLower(acc.IMAPHost + "|" + acc.IMAPUser)
+			if seenShared[key] {
+				continue
+			}
+			seenShared[key] = true
+		}
 		if err := pollIMAPAccount(acc); err != nil {
-			log.Printf("IMAP poll account %d: %v", acc.ID, err)
+			log.Printf("IMAP poll account %d (%s): %v", acc.ID, acc.MailboxSource, err)
 		}
 	}
 }
@@ -57,6 +118,16 @@ type inboxMessage struct {
 }
 
 func processInboxMessage(acc model.SMTPAccount, ownEmail string, msg inboxMessage) {
+	dedupeKey := msg.DedupeID
+	if dedupeKey == "" {
+		dedupeKey = strings.TrimSpace(msg.From + "|" + msg.Subject)
+	}
+	if dedupeKey != "" {
+		if done, _ := model.GmailMessageAlreadyProcessed(acc.UserID, dedupeKey); done {
+			return
+		}
+	}
+
 	replyRefs := []string{}
 	if msg.InReplyTo != "" {
 		replyRefs = append(replyRefs, msg.InReplyTo)
@@ -70,10 +141,16 @@ func processInboxMessage(acc model.SMTPAccount, ownEmail string, msg inboxMessag
 
 	if IsBounceMessage(msg.From, msg.Subject, msg.Body) {
 		handleBounce(acc, msg.From, msg.Subject, msg.Body)
+		if dedupeKey != "" {
+			_ = model.MarkGmailMessageProcessed(acc.UserID, dedupeKey)
+		}
 		return
 	}
 	if match, ok := MatchReply(acc.UserID, msg.From, msg.Subject, msg.Body, replyRefs, ownEmail); ok {
 		handleReply(acc.UserID, match, msg.MessageID)
+	}
+	if dedupeKey != "" {
+		_ = model.MarkGmailMessageProcessed(acc.UserID, dedupeKey)
 	}
 }
 
@@ -93,8 +170,8 @@ func pollIMAPAccount(acc model.SMTPAccount) error {
 	}
 
 	from := uint32(1)
-	if mbox.Messages > 50 {
-		from = mbox.Messages - 49
+	if mbox.Messages > imapLookbackMessages {
+		from = mbox.Messages - imapLookbackMessages + 1
 	}
 	seqset := new(imap.SeqSet)
 	seqset.AddRange(from, mbox.Messages)
@@ -154,7 +231,7 @@ func dialIMAP(acc model.SMTPAccount) (*client.Client, error) {
 	if pass == "" {
 		pass = acc.SMTPPassword
 	}
-	if acc.MailboxSource == "inboxkit" {
+	if acc.MailboxSource == model.MailboxSourceInboxKit || acc.MailboxSource == model.MailboxSourceShared {
 		dec, err := model.DecryptSMTPPassword(acc)
 		if err != nil {
 			c.Logout()
@@ -173,7 +250,11 @@ func dialIMAP(acc model.SMTPAccount) (*client.Client, error) {
 
 // pollAccountBounces kept for tests that may reference it.
 func pollAccountBounces(acc model.SMTPAccount) error {
-	if acc.IsGoogleOAuth() || acc.MailboxSource != "inboxkit" {
+	if !shouldPollMailbox(acc) {
+		return nil
+	}
+	prepareMailboxForPoll(&acc)
+	if acc.IMAPHost == "" || acc.IMAPUser == "" {
 		return nil
 	}
 	return pollIMAPAccount(acc)
@@ -214,21 +295,33 @@ func handleBounce(acc model.SMTPAccount, from, subject, body string) {
 		}
 	}
 
-	if contactID == 0 {
-		failed := ExtractFailedRecipient(body)
-		if failed != "" {
-			if c, err := model.FindContactByEmail(acc.UserID, failed); err == nil {
-				contactID = c.ID
+	failed := ExtractFailedRecipient(body)
+	if contactID == 0 && failed != "" {
+		if cid, tid, _, err := model.FindRecentSendByRecipientEmail(failed, 14); err == nil && cid > 0 {
+			contactID = cid
+			if trackingID == "" {
+				trackingID = tid
 			}
+		} else if c, err := model.FindContactByEmail(acc.UserID, failed); err == nil {
+			contactID = c.ID
 		}
 	}
 
 	if contactID > 0 {
 		source := strings.TrimSpace(subject)
+		if source == "" {
+			source = "bounce"
+		}
 		if len(source) > 200 {
 			source = source[:200]
 		}
-		_ = model.SuppressContact(contactID, "bounce", source, acc.ID)
+		if err := model.SuppressContact(contactID, "bounce", source, acc.ID); err != nil {
+			log.Printf("bounce suppress contact %d: %v", contactID, err)
+		} else {
+			log.Printf("bounce suppressed contact %d (failed=%q sendID=%d account=%d)", contactID, failed, sendID, acc.ID)
+		}
+	} else {
+		log.Printf("bounce detected but unmatched (from=%q subject=%q failed=%q sendID=%d account=%d)", from, subject, failed, sendID, acc.ID)
 	}
 
 	eventSource := "imap-bounce"

@@ -475,13 +475,8 @@ func PasteContactsQuick(ctx *gin.Context) {
 		importKeys = keysFromImportRowsParsed(parsed)
 	}
 
-	result, err := model.ImportContactRows(userID, parsed, listID, importKeys)
-	if err != nil {
-		ctx.Redirect(http.StatusFound, "/contacts?tab=import&error=Import+failed")
-		return
-	}
-	msg := model.FormatImportResultMessage(result)
-	ctx.Redirect(http.StatusFound, "/contacts?tab=import&success="+url.QueryEscape(msg))
+	redir, _ := enqueueContactImport(userID, model.ImportKindContactsPaste, parsed, listID, importKeys, "/contacts?tab=import")
+	ctx.Redirect(http.StatusFound, redir)
 }
 
 func BulkDeleteContacts(ctx *gin.Context) {

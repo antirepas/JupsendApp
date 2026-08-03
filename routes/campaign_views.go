@@ -40,6 +40,7 @@ type CampaignContactRowView struct {
 	SendID          int64
 	OpenCount       int
 	ClickCount      int
+	Replied         bool
 }
 
 type WorkflowCampaignContactRowView struct {
@@ -54,6 +55,8 @@ type WorkflowCampaignContactRowView struct {
 	ClickCount     int
 	HasStarted     bool
 	SendID         int64
+	Replied        bool
+	Sent           bool
 }
 
 // WorkflowGraphNodeView carries page context into recursive wf_graph_node template calls.
@@ -116,6 +119,7 @@ func buildWorkflowCampaignContactRows(
 	instances, _ := model.ListInstancesForCampaign(campaign.ID)
 	sendMap, _ := model.GetCampaignContactEngagementLite(campaign.ID)
 	emailMap, _ := model.GetCampaignContactEmailMap(campaign.ID)
+	replied := model.CampaignRepliedContactSet(campaign.ID)
 	labels := model.NodeLabelMapForVersion(campaign.WorkflowVersionID)
 
 	if len(instances) > 0 {
@@ -131,12 +135,14 @@ func buildWorkflowCampaignContactRows(
 				NodeKey:        inst.CurrentNodeKey,
 				CurrentStep:    model.LabelFromMap(labels, inst.CurrentNodeKey),
 				BranchLabel:    workflowBranchLabel(inst),
+				Replied:        replied[inst.ContactID],
 			}
 			if sent, ok := sendMap[inst.ContactID]; ok {
 				row.OpenCount = sent.OpenCount
 				row.ClickCount = sent.ClickCount
 				if sent.SendID > 0 {
 					row.SendID = sent.SendID
+					row.Sent = true
 				}
 			}
 			rows = append(rows, row)
@@ -147,9 +153,10 @@ func buildWorkflowCampaignContactRows(
 	var rows []WorkflowCampaignContactRowView
 	for i, cid := range contactIDs {
 		row := WorkflowCampaignContactRowView{
-			Index: i + 1,
-			ID:    cid,
-			Email: emailMap[cid],
+			Index:   i + 1,
+			ID:      cid,
+			Email:   emailMap[cid],
+			Replied: replied[cid],
 		}
 		row.InstanceStatus = "not started"
 		row.CurrentStep = "—"
@@ -159,6 +166,7 @@ func buildWorkflowCampaignContactRows(
 			if sent.SendID > 0 {
 				row.SendID = sent.SendID
 				row.HasStarted = true
+				row.Sent = true
 			}
 		}
 		rows = append(rows, row)
@@ -209,6 +217,7 @@ func buildCampaignContactRows(
 
 	sendMap, _ := model.GetCampaignContactEngagementLite(campaign.ID)
 	contactData, _ := model.GetCampaignContactDataMap(campaign.ID)
+	replied := model.CampaignRepliedContactSet(campaign.ID)
 
 	var rows []CampaignContactRowView
 	for i, cid := range contactIDs {
@@ -260,6 +269,7 @@ func buildCampaignContactRows(
 			MissingVars:     missing,
 			RenderedSubject: subject,
 			RenderedBody:    body,
+			Replied:         replied[cid],
 		}
 
 		if sent, ok := sendMap[cid]; ok && sent.SendID > 0 {
@@ -272,6 +282,88 @@ func buildCampaignContactRows(
 		rows = append(rows, row)
 	}
 	return rows
+}
+
+// filterCampaignContactRows filters manage-page contact rows by email + campaign engagement.
+// engagement: "", opened, clicked, replied, not_sent, sent, missing_vars
+func filterCampaignContactRows(rows []CampaignContactRowView, q, engagement string) []CampaignContactRowView {
+	q = strings.ToLower(strings.TrimSpace(q))
+	engagement = strings.TrimSpace(engagement)
+	out := make([]CampaignContactRowView, 0, len(rows))
+	for _, row := range rows {
+		if q != "" && !strings.Contains(strings.ToLower(row.Email), q) {
+			continue
+		}
+		switch engagement {
+		case "opened":
+			if row.OpenCount <= 0 {
+				continue
+			}
+		case "clicked":
+			if row.ClickCount <= 0 {
+				continue
+			}
+		case "replied":
+			if !row.Replied {
+				continue
+			}
+		case "not_sent":
+			if row.Sent {
+				continue
+			}
+		case "sent":
+			if !row.Sent {
+				continue
+			}
+		case "missing_vars":
+			if len(row.MissingVars) == 0 {
+				continue
+			}
+		}
+		out = append(out, row)
+	}
+	for i := range out {
+		out[i].Index = i + 1
+	}
+	return out
+}
+
+func filterWorkflowCampaignContactRows(rows []WorkflowCampaignContactRowView, q, engagement string) []WorkflowCampaignContactRowView {
+	q = strings.ToLower(strings.TrimSpace(q))
+	engagement = strings.TrimSpace(engagement)
+	out := make([]WorkflowCampaignContactRowView, 0, len(rows))
+	for _, row := range rows {
+		if q != "" && !strings.Contains(strings.ToLower(row.Email), q) {
+			continue
+		}
+		switch engagement {
+		case "opened":
+			if row.OpenCount <= 0 {
+				continue
+			}
+		case "clicked":
+			if row.ClickCount <= 0 {
+				continue
+			}
+		case "replied":
+			if !row.Replied {
+				continue
+			}
+		case "not_sent":
+			if row.Sent {
+				continue
+			}
+		case "sent":
+			if !row.Sent {
+				continue
+			}
+		}
+		out = append(out, row)
+	}
+	for i := range out {
+		out[i].Index = i + 1
+	}
+	return out
 }
 
 func truncatePreview(s string, max int) string {

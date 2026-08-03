@@ -166,14 +166,9 @@ func UploadContacts(ctx *gin.Context) {
 		importKeys = keysFromImportRows(rows)
 	}
 
-	result, err := model.ImportContactRows(userID, parseImportRowsFromExcel(rows, importKeys), listID, importKeys)
-	if err != nil {
-		ctx.Redirect(http.StatusFound, "/contacts?tab=import&error="+url.QueryEscape(err.Error()))
-		return
-	}
-
-	msg := model.FormatImportResultMessage(result)
-	ctx.Redirect(http.StatusFound, "/contacts?tab=import&success="+url.QueryEscape(msg))
+	parsed := parseImportRowsFromExcel(rows, importKeys)
+	redir, _ := enqueueContactImport(userID, model.ImportKindContactsUpload, parsed, listID, importKeys, "/contacts?tab=import")
+	ctx.Redirect(http.StatusFound, redir)
 }
 
 func keysFromImportRows(rows []util.ContactImportRow) []string {

@@ -17,6 +17,8 @@ var (
 	SMTPUser              string
 	SMTPPass              string
 	SMTPFrom              string
+	IMAPHost              string
+	IMAPPort              string
 	SessionSecret         string
 	TokenEncryptionKey    string
 	GoogleClientID        string
@@ -70,6 +72,8 @@ func reloadFromEnv() {
 	if SMTPFrom == "" {
 		SMTPFrom = SMTPUser
 	}
+	IMAPHost = strings.TrimSpace(os.Getenv("IMAP_HOST"))
+	IMAPPort = envOr("IMAP_PORT", "993")
 	SessionSecret = envOr("SESSION_SECRET", "")
 	TokenEncryptionKey = strings.TrimSpace(os.Getenv("TOKEN_ENCRYPTION_KEY"))
 	GoogleClientID = strings.TrimSpace(os.Getenv("GOOGLE_CLIENT_ID"))
@@ -132,6 +136,29 @@ func IsAdminEmail(email string) bool {
 	}
 	_, ok := AdminEmails[strings.TrimSpace(strings.ToLower(email))]
 	return ok
+}
+
+// SharedIMAPHost returns IMAP host for the Free shared mailbox (env or derived from SMTP).
+func SharedIMAPHost() string {
+	if IMAPHost != "" {
+		return IMAPHost
+	}
+	h := strings.ToLower(strings.TrimSpace(SMTPHost))
+	if strings.Contains(h, "gmail") || strings.Contains(h, "google") {
+		return "imap.gmail.com"
+	}
+	if strings.HasPrefix(h, "smtp.") {
+		return "imap." + strings.TrimPrefix(h, "smtp.")
+	}
+	return SMTPHost
+}
+
+// SharedIMAPPort returns IMAP port for the Free shared mailbox.
+func SharedIMAPPort() string {
+	if strings.TrimSpace(IMAPPort) != "" {
+		return IMAPPort
+	}
+	return "993"
 }
 
 func normalizeAppPassword(password string) string {

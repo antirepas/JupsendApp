@@ -11,6 +11,7 @@ type ImportContactsResult struct {
 	Skipped       int
 	Errors        int
 	InvalidEmails []string
+	ContactIDs    []int64
 }
 
 type ImportContactRow struct {
@@ -61,6 +62,7 @@ func ImportContactRows(userID int64, rows []ImportContactRow, listID int64, impo
 		} else {
 			result.Updated++
 		}
+		result.ContactIDs = append(result.ContactIDs, contactID)
 		if listID > 0 {
 			if err := addContactToListValidated(listID, userID, contactID); err != nil {
 				result.Errors++

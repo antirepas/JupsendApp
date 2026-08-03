@@ -61,6 +61,7 @@ func main() {
 	model.SyncAdminEmailsFromConfig()
 	outbound.StartWorker()
 	outbound.StartIMAPPoller()
+	outbound.StartImportWorker()
 	routes.RegisterRoutes(server)
 
 	server.Run(":" + config.Port)

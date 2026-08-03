@@ -326,6 +326,54 @@
     font-size: 0.875rem;
 }
 
+.import-jobs-banner {
+    position: fixed;
+    top: 0.75rem;
+    right: 0.75rem;
+    z-index: 60;
+    width: min(420px, calc(100vw - 1.5rem));
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+.import-jobs-banner.hidden { display: none; }
+.import-job {
+    background: #fff;
+    border: 1px solid #E5E7EB;
+    border-radius: 0.75rem;
+    padding: 0.75rem 1rem;
+    font-size: 0.8125rem;
+    color: #374151;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+}
+.import-job--active { border-color: #A7F3D0; background: #ECFDF5; }
+.import-job--done { border-color: #BBF7D0; }
+.import-job--failed { border-color: #FECACA; background: #FEF2F2; color: #991B1B; }
+.import-job a { color: #059669; font-weight: 600; margin-left: 0.35rem; }
+.import-job-dismiss {
+    margin-left: 0.5rem;
+    color: #6B7280;
+    font-size: 0.75rem;
+    text-decoration: underline;
+    background: none;
+    border: 0;
+    cursor: pointer;
+}
+.import-job-bar {
+    margin-top: 0.5rem;
+    height: 0.375rem;
+    background: #D1FAE5;
+    border-radius: 999px;
+    overflow: hidden;
+}
+.import-job-bar span {
+    display: block;
+    height: 100%;
+    background: #10B981;
+    border-radius: 999px;
+    transition: width 0.3s ease;
+}
+
 .empty-state {
     text-align: center;
     padding: 3rem 1.5rem;

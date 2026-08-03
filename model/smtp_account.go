@@ -331,6 +331,16 @@ func SetSMTPAccountStatus(id int64, status string) error {
 	return err
 }
 
+// UpdateSharedAccountIMAP sets IMAP connection fields on a shared Free mailbox row.
+func UpdateSharedAccountIMAP(id int64, host, port, user, password string) error {
+	_, err := db.Exec(`
+		UPDATE smtp_accounts SET
+			imap_host=?, imap_port=?, imap_user=?, imap_password=?, updated_at=?
+		WHERE id=? AND mailbox_source=?
+	`, host, port, user, password, time.Now(), id, MailboxSourceShared)
+	return err
+}
+
 func IncrementAccountSendCount(accountID int64) error {
 	today := time.Now().Format("2006-01-02")
 	_, err := db.Exec(`

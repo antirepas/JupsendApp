@@ -476,6 +476,11 @@ func loadCampaignContactSendStats(campaignID int64) map[int64]struct{ sent, open
 }
 
 func loadCampaignRepliedContacts(campaignID int64) map[int64]bool {
+	return CampaignRepliedContactSet(campaignID)
+}
+
+// CampaignRepliedContactSet returns contact IDs that replied to a send in this campaign.
+func CampaignRepliedContactSet(campaignID int64) map[int64]bool {
 	result := map[int64]bool{}
 	rows, err := db.Query(`
 		SELECT DISTINCT es.contact_id FROM contact_events ce
@@ -490,6 +495,21 @@ func loadCampaignRepliedContacts(campaignID int64) map[int64]bool {
 		var cid int64
 		if rows.Scan(&cid) == nil {
 			result[cid] = true
+		}
+	}
+	// Also treat contact.replied_at as replied when they are on this campaign and have a send.
+	rows2, err := db.Query(`
+		SELECT DISTINCT es.contact_id FROM email_sends es
+		INNER JOIN contact c ON c.id = es.contact_id
+		WHERE es.campaign_id = ? AND c.replied_at IS NOT NULL
+	`, campaignID)
+	if err == nil {
+		defer rows2.Close()
+		for rows2.Next() {
+			var cid int64
+			if rows2.Scan(&cid) == nil {
+				result[cid] = true
+			}
 		}
 	}
 	return result

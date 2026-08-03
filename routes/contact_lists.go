@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"emailtracker.com/model"
+	"emailtracker.com/outbound"
 	"github.com/gin-gonic/gin"
 )
 
@@ -189,13 +190,21 @@ func AddCampaignList(c *gin.Context) {
 		c.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error=Select+a+list")
 		return
 	}
-	n, err := model.SnapshotListToCampaign(listID, campaignID, userID)
-	if err != nil {
-		c.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error=Could+not+add+list")
+	if _, err := model.GetCampaignForUser(campaignID, userID); err != nil {
+		c.Redirect(http.StatusFound, "/campaigns?error=Campaign+not+found")
 		return
 	}
-	msg := "Added " + strconv.Itoa(n) + " contacts from list"
-	c.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?success="+msg)
+	job, err := model.EnqueueImportJob(userID, model.ImportKindCampaignListSnapshot, model.ImportJobPayload{
+		CampaignID:     campaignID,
+		SnapshotListID: listID,
+	})
+	if err != nil {
+		c.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error="+url.QueryEscape(err.Error()))
+		return
+	}
+	outbound.NotifyImportWorker()
+	msg := "Adding list in the background (" + strconv.Itoa(job.TotalRows) + " contacts). Progress shows in the top banner."
+	c.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?success="+url.QueryEscape(msg))
 }
 
 func RefreshCampaignList(c *gin.Context) {
@@ -210,11 +219,15 @@ func RefreshCampaignList(c *gin.Context) {
 		c.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error=No+list+linked")
 		return
 	}
-	n, err := model.SnapshotListToCampaign(campaign.ContactListID, campaignID, userID)
+	job, err := model.EnqueueImportJob(userID, model.ImportKindCampaignListSnapshot, model.ImportJobPayload{
+		CampaignID:     campaignID,
+		SnapshotListID: campaign.ContactListID,
+	})
 	if err != nil {
-		c.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error=Could+not+refresh+list")
+		c.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error="+url.QueryEscape(err.Error()))
 		return
 	}
-	msg := "Refreshed " + strconv.Itoa(n) + " contacts from list"
-	c.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?success="+msg)
+	outbound.NotifyImportWorker()
+	msg := "Refreshing list in the background (" + strconv.Itoa(job.TotalRows) + " contacts)."
+	c.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?success="+url.QueryEscape(msg))
 }

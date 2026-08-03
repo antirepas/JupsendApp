@@ -65,4 +65,53 @@
         </div>
     </nav>
 </aside>
+<div id="import-jobs-banner" class="import-jobs-banner hidden" aria-live="polite"></div>
+<script>
+(function () {
+    const el = document.getElementById('import-jobs-banner');
+    if (!el) return;
+    let timer = null;
+    function dismiss(id) {
+        fetch('/api/v1/import-jobs/' + id + '/dismiss', { method: 'POST', credentials: 'same-origin' })
+            .then(() => refresh());
+    }
+    function render(jobs) {
+        if (!jobs || !jobs.length) {
+            el.classList.add('hidden');
+            el.innerHTML = '';
+            return;
+        }
+        el.classList.remove('hidden');
+        el.innerHTML = jobs.map(j => {
+            const active = j.status === 'pending' || j.status === 'processing';
+            const cls = j.status === 'failed' ? 'import-job import-job--failed' : (active ? 'import-job import-job--active' : 'import-job import-job--done');
+            const detail = active
+                ? (j.processed_rows + ' / ' + j.total_rows + ' · ' + j.progress + '%')
+                : (j.message || j.error_message || j.status);
+            const link = j.campaign_id ? (' <a href="/campaigns/' + j.campaign_id + '">Open campaign</a>') : '';
+            const dismissBtn = active ? '' : (' <button type="button" class="import-job-dismiss" data-id="' + j.id + '">Dismiss</button>');
+            return '<div class="' + cls + '"><strong>' + j.kind_label + '</strong> — ' + detail + link + dismissBtn +
+                (active ? '<div class="import-job-bar"><span style="width:' + j.progress + '%"></span></div>' : '') +
+                '</div>';
+        }).join('');
+        el.querySelectorAll('.import-job-dismiss').forEach(btn => {
+            btn.addEventListener('click', () => dismiss(btn.getAttribute('data-id')));
+        });
+    }
+    function refresh() {
+        fetch('/api/v1/import-jobs', { credentials: 'same-origin' })
+            .then(r => r.ok ? r.json() : null)
+            .then(data => {
+                if (!data) return;
+                render(data.jobs || []);
+                const busy = (data.jobs || []).some(j => j.status === 'pending' || j.status === 'processing');
+                if (busy && !timer) timer = setInterval(refresh, 2500);
+                if (!busy && timer) { clearInterval(timer); timer = null; }
+            })
+            .catch(() => {});
+    }
+    refresh();
+    setTimeout(refresh, 800);
+})();
+</script>
 {{end}}
