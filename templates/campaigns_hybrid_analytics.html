@@ -189,7 +189,31 @@
 </div>
 
 <div class="card overflow-hidden mb-6">
-    <h3 class="card-title">Per-contact workflow progress</h3>
+    <div class="px-4 pt-4 pb-3 border-b border-gray-100">
+        <h3 class="card-title mb-3">Per-contact workflow progress</h3>
+        <form method="GET" action="/campaigns/{{$hybrid.CampaignID}}/analytics" class="flex flex-wrap gap-3 items-end">
+            <div class="flex-1 min-w-[160px]">
+                <label class="form-label">Search email</label>
+                <input type="search" name="q" class="form-input text-sm" value="{{$.contactPage.Query}}" placeholder="alice@…">
+            </div>
+            <div class="min-w-[150px]">
+                <label class="form-label">Sort</label>
+                <select name="sort" class="form-input text-sm">
+                    <option value="email" {{if eq $.contactPage.Sort "email"}}selected{{end}}>Email A–Z</option>
+                    <option value="opens" {{if eq $.contactPage.Sort "opens"}}selected{{end}}>Opens</option>
+                    <option value="clicks" {{if eq $.contactPage.Sort "clicks"}}selected{{end}}>Clicks</option>
+                    <option value="emails_sent" {{if eq $.contactPage.Sort "emails_sent"}}selected{{end}}>Emails sent</option>
+                    <option value="status" {{if eq $.contactPage.Sort "status"}}selected{{end}}>Status</option>
+                    <option value="replied" {{if eq $.contactPage.Sort "replied"}}selected{{end}}>Replied first</option>
+                </select>
+            </div>
+            <input type="hidden" name="ab_q" value="{{$.abContactPage.Query}}">
+            <input type="hidden" name="ab_sort" value="{{$.abContactPage.Sort}}">
+            <input type="hidden" name="ab_page" value="{{$.abContactPage.Page}}">
+            <button type="submit" class="btn-secondary text-sm">Apply</button>
+        </form>
+        <p class="text-xs text-gray-500 mt-2">{{$.contactPage.Total}} contacts · page {{$.contactPage.Page}} of {{$.contactPage.TotalPages}}</p>
+    </div>
     <table class="data-table">
         <thead>
             <tr>
@@ -213,9 +237,24 @@
             <td class="text-emerald-600">{{.ClickCount}}</td>
             <td>{{if .HasReplied}}<span class="badge badge-violet">Yes</span>{{else}}—{{end}}</td>
         </tr>
+        {{else}}
+        <tr><td colspan="7" class="text-sm text-gray-400 py-6 text-center">No contacts match.</td></tr>
         {{end}}
         </tbody>
     </table>
+    {{if gt $.contactPage.TotalPages 1}}
+    <div class="flex items-center justify-between px-4 py-3 border-t border-gray-100 text-sm">
+        <span class="text-gray-500">Page {{$.contactPage.Page}} of {{$.contactPage.TotalPages}}</span>
+        <div class="flex gap-2">
+            {{if $.contactPage.HasPrev}}
+            <a href="/campaigns/{{$hybrid.CampaignID}}/analytics?page={{$.contactPage.PrevPage}}&q={{$.contactPage.Query}}&sort={{$.contactPage.Sort}}&ab_q={{$.abContactPage.Query}}&ab_sort={{$.abContactPage.Sort}}&ab_page={{$.abContactPage.Page}}" class="btn-secondary text-xs">Previous</a>
+            {{end}}
+            {{if $.contactPage.HasNext}}
+            <a href="/campaigns/{{$hybrid.CampaignID}}/analytics?page={{$.contactPage.NextPage}}&q={{$.contactPage.Query}}&sort={{$.contactPage.Sort}}&ab_q={{$.abContactPage.Query}}&ab_sort={{$.abContactPage.Sort}}&ab_page={{$.abContactPage.Page}}" class="btn-secondary text-xs">Next</a>
+            {{end}}
+        </div>
+    </div>
+    {{end}}
 </div>
 </div>
 
@@ -313,7 +352,30 @@
 {{end}}
 
 <div class="card overflow-hidden">
-    <h3 class="card-title">Starter email per-contact results</h3>
+    <div class="px-4 pt-4 pb-3 border-b border-gray-100">
+        <h3 class="card-title mb-3">Starter email per-contact results</h3>
+        <form method="GET" action="/campaigns/{{$hybrid.CampaignID}}/analytics" class="flex flex-wrap gap-3 items-end">
+            <div class="flex-1 min-w-[160px]">
+                <label class="form-label">Search email</label>
+                <input type="search" name="ab_q" class="form-input text-sm" value="{{$.abContactPage.Query}}" placeholder="alice@…">
+            </div>
+            <div class="min-w-[150px]">
+                <label class="form-label">Sort</label>
+                <select name="ab_sort" class="form-input text-sm">
+                    <option value="email" {{if eq $.abContactPage.Sort "email"}}selected{{end}}>Email A–Z</option>
+                    <option value="opens" {{if eq $.abContactPage.Sort "opens"}}selected{{end}}>Opens</option>
+                    <option value="clicks" {{if eq $.abContactPage.Sort "clicks"}}selected{{end}}>Clicks</option>
+                    <option value="sent" {{if eq $.abContactPage.Sort "sent"}}selected{{end}}>Sent (newest)</option>
+                    <option value="engaged" {{if eq $.abContactPage.Sort "engaged"}}selected{{end}}>Engaged first</option>
+                </select>
+            </div>
+            <input type="hidden" name="q" value="{{$.contactPage.Query}}">
+            <input type="hidden" name="sort" value="{{$.contactPage.Sort}}">
+            <input type="hidden" name="page" value="{{$.contactPage.Page}}">
+            <button type="submit" class="btn-secondary text-sm">Apply</button>
+        </form>
+        <p class="text-xs text-gray-500 mt-2">{{$.abContactPage.Total}} contacts · page {{$.abContactPage.Page}} of {{$.abContactPage.TotalPages}}</p>
+    </div>
     <table class="data-table">
         <thead>
             <tr>
@@ -341,9 +403,24 @@
             <td class="text-sm">{{if .MinutesToFirstOpen}}{{printf "%.0f" .MinutesToFirstOpen}} min{{else}}—{{end}}</td>
             <td>{{if .SendID}}<a href="/sends/{{.SendID}}" class="text-brand-600 text-sm">View</a>{{end}}</td>
         </tr>
+        {{else}}
+        <tr><td colspan="9" class="text-sm text-gray-400 py-6 text-center">No contacts match.</td></tr>
         {{end}}
         </tbody>
     </table>
+    {{if gt $.abContactPage.TotalPages 1}}
+    <div class="flex items-center justify-between px-4 py-3 border-t border-gray-100 text-sm">
+        <span class="text-gray-500">Page {{$.abContactPage.Page}} of {{$.abContactPage.TotalPages}}</span>
+        <div class="flex gap-2">
+            {{if $.abContactPage.HasPrev}}
+            <a href="/campaigns/{{$hybrid.CampaignID}}/analytics?ab_page={{$.abContactPage.PrevPage}}&ab_q={{$.abContactPage.Query}}&ab_sort={{$.abContactPage.Sort}}&q={{$.contactPage.Query}}&sort={{$.contactPage.Sort}}&page={{$.contactPage.Page}}" class="btn-secondary text-xs">Previous</a>
+            {{end}}
+            {{if $.abContactPage.HasNext}}
+            <a href="/campaigns/{{$hybrid.CampaignID}}/analytics?ab_page={{$.abContactPage.NextPage}}&ab_q={{$.abContactPage.Query}}&ab_sort={{$.abContactPage.Sort}}&q={{$.contactPage.Query}}&sort={{$.contactPage.Sort}}&page={{$.contactPage.Page}}" class="btn-secondary text-xs">Next</a>
+            {{end}}
+        </div>
+    </div>
+    {{end}}
 </div>
 </div>
 

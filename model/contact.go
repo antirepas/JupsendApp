@@ -24,24 +24,32 @@ type ContactVariables struct {
 }
 
 type ContactListItem struct {
-	ID            int64
-	Email         string
-	Variables     []ContactVariables
-	CreatedAt     time.Time
-	Suppressed    bool
-	RepliedAt     *time.Time
-	ListNames     []string
-	VarPreview    string
-	ExtraVarCount int
+	ID               int64
+	Email            string
+	Variables        []ContactVariables
+	CreatedAt        time.Time
+	Suppressed       bool
+	RepliedAt        *time.Time
+	ListNames        []string
+	VarPreview       string
+	ExtraVarCount    int
+	LastCampaignID   int64
+	LastCampaignName string
+	LastSignal       string
+	LastActivity     *time.Time
 }
 
 type ContactListFilter struct {
-	Query       string
-	ListID      int64
-	Sort        string // newest, email
-	Page        int
-	PageSize    int
-	RepliedOnly bool
+	Query             string
+	ListID            int64
+	CampaignID        int64
+	ExcludeCampaignID int64 // omit contacts already on this campaign (picker)
+	Engagement        string // "", opened_no_reply, clicked_no_reply, replied, interested
+	Sort              string // newest, email
+	Page              int
+	PageSize          int
+	RepliedOnly       bool
+	Lite              bool // id+email only (no enrichment / variables)
 }
 
 type ContactListPage struct {
@@ -59,7 +67,7 @@ type ContactSummary struct {
 	Suppressed  bool
 	RepliedAt   *time.Time
 	RecentSends []EmailSendListItem
-	Campaigns   []string
+	Campaigns   []ContactCampaignRef
 }
 
 func (c *Contact) SaveContact(userID int64, variables []ContactVariables) (int64, error) {
@@ -168,12 +176,22 @@ func ListContactsFiltered(userID int64, f ContactListFilter) (ContactListPage, e
 		where = append(where, `c.id IN (SELECT contact_id FROM contact_list_members WHERE list_id = ?)`)
 		args = append(args, f.ListID)
 	}
+	if f.CampaignID > 0 {
+		where = append(where, campaignMembershipFilterSQL())
+		args = append(args, f.CampaignID, f.CampaignID)
+	}
+	if f.ExcludeCampaignID > 0 {
+		where = append(where, `c.id NOT IN (SELECT contact_id FROM campaign_contacts WHERE campaign_id = ?)`)
+		args = append(args, f.ExcludeCampaignID)
+	}
 	if q := strings.TrimSpace(f.Query); q != "" {
 		where = append(where, "LOWER(c.email) LIKE ?")
 		args = append(args, "%"+strings.ToLower(q)+"%")
 	}
-	if f.RepliedOnly {
+	if f.RepliedOnly || f.Engagement == "replied" {
 		where = append(where, "c.replied_at IS NOT NULL")
+	} else if clause, _ := engagementFilterSQL(f.Engagement); clause != "" {
+		where = append(where, "("+clause+")")
 	}
 
 	whereSQL := strings.Join(where, " AND ")
@@ -222,35 +240,46 @@ func ListContactsFiltered(userID int64, f ContactListFilter) (ContactListPage, e
 		items = append(items, item)
 	}
 
-	listMap, _ := GetListIDsForContacts(userID, contactIDs)
-	for i := range items {
-		for _, l := range listMap[items[i].ID] {
-			items[i].ListNames = append(items[i].ListNames, l.Name)
-		}
-		varRows, err := db.Query(`SELECT key, value FROM contact_variables WHERE contact_id = ?`, items[i].ID)
-		if err != nil {
-			continue
-		}
-		for varRows.Next() {
-			var cv ContactVariables
-			if err := varRows.Scan(&cv.Key, &cv.Value); err != nil {
-				varRows.Close()
-				break
+	listMap := map[int64][]ContactList{}
+	engMap := map[int64]ContactEngagement{}
+	if !f.Lite {
+		listMap, _ = GetListIDsForContacts(userID, contactIDs)
+		engMap, _ = EnrichContactsEngagement(userID, contactIDs)
+		for i := range items {
+			if eng, ok := engMap[items[i].ID]; ok {
+				items[i].LastCampaignID = eng.LastCampaignID
+				items[i].LastCampaignName = eng.LastCampaignName
+				items[i].LastSignal = eng.LastSignal
+				items[i].LastActivity = eng.LastActivity
 			}
-			cv.ContactID = items[i].ID
-			items[i].Variables = append(items[i].Variables, cv)
-		}
-		varRows.Close()
-		if len(items[i].Variables) > 0 {
-			parts := []string{}
-			for j, cv := range items[i].Variables {
-				if j >= 2 {
-					items[i].ExtraVarCount = len(items[i].Variables) - 2
+			for _, l := range listMap[items[i].ID] {
+				items[i].ListNames = append(items[i].ListNames, l.Name)
+			}
+			varRows, err := db.Query(`SELECT key, value FROM contact_variables WHERE contact_id = ?`, items[i].ID)
+			if err != nil {
+				continue
+			}
+			for varRows.Next() {
+				var cv ContactVariables
+				if err := varRows.Scan(&cv.Key, &cv.Value); err != nil {
+					varRows.Close()
 					break
 				}
-				parts = append(parts, cv.Key+"="+cv.Value)
+				cv.ContactID = items[i].ID
+				items[i].Variables = append(items[i].Variables, cv)
 			}
-			items[i].VarPreview = strings.Join(parts, ", ")
+			varRows.Close()
+			if len(items[i].Variables) > 0 {
+				parts := []string{}
+				for j, cv := range items[i].Variables {
+					if j >= 2 {
+						items[i].ExtraVarCount = len(items[i].Variables) - 2
+						break
+					}
+					parts = append(parts, cv.Key+"="+cv.Value)
+				}
+				items[i].VarPreview = strings.Join(parts, ", ")
+			}
 		}
 	}
 
@@ -296,17 +325,17 @@ func GetContactSummary(userID, contactID int64) (ContactSummary, error) {
 	sends, _ := ListEmailSendsForContact(userID, contactID, 10)
 
 	campaignRows, _ := db.Query(`
-		SELECT DISTINCT camp.name FROM campaign_contacts cc
+		SELECT DISTINCT camp.id, camp.name FROM campaign_contacts cc
 		INNER JOIN campaigns camp ON camp.id = cc.campaign_id
 		WHERE cc.contact_id = ? AND camp.user_id = ?
 		ORDER BY camp.name
 	`, contactID, userID)
-	var campaigns []string
+	var campaigns []ContactCampaignRef
 	if campaignRows != nil {
 		for campaignRows.Next() {
-			var name string
-			if err := campaignRows.Scan(&name); err == nil {
-				campaigns = append(campaigns, name)
+			var ref ContactCampaignRef
+			if err := campaignRows.Scan(&ref.ID, &ref.Name); err == nil {
+				campaigns = append(campaigns, ref)
 			}
 		}
 		campaignRows.Close()

@@ -193,7 +193,27 @@
 {{end}}
 
 <div class="card overflow-hidden mb-8">
-    <h3 class="card-title">Per-contact engagement</h3>
+    <div class="px-4 pt-4 pb-3 border-b border-gray-100">
+        <h3 class="card-title mb-3">Per-contact engagement</h3>
+        <form method="GET" action="/campaigns/{{.analytics.CampaignID}}/analytics" class="flex flex-wrap gap-3 items-end">
+            <div class="flex-1 min-w-[160px]">
+                <label class="form-label">Search email</label>
+                <input type="search" name="q" class="form-input text-sm" value="{{.contactPage.Query}}" placeholder="alice@…">
+            </div>
+            <div class="min-w-[150px]">
+                <label class="form-label">Sort</label>
+                <select name="sort" class="form-input text-sm">
+                    <option value="email" {{if eq .contactPage.Sort "email"}}selected{{end}}>Email A–Z</option>
+                    <option value="opens" {{if eq .contactPage.Sort "opens"}}selected{{end}}>Opens (high→low)</option>
+                    <option value="clicks" {{if eq .contactPage.Sort "clicks"}}selected{{end}}>Clicks (high→low)</option>
+                    <option value="sent" {{if eq .contactPage.Sort "sent"}}selected{{end}}>Sent (newest)</option>
+                    <option value="engaged" {{if eq .contactPage.Sort "engaged"}}selected{{end}}>Engaged first</option>
+                </select>
+            </div>
+            <button type="submit" class="btn-secondary text-sm">Apply</button>
+        </form>
+        <p class="text-xs text-gray-500 mt-2">{{.contactPage.Total}} contacts · page {{.contactPage.Page}} of {{.contactPage.TotalPages}}</p>
+    </div>
     <table class="data-table">
         <thead>
             <tr>
@@ -223,9 +243,24 @@
             <td class="text-sm">{{if .LastActivityAt}}{{.LastActivityAt.Format "Jan 2, 15:04"}}{{else}}—{{end}}</td>
             <td>{{if .SendID}}<a href="/sends/{{.SendID}}" class="text-brand-600 text-sm">View</a>{{end}}</td>
         </tr>
+        {{else}}
+        <tr><td colspan="10" class="text-sm text-gray-400 py-6 text-center">No contacts match.</td></tr>
         {{end}}
         </tbody>
     </table>
+    {{if gt .contactPage.TotalPages 1}}
+    <div class="flex items-center justify-between px-4 py-3 border-t border-gray-100 text-sm">
+        <span class="text-gray-500">Page {{.contactPage.Page}} of {{.contactPage.TotalPages}}</span>
+        <div class="flex gap-2">
+            {{if .contactPage.HasPrev}}
+            <a href="/campaigns/{{.analytics.CampaignID}}/analytics?page={{.contactPage.PrevPage}}&q={{.contactPage.Query}}&sort={{.contactPage.Sort}}" class="btn-secondary text-xs">Previous</a>
+            {{end}}
+            {{if .contactPage.HasNext}}
+            <a href="/campaigns/{{.analytics.CampaignID}}/analytics?page={{.contactPage.NextPage}}&q={{.contactPage.Query}}&sort={{.contactPage.Sort}}" class="btn-secondary text-xs">Next</a>
+            {{end}}
+        </div>
+    </div>
+    {{end}}
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>

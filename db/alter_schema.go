@@ -107,6 +107,12 @@ func runAlterSchema() {
 		// Allow campaigns to be stopped mid-flight (cancel queued sends).
 		`ALTER TABLE campaigns DROP CONSTRAINT IF EXISTS campaigns_status_check`,
 		`ALTER TABLE campaigns ADD CONSTRAINT campaigns_status_check CHECK (status IN ('draft', 'sent', 'stopped'))`,
+		`CREATE TABLE IF NOT EXISTS contact_interested_dismissed (
+			user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			contact_id BIGINT NOT NULL REFERENCES contact(id) ON DELETE CASCADE,
+			dismissed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY (user_id, contact_id)
+		)`,
 	}
 	for _, stmt := range alters {
 		if _, err := DB.Exec(stmt); err != nil {

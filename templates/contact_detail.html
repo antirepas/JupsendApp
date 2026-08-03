@@ -52,7 +52,9 @@
     <h3 class="card-title">Campaigns</h3>
     {{if .summary.Campaigns}}
     <ul class="text-sm space-y-1">
-        {{range .summary.Campaigns}}<li>{{.}}</li>{{end}}
+        {{range .summary.Campaigns}}
+        <li><a href="/campaigns/{{.ID}}" class="text-brand-600 hover:underline">{{.Name}}</a></li>
+        {{end}}
     </ul>
     {{else}}
     <p class="text-gray-400 text-sm">Not in any campaign yet</p>
@@ -63,11 +65,12 @@
     <h3 class="card-title">Recent sends</h3>
     {{if .summary.RecentSends}}
     <table class="data-table">
-        <thead><tr><th>Template</th><th>Status</th><th>Opens</th><th>Clicks</th><th>When</th></tr></thead>
+        <thead><tr><th>Template</th><th>Campaign</th><th>Status</th><th>Opens</th><th>Clicks</th><th>When</th></tr></thead>
         <tbody>
             {{range .summary.RecentSends}}
             <tr>
                 <td>{{.TemplateName}}</td>
+                <td class="text-sm">{{if .CampaignID}}<a href="/campaigns/{{.CampaignID}}" class="text-brand-600 hover:underline">{{.CampaignName}}</a>{{else}}—{{end}}</td>
                 <td><span class="badge badge-gray">{{.DeliveryStatus}}</span></td>
                 <td>{{.OpenCount}}</td>
                 <td>{{.ClickCount}}</td>

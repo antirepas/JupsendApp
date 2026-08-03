@@ -211,7 +211,23 @@ func CampaignDetailPage(ctx *gin.Context) {
 		return
 	}
 
-	pageExtras, err := loadCampaignDetailPageData(userID, detail)
+	page, _ := strconv.Atoi(ctx.DefaultQuery("picker_page", "1"))
+	listID, _ := strconv.ParseInt(ctx.Query("picker_list"), 10, 64)
+	pickerFilter := model.ContactListFilter{
+		Query:      ctx.Query("picker_q"),
+		ListID:     listID,
+		Engagement: ctx.Query("picker_engagement"),
+		Sort:       ctx.DefaultQuery("picker_sort", "email"),
+		Page:       page,
+		PageSize:   50,
+		Lite:       true,
+	}
+	addTab := ctx.DefaultQuery("add_tab", "list")
+	if pickerFilter.Query != "" || listID > 0 || pickerFilter.Engagement != "" || page > 1 {
+		addTab = "select"
+	}
+
+	pageExtras, err := loadCampaignDetailPageData(userID, detail, pickerFilter)
 	if err != nil {
 		log.Print(err)
 		ctx.HTML(http.StatusInternalServerError, "error.html", gin.H{"title": "Error", "active": "campaigns", "error": "Failed to load campaign"})
@@ -232,18 +248,29 @@ func CampaignDetailPage(ctx *gin.Context) {
 		scheduledAtLocal = detail.ScheduledAt.Format("2006-01-02T15:04")
 	}
 
+	pickerPage := pageExtras.PickerPage
 	pageData := gin.H{
-		"title":            detail.Name,
-		"active":           "campaigns",
-		"campaign":         detail,
-		"allContacts":      pageExtras.AllContacts,
-		"contactLists":     pageExtras.ContactLists,
-		"linkedListID":     detail.ContactListID,
-		"scheduledAtLocal": scheduledAtLocal,
-		"success":          ctx.Query("success"),
-		"error":            ctx.Query("error"),
-		"isWorkflow":       isWorkflow,
-		"canStop":          canStop,
+		"title":             detail.Name,
+		"active":            "campaigns",
+		"campaign":          detail,
+		"pickerContacts":    pickerPage.Items,
+		"pickerPage":        pickerPage,
+		"pickerQ":           pickerFilter.Query,
+		"pickerList":        listID,
+		"pickerEngagement":  pickerFilter.Engagement,
+		"pickerSort":        pickerFilter.Sort,
+		"pickerHasPrev":     pickerPage.Page > 1,
+		"pickerHasNext":     pickerPage.Page < pickerPage.TotalPages,
+		"pickerPrevPage":    pickerPage.Page - 1,
+		"pickerNextPage":    pickerPage.Page + 1,
+		"addTab":            addTab,
+		"contactLists":      pageExtras.ContactLists,
+		"linkedListID":      detail.ContactListID,
+		"scheduledAtLocal":  scheduledAtLocal,
+		"success":           ctx.Query("success"),
+		"error":             ctx.Query("error"),
+		"isWorkflow":        isWorkflow,
+		"canStop":           canStop,
 	}
 
 	if isWorkflow {
@@ -298,6 +325,9 @@ func CampaignAnalyticsPage(ctx *gin.Context) {
 		return
 	}
 
+	contactFilter := parseAnalyticsContactFilter(ctx, "")
+	abFilter := parseAnalyticsContactFilter(ctx, "ab_")
+
 	if (campaign.ExecutionMode == "workflow" || campaign.ExecutionMode == "workflow_ab") && campaign.WorkflowVersionID > 0 {
 		if campaign.ExecutionMode == "workflow_ab" && campaign.TemplateBID > 0 {
 			analytics, err := model.GetCampaignHybridAnalyticsFor(campaign, userID)
@@ -306,12 +336,18 @@ func CampaignAnalyticsPage(ctx *gin.Context) {
 				ctx.HTML(http.StatusNotFound, "error.html", gin.H{"title": "Error", "active": "campaigns", "error": "Campaign not found"})
 				return
 			}
+			wfContacts, wfPage := model.PageWorkflowContactRows(analytics.Workflow.Contacts, contactFilter)
+			analytics.Workflow.Contacts = wfContacts
+			abContacts, abPage := model.PageContactEngagementRows(analytics.StarterAB.Contacts, abFilter)
+			analytics.StarterAB.Contacts = abContacts
 			ctx.HTML(http.StatusOK, "campaigns_hybrid_analytics.html", gin.H{
-				"title":                    analytics.CampaignName + " Analytics",
-				"active":                   "campaigns",
-				"analytics":                analytics,
-				"experimentVariableLabel":  experimentVariableLabel(campaign.ExperimentVariable),
-				"isPro":                    model.UserIsPro(userID),
+				"title":                   analytics.CampaignName + " Analytics",
+				"active":                  "campaigns",
+				"analytics":               analytics,
+				"experimentVariableLabel": experimentVariableLabel(campaign.ExperimentVariable),
+				"isPro":                   model.UserIsPro(userID),
+				"contactPage":             wfPage,
+				"abContactPage":           abPage,
 			})
 			return
 		}
@@ -321,11 +357,14 @@ func CampaignAnalyticsPage(ctx *gin.Context) {
 			ctx.HTML(http.StatusNotFound, "error.html", gin.H{"title": "Error", "active": "campaigns", "error": "Campaign not found"})
 			return
 		}
+		contacts, contactPage := model.PageWorkflowContactRows(analytics.Contacts, contactFilter)
+		analytics.Contacts = contacts
 		ctx.HTML(http.StatusOK, "campaigns_workflow_analytics.html", gin.H{
-			"title":     analytics.CampaignName + " Analytics",
-			"active":    "campaigns",
-			"analytics": analytics,
-			"isPro":     model.UserIsPro(userID),
+			"title":       analytics.CampaignName + " Analytics",
+			"active":      "campaigns",
+			"analytics":   analytics,
+			"isPro":       model.UserIsPro(userID),
+			"contactPage": contactPage,
 		})
 		return
 	}
@@ -336,13 +375,27 @@ func CampaignAnalyticsPage(ctx *gin.Context) {
 		ctx.HTML(http.StatusNotFound, "error.html", gin.H{"title": "Error", "active": "campaigns", "error": "Campaign not found"})
 		return
 	}
+	contacts, contactPage := model.PageContactEngagementRows(analytics.Contacts, contactFilter)
+	analytics.Contacts = contacts
 
 	ctx.HTML(http.StatusOK, "campaigns_analytics.html", gin.H{
-		"title":     analytics.Name + " Analytics",
-		"active":    "campaigns",
-		"analytics": analytics,
-		"isPro":     model.UserIsPro(userID),
+		"title":       analytics.Name + " Analytics",
+		"active":      "campaigns",
+		"analytics":   analytics,
+		"isPro":       model.UserIsPro(userID),
+		"contactPage": contactPage,
 	})
+}
+
+func parseAnalyticsContactFilter(ctx *gin.Context, prefix string) model.AnalyticsContactFilter {
+	page, _ := strconv.Atoi(ctx.DefaultQuery(prefix+"page", "1"))
+	pageSize, _ := strconv.Atoi(ctx.DefaultQuery(prefix+"page_size", "50"))
+	return model.AnalyticsContactFilter{
+		Query:    ctx.Query(prefix + "q"),
+		Sort:     ctx.DefaultQuery(prefix+"sort", "email"),
+		Page:     page,
+		PageSize: pageSize,
+	}
 }
 
 func AddCampaignContacts(ctx *gin.Context) {

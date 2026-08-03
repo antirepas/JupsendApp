@@ -42,6 +42,25 @@
                 {{end}}
             </select>
         </div>
+        <div class="min-w-[160px]">
+            <label class="form-label">Campaign</label>
+            <select name="campaign" class="form-input">
+                <option value="">All campaigns</option>
+                {{range .campaigns}}
+                <option value="{{.ID}}" {{if eq $.filterCampaign .ID}}selected{{end}}>{{.Name}}</option>
+                {{end}}
+            </select>
+        </div>
+        <div class="min-w-[180px]">
+            <label class="form-label">Engagement</label>
+            <select name="engagement" class="form-input">
+                <option value="" {{if eq .filterEngagement ""}}selected{{end}}>Any</option>
+                <option value="opened_no_reply" {{if eq .filterEngagement "opened_no_reply"}}selected{{end}}>Opened, no reply (7d)</option>
+                <option value="clicked_no_reply" {{if eq .filterEngagement "clicked_no_reply"}}selected{{end}}>Clicked, no reply</option>
+                <option value="replied" {{if eq .filterEngagement "replied"}}selected{{end}}>Replied</option>
+                <option value="interested" {{if eq .filterEngagement "interested"}}selected{{end}}>Interested (90d)</option>
+            </select>
+        </div>
         <div class="min-w-[140px]">
             <label class="form-label">Sort</label>
             <select name="sort" class="form-input">
@@ -54,6 +73,13 @@
         </div>
         <button type="submit" class="btn-secondary">Filter</button>
     </form>
+    <div class="flex flex-wrap gap-2 mt-3 text-xs">
+        <span class="text-gray-400 self-center">Presets:</span>
+        <a class="badge badge-gray" href="/contacts?tab=all&engagement=opened_no_reply">Opened, no reply</a>
+        <a class="badge badge-gray" href="/contacts?tab=all&engagement=clicked_no_reply">Clicked, no reply</a>
+        <a class="badge badge-gray" href="/contacts?tab=all&engagement=replied">Replied</a>
+        <a class="badge badge-gray" href="/contacts?tab=all&engagement=interested">Interested</a>
+    </div>
     <form method="POST" action="/contacts/validate" class="mt-3">
         <button type="submit" class="btn-secondary text-sm">Validate all emails (syntax + MX)</button>
     </form>
@@ -72,6 +98,8 @@
             <tr>
                 <th class="w-10"></th>
                 <th>Email</th>
+                <th>Last campaign</th>
+                <th>Last signal</th>
                 <th>Lists</th>
                 <th>Variables</th>
                 <th class="text-right">Actions</th>
@@ -85,6 +113,14 @@
                     <a href="/contacts/{{.ID}}" class="text-brand-600 hover:underline">{{.Email}}</a>
                     {{if .Suppressed}}<span class="badge badge-red ml-1">suppressed</span>{{end}}
                     {{if .RepliedAt}}<span class="badge badge-green ml-1">replied</span>{{end}}
+                </td>
+                <td class="text-sm">
+                    {{if .LastCampaignID}}<a href="/campaigns/{{.LastCampaignID}}" class="text-brand-600 hover:underline">{{.LastCampaignName}}</a>
+                    {{else}}<span class="text-gray-400">—</span>{{end}}
+                </td>
+                <td class="text-sm text-gray-600">
+                    {{if and .LastSignal (ne .LastSignal "none")}}{{.LastSignal}}{{if .LastActivity}} <span class="text-gray-400">· {{.LastActivity.Format "Jan 2"}}</span>{{end}}
+                    {{else}}<span class="text-gray-400">—</span>{{end}}
                 </td>
                 <td class="text-sm">
                     {{if .ListNames}}
@@ -107,10 +143,10 @@
         <span class="text-gray-500">Page {{.contactPage.Page}} of {{.contactPage.TotalPages}}</span>
         <div class="flex gap-2">
             {{if .hasPrev}}
-            <a href="/contacts?tab=all&page={{.prevPage}}&q={{.filterQ}}&list={{.filterList}}&sort={{.filterSort}}" class="btn-secondary text-xs">Previous</a>
+            <a href="/contacts?tab=all&page={{.prevPage}}&q={{.filterQ}}&list={{.filterList}}&campaign={{.filterCampaign}}&engagement={{.filterEngagement}}&sort={{.filterSort}}{{if .filterReplied}}&replied=1{{end}}" class="btn-secondary text-xs">Previous</a>
             {{end}}
             {{if .hasNext}}
-            <a href="/contacts?tab=all&page={{.nextPage}}&q={{.filterQ}}&list={{.filterList}}&sort={{.filterSort}}" class="btn-secondary text-xs">Next</a>
+            <a href="/contacts?tab=all&page={{.nextPage}}&q={{.filterQ}}&list={{.filterList}}&campaign={{.filterCampaign}}&engagement={{.filterEngagement}}&sort={{.filterSort}}{{if .filterReplied}}&replied=1{{end}}" class="btn-secondary text-xs">Next</a>
             {{end}}
         </div>
     </div>

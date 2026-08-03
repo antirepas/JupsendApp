@@ -324,11 +324,15 @@ func InterestedContactsPage(ctx *gin.Context) {
 		ctx.HTML(http.StatusInternalServerError, "error.html", gin.H{"title": "Error", "active": "contacts", "error": "Failed to load interested contacts"})
 		return
 	}
+	lists, _ := model.ListContactLists(userID)
 	ctx.HTML(http.StatusOK, "contacts_interested.html", gin.H{
-		"title":            "Interested contacts",
-		"active":           "interested",
-		"contacts":         contacts,
-		"interestedCount":  len(contacts),
+		"title":           "Interested contacts",
+		"active":          "interested",
+		"contacts":        contacts,
+		"interestedCount": len(contacts),
+		"lists":           lists,
+		"success":         ctx.Query("success"),
+		"error":           ctx.Query("error"),
 	})
 }
 
@@ -337,10 +341,14 @@ func ListContactsPage(ctx *gin.Context) {
 	tab := ctx.DefaultQuery("tab", "all")
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 	listID, _ := strconv.ParseInt(ctx.Query("list"), 10, 64)
+	campaignID, _ := strconv.ParseInt(ctx.Query("campaign"), 10, 64)
+	engagement := ctx.Query("engagement")
 
 	filter := model.ContactListFilter{
 		Query:       ctx.Query("q"),
 		ListID:      listID,
+		CampaignID:  campaignID,
+		Engagement:  engagement,
 		Sort:        ctx.DefaultQuery("sort", "newest"),
 		Page:        page,
 		PageSize:    50,
@@ -355,6 +363,7 @@ func ListContactsPage(ctx *gin.Context) {
 
 	templates, _ := model.ListTemplates(userID)
 	lists, _ := model.ListContactLists(userID)
+	campaigns, _ := model.ListCampaigns(userID)
 	suppressions, _ := model.ListSuppressions(userID)
 	allContacts, _ := model.ListContacts(userID)
 
@@ -364,25 +373,28 @@ func ListContactsPage(ctx *gin.Context) {
 	hasNext := page < contactPage.TotalPages
 
 	ctx.HTML(http.StatusOK, "contacts_list.html", gin.H{
-		"title":        "Contacts",
-		"active":       "contacts",
-		"tab":          tab,
-		"contacts":     contactPage.Items,
-		"allContacts":  allContacts,
-		"contactPage":  contactPage,
-		"templates":    templates,
-		"lists":        lists,
-		"suppressions": suppressions,
-		"filterQ":       filter.Query,
-		"filterList":    listID,
-		"filterSort":    filter.Sort,
-		"filterReplied": filter.RepliedOnly,
-		"prevPage":      prevPage,
-		"nextPage":     nextPage,
-		"hasPrev":      hasPrev,
-		"hasNext":      hasNext,
-		"success":      ctx.Query("success"),
-		"error":        ctx.Query("error"),
+		"title":            "Contacts",
+		"active":           "contacts",
+		"tab":              tab,
+		"contacts":         contactPage.Items,
+		"allContacts":      allContacts,
+		"contactPage":      contactPage,
+		"templates":        templates,
+		"lists":            lists,
+		"campaigns":        campaigns,
+		"suppressions":     suppressions,
+		"filterQ":          filter.Query,
+		"filterList":       listID,
+		"filterCampaign":   campaignID,
+		"filterEngagement": engagement,
+		"filterSort":       filter.Sort,
+		"filterReplied":    filter.RepliedOnly,
+		"prevPage":         prevPage,
+		"nextPage":         nextPage,
+		"hasPrev":          hasPrev,
+		"hasNext":          hasNext,
+		"success":          ctx.Query("success"),
+		"error":            ctx.Query("error"),
 	})
 }
 

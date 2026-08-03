@@ -6,15 +6,20 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"emailtracker.com/db"
 )
 
 // ListContactRow is a contact with variables for list detail views.
 type ListContactRow struct {
-	ID        int64
-	Email     string
-	Variables map[string]string
+	ID               int64
+	Email            string
+	Variables        map[string]string
+	LastCampaignID   int64
+	LastCampaignName string
+	LastSignal       string
+	LastActivity     *time.Time
 }
 
 func parseVariableSchema(raw sql.NullString) []string {
@@ -94,6 +99,24 @@ func setListVariableSchema(listID, userID int64, keys []string) error {
 	}
 	_, err = db.Exec(`UPDATE contact_lists SET variable_schema = ? WHERE id = ? AND user_id = ?`, encoded, listID, userID)
 	return err
+}
+
+// SetListVariableSchema updates the list's required variable keys (exported for routes).
+func SetListVariableSchema(listID, userID int64, keys []string) error {
+	if _, err := GetContactListForUser(listID, userID); err != nil {
+		return err
+	}
+	return setListVariableSchema(listID, userID, keys)
+}
+
+// ParseSchemaKeysInput splits comma/newline/space-separated variable key names.
+func ParseSchemaKeysInput(raw string) []string {
+	raw = strings.ReplaceAll(raw, "\n", ",")
+	raw = strings.ReplaceAll(raw, ";", ",")
+	parts := strings.FieldsFunc(raw, func(r rune) bool {
+		return r == ',' || r == ' ' || r == '\t'
+	})
+	return sortedUniqueKeys(parts)
 }
 
 // ValidateVariableKeysForList checks contact keys against the list schema.
@@ -193,6 +216,11 @@ func addContactToListValidated(listID, userID, contactID int64) error {
 
 // ListContactsInList returns members and the column keys to display.
 func ListContactsInList(listID, userID int64) (list ContactList, rows []ListContactRow, columns []string, err error) {
+	return ListContactsInListFiltered(listID, userID, "")
+}
+
+// ListContactsInListFiltered returns members optionally filtered by email search.
+func ListContactsInListFiltered(listID, userID int64, query string) (list ContactList, rows []ListContactRow, columns []string, err error) {
 	list, err = GetContactListForUser(listID, userID)
 	if err != nil {
 		return list, nil, nil, err
@@ -202,13 +230,19 @@ func ListContactsInList(listID, userID int64) (list ContactList, rows []ListCont
 		return list, nil, nil, err
 	}
 
-	memberRows, err := db.Query(`
+	sqlQuery := `
 		SELECT c.id, c.email
 		FROM contact_list_members m
 		INNER JOIN contact c ON c.id = m.contact_id
-		WHERE m.list_id = ? AND c.user_id = ?
-		ORDER BY c.email ASC
-	`, listID, userID)
+		WHERE m.list_id = ? AND c.user_id = ?`
+	args := []interface{}{listID, userID}
+	if q := strings.TrimSpace(query); q != "" {
+		sqlQuery += ` AND LOWER(c.email) LIKE ?`
+		args = append(args, "%"+strings.ToLower(q)+"%")
+	}
+	sqlQuery += ` ORDER BY c.email ASC`
+
+	memberRows, err := db.Query(sqlQuery, args...)
 	if err != nil {
 		return list, nil, nil, err
 	}
@@ -219,6 +253,7 @@ func ListContactsInList(listID, userID int64) (list ContactList, rows []ListCont
 		colSet[k] = true
 	}
 
+	var ids []int64
 	for memberRows.Next() {
 		var row ListContactRow
 		if err := memberRows.Scan(&row.ID, &row.Email); err != nil {
@@ -235,6 +270,7 @@ func ListContactsInList(listID, userID int64) (list ContactList, rows []ListCont
 				colSet[v.Key] = true
 			}
 		}
+		ids = append(ids, row.ID)
 		rows = append(rows, row)
 	}
 	if len(columns) == 0 {
@@ -242,6 +278,15 @@ func ListContactsInList(listID, userID int64) (list ContactList, rows []ListCont
 			columns = append(columns, k)
 		}
 		sort.Strings(columns)
+	}
+	engMap, _ := EnrichContactsEngagement(userID, ids)
+	for i := range rows {
+		if eng, ok := engMap[rows[i].ID]; ok {
+			rows[i].LastCampaignID = eng.LastCampaignID
+			rows[i].LastCampaignName = eng.LastCampaignName
+			rows[i].LastSignal = eng.LastSignal
+			rows[i].LastActivity = eng.LastActivity
+		}
 	}
 	return list, rows, columns, nil
 }

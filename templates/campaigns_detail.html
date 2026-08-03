@@ -352,14 +352,14 @@
 <div class="card mb-6">
     <h3 class="card-title">Add contacts</h3>
     <div class="flex gap-1 border-b border-gray-200 mb-4" id="contact-tabs">
-        <button type="button" class="tab-btn active" data-tab="list">From list</button>
-        <button type="button" class="tab-btn" data-tab="select">Select existing</button>
+        <button type="button" class="tab-btn {{if ne .addTab "select"}}active{{end}}" data-tab="list">From list</button>
+        <button type="button" class="tab-btn {{if eq .addTab "select"}}active{{end}}" data-tab="select">Select existing</button>
         {{if not .isWorkflow}}
         <button type="button" class="tab-btn" data-tab="paste">Paste</button>
         <button type="button" class="tab-btn" data-tab="upload">Upload file</button>
         {{end}}
     </div>
-    <div id="tab-list" class="contact-tab-panel">
+    <div id="tab-list" class="contact-tab-panel {{if eq .addTab "select"}}hidden{{end}}">
         {{if .contactLists}}
         <form method="POST" action="/campaigns/{{.campaign.ID}}/add-list" class="flex flex-wrap gap-3 items-end">
             <div class="flex-1 min-w-[200px]">
@@ -383,23 +383,70 @@
         <p class="text-sm text-gray-500">No lists yet. <a href="/contacts?tab=lists" class="text-brand-600">Create a list</a> first.</p>
         {{end}}
     </div>
-    <div id="tab-select" class="contact-tab-panel hidden">
-        <input type="search" id="contact-search" class="form-input text-sm mb-2" placeholder="Search contacts…">
+    <div id="tab-select" class="contact-tab-panel {{if ne .addTab "select"}}hidden{{end}}">
+        <form method="GET" action="/campaigns/{{.campaign.ID}}" class="flex flex-wrap gap-3 items-end mb-3">
+            <input type="hidden" name="add_tab" value="select">
+            <div class="flex-1 min-w-[160px]">
+                <label class="form-label">Search email</label>
+                <input type="search" name="picker_q" class="form-input text-sm" value="{{.pickerQ}}" placeholder="alice@…">
+            </div>
+            <div class="min-w-[150px]">
+                <label class="form-label">List</label>
+                <select name="picker_list" class="form-input text-sm">
+                    <option value="">All lists</option>
+                    {{range .contactLists}}
+                    <option value="{{.ID}}" {{if eq $.pickerList .ID}}selected{{end}}>{{.Name}}</option>
+                    {{end}}
+                </select>
+            </div>
+            <div class="min-w-[170px]">
+                <label class="form-label">Engagement</label>
+                <select name="picker_engagement" class="form-input text-sm">
+                    <option value="" {{if eq .pickerEngagement ""}}selected{{end}}>Any</option>
+                    <option value="opened_no_reply" {{if eq .pickerEngagement "opened_no_reply"}}selected{{end}}>Opened, no reply</option>
+                    <option value="clicked_no_reply" {{if eq .pickerEngagement "clicked_no_reply"}}selected{{end}}>Clicked, no reply</option>
+                    <option value="replied" {{if eq .pickerEngagement "replied"}}selected{{end}}>Replied</option>
+                    <option value="interested" {{if eq .pickerEngagement "interested"}}selected{{end}}>Interested</option>
+                </select>
+            </div>
+            <div class="min-w-[130px]">
+                <label class="form-label">Sort</label>
+                <select name="picker_sort" class="form-input text-sm">
+                    <option value="email" {{if eq .pickerSort "email"}}selected{{end}}>Email A–Z</option>
+                    <option value="newest" {{if eq .pickerSort "newest"}}selected{{end}}>Newest</option>
+                </select>
+            </div>
+            <button type="submit" class="btn-secondary text-sm">Filter</button>
+        </form>
+        <p class="text-xs text-gray-500 mb-2">Showing contacts not already on this campaign ({{.pickerPage.Total}} match).</p>
         <form method="POST" action="/campaigns/{{.campaign.ID}}/contacts" class="space-y-2">
             <div class="flex gap-2 mb-2">
-                <button type="button" id="select-all-visible" class="text-sm text-brand-600 font-medium">Select all visible</button>
+                <button type="button" id="select-all-visible" class="text-sm text-brand-600 font-medium">Select all on page</button>
                 <button type="button" id="clear-selection" class="text-sm text-gray-500">Clear</button>
             </div>
-            <div class="max-h-48 overflow-y-auto border border-gray-200 rounded-lg p-2 space-y-1" id="contact-checkboxes">
-                {{range .allContacts}}
+            <div class="max-h-56 overflow-y-auto border border-gray-200 rounded-lg p-2 space-y-1" id="contact-checkboxes">
+                {{range .pickerContacts}}
                 <label class="flex items-center gap-2 text-sm p-1 hover:bg-ivory rounded contact-pick" data-email="{{.Email}}">
                     <input type="checkbox" name="contact_ids" value="{{.ID}}">
                     <span>{{.Email}}</span>
                 </label>
                 {{else}}
-                <p class="text-gray-400 text-sm">No contacts yet — use a list or select existing.</p>
+                <p class="text-gray-400 text-sm">No contacts match these filters (or all matching contacts are already on the campaign).</p>
                 {{end}}
             </div>
+            {{if gt .pickerPage.TotalPages 1}}
+            <div class="flex items-center justify-between text-sm text-gray-500">
+                <span>Page {{.pickerPage.Page}} of {{.pickerPage.TotalPages}}</span>
+                <div class="flex gap-2">
+                    {{if .pickerHasPrev}}
+                    <a href="/campaigns/{{.campaign.ID}}?add_tab=select&picker_page={{.pickerPrevPage}}&picker_q={{.pickerQ}}&picker_list={{.pickerList}}&picker_engagement={{.pickerEngagement}}&picker_sort={{.pickerSort}}" class="btn-secondary text-xs">Previous</a>
+                    {{end}}
+                    {{if .pickerHasNext}}
+                    <a href="/campaigns/{{.campaign.ID}}?add_tab=select&picker_page={{.pickerNextPage}}&picker_q={{.pickerQ}}&picker_list={{.pickerList}}&picker_engagement={{.pickerEngagement}}&picker_sort={{.pickerSort}}" class="btn-secondary text-xs">Next</a>
+                    {{end}}
+                </div>
+            </div>
+            {{end}}
             <button type="submit" class="btn-primary text-sm">Add selected</button>
         </form>
     </div>
@@ -446,23 +493,8 @@ document.querySelectorAll('#contact-tabs .tab-btn').forEach(btn => {
         if (panel) panel.classList.remove('hidden');
     });
 });
-const searchInput = document.getElementById('contact-search');
-if (searchInput) {
-    searchInput.addEventListener('input', () => {
-        const q = searchInput.value.toLowerCase();
-        document.querySelectorAll('.contact-pick').forEach(row => {
-            const email = (row.dataset.email || '').toLowerCase();
-            row.style.display = email.includes(q) ? '' : 'none';
-        });
-    });
-}
 document.getElementById('select-all-visible')?.addEventListener('click', () => {
-    document.querySelectorAll('.contact-pick').forEach(row => {
-        if (row.style.display !== 'none') {
-            const cb = row.querySelector('input[type=checkbox]');
-            if (cb) cb.checked = true;
-        }
-    });
+    document.querySelectorAll('#contact-checkboxes input[type=checkbox]').forEach(cb => { cb.checked = true; });
 });
 document.getElementById('clear-selection')?.addEventListener('click', () => {
     document.querySelectorAll('#contact-checkboxes input[type=checkbox]').forEach(cb => { cb.checked = false; });

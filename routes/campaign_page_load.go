@@ -10,7 +10,7 @@ import (
 
 type campaignDetailPageData struct {
 	ContactIDs          []int64
-	AllContacts         []model.ContactListItem
+	PickerPage          model.ContactListPage
 	ContactLists        []model.ContactList
 	WorkflowInfo        model.WorkflowVersionInfo
 	WorkflowGraphTree   model.CampaignWorkflowGraphNode
@@ -42,10 +42,19 @@ func campaignFromDetail(d model.CampaignDetail) model.Campaign {
 	}
 }
 
-func loadCampaignDetailPageData(userID int64, detail model.CampaignDetail) (campaignDetailPageData, error) {
+func loadCampaignDetailPageData(userID int64, detail model.CampaignDetail, pickerFilter model.ContactListFilter) (campaignDetailPageData, error) {
 	var data campaignDetailPageData
 	campaign := campaignFromDetail(detail)
 	isWorkflow := (detail.ExecutionMode == "workflow" || detail.ExecutionMode == "workflow_ab") && detail.WorkflowVersionID > 0
+
+	pickerFilter.ExcludeCampaignID = detail.ID
+	pickerFilter.Lite = true
+	if pickerFilter.PageSize < 1 {
+		pickerFilter.PageSize = 50
+	}
+	if pickerFilter.Sort == "" {
+		pickerFilter.Sort = "email"
+	}
 
 	g, _ := errgroup.WithContext(context.Background())
 
@@ -56,7 +65,7 @@ func loadCampaignDetailPageData(userID int64, detail model.CampaignDetail) (camp
 	})
 	g.Go(func() error {
 		var err error
-		data.AllContacts, err = model.ListContactPickerItems(userID, 2000)
+		data.PickerPage, err = model.ListContactsFiltered(userID, pickerFilter)
 		return err
 	})
 	g.Go(func() error {

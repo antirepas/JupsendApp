@@ -74,20 +74,51 @@ func ContactListDetailPage(c *gin.Context) {
 		c.Redirect(http.StatusFound, "/contacts?tab=lists&error=Invalid+list")
 		return
 	}
-	list, rows, columns, err := model.ListContactsInList(listID, userID)
+	q := c.Query("q")
+	list, rows, columns, err := model.ListContactsInListFiltered(listID, userID, q)
 	if err != nil {
 		c.Redirect(http.StatusFound, "/contacts?tab=lists&error=List+not+found")
 		return
 	}
+	allContacts, _ := model.ListContactPickerItems(userID, 2000)
+	memberIDs, _ := model.ListMemberContactIDs(listID, userID)
+	memberSet := map[int64]bool{}
+	for _, id := range memberIDs {
+		memberSet[id] = true
+	}
+	var addable []model.ContactListItem
+	for _, ct := range allContacts {
+		if !memberSet[ct.ID] {
+			addable = append(addable, ct)
+		}
+	}
 	c.HTML(http.StatusOK, "contacts_list_detail.html", gin.H{
-		"title":   list.Name,
-		"active":  "contacts",
-		"list":    list,
-		"rows":    rows,
-		"columns": columns,
-		"success": c.Query("success"),
-		"error":   c.Query("error"),
+		"title":       list.Name,
+		"active":      "contacts",
+		"list":        list,
+		"rows":        rows,
+		"columns":     columns,
+		"filterQ":     q,
+		"addContacts": addable,
+		"success":     c.Query("success"),
+		"error":       c.Query("error"),
 	})
+}
+
+func SetContactListSchema(c *gin.Context) {
+	userID := mustUserID(c)
+	listID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.Redirect(http.StatusFound, "/contacts?tab=lists&error=Invalid+list")
+		return
+	}
+	raw := c.PostForm("schema")
+	keys := model.ParseSchemaKeysInput(raw)
+	if err := model.SetListVariableSchema(listID, userID, keys); err != nil {
+		c.Redirect(http.StatusFound, "/contacts/lists/"+strconv.FormatInt(listID, 10)+"?error="+url.QueryEscape(err.Error()))
+		return
+	}
+	c.Redirect(http.StatusFound, "/contacts/lists/"+strconv.FormatInt(listID, 10)+"?success=Schema+updated")
 }
 
 func ListVariablesJSON(c *gin.Context) {
@@ -143,7 +174,7 @@ func RemoveListMember(c *gin.Context) {
 		return
 	}
 	_ = model.RemoveContactFromList(listID, userID, contactID)
-	c.Redirect(http.StatusFound, "/contacts/"+strconv.FormatInt(contactID, 10)+"?success=Removed+from+list")
+	c.Redirect(http.StatusFound, "/contacts/lists/"+strconv.FormatInt(listID, 10)+"?success=Removed+from+list")
 }
 
 func AddCampaignList(c *gin.Context) {

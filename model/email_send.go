@@ -30,6 +30,8 @@ type EmailSendListItem struct {
 	DeliveryStatus  string
 	DeliveryError   string
 	JobStatus       string
+	CampaignID      int64
+	CampaignName    string
 }
 
 type EmailSendDetail struct {
@@ -161,6 +163,7 @@ func scanEmailSendListItem(
 		&item.ID, &item.TemplateID, &item.ContactID, &item.TrackingID, &sentAt,
 		&item.TemplateName, &item.TemplateSubject, &item.ContactEmail, &item.SenderEmail,
 		&item.OpenCount, &item.ClickCount, &item.DeliveryStatus, &item.DeliveryError, &item.JobStatus,
+		&item.CampaignID, &item.CampaignName,
 	)
 	if err != nil {
 		return EmailSendListItem{}, err
@@ -181,15 +184,17 @@ func ListEmailSends(userID int64) ([]EmailSendListItem, error) {
 			COALESCE(SUM(CASE WHEN ee.event_type = 'click' THEN 1 ELSE 0 END), 0),
 			COALESCE(NULLIF(es.delivery_status, ''), 'unknown'),
 			COALESCE(sj.last_error, ''),
-			COALESCE(sj.status, '')
+			COALESCE(sj.status, ''),
+			COALESCE(es.campaign_id, 0), COALESCE(camp.name, '')
 		FROM email_sends es
 		LEFT JOIN template t ON t.id = es.template_id
 		LEFT JOIN contact c ON c.id = es.contact_id
 		LEFT JOIN smtp_accounts sa ON sa.user_id = es.user_id
 		LEFT JOIN email_events ee ON ee.email_send_id = es.id OR ee.tracking_id = es.tracking_id
 		LEFT JOIN send_jobs sj ON sj.id = es.send_job_id
+		LEFT JOIN campaigns camp ON camp.id = es.campaign_id
 		WHERE es.user_id = ?
-		GROUP BY es.id, es.template_id, es.contact_id, es.tracking_id, es.sent_at, es.delivery_status, t.name, t.subject, c.email, sa.google_email, sa.from_email, sa.smtp_user, sj.last_error, sj.status
+		GROUP BY es.id, es.template_id, es.contact_id, es.tracking_id, es.sent_at, es.delivery_status, es.campaign_id, t.name, t.subject, c.email, sa.google_email, sa.from_email, sa.smtp_user, sj.last_error, sj.status, camp.name
 		ORDER BY es.id DESC
 	`
 	rows, err := db.Query(query, userID)
@@ -222,15 +227,17 @@ func ListEmailSendsForContact(userID, contactID int64, limit int) ([]EmailSendLi
 			COALESCE(SUM(CASE WHEN ee.event_type = 'click' THEN 1 ELSE 0 END), 0),
 			COALESCE(NULLIF(es.delivery_status, ''), 'unknown'),
 			COALESCE(sj.last_error, ''),
-			COALESCE(sj.status, '')
+			COALESCE(sj.status, ''),
+			COALESCE(es.campaign_id, 0), COALESCE(camp.name, '')
 		FROM email_sends es
 		LEFT JOIN template t ON t.id = es.template_id
 		LEFT JOIN contact c ON c.id = es.contact_id
 		LEFT JOIN smtp_accounts sa ON sa.user_id = es.user_id
 		LEFT JOIN email_events ee ON ee.email_send_id = es.id OR ee.tracking_id = es.tracking_id
 		LEFT JOIN send_jobs sj ON sj.id = es.send_job_id
+		LEFT JOIN campaigns camp ON camp.id = es.campaign_id
 		WHERE es.user_id = ? AND es.contact_id = ?
-		GROUP BY es.id, es.template_id, es.contact_id, es.tracking_id, es.sent_at, es.delivery_status, t.name, t.subject, c.email, sa.google_email, sa.from_email, sa.smtp_user, sj.last_error, sj.status
+		GROUP BY es.id, es.template_id, es.contact_id, es.tracking_id, es.sent_at, es.delivery_status, es.campaign_id, t.name, t.subject, c.email, sa.google_email, sa.from_email, sa.smtp_user, sj.last_error, sj.status, camp.name
 		ORDER BY es.id DESC
 		LIMIT ?
 	`
@@ -260,15 +267,17 @@ func GetEmailSendDetail(id int64) (EmailSendDetail, error) {
 			COALESCE(SUM(CASE WHEN ee.event_type = 'click' THEN 1 ELSE 0 END), 0),
 			COALESCE(NULLIF(es.delivery_status, ''), 'unknown'),
 			COALESCE(sj.last_error, ''),
-			COALESCE(sj.status, '')
+			COALESCE(sj.status, ''),
+			COALESCE(es.campaign_id, 0), COALESCE(camp.name, '')
 		FROM email_sends es
 		LEFT JOIN template t ON t.id = es.template_id
 		LEFT JOIN contact c ON c.id = es.contact_id
 		LEFT JOIN smtp_accounts sa ON sa.user_id = es.user_id
 		LEFT JOIN email_events ee ON ee.email_send_id = es.id OR ee.tracking_id = es.tracking_id
 		LEFT JOIN send_jobs sj ON sj.id = es.send_job_id
+		LEFT JOIN campaigns camp ON camp.id = es.campaign_id
 		WHERE es.id = ?
-		GROUP BY es.id, es.template_id, es.contact_id, es.tracking_id, es.sent_at, es.delivery_status, t.name, t.subject, c.email, sa.google_email, sa.from_email, sa.smtp_user, sj.last_error, sj.status
+		GROUP BY es.id, es.template_id, es.contact_id, es.tracking_id, es.sent_at, es.delivery_status, es.campaign_id, t.name, t.subject, c.email, sa.google_email, sa.from_email, sa.smtp_user, sj.last_error, sj.status, camp.name
 	`
 	row := db.QueryRow(query, id)
 	item, err := scanEmailSendListItem(row.Scan)

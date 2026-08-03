@@ -114,7 +114,11 @@ func ListInterestedContacts(userID int64, limit int) ([]InterestedContact, error
 	}
 
 	var list []InterestedContact
+	dismissed, _ := dismissedInterestedSet(userID)
 	for cid, a := range byContact {
+		if dismissed[cid] {
+			continue
+		}
 		score := 0
 		tier := "cold"
 		switch {

@@ -36,6 +36,7 @@ func RegisterRoutes(server *gin.Engine) {
 		"templates/templates_form.html",
 		"templates/contacts_list.html",
 		"templates/contacts_interested.html",
+		"templates/contacts_list_detail.html",
 		"templates/contacts_form.html",
 		"templates/contact_detail.html",
 		"templates/sends_list.html",
@@ -164,8 +165,12 @@ func RegisterRoutes(server *gin.Engine) {
 		authd.POST("/contacts/lists/:id/delete", DeleteContactList)
 		authd.POST("/contacts/lists/:id/members", AddListMembers)
 		authd.POST("/contacts/lists/:id/members/:contact_id/remove", RemoveListMember)
+		authd.POST("/contacts/lists/:id/schema", SetContactListSchema)
 		authd.GET("/contacts/lists/:id/variables", ListVariablesJSON)
 		authd.GET("/contacts/lists/:id", ContactListDetailPage)
+		authd.POST("/contacts/interested/bulk-add-list", InterestedBulkAddList)
+		authd.POST("/contacts/interested/bulk-suppress", InterestedBulkSuppress)
+		authd.POST("/contacts/interested/bulk-dismiss", InterestedBulkDismiss)
 		authd.POST("/contacts/bulk-delete", BulkDeleteContacts)
 		authd.POST("/contacts/validate", ValidateContactsWeb)
 		authd.POST("/contacts/paste", PasteContactsQuick)

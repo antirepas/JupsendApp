@@ -18,23 +18,62 @@
 
 <div class="card mb-6">
     <h3 class="card-title">Variable schema</h3>
-    <p class="text-sm text-gray-500 mb-3">All contacts in a list must use these variable names. Missing values are allowed; extra variable names are not.</p>
+    <p class="text-sm text-gray-500 mb-3">Required column names for this list. Missing values are OK; unknown keys on import are rejected.</p>
     {{if .columns}}
-    <div class="flex flex-wrap gap-2">
+    <div class="flex flex-wrap gap-2 mb-4">
         {{range .columns}}<span class="badge badge-blue">{{.}}</span>{{end}}
     </div>
     {{else}}
-    <p class="text-sm text-gray-400">No variable schema yet — it is set when the first contact is added or when you import with column headers.</p>
+    <p class="text-sm text-gray-400 mb-4">No schema yet — set keys below or import with headers.</p>
+    {{end}}
+    <form method="POST" action="/contacts/lists/{{.list.ID}}/schema" class="flex flex-wrap gap-3 items-end">
+        <div class="flex-1 min-w-[220px]">
+            <label class="form-label">Set schema keys</label>
+            <input type="text" name="schema" class="form-input" placeholder="first_name, company, role" value="{{range $i, $c := .columns}}{{if $i}}, {{end}}{{$c}}{{end}}">
+        </div>
+        <button type="submit" class="btn-secondary">Save schema</button>
+    </form>
+</div>
+
+<div class="card mb-6">
+    <h3 class="card-title mb-3">Add members</h3>
+    {{if .addContacts}}
+    <form method="POST" action="/contacts/lists/{{.list.ID}}/members">
+        <div class="max-h-48 overflow-y-auto border border-gray-100 rounded-lg mb-3 p-2">
+            {{range .addContacts}}
+            <label class="flex items-center gap-2 py-1 px-2 text-sm hover:bg-gray-50 rounded">
+                <input type="checkbox" name="contact_ids" value="{{.ID}}">
+                <span>{{.Email}}</span>
+            </label>
+            {{end}}
+        </div>
+        <button type="submit" class="btn-primary">Add selected</button>
+    </form>
+    {{else}}
+    <p class="text-sm text-gray-400">All of your contacts are already in this list, or you have no contacts yet.
+        <a href="/contacts?tab=import" class="text-brand-600">Import contacts</a>
+    </p>
     {{end}}
 </div>
 
 <div class="card overflow-hidden">
+    <div class="px-4 py-3 border-b border-gray-100 flex flex-wrap gap-3 items-center justify-between">
+        <form method="GET" action="/contacts/lists/{{.list.ID}}" class="flex gap-2 items-center">
+            <input type="search" name="q" value="{{.filterQ}}" class="form-input" placeholder="Search email…" style="min-width:200px">
+            <button type="submit" class="btn-secondary">Search</button>
+            {{if .filterQ}}<a href="/contacts/lists/{{.list.ID}}" class="text-sm text-gray-500">Clear</a>{{end}}
+        </form>
+        <span class="text-sm text-gray-400">{{len .rows}} shown</span>
+    </div>
     {{if .rows}}
     <table class="data-table">
         <thead>
             <tr>
                 <th>Email</th>
                 {{range .columns}}<th>{{.}}</th>{{end}}
+                <th>Last campaign</th>
+                <th>Last signal</th>
+                <th></th>
             </tr>
         </thead>
         <tbody>
@@ -44,14 +83,33 @@
                 {{range $.columns}}
                 <td class="text-sm text-gray-600">{{index $row.Variables .}}</td>
                 {{end}}
+                <td class="text-sm text-gray-600">
+                    {{if $row.LastCampaignID}}
+                    <a href="/campaigns/{{$row.LastCampaignID}}" class="text-brand-600 hover:underline">{{$row.LastCampaignName}}</a>
+                    {{else if $row.LastCampaignName}}{{$row.LastCampaignName}}{{else}}—{{end}}
+                </td>
+                <td class="text-sm text-gray-600">
+                    {{if and $row.LastSignal (ne $row.LastSignal "none")}}{{$row.LastSignal}}{{if $row.LastActivity}} <span class="text-gray-400">· {{$row.LastActivity.Format "Jan 2"}}</span>{{end}}
+                    {{else}}—{{end}}
+                </td>
+                <td class="text-right">
+                    <form method="POST" action="/contacts/lists/{{$.list.ID}}/members/{{$row.ID}}/remove" class="inline" onsubmit="return confirm('Remove from list?');">
+                        <button type="submit" class="text-sm text-red-600 font-medium">Remove</button>
+                    </form>
+                </td>
             </tr>
             {{end}}
         </tbody>
     </table>
     {{else}}
     <div class="empty-state">
+        {{if .filterQ}}
+        <p>No members match “{{.filterQ}}”.</p>
+        <a href="/contacts/lists/{{.list.ID}}" class="btn-secondary mt-4">Clear search</a>
+        {{else}}
         <p>No contacts in this list yet.</p>
         <a href="/contacts?tab=import" class="btn-primary mt-4">Import contacts</a>
+        {{end}}
     </div>
     {{end}}
 </div>
