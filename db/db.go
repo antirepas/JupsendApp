@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log"
@@ -11,6 +12,10 @@ import (
 )
 
 var DB *sql.DB
+
+// schemaAdvisoryLockKey serializes CREATE TABLE across processes that share a DB
+// (e.g. go test ./... running packages in parallel against emailtracker_test).
+const schemaAdvisoryLockKey int64 = 0x6a757073656e64 // "jupsend"
 
 func Prepare() {
 	if config.DatabaseURL == "" {
@@ -50,5 +55,27 @@ func Ping() error {
 }
 
 func CreateTables() {
+	if DB == nil {
+		log.Fatal("database not initialized")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	// Hold the lock on one dedicated connection for the whole schema run.
+	conn, err := DB.Conn(ctx)
+	if err != nil {
+		log.Fatalf("schema conn: %v", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	if _, err := conn.ExecContext(ctx, `SELECT pg_advisory_lock($1)`, schemaAdvisoryLockKey); err != nil {
+		log.Fatalf("schema lock: %v", err)
+	}
+	defer func() {
+		if _, err := conn.ExecContext(context.Background(), `SELECT pg_advisory_unlock($1)`, schemaAdvisoryLockKey); err != nil {
+			log.Printf("schema unlock: %v", err)
+		}
+	}()
+
 	runSchema()
 }

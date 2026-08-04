@@ -1,6 +1,10 @@
 package db
 
-import "log"
+import (
+	"log"
+	"strings"
+	"time"
+)
 
 func runSchema() {
 	stmts := []string{
@@ -361,9 +365,29 @@ func runSchema() {
 	}
 
 	for _, stmt := range stmts {
-		if _, err := DB.Exec(stmt); err != nil {
+		if err := execSchemaStmt(stmt); err != nil {
 			log.Fatalf("schema: %v\nstmt: %s", err, stmt)
 		}
 	}
 	runAlterSchema()
+}
+
+func execSchemaStmt(stmt string) error {
+	var last error
+	for attempt := 0; attempt < 5; attempt++ {
+		_, err := DB.Exec(stmt)
+		if err == nil {
+			return nil
+		}
+		last = err
+		// Concurrent CREATE TABLE IF NOT EXISTS + BIGSERIAL can hit pg_type unique conflicts.
+		msg := err.Error()
+		if strings.Contains(msg, "23505") || strings.Contains(msg, "pg_type_typname_nsp_index") ||
+			strings.Contains(msg, "already exists") {
+			time.Sleep(time.Duration(50*(attempt+1)) * time.Millisecond)
+			continue
+		}
+		return err
+	}
+	return last
 }
