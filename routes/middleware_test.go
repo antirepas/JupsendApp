@@ -39,10 +39,10 @@ func TestRequireSubscriptionRedirectsUnsubscribed(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Pro without an active paid membership must be gated; Free users have app access.
-	if err := model.ApplyPlanLimitsToUser(userID, model.PlanTierPro); err != nil {
+	// Set plan_tier directly — ApplyPlanLimitsToUser(Free) needs shared SMTP env, which CI/tests may lack.
+	if _, err := db.Exec(`UPDATE users SET plan_tier = 'pro', subscription_status = 'none' WHERE id = ?`, userID); err != nil {
 		t.Fatal(err)
 	}
-	_ = model.UpdateUserSubscription(userID, model.SubStatusNone, "", "", nil)
 
 	r := subscriptionTestRouter()
 	req2 := httptest.NewRequest(http.MethodGet, "/protected", nil)
@@ -79,10 +79,9 @@ func TestRequireSubscriptionRedirectsUnsubscribed(t *testing.T) {
 	}
 
 	// Free plan should have access without a paid membership.
-	if err := model.ApplyPlanLimitsToUser(userID, model.PlanTierFree); err != nil {
+	if _, err := db.Exec(`UPDATE users SET plan_tier = 'free', subscription_status = 'none', whop_membership_id = '', whop_member_id = '' WHERE id = ?`, userID); err != nil {
 		t.Fatal(err)
 	}
-	_ = model.UpdateUserSubscription(userID, model.SubStatusNone, "", "", nil)
 	freeReq := httptest.NewRequest(http.MethodGet, "/protected", nil)
 	freeReq.Header.Set("Cookie", cookieHeader)
 	freeW := httptest.NewRecorder()
