@@ -68,8 +68,7 @@
                 </td>
                 <td class="text-sm text-gray-500">{{if not .LastActivity.IsZero}}{{.LastActivity.Format "Jan 2, 15:04"}}{{else}}—{{end}}</td>
                 <td class="text-right space-x-2">
-                    <a href="/contacts/{{.ContactID}}" class="text-brand-600 text-sm font-medium">View</a>
-                    <a href="/sends/new?contact_id={{.ContactID}}" class="text-brand-600 text-sm font-medium">Follow up</a>
+                    <a href="/contacts/{{.ContactID}}#conversation" class="text-brand-600 text-sm font-medium">Open conversation</a>
                 </td>
             </tr>
             {{end}}

@@ -28,9 +28,21 @@
     </div>
     <div class="stat-card">
         <p class="stat-label">Subject</p>
-        <p class="text-lg font-semibold">{{if .send.TemplateSubject}}{{.send.TemplateSubject}}{{else}}<span class="text-slate-400">—</span>{{end}}</p>
+        <p class="text-lg font-semibold">{{if .send.RenderedSubject}}{{.send.RenderedSubject}}{{else if .send.TemplateSubject}}{{.send.TemplateSubject}}{{else}}<span class="text-slate-400">—</span>{{end}}</p>
     </div>
 </div>
+
+{{if or .send.RenderedHTML .send.RenderedText}}
+<div class="card mb-8">
+    <h3 class="card-title">Email content</h3>
+    <p class="text-xs text-slate-500 mb-3">Snapshot of what was sent (as of delivery).</p>
+    {{if .send.RenderedHTML}}
+    <div class="conv-msg-body border border-slate-100 rounded-lg p-4 bg-white">{{.renderedBody}}</div>
+    {{else}}
+    <pre class="text-sm text-slate-700 whitespace-pre-wrap">{{.send.RenderedText}}</pre>
+    {{end}}
+</div>
+{{end}}
 
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
     <div class="stat-card lg:col-span-3">

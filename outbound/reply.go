@@ -8,6 +8,7 @@ import (
 
 	"emailtracker.com/db"
 	"emailtracker.com/model"
+	"emailtracker.com/util"
 )
 
 var (
@@ -213,8 +214,8 @@ func MatchReply(userID int64, from, subject, body string, inReplyTo []string, us
 	}, true
 }
 
-func handleReply(userID int64, match ReplyMatch, imapMessageID string) {
-	dedupe := replyDedupeKey(match, imapMessageID)
+func handleReply(userID int64, match ReplyMatch, msg inboxMessage, accountID int64, ownEmail string) {
+	dedupe := replyDedupeKey(match, msg.MessageID)
 	if dedupe != "" {
 		if exists, _ := model.ContactEventExistsByDedupe(dedupe); exists {
 			return
@@ -243,10 +244,35 @@ func handleReply(userID int64, match ReplyMatch, imapMessageID string) {
 		EventType:   "REPLY",
 		DedupeKey:   dedupe,
 		Metadata: map[string]interface{}{
-			"source": "imap",
+			"source":  "imap",
+			"subject": msg.Subject,
 		},
 		OccurredAt: time.Now(),
 	})
+
+	parsed := util.ParseMIMEBody(msg.Body)
+	toEmail := ownEmail
+	if match.EmailSendID > 0 {
+		if detail, err := model.GetEmailSendDetail(match.EmailSendID); err == nil && detail.SenderEmail != "" {
+			toEmail = detail.SenderEmail
+		}
+	}
+	_, _ = model.InsertConversationMessage(model.ConversationMessageInput{
+		UserID:        userID,
+		ContactID:     match.ContactID,
+		SMTPAccountID: accountID,
+		EmailSendID:   match.EmailSendID,
+		Direction:     model.ConversationInbound,
+		FromEmail:     msg.From,
+		ToEmail:       toEmail,
+		Subject:       msg.Subject,
+		BodyText:      parsed.Text,
+		BodyHTML:      parsed.HTML,
+		MessageID:     msg.MessageID,
+		InReplyTo:     msg.InReplyTo,
+		OccurredAt:    time.Now(),
+	})
+
 	_ = model.MarkContactReplied(match.ContactID)
 	_ = model.CancelActiveInstancesForContact(match.ContactID)
 }

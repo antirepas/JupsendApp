@@ -24,6 +24,12 @@ func BuildMultipartEmail(from, fromName, to, subject, plainBody, htmlBody string
 	if meta.MessageID != "" {
 		headers += "Message-ID: " + meta.MessageID + "\r\n"
 	}
+	if meta.InReplyTo != "" {
+		headers += "In-Reply-To: " + meta.InReplyTo + "\r\n"
+	}
+	if meta.References != "" {
+		headers += "References: " + meta.References + "\r\n"
+	}
 	if meta.EmailTrackerSendID != "" {
 		headers += "X-EmailTracker-Send-ID: " + meta.EmailTrackerSendID + "\r\n"
 	}

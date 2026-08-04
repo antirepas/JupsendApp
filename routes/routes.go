@@ -187,6 +187,7 @@ func RegisterRoutes(server *gin.Engine) {
 		authd.GET("/contacts/:id/edit", EditContactPage)
 		authd.GET("/contacts/:id", ContactDetailPage)
 		authd.POST("/contacts/:id/lists", UpdateContactLists)
+		authd.POST("/contacts/:id/reply", ReplyContactWeb)
 		authd.POST("/contacts", CreateContact)
 		authd.POST("/contacts/:id", UpdateContact)
 		authd.POST("/contacts/:id/delete", DeleteContact)

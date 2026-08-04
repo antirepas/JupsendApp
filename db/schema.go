@@ -98,7 +98,28 @@ func runSchema() {
 			workflow_instance_id BIGINT,
 			smtp_account_id BIGINT,
 			send_job_id BIGINT,
-			delivery_status TEXT DEFAULT 'sent'
+			delivery_status TEXT DEFAULT 'sent',
+			rendered_subject TEXT DEFAULT '',
+			rendered_html TEXT DEFAULT '',
+			rendered_text TEXT DEFAULT ''
+		)`,
+
+		`CREATE TABLE IF NOT EXISTS conversation_messages (
+			id BIGSERIAL PRIMARY KEY,
+			user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			contact_id BIGINT NOT NULL REFERENCES contact(id) ON DELETE CASCADE,
+			smtp_account_id BIGINT DEFAULT 0,
+			email_send_id BIGINT DEFAULT 0,
+			direction TEXT NOT NULL CHECK (direction IN ('inbound', 'outbound')),
+			from_email TEXT NOT NULL DEFAULT '',
+			to_email TEXT NOT NULL DEFAULT '',
+			subject TEXT NOT NULL DEFAULT '',
+			body_text TEXT NOT NULL DEFAULT '',
+			body_html TEXT NOT NULL DEFAULT '',
+			message_id TEXT DEFAULT '',
+			in_reply_to TEXT DEFAULT '',
+			occurred_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 		)`,
 
 		`CREATE TABLE IF NOT EXISTS email_events (
@@ -287,6 +308,8 @@ func runSchema() {
 		`CREATE INDEX IF NOT EXISTS idx_contact_user_email ON contact(user_id, email)`,
 		`CREATE INDEX IF NOT EXISTS idx_contact_list_members_contact ON contact_list_members(contact_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_email_sends_user_contact_sent ON email_sends(user_id, contact_id, sent_at)`,
+		`CREATE INDEX IF NOT EXISTS idx_conversation_messages_contact ON conversation_messages(user_id, contact_id, occurred_at)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_conversation_messages_user_msgid ON conversation_messages(user_id, message_id) WHERE message_id IS NOT NULL AND message_id <> ''`,
 
 		`CREATE TABLE IF NOT EXISTS outreach_domains (
 			id BIGSERIAL PRIMARY KEY,

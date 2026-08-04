@@ -124,6 +124,21 @@ func executeJob(job model.SendJob, account model.SMTPAccount) error {
 	if err := model.MarkEmailSendSent(emailSendID, account.ID, job.ID); err != nil {
 		return err
 	}
+	_ = model.SaveEmailSendRenderedContent(emailSendID, newSubject, replacedLinksBody, plainBody)
+	_, _ = model.InsertConversationMessage(model.ConversationMessageInput{
+		UserID:        job.UserID,
+		ContactID:     job.ContactID,
+		SMTPAccountID: account.ID,
+		EmailSendID:   emailSendID,
+		Direction:     model.ConversationOutbound,
+		FromEmail:     from,
+		ToEmail:       contact.Email,
+		Subject:       newSubject,
+		BodyText:      plainBody,
+		BodyHTML:      replacedLinksBody,
+		MessageID:     messageID,
+		OccurredAt:    time.Now(),
+	})
 	if err := model.CompleteSendJob(job.ID, account.ID); err != nil {
 		return err
 	}

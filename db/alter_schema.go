@@ -137,6 +137,29 @@ func runAlterSchema() {
 		`CREATE INDEX IF NOT EXISTS idx_import_jobs_user_status ON import_jobs(user_id, status)`,
 		`CREATE INDEX IF NOT EXISTS idx_import_jobs_pending ON import_jobs(status, id) WHERE status IN ('pending', 'processing')`,
 		`ALTER TABLE outreach_domains ADD COLUMN IF NOT EXISTS nameservers_json TEXT DEFAULT ''`,
+		`ALTER TABLE email_sends ADD COLUMN IF NOT EXISTS rendered_subject TEXT DEFAULT ''`,
+		`ALTER TABLE email_sends ADD COLUMN IF NOT EXISTS rendered_html TEXT DEFAULT ''`,
+		`ALTER TABLE email_sends ADD COLUMN IF NOT EXISTS rendered_text TEXT DEFAULT ''`,
+		`CREATE TABLE IF NOT EXISTS conversation_messages (
+			id BIGSERIAL PRIMARY KEY,
+			user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			contact_id BIGINT NOT NULL REFERENCES contact(id) ON DELETE CASCADE,
+			smtp_account_id BIGINT DEFAULT 0,
+			email_send_id BIGINT DEFAULT 0,
+			direction TEXT NOT NULL CHECK (direction IN ('inbound', 'outbound')),
+			from_email TEXT NOT NULL DEFAULT '',
+			to_email TEXT NOT NULL DEFAULT '',
+			subject TEXT NOT NULL DEFAULT '',
+			body_text TEXT NOT NULL DEFAULT '',
+			body_html TEXT NOT NULL DEFAULT '',
+			message_id TEXT DEFAULT '',
+			in_reply_to TEXT DEFAULT '',
+			occurred_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_conversation_messages_user_msgid
+			ON conversation_messages(user_id, message_id) WHERE message_id IS NOT NULL AND message_id <> ''`,
+		`CREATE INDEX IF NOT EXISTS idx_conversation_messages_contact ON conversation_messages(user_id, contact_id, occurred_at)`,
 	}
 	for _, stmt := range alters {
 		if _, err := DB.Exec(stmt); err != nil {

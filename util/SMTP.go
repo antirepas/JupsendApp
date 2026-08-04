@@ -45,6 +45,8 @@ type SendMeta struct {
 	MessageID          string
 	EmailTrackerSendID string
 	FromName           string
+	InReplyTo          string
+	References         string
 }
 
 func (s *EmailSender) Send(to, subject, plainBody, htmlBody string) error {

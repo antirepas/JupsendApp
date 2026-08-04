@@ -2,6 +2,7 @@ package routes
 
 import (
 	"fmt"
+	"html/template"
 	"log"
 	"net/http"
 	"net/url"
@@ -512,14 +513,54 @@ func ContactDetailPage(ctx *gin.Context) {
 	for _, l := range allLists {
 		listMemberships = append(listMemberships, listMembership{List: l, Member: memberIDs[l.ID]})
 	}
+	conversation, _ := model.ListContactConversation(userID, id, 200)
+	replySubject := "Re: "
+	if inbound, err := model.LatestInboundMessage(userID, id); err == nil {
+		sub := strings.TrimSpace(inbound.Subject)
+		if strings.HasPrefix(strings.ToLower(sub), "re:") {
+			replySubject = sub
+		} else if sub != "" {
+			replySubject = "Re: " + sub
+		}
+	} else if len(summary.RecentSends) > 0 && summary.RecentSends[0].TemplateSubject != "" {
+		replySubject = "Re: " + summary.RecentSends[0].TemplateSubject
+	}
+	canReply := model.CanReplyInApp(userID, id, summary.RepliedAt)
+
 	ctx.HTML(http.StatusOK, "contact_detail.html", gin.H{
 		"title":           summary.Contact.Email,
 		"active":          "contacts",
 		"summary":         summary,
 		"listMemberships": listMemberships,
+		"conversation":    conversation,
+		"canReply":        canReply,
+		"replySubject":    replySubject,
 		"success":         ctx.Query("success"),
 		"error":           ctx.Query("error"),
 	})
+}
+
+func ReplyContactWeb(ctx *gin.Context) {
+	userID := mustUserID(ctx)
+	contactID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
+	if err != nil {
+		ctx.Redirect(http.StatusFound, "/contacts?error=Invalid+contact")
+		return
+	}
+	subject := strings.TrimSpace(ctx.PostForm("subject"))
+	body := strings.TrimSpace(ctx.PostForm("body"))
+	_, err = outbound.SendManualReply(outbound.ManualReplyInput{
+		UserID:    userID,
+		ContactID: contactID,
+		Subject:   subject,
+		BodyText:  body,
+	})
+	if err != nil {
+		log.Print(err)
+		ctx.Redirect(http.StatusFound, "/contacts/"+strconv.FormatInt(contactID, 10)+"?error="+url.QueryEscape(err.Error())+"#conversation")
+		return
+	}
+	ctx.Redirect(http.StatusFound, "/contacts/"+strconv.FormatInt(contactID, 10)+"?success="+url.QueryEscape("Reply sent")+"#conversation")
 }
 
 func UpdateContactLists(ctx *gin.Context) {
@@ -690,11 +731,17 @@ func SendDetailPage(ctx *gin.Context) {
 		return
 	}
 
+	renderedBody := template.HTML("")
+	if detail.RenderedHTML != "" {
+		renderedBody = template.HTML(util.SanitizeHTMLForDisplay(detail.RenderedHTML))
+	}
+
 	ctx.HTML(http.StatusOK, "sends_detail.html", gin.H{
-		"title":  "Send Detail",
-		"active": "sends",
-		"send":   detail,
-		"success": ctx.Query("success"),
+		"title":         "Send Detail",
+		"active":        "sends",
+		"send":          detail,
+		"renderedBody":  renderedBody,
+		"success":       ctx.Query("success"),
 	})
 }
 

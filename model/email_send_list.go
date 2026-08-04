@@ -148,19 +148,22 @@ func ListEmailSendsFiltered(userID int64, f SendListFilter) (SendListPage, error
 	listQ := `
 		SELECT
 			es.id, es.template_id, es.contact_id, es.tracking_id, es.sent_at,
-			COALESCE(t.name, ''), COALESCE(t.subject, ''), COALESCE(c.email, ''),
+			COALESCE(t.name, ''), COALESCE(NULLIF(es.rendered_subject, ''), COALESCE(t.subject, '')), COALESCE(c.email, ''),
 			COALESCE(NULLIF(sa.google_email, ''), NULLIF(sa.from_email, ''), NULLIF(sa.smtp_user, ''), ''),
 			COALESCE(SUM(CASE WHEN ee.event_type = 'open' THEN 1 ELSE 0 END), 0),
 			COALESCE(SUM(CASE WHEN ee.event_type = 'click' THEN 1 ELSE 0 END), 0),
 			COALESCE(NULLIF(es.delivery_status, ''), 'unknown'),
 			COALESCE(sj.last_error, ''),
 			COALESCE(sj.status, ''),
-			COALESCE(es.campaign_id, 0), COALESCE(camp.name, '')
+			COALESCE(es.campaign_id, 0), COALESCE(camp.name, ''),
+			COALESCE(es.rendered_subject, ''), COALESCE(es.rendered_html, ''), COALESCE(es.rendered_text, ''),
+			COALESCE(es.smtp_account_id, 0)
 		` + fromSQL + `
-		LEFT JOIN smtp_accounts sa ON sa.user_id = es.user_id
+		LEFT JOIN smtp_accounts sa ON sa.id = es.smtp_account_id OR (es.smtp_account_id IS NULL AND sa.user_id = es.user_id AND sa.is_default = 1)
 		LEFT JOIN email_events ee ON ee.email_send_id = es.id OR ee.tracking_id = es.tracking_id
 		WHERE ` + whereSQL + `
 		GROUP BY es.id, es.template_id, es.contact_id, es.tracking_id, es.sent_at, es.delivery_status, es.campaign_id,
+			es.rendered_subject, es.rendered_html, es.rendered_text, es.smtp_account_id,
 			t.name, t.subject, c.email, sa.google_email, sa.from_email, sa.smtp_user, sj.last_error, sj.status, camp.name
 		ORDER BY es.id DESC
 		LIMIT ? OFFSET ?
