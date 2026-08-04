@@ -38,6 +38,11 @@ func TestRequireSubscriptionRedirectsUnsubscribed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Pro without an active paid membership must be gated; Free users have app access.
+	if err := model.ApplyPlanLimitsToUser(userID, model.PlanTierPro); err != nil {
+		t.Fatal(err)
+	}
+	_ = model.UpdateUserSubscription(userID, model.SubStatusNone, "", "", nil)
 
 	r := subscriptionTestRouter()
 	req2 := httptest.NewRequest(http.MethodGet, "/protected", nil)
@@ -71,6 +76,19 @@ func TestRequireSubscriptionRedirectsUnsubscribed(t *testing.T) {
 	r.ServeHTTP(okW, okReq)
 	if okW.Code != http.StatusOK {
 		t.Fatalf("expected 200 with active subscription, got %d", okW.Code)
+	}
+
+	// Free plan should have access without a paid membership.
+	if err := model.ApplyPlanLimitsToUser(userID, model.PlanTierFree); err != nil {
+		t.Fatal(err)
+	}
+	_ = model.UpdateUserSubscription(userID, model.SubStatusNone, "", "", nil)
+	freeReq := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	freeReq.Header.Set("Cookie", cookieHeader)
+	freeW := httptest.NewRecorder()
+	r.ServeHTTP(freeW, freeReq)
+	if freeW.Code != http.StatusOK {
+		t.Fatalf("expected 200 for free plan, got %d", freeW.Code)
 	}
 }
 
