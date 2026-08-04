@@ -144,7 +144,14 @@ func UserIsAdmin(u User) bool {
 }
 
 func UserHasAppAccess(u User) bool {
-	return UserIsAdmin(u) || UserHasActiveSubscription(u)
+	if UserIsAdmin(u) {
+		return true
+	}
+	// Free is a real plan — no paid membership required.
+	if NormalizePlanTier(u.PlanTier) == PlanTierFree {
+		return true
+	}
+	return UserHasActiveSubscription(u)
 }
 
 func SetUserAdmin(userID int64, admin bool) error {

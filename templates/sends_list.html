@@ -7,29 +7,85 @@
 {{template "sidebar" .}}
 <main class="flex-1 overflow-y-auto">
 <div class="max-w-6xl mx-auto p-8">
-<div class="flex items-center justify-between mb-8">
+<div class="flex items-center justify-between mb-6 gap-4 flex-wrap">
     <div>
         <h2 class="text-2xl font-bold text-slate-900">Email Sends</h2>
-        <p class="text-slate-500 mt-1">Track delivery and engagement</p>
+        <p class="text-slate-500 mt-1">Live queue and recent deliveries</p>
     </div>
-    <a href="/sends/new" class="btn-primary">Send Email</a>
+    <div class="flex items-center gap-2 flex-wrap">
+        {{if gt .counts.Cancelled 0}}
+        <form method="POST" action="/sends/clear-cancelled" onsubmit="return confirm('Permanently delete {{.counts.Cancelled}} cancelled sends? Delivered emails are kept.');">
+            <button type="submit" class="btn-secondary text-sm">Clear cancelled ({{.counts.Cancelled}})</button>
+        </form>
+        {{end}}
+        <a href="/sends/new" class="btn-primary">Send Email</a>
+    </div>
 </div>
 
 {{if .success}}
 <div class="alert-success mb-6">{{.success}}</div>
 {{end}}
+{{if .error}}
+<div class="alert-error mb-6">{{.error}}</div>
+{{end}}
 {{if .gmailSendBlocked}}
 <div class="alert-error mb-6">{{.gmailSendBlocked}} <a href="/settings" class="underline font-medium">Open Settings</a></div>
 {{end}}
 
+<div class="flex flex-wrap gap-2 mb-6 text-sm">
+    <span class="badge badge-amber">{{.counts.Queued}} queued</span>
+    <span class="badge badge-green">{{.counts.SentToday}} sent today</span>
+    <span class="badge badge-red">{{.counts.Failed}} failed</span>
+    {{if gt .counts.Cancelled 0}}
+    <a href="/sends?status=cancelled" class="badge badge-gray">{{.counts.Cancelled}} cancelled — view</a>
+    {{else}}
+    <span class="badge badge-gray">0 cancelled</span>
+    {{end}}
+</div>
+
+<form method="GET" action="/sends" class="card mb-6 flex flex-wrap gap-3 items-end">
+    <div class="min-w-[180px] flex-1">
+        <label class="form-label">Search</label>
+        <input type="search" name="q" value="{{.filterQ}}" class="form-input" placeholder="Recipient, template, campaign">
+    </div>
+    <div class="min-w-[160px]">
+        <label class="form-label">Status</label>
+        <select name="status" class="form-input">
+            <option value="" {{if eq .filterStatus ""}}selected{{end}}>Inbox (hide cancelled)</option>
+            <option value="queued" {{if eq .filterStatus "queued"}}selected{{end}}>Queued</option>
+            <option value="sent" {{if eq .filterStatus "sent"}}selected{{end}}>Sent</option>
+            <option value="failed" {{if eq .filterStatus "failed"}}selected{{end}}>Failed</option>
+            <option value="cancelled" {{if eq .filterStatus "cancelled"}}selected{{end}}>Cancelled</option>
+            <option value="opened" {{if eq .filterStatus "opened"}}selected{{end}}>Opened</option>
+            <option value="clicked" {{if eq .filterStatus "clicked"}}selected{{end}}>Clicked</option>
+            <option value="all" {{if eq .filterStatus "all"}}selected{{end}}>All</option>
+        </select>
+    </div>
+    <div class="min-w-[180px]">
+        <label class="form-label">Campaign</label>
+        <select name="campaign" class="form-input">
+            <option value="">Any</option>
+            {{range .campaigns}}
+            <option value="{{.ID}}" {{if eq $.filterCampaign .ID}}selected{{end}}>{{.Name}}</option>
+            {{end}}
+        </select>
+    </div>
+    <button type="submit" class="btn-secondary">Filter</button>
+    <a href="/sends" class="btn-secondary">Clear</a>
+</form>
+
 <div class="card overflow-hidden">
     {{if .sends}}
+    <div class="px-4 py-2 border-b border-gray-100 flex items-center justify-between text-sm text-slate-500">
+        <span>{{.page.Total}} matching · page {{.page.Page}} of {{.page.TotalPages}}</span>
+    </div>
     <table class="data-table">
         <thead>
             <tr>
                 <th>Recipient</th>
+                <th>Campaign</th>
                 <th>Template</th>
-                <th>Sent</th>
+                <th>When</th>
                 <th>Opens</th>
                 <th>Clicks</th>
                 <th>Status</th>
@@ -40,6 +96,13 @@
             {{range .sends}}
             <tr>
                 <td class="font-medium">{{if .ContactEmail}}{{.ContactEmail}}{{else}}<span class="text-slate-400">Unknown</span>{{end}}</td>
+                <td class="text-sm">
+                    {{if .CampaignID}}
+                    <a href="/campaigns/{{.CampaignID}}" class="text-brand-600 hover:underline">{{if .CampaignName}}{{.CampaignName}}{{else}}Campaign{{end}}</a>
+                    {{else}}
+                    <span class="text-slate-400">—</span>
+                    {{end}}
+                </td>
                 <td class="text-slate-600">{{if .TemplateName}}{{.TemplateName}}{{else}}<span class="text-slate-400">Unknown</span>{{end}}</td>
                 <td class="text-slate-500 text-sm">
                     {{if eq .DeliveryStatus "queued"}}
@@ -53,35 +116,62 @@
                 <td>{{.OpenCount}}</td>
                 <td>{{.ClickCount}}</td>
                 <td>
-                    {{if eq .DeliveryStatus "queued"}}
+                    {{if .IsCancelled}}
+                    <span class="badge badge-gray" title="{{.DeliveryError}}">Cancelled</span>
+                    {{else if eq .DeliveryStatus "queued"}}
                     <span class="badge badge-amber">Queued</span>
                     {{if .DeliveryError}}<p class="text-xs text-amber-700 mt-1 max-w-xs" title="{{.DeliveryError}}">{{.DeliveryError}}</p>{{end}}
                     {{else if eq .DeliveryStatus "sending"}}
                     <span class="badge badge-amber">Sending</span>
                     {{else if eq .DeliveryStatus "failed"}}
-                    <span class="badge badge-gray" title="{{.DeliveryError}}">Failed</span>
+                    <span class="badge badge-red" title="{{.DeliveryError}}">Failed</span>
                     {{if .DeliveryError}}<p class="text-xs text-red-600 mt-1 max-w-xs truncate" title="{{.DeliveryError}}">{{.DeliveryError}}</p>{{end}}
                     {{else if gt .ClickCount 0}}
-                    <span class="badge badge-green">Clicked</span>
+                    <span class="badge badge-amber">Clicked</span>
                     {{else if gt .OpenCount 0}}
                     <span class="badge badge-blue">Opened</span>
                     {{else if eq .DeliveryStatus "sent"}}
-                    <span class="badge badge-gray">Sent</span>
+                    <span class="badge badge-green">Sent</span>
                     {{else}}
-                    <span class="badge badge-amber">{{.DeliveryStatus}}</span>
+                    <span class="badge badge-gray">{{.DeliveryStatus}}</span>
                     {{end}}
                 </td>
-                <td class="text-right">
+                <td class="text-right whitespace-nowrap">
                     <a href="/sends/{{.ID}}" class="text-brand-600 hover:text-brand-700 text-sm font-medium">Details</a>
+                    {{if .CanDelete}}
+                    <form method="POST" action="/sends/{{.ID}}/delete" class="inline ml-2" onsubmit="return confirm('Delete this send record?');">
+                        <button type="submit" class="text-red-600 text-sm font-medium">Delete</button>
+                    </form>
+                    {{end}}
                 </td>
             </tr>
             {{end}}
         </tbody>
     </table>
+    {{if gt .page.TotalPages 1}}
+    <div class="px-4 py-3 border-t border-gray-100 flex items-center justify-between gap-3">
+        {{if .prevPage}}
+        <a href="/sends?page={{.prevPage}}&q={{.filterQ}}&status={{.filterStatus}}&campaign={{.filterCampaign}}" class="btn-secondary text-xs">Previous</a>
+        {{else}}
+        <span></span>
+        {{end}}
+        {{if .nextPage}}
+        <a href="/sends?page={{.nextPage}}&q={{.filterQ}}&status={{.filterStatus}}&campaign={{.filterCampaign}}" class="btn-secondary text-xs">Next</a>
+        {{end}}
+    </div>
+    {{end}}
     {{else}}
     <div class="empty-state">
+        {{if or .filterQ .filterStatus .filterCampaign}}
+        <p>No sends match these filters.</p>
+        {{if gt .counts.Cancelled 0}}
+        <p class="text-sm text-slate-500 mt-2">{{.counts.Cancelled}} cancelled sends are hidden from the inbox. <a href="/sends?status=cancelled" class="text-brand-600">View cancelled</a> or clear them.</p>
+        {{end}}
+        <a href="/sends" class="btn-secondary mt-4">Clear filters</a>
+        {{else}}
         <p>No emails sent yet.</p>
         <a href="/sends/new" class="btn-primary mt-4">Send your first email</a>
+        {{end}}
     </div>
     {{end}}
 </div>

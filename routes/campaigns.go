@@ -609,9 +609,9 @@ func StopCampaign(ctx *gin.Context) {
 		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?success="+url.QueryEscape("Campaign already stopped"))
 		return
 	}
-	msg := fmt.Sprintf("Campaign stopped. Cancelled %d queued emails", result.CancelledJobs)
+	msg := fmt.Sprintf("Campaign stopped. Removed %d queued emails", result.CancelledJobs)
 	if result.CancelledInstances > 0 {
-		msg += fmt.Sprintf(" and %d workflow runs", result.CancelledInstances)
+		msg += fmt.Sprintf(" and cancelled %d workflow runs", result.CancelledInstances)
 	}
 	ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?success="+url.QueryEscape(msg))
 }

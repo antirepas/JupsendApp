@@ -3,7 +3,7 @@ package model
 import (
 	"database/sql"
 	"fmt"
-	"time"
+	"strings"
 
 	"emailtracker.com/db"
 )
@@ -50,7 +50,7 @@ func CampaignHasCancellableWork(campaignID int64) (bool, error) {
 	return instances > 0, nil
 }
 
-// StopCampaign marks the campaign stopped, fails queued send jobs, and cancels workflow instances.
+// StopCampaign marks the campaign stopped, deletes queued send jobs/sends, and cancels workflow instances.
 func StopCampaign(campaignID, userID int64) (StopCampaignResult, error) {
 	var result StopCampaignResult
 	campaign, err := GetCampaignForUser(campaignID, userID)
@@ -115,43 +115,62 @@ func cancelPendingSendJobsForCampaignTx(tx *db.Tx, campaignID, userID int64) (in
 	}
 	defer rows.Close()
 
-	type jobRow struct {
-		id, emailSendID int64
-		hasSend         bool
-	}
-	var jobs []jobRow
+	var jobIDs []int64
+	var sendIDs []int64
+	seenSend := map[int64]bool{}
 	for rows.Next() {
-		var j jobRow
+		var jobID int64
 		var sendID sql.NullInt64
-		if err := rows.Scan(&j.id, &sendID); err != nil {
+		if err := rows.Scan(&jobID, &sendID); err != nil {
 			return 0, err
 		}
-		if sendID.Valid && sendID.Int64 > 0 {
-			j.emailSendID = sendID.Int64
-			j.hasSend = true
+		jobIDs = append(jobIDs, jobID)
+		if sendID.Valid && sendID.Int64 > 0 && !seenSend[sendID.Int64] {
+			seenSend[sendID.Int64] = true
+			sendIDs = append(sendIDs, sendID.Int64)
 		}
-		jobs = append(jobs, j)
+	}
+	if len(jobIDs) == 0 {
+		return 0, nil
 	}
 
-	const cancelMsg = "cancelled: campaign stopped"
-	now := time.Now()
-	for _, j := range jobs {
-		if _, err := tx.Exec(`
-			UPDATE send_jobs SET status = 'failed', last_error = ?, lock_token = NULL, updated_at = ?
-			WHERE id = ? AND status IN ('pending', 'processing')
-		`, cancelMsg, now, j.id); err != nil {
+	// Delete queue jobs first (FK to email_sends).
+	jobPH := make([]string, len(jobIDs))
+	jobArgs := make([]interface{}, len(jobIDs))
+	for i, id := range jobIDs {
+		jobPH[i] = "?"
+		jobArgs[i] = id
+	}
+	if _, err := tx.Exec(`DELETE FROM send_jobs WHERE id IN (`+strings.Join(jobPH, ",")+`)`, jobArgs...); err != nil {
+		return 0, err
+	}
+
+	if len(sendIDs) > 0 {
+		sendPH := make([]string, len(sendIDs))
+		sendArgs := make([]interface{}, 0, len(sendIDs)+1)
+		for i, id := range sendIDs {
+			sendPH[i] = "?"
+			sendArgs = append(sendArgs, id)
+		}
+		inList := strings.Join(sendPH, ",")
+		if _, err := tx.Exec(`DELETE FROM tracked_links WHERE email_send_id IN (`+inList+`)`, sendArgs...); err != nil {
 			return 0, err
 		}
-		if j.hasSend {
-			if _, err := tx.Exec(`
-				UPDATE email_sends SET delivery_status = 'failed'
-				WHERE id = ? AND delivery_status IN ('queued', 'sending')
-			`, j.emailSendID); err != nil {
-				return 0, err
-			}
+		if _, err := tx.Exec(`UPDATE contact_events SET email_send_id = NULL WHERE email_send_id IN (`+inList+`)`, sendArgs...); err != nil {
+			return 0, err
+		}
+		// Only purge never-delivered campaign queue rows.
+		sendArgs = append(sendArgs, userID)
+		if _, err := tx.Exec(`
+			DELETE FROM email_sends
+			WHERE id IN (`+inList+`)
+				AND user_id = ?
+				AND LOWER(COALESCE(delivery_status, '')) IN ('queued', 'sending', 'failed', 'cancelled')
+		`, sendArgs...); err != nil {
+			return 0, err
 		}
 	}
-	return len(jobs), nil
+	return len(jobIDs), nil
 }
 
 func cancelWorkflowInstancesForCampaignTx(tx *db.Tx, campaignID int64) (int, error) {

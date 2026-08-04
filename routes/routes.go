@@ -228,6 +228,8 @@ func RegisterRoutes(server *gin.Engine) {
 		authd.GET("/sends", ListSendsPage)
 		authd.GET("/sends/new", NewSendPage)
 		authd.POST("/sends", CreateSend)
+		authd.POST("/sends/clear-cancelled", ClearCancelledSendsWeb)
+		authd.POST("/sends/:id/delete", DeleteSendWeb)
 		authd.GET("/sends/:id", SendDetailPage)
 	}
 

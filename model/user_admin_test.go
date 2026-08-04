@@ -42,12 +42,16 @@ func TestUserHasAppAccess(t *testing.T) {
 	if !UserHasAppAccess(admin) {
 		t.Fatal("admin should have access")
 	}
-	sub := User{Email: "b@test.com", SubscriptionStatus: SubStatusActive}
+	sub := User{Email: "b@test.com", SubscriptionStatus: SubStatusActive, PlanTier: "pro"}
 	if !UserHasAppAccess(sub) {
 		t.Fatal("subscriber should have access")
 	}
-	none := User{Email: "c@test.com", SubscriptionStatus: SubStatusNone}
-	if UserHasAppAccess(none) {
-		t.Fatal("regular user should not have access")
+	proNone := User{Email: "c@test.com", SubscriptionStatus: SubStatusNone, PlanTier: "pro"}
+	if UserHasAppAccess(proNone) {
+		t.Fatal("pro without active subscription should not have access")
+	}
+	free := User{Email: "d@test.com", SubscriptionStatus: SubStatusNone, PlanTier: "free"}
+	if !UserHasAppAccess(free) {
+		t.Fatal("free plan should have access")
 	}
 }

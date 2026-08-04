@@ -95,12 +95,13 @@ func TestStopCampaignCancelsQueuedJobs(t *testing.T) {
 	if camp.Status != "stopped" || camp.IsSending {
 		t.Fatalf("status=%q isSending=%v", camp.Status, camp.IsSending)
 	}
-	job, err := GetSendJob(jobID)
-	if err != nil {
-		t.Fatal(err)
+	if _, err := GetSendJob(jobID); err == nil {
+		t.Fatal("expected send job to be deleted on stop")
 	}
-	if job.Status != "failed" {
-		t.Fatalf("job status=%q want failed", job.Status)
+	var sendLeft int
+	_ = db.QueryRow(`SELECT COUNT(*) FROM email_sends WHERE id = ?`, sendID).Scan(&sendLeft)
+	if sendLeft != 0 {
+		t.Fatalf("expected email_send deleted, still have %d", sendLeft)
 	}
 	if !CampaignIsStopped(campID) {
 		t.Fatal("CampaignIsStopped should be true")

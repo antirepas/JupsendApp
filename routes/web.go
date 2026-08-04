@@ -545,19 +545,80 @@ func UpdateContactLists(ctx *gin.Context) {
 
 func ListSendsPage(ctx *gin.Context) {
 	userID := mustUserID(ctx)
-	sends, err := model.ListEmailSends(userID)
+	pageNum, _ := strconv.Atoi(ctx.Query("page"))
+	campaignID, _ := strconv.ParseInt(ctx.Query("campaign"), 10, 64)
+	filter := model.SendListFilter{
+		Status:     ctx.Query("status"),
+		CampaignID: campaignID,
+		Query:      ctx.Query("q"),
+		Page:       pageNum,
+		PageSize:   25,
+	}
+	page, err := model.ListEmailSendsFiltered(userID, filter)
 	if err != nil {
 		log.Print(err)
 		ctx.HTML(http.StatusInternalServerError, "error.html", gin.H{"title": "Error", "active": "sends", "error": "Failed to load sends"})
 		return
 	}
+	counts, _ := model.CountEmailSendsSummary(userID)
+	campaigns, _ := model.ListCampaigns(userID)
+
+	var prevPage, nextPage int
+	if page.Page > 1 {
+		prevPage = page.Page - 1
+	}
+	if page.Page < page.TotalPages {
+		nextPage = page.Page + 1
+	}
+
 	ctx.HTML(http.StatusOK, "sends_list.html", gin.H{
 		"title":            "Sends",
 		"active":           "sends",
-		"sends":            sends,
+		"sends":            page.Items,
+		"page":             page,
+		"counts":           counts,
+		"campaigns":        campaigns,
+		"filterQ":          filter.Query,
+		"filterStatus":     filter.Status,
+		"filterCampaign":   filter.CampaignID,
+		"prevPage":         prevPage,
+		"nextPage":         nextPage,
 		"success":          ctx.Query("success"),
+		"error":            ctx.Query("error"),
 		"gmailSendBlocked": model.GmailSendBlocked(userID),
 	})
+}
+
+func ClearCancelledSendsWeb(ctx *gin.Context) {
+	userID := mustUserID(ctx)
+	n, err := model.ClearCancelledSends(userID)
+	if err != nil {
+		log.Print(err)
+		ctx.Redirect(http.StatusFound, "/sends?error="+url.QueryEscape("Could not clear cancelled sends"))
+		return
+	}
+	msg := fmt.Sprintf("Deleted %d cancelled sends", n)
+	ctx.Redirect(http.StatusFound, "/sends?success="+url.QueryEscape(msg))
+}
+
+func DeleteSendWeb(ctx *gin.Context) {
+	userID := mustUserID(ctx)
+	id, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
+	if err != nil {
+		ctx.Redirect(http.StatusFound, "/sends?error=Invalid+send")
+		return
+	}
+	ok, err := model.DeleteEmailSendForUser(userID, id)
+	if err != nil {
+		log.Print(err)
+		ctx.Redirect(http.StatusFound, "/sends?error="+url.QueryEscape("Could not delete send"))
+		return
+	}
+	if !ok {
+		ctx.Redirect(http.StatusFound, "/sends?error="+url.QueryEscape("Send not found or already delivered (delivered sends cannot be deleted)"))
+		return
+	}
+	ctx.Redirect(http.StatusFound, "/sends?success="+url.QueryEscape("Send deleted"))
 }
 
 func NewSendPage(ctx *gin.Context) {

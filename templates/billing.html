@@ -27,7 +27,7 @@
             <p class="text-sm text-slate-500 mt-1">{{if .cancelAtPeriodEnd}}Access until{{else}}Renews{{end}}: <span class="font-medium text-slate-700">{{.renewalDate}}</span></p>
             {{end}}
             {{if .cancelAtPeriodEnd}}
-            <p class="text-sm text-amber-700 mt-2">Cancellation scheduled — you keep access until the date above.</p>
+            <p class="text-sm text-amber-700 mt-2">Cancellation scheduled — you keep Pro until the date above, then move to Free.</p>
             {{end}}
         </div>
         <div class="text-sm text-slate-600 space-y-1">
@@ -64,8 +64,22 @@
         {{if .Current}}
         <p class="text-xs text-slate-400">Your active plan</p>
         {{else if eq .Tier "free"}}
-            {{if $.hasPaidMembership}}
-            <p class="text-xs text-slate-500 mb-2">Cancel your paid subscription below to return to Free limits.</p>
+            {{if $.onPro}}
+            <div class="space-y-2">
+                {{if and $.hasPaidMembership (not $.cancelAtPeriodEnd)}}
+                <form method="POST" action="/settings/billing/cancel">
+                    <input type="hidden" name="mode" value="at_period_end">
+                    <button type="submit" class="btn-secondary w-full text-sm" onclick="return confirm('Cancel Pro at the end of this billing period? You keep Pro until then.');">Switch to Free at period end</button>
+                </form>
+                {{end}}
+                <form method="POST" action="/settings/billing/cancel">
+                    <input type="hidden" name="mode" value="immediate">
+                    <button type="submit" class="btn-primary w-full text-sm" onclick="return confirm('Revoke Pro now and switch to Free immediately?');">{{if $.hasPaidMembership}}Revoke Pro now{{else}}Switch to Free{{end}}</button>
+                </form>
+                {{if and $.hasPaidMembership $.cancelAtPeriodEnd}}
+                <p class="text-xs text-slate-500">Cancellation already scheduled. Use revoke to end Pro immediately.</p>
+                {{end}}
+            </div>
             {{else}}
             <p class="text-xs text-slate-400">You’re on Free when not subscribed to Pro</p>
             {{end}}
@@ -81,13 +95,30 @@
     {{end}}
 </div>
 
-{{if and .hasPaidMembership .whopConfigured (not .cancelAtPeriodEnd)}}
+{{if .onPro}}
 <div class="card border-amber-200 bg-amber-50/50">
-    <h3 class="card-title text-amber-900">Cancel subscription</h3>
-    <p class="text-sm text-amber-800 mb-4">Cancel at the end of your billing period. You keep access until then, then move to Free plan limits.</p>
-    <form method="POST" action="/settings/billing/cancel" onsubmit="return confirm('Cancel your subscription at period end?');">
-        <button type="submit" class="btn-secondary text-sm">Cancel subscription</button>
+    <h3 class="card-title text-amber-900">Leave Pro</h3>
+    {{if .cancelAtPeriodEnd}}
+    <p class="text-sm text-amber-800 mb-4">Your subscription is set to end on {{if .renewalDate}}{{.renewalDate}}{{else}}the renewal date{{end}}. You can revoke Pro immediately below.</p>
+    <form method="POST" action="/settings/billing/cancel" onsubmit="return confirm('Revoke Pro now and switch to Free immediately?');">
+        <input type="hidden" name="mode" value="immediate">
+        <button type="submit" class="btn-secondary text-sm">Revoke Pro now</button>
     </form>
+    {{else}}
+    <p class="text-sm text-amber-800 mb-4">Cancel at period end to keep Pro until renewal, or revoke immediately to move to Free now.</p>
+    <div class="flex flex-wrap gap-2">
+        {{if .hasPaidMembership}}
+        <form method="POST" action="/settings/billing/cancel" onsubmit="return confirm('Cancel Pro at the end of this billing period?');">
+            <input type="hidden" name="mode" value="at_period_end">
+            <button type="submit" class="btn-secondary text-sm">Cancel at period end</button>
+        </form>
+        {{end}}
+        <form method="POST" action="/settings/billing/cancel" onsubmit="return confirm('Revoke Pro now and switch to Free immediately?');">
+            <input type="hidden" name="mode" value="immediate">
+            <button type="submit" class="btn-secondary text-sm">Revoke Pro now</button>
+        </form>
+    </div>
+    {{end}}
 </div>
 {{end}}
 {{end}}

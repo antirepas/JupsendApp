@@ -70,6 +70,7 @@ func BillingPage(c *gin.Context) {
 		successMsg = "Subscription updated. You can now use the full app."
 	}
 
+	onPro := currentTier == model.PlanTierPro && !model.UserIsAdmin(user)
 	c.HTML(http.StatusOK, "billing.html", gin.H{
 		"title":             "Billing",
 		"active":            "billing",
@@ -84,7 +85,8 @@ func BillingPage(c *gin.Context) {
 		"renewalDate":       renewalDate,
 		"cancelAtPeriodEnd": cancelAtPeriodEnd,
 		"manageURL":         manageURL,
-		"hasPaidMembership": currentTier != model.PlanTierFree && user.WhopMembershipID != "",
+		"onPro":             onPro,
+		"hasPaidMembership": onPro && user.WhopMembershipID != "",
 		"whopConfigured":    whop.IsConfigured(),
 	})
 }
@@ -155,11 +157,32 @@ func BillingCancel(c *gin.Context) {
 		c.Redirect(http.StatusFound, "/login")
 		return
 	}
-	if user.WhopMembershipID == "" {
-		c.Redirect(http.StatusFound, "/settings/billing?error="+url.QueryEscape("No active Whop membership to cancel"))
+	if model.UserIsAdmin(user) {
+		c.Redirect(http.StatusFound, "/settings/billing?error="+url.QueryEscape("Admin accounts keep full access"))
 		return
 	}
-	if err := whop.CancelMembership(user.WhopMembershipID); err != nil {
+	if model.NormalizePlanTier(user.PlanTier) == model.PlanTierFree {
+		c.Redirect(http.StatusFound, "/settings/billing?error="+url.QueryEscape("You are already on Free"))
+		return
+	}
+
+	mode := strings.TrimSpace(strings.ToLower(c.PostForm("mode")))
+	if mode != "immediate" {
+		mode = "at_period_end"
+	}
+
+	// Local Pro without a Whop membership (manual / webhook gap): apply Free immediately.
+	if user.WhopMembershipID == "" {
+		if err := downgradeUserToFree(userID); err != nil {
+			log.Printf("billing downgrade local: %v", err)
+			c.Redirect(http.StatusFound, "/settings/billing?error="+url.QueryEscape(err.Error()))
+			return
+		}
+		c.Redirect(http.StatusFound, "/settings/billing?success="+url.QueryEscape("Switched to Free plan."))
+		return
+	}
+
+	if err := whop.CancelMembership(user.WhopMembershipID, mode); err != nil {
 		log.Printf("whop cancel: %v", err)
 		msg := err.Error()
 		if len(msg) > 180 {
@@ -169,12 +192,30 @@ func BillingCancel(c *gin.Context) {
 		return
 	}
 
-	// Refresh renewal end from Whop so UI can show access-until date.
+	if mode == "immediate" {
+		if err := downgradeUserToFree(userID); err != nil {
+			log.Printf("billing downgrade after immediate cancel: %v", err)
+			c.Redirect(http.StatusFound, "/settings/billing?error="+url.QueryEscape("Whop cancelled, but local Free switch failed: "+err.Error()))
+			return
+		}
+		c.Redirect(http.StatusFound, "/settings/billing?success="+url.QueryEscape("Pro revoked. You are now on the Free plan."))
+		return
+	}
+
+	// Period-end: keep Pro until renewal; refresh access-until date for the UI.
 	if mem, err := whop.GetMembership(user.WhopMembershipID); err == nil && mem.RenewalPeriodEnd != nil {
 		_ = model.UpdateUserSubscription(userID, user.SubscriptionStatus, user.WhopMembershipID, user.WhopMemberID, mem.RenewalPeriodEnd)
 	}
 
-	c.Redirect(http.StatusFound, "/settings/billing?success="+url.QueryEscape("Subscription will cancel at the end of your billing period. You keep access until then."))
+	c.Redirect(http.StatusFound, "/settings/billing?success="+url.QueryEscape("Subscription will cancel at the end of your billing period. You keep Pro until then, then move to Free."))
+}
+
+func downgradeUserToFree(userID int64) error {
+	if err := model.ApplyPlanLimitsToUser(userID, model.PlanTierFree); err != nil {
+		return err
+	}
+	// Free users keep app access with an active free entitlement (no Whop membership).
+	return model.UpdateUserSubscription(userID, model.SubStatusActive, "", "", nil)
 }
 
 func WhopWebhook(c *gin.Context) {
@@ -308,19 +349,15 @@ func handleMembershipDeactivated(data json.RawMessage) {
 		return
 	}
 	userID := whop.UserIDFromMetadata(m.Metadata)
-	memberID := ""
-	if m.Member != nil {
-		memberID = m.Member.ID
-	}
 	if userID > 0 {
-		_ = model.UpdateUserSubscription(userID, model.SubStatusCancelled, m.ID, memberID, nil)
 		_ = model.ApplyPlanLimitsToUser(userID, model.PlanTierFree)
+		_ = model.UpdateUserSubscription(userID, model.SubStatusActive, "", "", nil)
 		return
 	}
 	if m.User != nil && m.User.Email != "" {
-		_ = model.UpdateUserSubscriptionByEmail(m.User.Email, model.SubStatusCancelled, m.ID, memberID, nil)
 		if u, err := model.GetUserByEmail(m.User.Email); err == nil {
 			_ = model.ApplyPlanLimitsToUser(u.ID, model.PlanTierFree)
+			_ = model.UpdateUserSubscription(u.ID, model.SubStatusActive, "", "", nil)
 		}
 	}
 }
@@ -332,14 +369,14 @@ func handlePaymentFailed(data json.RawMessage) {
 	}
 	userID := whop.UserIDFromMetadata(m.Metadata)
 	if userID > 0 {
-		_ = model.UpdateUserSubscription(userID, model.SubStatusPastDue, m.ID, "", nil)
 		_ = model.ApplyPlanLimitsToUser(userID, model.PlanTierFree)
+		_ = model.UpdateUserSubscription(userID, model.SubStatusActive, "", "", nil)
 		return
 	}
 	if m.User != nil && m.User.Email != "" {
-		_ = model.UpdateUserSubscriptionByEmail(m.User.Email, model.SubStatusPastDue, m.ID, "", nil)
 		if u, err := model.GetUserByEmail(m.User.Email); err == nil {
 			_ = model.ApplyPlanLimitsToUser(u.ID, model.PlanTierFree)
+			_ = model.UpdateUserSubscription(u.ID, model.SubStatusActive, "", "", nil)
 		}
 	}
 }

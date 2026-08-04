@@ -69,13 +69,17 @@ func GetMembership(membershipID string) (MembershipDetails, error) {
 	return out, nil
 }
 
-// CancelMembership cancels at period end by default (user keeps access until renewal date).
-func CancelMembership(membershipID string) error {
+// CancelMembership cancels a membership. mode is "at_period_end" (default) or "immediate".
+func CancelMembership(membershipID string, mode string) error {
 	membershipID = strings.TrimSpace(membershipID)
 	if membershipID == "" {
 		return fmt.Errorf("membership id required")
 	}
-	payload := map[string]string{"cancellation_mode": "at_period_end"}
+	mode = strings.TrimSpace(strings.ToLower(mode))
+	if mode != "immediate" {
+		mode = "at_period_end"
+	}
+	payload := map[string]string{"cancellation_mode": mode}
 	raw, _ := json.Marshal(payload)
 	req, err := http.NewRequest(http.MethodPost, apiBase()+"/memberships/"+membershipID+"/cancel", bytes.NewReader(raw))
 	if err != nil {
