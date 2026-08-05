@@ -101,6 +101,7 @@ func OnboardingDomainPage(c *gin.Context) {
 		"inboxkitOK":    inboxkit.Configured(),
 		"inboxkitHint":  inboxkit.ConfiguredHint(),
 		"includedCount": config.InboxKitIncludedMailboxCount(),
+		"mailboxSlots":  mailboxSlotNums(config.InboxKitIncludedMailboxCount()),
 		"pendingDomain": pending,
 		"error":         humanizeInboxKitError(c.Query("error")),
 		"success":       c.Query("success"),
@@ -153,6 +154,17 @@ func humanizeInboxKitError(raw string) string {
 	}
 }
 
+func mailboxSlotNums(n int) []int {
+	if n < 1 {
+		n = 1
+	}
+	out := make([]int, n)
+	for i := range out {
+		out[i] = i + 1
+	}
+	return out
+}
+
 func OnboardingDomainSearch(c *gin.Context) {
 	userID := mustUserID(c)
 	ensureAdminPro(userID)
@@ -190,6 +202,7 @@ func OnboardingDomainSearch(c *gin.Context) {
 		"user":          user,
 		"inboxkitOK":    true,
 		"includedCount": config.InboxKitIncludedMailboxCount(),
+		"mailboxSlots":  mailboxSlotNums(config.InboxKitIncludedMailboxCount()),
 		"query":         q,
 		"results":       results,
 		"searched":      true,
@@ -285,6 +298,12 @@ func OnboardingDomainStatus(c *gin.Context) {
 		return
 	}
 	mailboxes, _ := model.ListOutreachMailboxes(userID)
+	var domainMailboxes []model.OutreachMailbox
+	for _, m := range mailboxes {
+		if m.DomainID == domainID {
+			domainMailboxes = append(domainMailboxes, m)
+		}
+	}
 	nameservers := d.Nameservers()
 	nsPropagated := false
 	needsNS := inboxkit.IsConnectOrderID(d.InboxkitOrderID) || d.Status == "connecting"
@@ -305,15 +324,19 @@ func OnboardingDomainStatus(c *gin.Context) {
 			}
 		}
 	}
+	errMsg := c.Query("error")
+	if errMsg == "" && d.LastError != "" {
+		errMsg = d.LastError
+	}
 	c.HTML(http.StatusOK, "onboarding_domain_status.html", gin.H{
 		"title":        "Setting up domain",
 		"active":       "mailboxes",
 		"domain":       d,
-		"mailboxes":    mailboxes,
+		"mailboxes":    domainMailboxes,
 		"nameservers":  nameservers,
 		"nsPropagated": nsPropagated,
 		"needsNS":      needsNS,
-		"error":        c.Query("error"),
+		"error":        errMsg,
 	})
 }
 
@@ -334,15 +357,10 @@ func MailboxesPage(c *gin.Context) {
 			}
 		}
 	}
+	model.SyncPendingOutreachDomains(userID)
+
 	domains, _ := model.ListOutreachDomains(userID)
 	mailboxes, _ := model.ListOutreachMailboxes(userID)
-	for _, m := range mailboxes {
-		if m.Status == "ready" && m.DomainID > 0 {
-			_ = model.SyncInboxKitOrder(userID, m.DomainID)
-			break
-		}
-	}
-	mailboxes, _ = model.ListOutreachMailboxes(userID)
 	user, _ := model.GetUserByID(userID)
 	isPro := model.UserIsPro(userID)
 	sharedReady := false
@@ -354,51 +372,153 @@ func MailboxesPage(c *gin.Context) {
 		}
 	}
 
+	q := strings.ToLower(strings.TrimSpace(c.Query("q")))
+	statusFilter := strings.ToLower(strings.TrimSpace(c.Query("status")))
+	domainByID := map[int64]model.OutreachDomain{}
+	activeDomains := 0
+	for _, d := range domains {
+		domainByID[d.ID] = d
+		if d.Status == "ready" {
+			activeDomains++
+		}
+	}
+
 	type mailboxRow struct {
-		ID           int64
-		Email        string
-		Status       string
-		IsDefault    bool
-		FromName     string
-		WarmupLabel  string
-		InsightsHint string
-		Source       string
-		CanEditCreds bool
-		SMTPHost     string
-		SMTPPort     string
-		IMAPHost     string
-		IMAPPort     string
-		SMTPUser     string
+		ID              int64
+		Email           string
+		DomainName      string
+		Status          string
+		StatusLabel     string
+		IsDefault       bool
+		IsAdmin         bool
+		Role            string
+		FromName        string
+		Initial         string
+		Platform        string
+		WarmupLabel     string
+		WarmupReady     bool
+		CampaignsLabel  string
+		RenewalLabel    string
+		InsightsHint    string
+		Source          string
+		CanEditCreds    bool
+		IsInboxKit      bool
+		ForwardingEmail string
+		LastError       string
+		SMTPHost        string
+		SMTPPort        string
+		IMAPHost        string
+		IMAPPort        string
+		SMTPUser        string
+		WarmupEnabled   bool
+		DailyLimit      int
+		SendsToday      int
+		CreatedAt       string
+		UpdatedAt       string
 	}
 	var rows []mailboxRow
+	activeMailboxes := 0
+	renewalLabel := "—"
+	if user.SubscriptionEndsAt != nil {
+		renewalLabel = user.SubscriptionEndsAt.Format("1/2/2006")
+	}
+
 	for _, m := range mailboxes {
+		if q != "" {
+			hay := strings.ToLower(m.Email + " " + m.FirstName + " " + m.LastName)
+			if d, ok := domainByID[m.DomainID]; ok {
+				hay += " " + strings.ToLower(d.Domain)
+			}
+			if !strings.Contains(hay, q) {
+				continue
+			}
+		}
+		st := strings.ToLower(m.Status)
+		if statusFilter != "" && statusFilter != "all" {
+			if statusFilter == "active" && st != "ready" && st != "active" {
+				continue
+			}
+			if statusFilter == "scheduled_cancel" && st != "scheduled_cancel" && st != "scheduled_for_cancellation" {
+				continue
+			}
+			if statusFilter != "active" && statusFilter != "scheduled_cancel" && st != statusFilter {
+				continue
+			}
+		}
+
 		fromName := strings.TrimSpace(m.FirstName + " " + m.LastName)
-		row := mailboxRow{ID: m.ID, Email: m.Email, Status: m.Status, IsDefault: m.IsDefault, FromName: fromName}
+		initial := "M"
+		if fromName != "" {
+			initial = strings.ToUpper(string([]rune(fromName)[0]))
+		} else if m.Email != "" {
+			initial = strings.ToUpper(string(m.Email[0]))
+		}
+		domainName := ""
+		if d, ok := domainByID[m.DomainID]; ok {
+			domainName = d.Domain
+		} else if i := strings.Index(m.Email, "@"); i >= 0 {
+			domainName = m.Email[i+1:]
+		}
+		statusLabel := m.Status
+		switch st {
+		case "ready", "active":
+			statusLabel = "Active"
+			activeMailboxes++
+		case "scheduled_cancel", "scheduled_for_cancellation":
+			statusLabel = "Scheduled For Cancellation"
+		case "provisioning":
+			statusLabel = "Provisioning"
+		case "error":
+			statusLabel = "Error"
+		}
+		role := m.Role
+		if m.IsAdmin && role == "" {
+			role = "Admin"
+		}
+		row := mailboxRow{
+			ID: m.ID, Email: m.Email, DomainName: domainName, Status: m.Status, StatusLabel: statusLabel,
+			IsDefault: m.IsDefault, IsAdmin: m.IsAdmin || strings.EqualFold(role, "admin"), Role: role,
+			FromName: fromName, Initial: initial, Platform: m.Platform,
+			ForwardingEmail: m.ForwardingEmail, LastError: m.LastError,
+			CreatedAt: m.CreatedAt.Format("1/2/2006"), UpdatedAt: m.UpdatedAt.Format("1/2/2006"),
+			CampaignsLabel: "—", RenewalLabel: renewalLabel, WarmupLabel: "—",
+		}
 		if m.SMTPAccountID > 0 {
 			if acc, err := model.GetSMTPAccount(m.SMTPAccountID); err == nil {
 				if strings.TrimSpace(acc.FromName) != "" {
 					row.FromName = acc.FromName
+					row.Initial = strings.ToUpper(string([]rune(acc.FromName)[0]))
 				}
 				row.Source = acc.MailboxSource
 				row.CanEditCreds = acc.MailboxSource == model.MailboxSourceManual || acc.MailboxSource == model.MailboxSourceInboxKit
+				row.IsInboxKit = acc.MailboxSource == model.MailboxSourceInboxKit
 				row.SMTPHost = acc.SMTPHost
 				row.SMTPPort = acc.SMTPPort
 				row.IMAPHost = acc.IMAPHost
 				row.IMAPPort = acc.IMAPPort
 				row.SMTPUser = acc.SMTPUser
+				row.WarmupEnabled = acc.WarmupEnabled
+				row.DailyLimit = acc.DailyLimit
+				row.SendsToday = acc.SendsToday
 				schedule := outbound.EffectiveDailyCap(acc)
 				cap, hint := outbound.ApplyInsightsToCap(schedule, acc, m.AnalyticsJSON)
 				if acc.WarmupEnabled {
-					row.WarmupLabel = fmt.Sprintf("%d/%d today", acc.SendsToday, cap)
+					row.WarmupLabel = fmt.Sprintf("%d/%d", acc.SendsToday, cap)
+					row.WarmupReady = true
 				} else {
-					row.WarmupLabel = fmt.Sprintf("cap %d", acc.DailyLimit)
+					row.WarmupLabel = "Add"
+					row.WarmupReady = false
 				}
 				if hint.Adjusted {
 					row.InsightsHint = hint.Reason
-				} else if m.AnalyticsJSON != "" && m.AnalyticsJSON != "{}" {
-					row.InsightsHint = "Schedule warmup"
+				}
+				n := model.CountCampaignsUsingSMTP(acc.ID)
+				if n > 0 {
+					row.CampaignsLabel = strconv.Itoa(n)
 				}
 			}
+		} else if st == "ready" || st == "active" {
+			row.WarmupLabel = "Add"
 		}
 		if row.Source == "" {
 			if strings.EqualFold(m.Platform, "MANUAL") {
@@ -406,28 +526,98 @@ func MailboxesPage(c *gin.Context) {
 				row.CanEditCreds = m.SMTPAccountID > 0
 			} else if m.InboxkitMailboxID != "" || strings.EqualFold(m.Platform, "GOOGLE") {
 				row.Source = model.MailboxSourceInboxKit
+				row.IsInboxKit = true
 			}
+		}
+		if strings.EqualFold(row.Platform, "") {
+			row.Platform = "GOOGLE"
 		}
 		rows = append(rows, row)
 	}
 
+	manageID, _ := strconv.ParseInt(c.Query("manage"), 10, 64)
+	manageTab := c.Query("tab")
+	if manageTab == "" {
+		manageTab = "overview"
+	}
+	var manageRow *mailboxRow
+	if manageID > 0 {
+		for i := range rows {
+			if rows[i].ID == manageID {
+				manageRow = &rows[i]
+				break
+			}
+		}
+		if manageRow == nil {
+			// Still allow manage for filtered-out rows.
+			if m, err := model.GetOutreachMailbox(manageID, userID); err == nil {
+				fromName := strings.TrimSpace(m.FirstName + " " + m.LastName)
+				domainName := ""
+				if d, ok := domainByID[m.DomainID]; ok {
+					domainName = d.Domain
+				}
+				r := mailboxRow{
+					ID: m.ID, Email: m.Email, DomainName: domainName, Status: m.Status,
+					FromName: fromName, IsDefault: m.IsDefault, IsAdmin: m.IsAdmin, Role: m.Role,
+					Platform: m.Platform, ForwardingEmail: m.ForwardingEmail, LastError: m.LastError,
+					CreatedAt: m.CreatedAt.Format("1/2/2006"), UpdatedAt: m.UpdatedAt.Format("1/2/2006"),
+					IsInboxKit: m.InboxkitMailboxID != "",
+				}
+				if m.SMTPAccountID > 0 {
+					if acc, err := model.GetSMTPAccount(m.SMTPAccountID); err == nil {
+						r.FromName = firstNonEmptyStr(acc.FromName, r.FromName)
+						r.SMTPHost, r.SMTPPort = acc.SMTPHost, acc.SMTPPort
+						r.IMAPHost, r.IMAPPort = acc.IMAPHost, acc.IMAPPort
+						r.SMTPUser = acc.SMTPUser
+						r.Source = acc.MailboxSource
+						r.CanEditCreds = acc.MailboxSource != model.MailboxSourceShared
+						r.WarmupEnabled = acc.WarmupEnabled
+						r.DailyLimit = acc.DailyLimit
+						r.SendsToday = acc.SendsToday
+						r.IsInboxKit = acc.MailboxSource == model.MailboxSourceInboxKit
+					}
+				}
+				manageRow = &r
+			}
+		}
+	}
+
+	showAttach := c.Query("attach") == "1"
+
 	c.HTML(http.StatusOK, "mailboxes.html", gin.H{
-		"title":         "Mailboxes",
-		"active":        "mailboxes",
-		"user":          user,
-		"domains":       domains,
-		"mailboxes":     mailboxes,
-		"mailboxRows":   rows,
-		"isPro":         isPro,
-		"isAdmin":       model.UserIsAdmin(user),
-		"sharedReady":   sharedReady,
-		"sharedEmail":   sharedEmail,
-		"inboxkitOK":    inboxkit.Configured(),
-		"whopAddon":     config.WhopMailboxAddonID != "" && whop.IsConfigured(),
-		"success":       c.Query("success"),
-		"error":         c.Query("error"),
-		"includedCount": config.InboxKitIncludedMailboxCount(),
+		"title":           "Mailboxes",
+		"active":          "mailboxes",
+		"user":            user,
+		"domains":         domains,
+		"mailboxes":       mailboxes,
+		"mailboxRows":     rows,
+		"statsActiveDomains": activeDomains,
+		"statsTotal":      len(mailboxes),
+		"statsActive":     activeMailboxes,
+		"isPro":           isPro,
+		"isAdmin":         model.UserIsAdmin(user),
+		"sharedReady":     sharedReady,
+		"sharedEmail":     sharedEmail,
+		"inboxkitOK":      inboxkit.Configured(),
+		"whopAddon":       config.WhopMailboxAddonID != "" && whop.IsConfigured(),
+		"success":         c.Query("success"),
+		"error":           c.Query("error"),
+		"includedCount":   config.InboxKitIncludedMailboxCount(),
+		"q":               c.Query("q"),
+		"statusFilter":    statusFilter,
+		"manageRow":       manageRow,
+		"manageTab":       manageTab,
+		"showAttach":      showAttach,
 	})
+}
+
+func firstNonEmptyStr(vals ...string) string {
+	for _, v := range vals {
+		if strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 func MailboxesAttachManual(c *gin.Context) {
@@ -524,10 +714,21 @@ func MailboxesUpdateCredentials(c *gin.Context) {
 		return
 	}
 	if err := model.UpdateMailboxCredentials(userID, id, smtpHost, smtpPort, imapHost, imapPort, username, password); err != nil {
-		c.Redirect(http.StatusFound, "/mailboxes?error="+url.QueryEscape(err.Error()))
+		c.Redirect(http.StatusFound, mailboxManageURL(id, "credentials", err.Error(), ""))
 		return
 	}
-	c.Redirect(http.StatusFound, "/mailboxes?success="+url.QueryEscape("Credentials updated"))
+	c.Redirect(http.StatusFound, mailboxManageURL(id, "credentials", "", "Credentials updated"))
+}
+
+func mailboxManageURL(id int64, tab, errMsg, success string) string {
+	u := "/mailboxes?manage=" + strconv.FormatInt(id, 10) + "&tab=" + url.QueryEscape(tab)
+	if errMsg != "" {
+		u += "&error=" + url.QueryEscape(errMsg)
+	}
+	if success != "" {
+		u += "&success=" + url.QueryEscape(success)
+	}
+	return u
 }
 
 func MailboxesDelete(c *gin.Context) {
@@ -544,10 +745,10 @@ func MailboxesSetDefault(c *gin.Context) {
 	userID := mustUserID(c)
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err := model.SetDefaultOutreachMailbox(userID, id); err != nil {
-		c.Redirect(http.StatusFound, "/mailboxes?error="+url.QueryEscape(err.Error()))
+		c.Redirect(http.StatusFound, mailboxManageURL(id, "settings", err.Error(), ""))
 		return
 	}
-	c.Redirect(http.StatusFound, "/mailboxes?success="+url.QueryEscape("Default mailbox updated"))
+	c.Redirect(http.StatusFound, mailboxManageURL(id, "settings", "", "Default mailbox updated"))
 }
 
 func MailboxesUpdateFromName(c *gin.Context) {
@@ -555,10 +756,70 @@ func MailboxesUpdateFromName(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 	fromName := strings.TrimSpace(c.PostForm("from_name"))
 	if err := model.UpdateMailboxFromName(userID, id, fromName); err != nil {
-		c.Redirect(http.StatusFound, "/mailboxes?error="+url.QueryEscape(err.Error()))
+		c.Redirect(http.StatusFound, mailboxManageURL(id, "settings", err.Error(), ""))
 		return
 	}
-	c.Redirect(http.StatusFound, "/mailboxes?success="+url.QueryEscape("From name updated"))
+	c.Redirect(http.StatusFound, mailboxManageURL(id, "settings", "", "From name updated"))
+}
+
+func MailboxesRefreshCredentials(c *gin.Context) {
+	userID := mustUserID(c)
+	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err := model.RefreshMailboxFromInboxKit(userID, id); err != nil {
+		c.Redirect(http.StatusFound, mailboxManageURL(id, "credentials", humanizeInboxKitError(err.Error()), ""))
+		return
+	}
+	c.Redirect(http.StatusFound, mailboxManageURL(id, "credentials", "", "Credentials refreshed from InboxKit"))
+}
+
+func MailboxesRevealPassword(c *gin.Context) {
+	userID := mustUserID(c)
+	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
+	pass, err := model.DecryptMailboxPassword(userID, id)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"password": pass})
+}
+
+func MailboxesUpdateWarmup(c *gin.Context) {
+	userID := mustUserID(c)
+	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
+	enabled := c.PostForm("warmup_enabled") == "1" || c.PostForm("warmup_enabled") == "on"
+	daily, _ := strconv.Atoi(strings.TrimSpace(c.PostForm("daily_limit")))
+	if err := model.UpdateMailboxWarmupSettings(userID, id, enabled, daily); err != nil {
+		c.Redirect(http.StatusFound, mailboxManageURL(id, "settings", err.Error(), ""))
+		return
+	}
+	c.Redirect(http.StatusFound, mailboxManageURL(id, "settings", "", "Warmup settings saved"))
+}
+
+func MailboxesCancel(c *gin.Context) {
+	userID := mustUserID(c)
+	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err := model.CancelInboxKitMailbox(userID, id); err != nil {
+		c.Redirect(http.StatusFound, mailboxManageURL(id, "settings", humanizeInboxKitError(err.Error()), ""))
+		return
+	}
+	c.Redirect(http.StatusFound, mailboxManageURL(id, "overview", "", "Mailbox scheduled for cancellation at InboxKit"))
+}
+
+func MailboxesForwarding(c *gin.Context) {
+	userID := mustUserID(c)
+	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
+	action := strings.TrimSpace(c.PostForm("action"))
+	fwd := strings.TrimSpace(c.PostForm("forwarding_email"))
+	remove := action == "remove"
+	if err := model.SetMailboxForwarding(userID, id, fwd, remove); err != nil {
+		c.Redirect(http.StatusFound, mailboxManageURL(id, "forwarding", humanizeInboxKitError(err.Error()), ""))
+		return
+	}
+	msg := "Forwarding updated — InboxKit may take a few minutes to apply"
+	if remove {
+		msg = "Forwarding removed"
+	}
+	c.Redirect(http.StatusFound, mailboxManageURL(id, "forwarding", "", msg))
 }
 
 func MailboxesBuyPage(c *gin.Context) {
@@ -682,6 +943,7 @@ func MailboxesBuyDomainPage(c *gin.Context) {
 		"inboxkitOK":    inboxkit.Configured(),
 		"whopOK":        config.WhopDomainAddonID != "" && whop.IsConfigured(),
 		"includedCount": config.InboxKitIncludedMailboxCount(),
+		"mailboxSlots":  mailboxSlotNums(config.InboxKitIncludedMailboxCount()),
 	})
 }
 
@@ -710,6 +972,7 @@ func MailboxesBuyDomainSearch(c *gin.Context) {
 		"inboxkitOK":    true,
 		"whopOK":        config.WhopDomainAddonID != "" && whop.IsConfigured(),
 		"includedCount": config.InboxKitIncludedMailboxCount(),
+		"mailboxSlots":  mailboxSlotNums(config.InboxKitIncludedMailboxCount()),
 	})
 }
 

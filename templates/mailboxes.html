@@ -6,21 +6,18 @@
 <div class="flex h-full">
 {{template "sidebar" .}}
 <main class="flex-1 overflow-y-auto">
-<div class="max-w-4xl mx-auto p-8">
+<div class="max-w-6xl mx-auto p-8">
   <div class="flex flex-wrap items-start justify-between gap-4 mb-6">
     <div>
       <h2 class="text-2xl font-bold text-charcoal mb-1">Mailboxes</h2>
-      <p class="text-gray-500 text-sm">{{if .isPro}}Outreach domains and sending mailboxes. Campaigns send from your default mailbox.{{else}}Free plan uses a shared sending address. Upgrade to Pro for your own domain and mailboxes.{{end}}</p>
+      <p class="text-gray-500 text-sm">{{if .isPro}}Manage your email mailboxes and sender reputation.{{else}}Free plan uses a shared sending address. Upgrade to Pro for your own domain and mailboxes.{{end}}</p>
     </div>
     <div class="flex flex-wrap gap-2">
       {{if .isPro}}
-        {{if not .domains}}
-        <a href="/onboarding/domain?new=1" class="btn-primary">Set up domain</a>
-        {{else}}
-        <a href="/mailboxes/buy" class="btn-primary">Buy more mailboxes</a>
+        <a href="/mailboxes/buy" class="btn-primary">+ Buy Mailboxes</a>
         <a href="/onboarding/domain?new=1" class="btn-secondary">Connect domain</a>
         <a href="/mailboxes/domains/buy" class="btn-secondary">Buy domain</a>
-        {{end}}
+        <a href="/mailboxes?attach=1" class="btn-secondary">Add external</a>
       {{else}}
         <a href="/settings/billing" class="btn-primary">Upgrade to Pro</a>
       {{end}}
@@ -30,8 +27,9 @@
   {{if .success}}<div class="alert-success mb-6">{{.success}}</div>{{end}}
   {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
   {{if and .isPro (not .inboxkitOK)}}
-  <div class="alert-error mb-6">InboxKit is not configured — domain search and provisioning are unavailable. You can still attach SMTP/IMAP below.</div>
+  <div class="alert-error mb-6">InboxKit is not configured — domain search and provisioning are unavailable. You can still attach SMTP/IMAP via Add external.</div>
   {{end}}
+
   {{if not .isPro}}
   <div class="card mb-6 space-y-2">
     <h3 class="card-title">Free shared mailbox</h3>
@@ -41,120 +39,147 @@
     <p class="text-sm text-amber-700">Shared SMTP is not configured on this server yet. Set <code class="text-xs">SMTP_HOST</code>, <code class="text-xs">SMTP_USER</code>, and <code class="text-xs">APP_PASSWORD</code>, then reload.</p>
     {{end}}
   </div>
-  {{end}}
+  {{else}}
+
+  <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+    <div class="rounded-xl border border-gray-200 bg-white px-5 py-4 flex items-center gap-4">
+      <div class="h-10 w-10 rounded-full bg-brand-50 text-brand-700 flex items-center justify-center text-lg">◎</div>
+      <div>
+        <div class="text-xs uppercase tracking-wide text-gray-500">Active Domains</div>
+        <div class="text-2xl font-semibold text-charcoal">{{.statsActiveDomains}}</div>
+      </div>
+    </div>
+    <div class="rounded-xl border border-gray-200 bg-white px-5 py-4 flex items-center gap-4">
+      <div class="h-10 w-10 rounded-full bg-brand-50 text-brand-700 flex items-center justify-center text-lg">✉</div>
+      <div>
+        <div class="text-xs uppercase tracking-wide text-gray-500">Total Mailboxes</div>
+        <div class="text-2xl font-semibold text-charcoal">{{.statsTotal}}</div>
+      </div>
+    </div>
+    <div class="rounded-xl border border-gray-200 bg-white px-5 py-4 flex items-center gap-4">
+      <div class="h-10 w-10 rounded-full bg-brand-50 text-brand-700 flex items-center justify-center text-lg">▣</div>
+      <div>
+        <div class="text-xs uppercase tracking-wide text-gray-500">Active Mailboxes</div>
+        <div class="text-2xl font-semibold text-charcoal">{{.statsActive}}</div>
+      </div>
+    </div>
+  </div>
 
   {{if .domains}}
-  <div class="card mb-6 space-y-3">
-    <h3 class="card-title">Domains</h3>
-    <ul class="space-y-2 text-sm">
-      {{range .domains}}
-      <li class="flex flex-wrap justify-between gap-2">
-        <span class="font-medium">{{.Domain}}</span>
-        <span class="text-gray-500">
-          {{.Status}}{{if .Included}} · included{{end}}
-          {{if and (ne .Status "ready") (ne .Status "error")}}
-          · <a href="/onboarding/domain/status?domain_id={{.ID}}" class="text-brand-600 font-medium">Continue</a>
-          {{end}}
-        </span>
-      </li>
+  <div class="mb-4 flex flex-wrap gap-2 text-xs text-gray-600">
+    {{range .domains}}
+    <span class="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1">
+      <span class="font-medium text-charcoal">{{.Domain}}</span>
+      <span class="text-gray-400">{{.Status}}</span>
+      {{if .LastError}}<span class="text-red-600 truncate max-w-[12rem]" title="{{.LastError}}">{{.LastError}}</span>{{end}}
+      {{if and (ne .Status "ready") (ne .Status "error")}}
+      <a href="/onboarding/domain/status?domain_id={{.ID}}" class="text-brand-600 font-medium">Continue</a>
       {{end}}
-    </ul>
+    </span>
+    {{end}}
   </div>
   {{end}}
 
-  <div class="card space-y-4">
-    <h3 class="card-title">Mailboxes</h3>
-    {{if .mailboxes}}
-    <div class="space-y-4">
-      {{range .mailboxRows}}
-      <div class="border border-gray-100 rounded-lg p-4 space-y-3">
-        <div class="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <div class="font-medium text-charcoal">{{.Email}}</div>
-            <div class="text-xs text-gray-500 mt-1">
-              {{.Status}}
-              {{if .Source}} · {{.Source}}{{end}}
-              {{if .IsDefault}} · default{{end}}
-              {{if .WarmupLabel}} · {{.WarmupLabel}}{{end}}
-            </div>
-            {{if .InsightsHint}}<div class="text-xs text-gray-500 mt-1">{{.InsightsHint}}</div>{{end}}
-          </div>
-          <div class="flex flex-wrap gap-3 items-center text-sm">
-            {{if and (eq .Status "ready") (not .IsDefault)}}
-            <form method="POST" action="/mailboxes/{{.ID}}/default">
-              <button type="submit" class="text-brand-600 font-medium hover:underline">Make default</button>
-            </form>
-            {{end}}
-            <form method="POST" action="/mailboxes/{{.ID}}/delete" onsubmit="return confirm('Delete this mailbox? Sending from it will stop.');">
-              <button type="submit" class="text-red-600 font-medium hover:underline">Delete</button>
-            </form>
-          </div>
-        </div>
-
-        <form method="POST" action="/mailboxes/{{.ID}}/from-name" class="flex flex-wrap items-end gap-2">
-          <div class="flex-1 min-w-[12rem]">
-            <label class="form-label">From name</label>
-            <input name="from_name" class="form-input text-sm" value="{{.FromName}}" required placeholder="First Last">
-          </div>
-          <button type="submit" class="btn-secondary text-sm">Save name</button>
-        </form>
-
-        {{if .CanEditCreds}}
-        <details class="rounded-lg border border-gray-100 bg-gray-50/80 p-3">
-          <summary class="cursor-pointer text-sm font-medium text-charcoal select-none">Update SMTP / IMAP credentials</summary>
-          <form method="POST" action="/mailboxes/{{.ID}}/credentials" class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <label class="form-label">SMTP host</label>
-              <input name="smtp_host" class="form-input text-sm" value="{{.SMTPHost}}" placeholder="smtp.gmail.com">
-            </div>
-            <div>
-              <label class="form-label">SMTP port</label>
-              <input name="smtp_port" class="form-input text-sm" value="{{.SMTPPort}}" placeholder="587">
-            </div>
-            <div>
-              <label class="form-label">IMAP host</label>
-              <input name="imap_host" class="form-input text-sm" value="{{.IMAPHost}}" placeholder="imap.gmail.com">
-            </div>
-            <div>
-              <label class="form-label">IMAP port</label>
-              <input name="imap_port" class="form-input text-sm" value="{{.IMAPPort}}" placeholder="993">
-            </div>
-            <div>
-              <label class="form-label">Username</label>
-              <input name="username" class="form-input text-sm" value="{{.SMTPUser}}" placeholder="Usually the email address">
-            </div>
-            <div>
-              <label class="form-label">Password / app password</label>
-              <input name="password" class="form-input text-sm" type="password" autocomplete="new-password" placeholder="Leave blank to keep current">
-            </div>
-            <div class="md:col-span-2">
-              <p class="text-xs text-gray-500 mb-2">Gmail / Google Workspace: use an <strong>App Password</strong> (not your normal login). Enable 2-Step Verification, then create an app password. Also enable IMAP in Gmail settings.</p>
-              <button type="submit" class="btn-primary text-sm">Save &amp; test credentials</button>
-            </div>
-          </form>
-        </details>
-        {{end}}
-      </div>
-      {{end}}
+  <div class="rounded-xl border border-gray-200 bg-white overflow-hidden">
+    <div class="flex flex-wrap items-center gap-3 px-4 py-3 border-b border-gray-100">
+      <form method="GET" action="/mailboxes" class="flex-1 min-w-[14rem] relative">
+        <input type="search" name="q" value="{{.q}}" placeholder="Search mailboxes by email or domain." class="form-input w-full text-sm pl-9">
+        {{if .statusFilter}}<input type="hidden" name="status" value="{{.statusFilter}}">{{end}}
+      </form>
+      <form method="GET" action="/mailboxes" class="flex items-center gap-2">
+        {{if .q}}<input type="hidden" name="q" value="{{.q}}">{{end}}
+        <select name="status" class="form-input text-sm py-2" onchange="this.form.submit()">
+          <option value="" {{if or (eq .statusFilter "") (eq .statusFilter "all")}}selected{{end}}>All statuses</option>
+          <option value="active" {{if eq .statusFilter "active"}}selected{{end}}>Active</option>
+          <option value="provisioning" {{if eq .statusFilter "provisioning"}}selected{{end}}>Provisioning</option>
+          <option value="scheduled_cancel" {{if eq .statusFilter "scheduled_cancel"}}selected{{end}}>Scheduled cancel</option>
+          <option value="error" {{if eq .statusFilter "error"}}selected{{end}}>Error</option>
+        </select>
+      </form>
+      <a href="/mailboxes" class="btn-secondary text-sm px-3 py-2" title="Refresh">↻</a>
     </div>
-    <p class="text-xs text-gray-500">From name is what recipients see (e.g. <code>Antanas Kupstas &lt;antanas@…&gt;</code>).</p>
+
+    {{if .mailboxRows}}
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="text-left text-xs uppercase tracking-wide text-gray-500 border-b border-gray-100">
+            <th class="px-4 py-3 font-medium">Mailbox</th>
+            <th class="px-4 py-3 font-medium">Status</th>
+            <th class="px-4 py-3 font-medium">Warmup</th>
+            <th class="px-4 py-3 font-medium">Campaigns</th>
+            <th class="px-4 py-3 font-medium">Renewal Date</th>
+            <th class="px-4 py-3 font-medium text-right">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .mailboxRows}}
+          <tr class="border-b border-gray-50 hover:bg-gray-50/80">
+            <td class="px-4 py-3">
+              <div class="flex items-center gap-3 min-w-[14rem]">
+                <div class="h-9 w-9 rounded-full bg-brand-700 text-white flex items-center justify-center font-semibold shrink-0">{{.Initial}}</div>
+                <div>
+                  <div class="flex flex-wrap items-center gap-1.5">
+                    <span class="font-medium text-charcoal">{{if .FromName}}{{.FromName}}{{else}}{{.Email}}{{end}}</span>
+                    {{if .IsDefault}}<span class="text-[10px] uppercase tracking-wide rounded-full bg-brand-50 text-brand-800 px-2 py-0.5">Default</span>{{end}}
+                    {{if .IsAdmin}}<span class="text-[10px] uppercase tracking-wide rounded-full bg-emerald-50 text-emerald-800 px-2 py-0.5">Admin</span>{{end}}
+                  </div>
+                  <div class="text-xs text-gray-500">{{.Email}}</div>
+                  {{if .LastError}}<div class="text-xs text-red-600 mt-0.5 truncate max-w-xs" title="{{.LastError}}">{{.LastError}}</div>{{end}}
+                </div>
+              </div>
+            </td>
+            <td class="px-4 py-3">
+              {{if or (eq .Status "ready") (eq .Status "active")}}
+              <span class="inline-flex items-center gap-1 rounded-full bg-emerald-50 text-emerald-800 px-2.5 py-1 text-xs font-medium">✓ {{.StatusLabel}}</span>
+              {{else if or (eq .Status "scheduled_cancel") (eq .Status "scheduled_for_cancellation")}}
+              <span class="inline-flex items-center gap-1 rounded-full bg-amber-50 text-amber-900 px-2.5 py-1 text-xs font-medium">{{.StatusLabel}}</span>
+              {{else if eq .Status "error"}}
+              <span class="inline-flex items-center gap-1 rounded-full bg-red-50 text-red-800 px-2.5 py-1 text-xs font-medium">{{.StatusLabel}}</span>
+              {{else}}
+              <span class="inline-flex items-center gap-1 rounded-full bg-gray-100 text-gray-700 px-2.5 py-1 text-xs font-medium">{{.StatusLabel}}</span>
+              {{end}}
+            </td>
+            <td class="px-4 py-3">
+              {{if .WarmupReady}}
+              <span class="text-xs text-gray-700">{{.WarmupLabel}}</span>
+              {{else if eq .WarmupLabel "Add"}}
+              <a href="/mailboxes?manage={{.ID}}&tab=settings" class="inline-flex items-center gap-1 text-xs font-medium text-brand-700 hover:underline">+ Add</a>
+              {{else}}
+              <span class="text-gray-400">—</span>
+              {{end}}
+            </td>
+            <td class="px-4 py-3 text-gray-600">{{.CampaignsLabel}}</td>
+            <td class="px-4 py-3 text-gray-600">{{.RenewalLabel}}</td>
+            <td class="px-4 py-3 text-right">
+              <a href="/mailboxes?manage={{.ID}}&tab=overview" class="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-charcoal hover:bg-gray-50">Manage</a>
+            </td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
     {{else}}
-    <p class="text-sm text-gray-600">
-      {{if .isPro}}
-      No mailboxes yet. <a href="/onboarding/domain?new=1" class="text-brand-600 font-medium">Set up a domain</a> to get {{.includedCount}} included, or attach SMTP/IMAP below.
-      {{else}}
-      Free plan sends from the shared mailbox above. Upgrade to Pro for your own domain and seats.
-      {{end}}
-    </p>
+    <div class="px-6 py-12 text-center text-sm text-gray-600">
+      No mailboxes yet.
+      <a href="/onboarding/domain?new=1" class="text-brand-600 font-medium">Set up a domain</a>
+      to get {{.includedCount}} included, or
+      <a href="/mailboxes?attach=1" class="text-brand-600 font-medium">attach SMTP/IMAP</a>.
+    </div>
     {{end}}
   </div>
 
-  {{if .isPro}}
-  <form method="POST" action="/mailboxes/attach" class="card space-y-4 mt-6">
-    <h3 class="card-title">Attach existing mailbox (SMTP / IMAP)</h3>
-    <p class="text-sm text-gray-600">Use credentials from Google Workspace, Microsoft 365, or another provider. IMAP enables bounce and reply tracking.</p>
+  {{if .showAttach}}
+  <form method="POST" action="/mailboxes/attach" class="card space-y-4 mt-6" id="attach-external">
+    <div class="flex items-start justify-between gap-3">
+      <div>
+        <h3 class="card-title">Add external mailbox (SMTP / IMAP)</h3>
+        <p class="text-sm text-gray-600 mt-1">Use credentials from Google Workspace, Microsoft 365, or another provider. IMAP enables bounce and reply tracking.</p>
+      </div>
+      <a href="/mailboxes" class="text-sm text-gray-500 hover:text-charcoal">Close</a>
+    </div>
     <div class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-      <strong>Gmail tip:</strong> Google rejects normal passwords for SMTP (<code>535 BadCredentials</code>). Create an
+      <strong>Gmail tip:</strong> use an
       <a class="underline font-medium" href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener">App Password</a>
       after enabling 2-Step Verification, and turn on IMAP in Gmail settings.
     </div>
@@ -200,12 +225,196 @@
   </form>
   {{end}}
 
+  {{end}}{{/* isPro */}}
+
   <p class="text-xs text-gray-500 mt-6">
     <a href="/settings/smtp-check" class="text-brand-600 font-medium">Test SMTP</a> from this server using your default mailbox.
   </p>
 </div>
 </main>
 </div>
+
+{{if .manageRow}}
+{{with .manageRow}}
+<div class="fixed inset-0 z-40 flex justify-end" id="mailbox-manage-drawer" role="dialog" aria-modal="true">
+  <a href="/mailboxes" class="absolute inset-0 bg-black/30" aria-label="Close"></a>
+  <div class="relative h-full w-full max-w-md bg-white shadow-xl overflow-y-auto">
+    <div class="sticky top-0 bg-white border-b border-gray-100 px-5 py-4 flex items-center justify-between gap-3 z-10">
+      <div class="min-w-0">
+        <div class="text-sm font-medium text-charcoal truncate">{{.Email}}</div>
+      </div>
+      <a href="/mailboxes" class="text-gray-400 hover:text-charcoal text-xl leading-none px-1" aria-label="Close">×</a>
+    </div>
+    <div class="px-5 pt-3 border-b border-gray-100 flex gap-4 text-sm">
+      <a href="/mailboxes?manage={{.ID}}&tab=overview" class="pb-2 {{if eq $.manageTab "overview"}}border-b-2 border-charcoal font-semibold text-charcoal{{else}}text-gray-500{{end}}">Overview</a>
+      <a href="/mailboxes?manage={{.ID}}&tab=credentials" class="pb-2 {{if eq $.manageTab "credentials"}}border-b-2 border-charcoal font-semibold text-charcoal{{else}}text-gray-500{{end}}">Credentials</a>
+      <a href="/mailboxes?manage={{.ID}}&tab=settings" class="pb-2 {{if eq $.manageTab "settings"}}border-b-2 border-charcoal font-semibold text-charcoal{{else}}text-gray-500{{end}}">Settings</a>
+      <a href="/mailboxes?manage={{.ID}}&tab=forwarding" class="pb-2 {{if eq $.manageTab "forwarding"}}border-b-2 border-charcoal font-semibold text-charcoal{{else}}text-gray-500{{end}}">Forwarding</a>
+    </div>
+
+    <div class="p-5 space-y-6">
+      {{if eq $.manageTab "overview"}}
+      <div class="text-center space-y-2">
+        <div class="mx-auto h-16 w-16 rounded-full bg-brand-700 text-white flex items-center justify-center text-2xl font-semibold">{{.Initial}}</div>
+        <div class="font-semibold text-lg text-charcoal">{{if .FromName}}{{.FromName}}{{else}}{{.Email}}{{end}}</div>
+        <div class="text-sm text-gray-500">{{.Email}}</div>
+        <div class="flex justify-center gap-2 pt-1">
+          {{if or (eq .Status "ready") (eq .Status "active")}}
+          <span class="rounded-full bg-emerald-50 text-emerald-800 px-2.5 py-1 text-xs font-medium">Active</span>
+          {{else}}
+          <span class="rounded-full bg-gray-100 text-gray-700 px-2.5 py-1 text-xs font-medium">{{.StatusLabel}}</span>
+          {{end}}
+          {{if .IsAdmin}}<span class="rounded-full bg-emerald-50 text-emerald-800 px-2.5 py-1 text-xs font-medium">Admin</span>{{end}}
+          {{if .IsDefault}}<span class="rounded-full bg-brand-50 text-brand-800 px-2.5 py-1 text-xs font-medium">Default</span>{{end}}
+        </div>
+      </div>
+      <div>
+        <h4 class="text-[11px] uppercase tracking-wide text-gray-400 mb-3">Mailbox details</h4>
+        <dl class="space-y-3 text-sm">
+          <div class="flex justify-between gap-4"><dt class="text-gray-500">Platform</dt><dd class="font-medium">{{.Platform}}</dd></div>
+          <div class="flex justify-between gap-4"><dt class="text-gray-500">Domain</dt><dd class="font-medium">{{.DomainName}}</dd></div>
+          <div class="flex justify-between gap-4"><dt class="text-gray-500">Role</dt><dd class="font-medium">{{if .Role}}{{.Role}}{{else if .IsAdmin}}Admin{{else}}—{{end}}</dd></div>
+        </dl>
+      </div>
+      <div>
+        <h4 class="text-[11px] uppercase tracking-wide text-gray-400 mb-3">Important dates</h4>
+        <dl class="space-y-3 text-sm">
+          <div class="flex justify-between gap-4"><dt class="text-gray-500">Created</dt><dd class="font-medium">{{.CreatedAt}}</dd></div>
+          <div class="flex justify-between gap-4"><dt class="text-gray-500">Last Updated</dt><dd class="font-medium">{{.UpdatedAt}}</dd></div>
+        </dl>
+      </div>
+      <div>
+        <h4 class="text-[11px] uppercase tracking-wide text-gray-400 mb-3">Email forwarding</h4>
+        <dl class="space-y-3 text-sm">
+          <div class="flex justify-between gap-4"><dt class="text-gray-500">Forwarding Email</dt><dd class="font-medium truncate">{{if .ForwardingEmail}}{{.ForwardingEmail}}{{else}}—{{end}}</dd></div>
+        </dl>
+      </div>
+      {{end}}
+
+      {{if eq $.manageTab "credentials"}}
+      <div class="space-y-4">
+        <p class="text-sm text-gray-600">SMTP and IMAP credentials for this mailbox. Keep them private.</p>
+        <dl class="space-y-3 text-sm rounded-lg border border-gray-100 p-4">
+          <div class="flex justify-between gap-4"><dt class="text-gray-500">SMTP host</dt><dd class="font-mono text-xs">{{if .SMTPHost}}{{.SMTPHost}}{{else}}—{{end}}</dd></div>
+          <div class="flex justify-between gap-4"><dt class="text-gray-500">SMTP port</dt><dd class="font-mono text-xs">{{if .SMTPPort}}{{.SMTPPort}}{{else}}—{{end}}</dd></div>
+          <div class="flex justify-between gap-4"><dt class="text-gray-500">IMAP host</dt><dd class="font-mono text-xs">{{if .IMAPHost}}{{.IMAPHost}}{{else}}—{{end}}</dd></div>
+          <div class="flex justify-between gap-4"><dt class="text-gray-500">IMAP port</dt><dd class="font-mono text-xs">{{if .IMAPPort}}{{.IMAPPort}}{{else}}—{{end}}</dd></div>
+          <div class="flex justify-between gap-4"><dt class="text-gray-500">Username</dt><dd class="font-mono text-xs">{{if .SMTPUser}}{{.SMTPUser}}{{else}}{{.Email}}{{end}}</dd></div>
+          <div class="flex justify-between items-center gap-4">
+            <dt class="text-gray-500">Password</dt>
+            <dd class="flex items-center gap-2">
+              <code id="mb-pass-{{.ID}}" class="font-mono text-xs text-gray-400">••••••••</code>
+              <button type="button" class="text-xs text-brand-600 font-medium" onclick="revealMailboxPassword({{.ID}})">Reveal</button>
+            </dd>
+          </div>
+        </dl>
+        {{if .IsInboxKit}}
+        <form method="POST" action="/mailboxes/{{.ID}}/credentials/refresh">
+          <button type="submit" class="btn-secondary text-sm w-full">Refresh from InboxKit</button>
+        </form>
+        {{end}}
+        {{if .CanEditCreds}}
+        <details class="rounded-lg border border-gray-100 p-3">
+          <summary class="cursor-pointer text-sm font-medium">Update credentials manually</summary>
+          <form method="POST" action="/mailboxes/{{.ID}}/credentials" class="mt-3 grid grid-cols-1 gap-3">
+            <div><label class="form-label">SMTP host</label><input name="smtp_host" class="form-input text-sm" value="{{.SMTPHost}}"></div>
+            <div><label class="form-label">SMTP port</label><input name="smtp_port" class="form-input text-sm" value="{{.SMTPPort}}"></div>
+            <div><label class="form-label">IMAP host</label><input name="imap_host" class="form-input text-sm" value="{{.IMAPHost}}"></div>
+            <div><label class="form-label">IMAP port</label><input name="imap_port" class="form-input text-sm" value="{{.IMAPPort}}"></div>
+            <div><label class="form-label">Username</label><input name="username" class="form-input text-sm" value="{{.SMTPUser}}"></div>
+            <div><label class="form-label">Password</label><input name="password" type="password" class="form-input text-sm" placeholder="Leave blank to keep current" autocomplete="new-password"></div>
+            <button type="submit" class="btn-primary text-sm">Save &amp; test</button>
+          </form>
+        </details>
+        {{end}}
+      </div>
+      {{end}}
+
+      {{if eq $.manageTab "settings"}}
+      <div class="space-y-5">
+        <form method="POST" action="/mailboxes/{{.ID}}/from-name" class="space-y-3">
+          <label class="form-label">From name</label>
+          <input name="from_name" class="form-input" value="{{.FromName}}" required>
+          <button type="submit" class="btn-secondary text-sm">Save name</button>
+        </form>
+        {{if and (or (eq .Status "ready") (eq .Status "active")) (not .IsDefault)}}
+        <form method="POST" action="/mailboxes/{{.ID}}/default">
+          <button type="submit" class="btn-secondary text-sm w-full">Make default sending mailbox</button>
+        </form>
+        {{end}}
+        <form method="POST" action="/mailboxes/{{.ID}}/warmup" class="space-y-3 rounded-lg border border-gray-100 p-4">
+          <h4 class="text-sm font-medium text-charcoal">Warmup (jupsend)</h4>
+          <label class="flex items-center gap-2 text-sm">
+            <input type="checkbox" name="warmup_enabled" value="1" {{if .WarmupEnabled}}checked{{end}}>
+            Enable gradual daily ramp
+          </label>
+          <div>
+            <label class="form-label">Daily limit</label>
+            <input name="daily_limit" type="number" min="1" class="form-input text-sm" value="{{if .DailyLimit}}{{.DailyLimit}}{{else}}50{{end}}">
+          </div>
+          {{if .WarmupEnabled}}<p class="text-xs text-gray-500">Sent today: {{.SendsToday}}</p>{{end}}
+          <button type="submit" class="btn-secondary text-sm">Save warmup</button>
+        </form>
+        {{if .IsInboxKit}}
+        <form method="POST" action="/mailboxes/{{.ID}}/cancel" class="rounded-lg border border-amber-200 bg-amber-50 p-4 space-y-2" onsubmit="return confirm('Cancel this mailbox at InboxKit? Sending will stop when the seat ends.');">
+          <h4 class="text-sm font-medium text-amber-950">Cancel InboxKit seat</h4>
+          <p class="text-xs text-amber-900">Schedules cancellation with InboxKit. Your local copy stays until you delete it.</p>
+          <button type="submit" class="btn-secondary text-sm text-amber-900 border-amber-300">Cancel mailbox</button>
+        </form>
+        {{end}}
+        <form method="POST" action="/mailboxes/{{.ID}}/delete" onsubmit="return confirm('Remove this mailbox from jupsend? Sending from it will stop.');">
+          <button type="submit" class="text-sm text-red-600 font-medium hover:underline">Delete from jupsend</button>
+        </form>
+      </div>
+      {{end}}
+
+      {{if eq $.manageTab "forwarding"}}
+      <div class="space-y-4">
+        {{if .IsInboxKit}}
+        <p class="text-sm text-gray-600">Incoming mail is delivered to this mailbox and also forwarded to the address below. Changes can take a few minutes.</p>
+        <form method="POST" action="/mailboxes/{{.ID}}/forwarding" class="space-y-3">
+          <input type="hidden" name="action" value="setup">
+          <label class="form-label">Forwarding email</label>
+          <input name="forwarding_email" type="email" class="form-input" value="{{.ForwardingEmail}}" placeholder="you@company.com" required>
+          <button type="submit" class="btn-primary text-sm w-full">{{if .ForwardingEmail}}Update forwarding{{else}}Enable forwarding{{end}}</button>
+        </form>
+        {{if .ForwardingEmail}}
+        <form method="POST" action="/mailboxes/{{.ID}}/forwarding">
+          <input type="hidden" name="action" value="remove">
+          <button type="submit" class="btn-secondary text-sm w-full">Remove forwarding</button>
+        </form>
+        {{end}}
+        {{else}}
+        <p class="text-sm text-gray-600">Forwarding is managed in InboxKit for provisioned mailboxes. External SMTP mailboxes use your provider’s forwarding settings.</p>
+        {{end}}
+      </div>
+      {{end}}
+    </div>
+  </div>
+</div>
+{{end}}
+{{end}}
+
+<script>
+function revealMailboxPassword(id) {
+  fetch('/mailboxes/' + id + '/password', {credentials: 'same-origin'})
+    .then(function (r) { return r.json().then(function (j) { return {ok: r.ok, j: j}; }); })
+    .then(function (res) {
+      var el = document.getElementById('mb-pass-' + id);
+      if (!el) return;
+      if (!res.ok) {
+        el.textContent = res.j.error || 'unavailable';
+        el.classList.remove('text-gray-400');
+        el.classList.add('text-red-600');
+        return;
+      }
+      el.textContent = res.j.password || '';
+      el.classList.remove('text-gray-400');
+      el.classList.add('text-charcoal');
+    })
+    .catch(function () {});
+}
+</script>
 </body>
 </html>
 {{end}}

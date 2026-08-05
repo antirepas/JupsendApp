@@ -49,12 +49,19 @@
     {{if .mailboxes}}
     <ul class="space-y-2 text-sm">
       {{range .mailboxes}}
-      <li class="flex justify-between gap-3 border-b border-gray-100 pb-2">
-        <span>{{.Email}}</span>
-        <span class="text-gray-500">{{.Status}}</span>
+      <li class="border-b border-gray-100 pb-2">
+        <div class="flex justify-between gap-3">
+          <span>{{.Email}}</span>
+          <span class="text-gray-500">{{.Status}}</span>
+        </div>
+        {{if .LastError}}<p class="text-xs text-red-600 mt-1">{{.LastError}}</p>{{end}}
       </li>
       {{end}}
     </ul>
+    {{end}}
+
+    {{if .domain.LastError}}
+    <div class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{{.domain.LastError}}</div>
     {{end}}
 
     <a href="/onboarding/domain/status?domain_id={{.domain.ID}}" class="btn-secondary inline-flex w-full justify-center">Refresh status</a>

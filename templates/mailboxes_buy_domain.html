@@ -32,31 +32,17 @@
     </div>
     <div class="card space-y-4">
       <h3 class="card-title">Starter mailboxes</h3>
-      <p class="text-sm text-gray-600">Enter real first and last names for each seat you want.</p>
+      <p class="text-sm text-gray-600">Enter real first and last names for each seat you want. Up to {{.includedCount}} included.</p>
+      {{range $i, $n := .mailboxSlots}}
       <div class="rounded-lg border border-gray-200 p-4 space-y-3">
-        <p class="text-sm font-medium">Mailbox 1</p>
+        <p class="text-sm font-medium">Mailbox {{$n}}{{if gt $n 1}} <span class="text-gray-400 font-normal">(optional)</span>{{end}}</p>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <input name="first_name_1" class="form-input" required placeholder="First name">
-          <input name="last_name_1" class="form-input" required placeholder="Last name">
-          <input name="local_1" class="form-input" required placeholder="local part">
+          <input name="first_name_{{$n}}" class="form-input" {{if eq $n 1}}required{{end}} placeholder="First name">
+          <input name="last_name_{{$n}}" class="form-input" {{if eq $n 1}}required{{end}} placeholder="Last name">
+          <input name="local_{{$n}}" class="form-input" {{if eq $n 1}}required{{end}} placeholder="local part">
         </div>
       </div>
-      <div class="rounded-lg border border-gray-200 p-4 space-y-3">
-        <p class="text-sm font-medium">Mailbox 2 <span class="text-gray-400 font-normal">(optional)</span></p>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <input name="first_name_2" class="form-input" placeholder="First name">
-          <input name="last_name_2" class="form-input" placeholder="Last name">
-          <input name="local_2" class="form-input" placeholder="local part">
-        </div>
-      </div>
-      <div class="rounded-lg border border-gray-200 p-4 space-y-3">
-        <p class="text-sm font-medium">Mailbox 3 <span class="text-gray-400 font-normal">(optional)</span></p>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <input name="first_name_3" class="form-input" placeholder="First name">
-          <input name="last_name_3" class="form-input" placeholder="Last name">
-          <input name="local_3" class="form-input" placeholder="local part">
-        </div>
-      </div>
+      {{end}}
       <button type="submit" class="btn-primary">{{if .whopOK}}Continue to checkout{{else}}Order domain{{end}}</button>
     </div>
   </form>

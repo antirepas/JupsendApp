@@ -20,6 +20,8 @@ type OutreachDomain struct {
 	Included         bool
 	RedirectURL      string
 	NameserversJSON  string
+	LastError        string
+	LastSyncedAt     *time.Time
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
 }
@@ -36,6 +38,11 @@ type OutreachMailbox struct {
 	Platform           string
 	Status             string
 	IsDefault          bool
+	IsAdmin            bool
+	Role               string
+	ForwardingEmail    string
+	LastError          string
+	CancelledAt        *time.Time
 	HealthJSON         string
 	AnalyticsJSON      string
 	Included           bool
@@ -83,6 +90,28 @@ func UpdateOutreachDomainStatus(id int64, status, orderID string) error {
 		UPDATE outreach_domains SET status=?, inboxkit_order_id=COALESCE(NULLIF(?, ''), inboxkit_order_id), updated_at=?
 		WHERE id=?
 	`, status, orderID, time.Now(), id)
+	return err
+}
+
+func SetOutreachDomainError(id int64, status, lastError string) error {
+	now := time.Now()
+	_, err := db.Exec(`
+		UPDATE outreach_domains SET status=?, last_error=?, last_synced_at=?, updated_at=? WHERE id=?
+	`, status, lastError, now, now, id)
+	return err
+}
+
+func ClearOutreachDomainError(id int64) error {
+	now := time.Now()
+	_, err := db.Exec(`
+		UPDATE outreach_domains SET last_error='', last_synced_at=?, updated_at=? WHERE id=?
+	`, now, now, id)
+	return err
+}
+
+func TouchOutreachDomainSynced(id int64) error {
+	now := time.Now()
+	_, err := db.Exec(`UPDATE outreach_domains SET last_synced_at=?, updated_at=? WHERE id=?`, now, now, id)
 	return err
 }
 
@@ -135,7 +164,7 @@ func GetMailboxAnalyticsBySMTPAccountID(smtpAccountID int64) string {
 func GetOutreachDomain(id, userID int64) (OutreachDomain, error) {
 	row := db.QueryRow(`
 		SELECT id, user_id, domain, COALESCE(inboxkit_order_id,''), status, included, COALESCE(redirect_url,''),
-			COALESCE(nameservers_json,''), created_at, updated_at
+			COALESCE(nameservers_json,''), COALESCE(last_error,''), last_synced_at, created_at, updated_at
 		FROM outreach_domains WHERE id=? AND user_id=?
 	`, id, userID)
 	return scanOutreachDomain(row)
@@ -144,7 +173,7 @@ func GetOutreachDomain(id, userID int64) (OutreachDomain, error) {
 func GetOutreachDomainByName(userID int64, domain string) (OutreachDomain, error) {
 	row := db.QueryRow(`
 		SELECT id, user_id, domain, COALESCE(inboxkit_order_id,''), status, included, COALESCE(redirect_url,''),
-			COALESCE(nameservers_json,''), created_at, updated_at
+			COALESCE(nameservers_json,''), COALESCE(last_error,''), last_synced_at, created_at, updated_at
 		FROM outreach_domains WHERE user_id=? AND domain=?
 	`, userID, strings.ToLower(domain))
 	return scanOutreachDomain(row)
@@ -153,7 +182,7 @@ func GetOutreachDomainByName(userID int64, domain string) (OutreachDomain, error
 func ListOutreachDomains(userID int64) ([]OutreachDomain, error) {
 	rows, err := db.Query(`
 		SELECT id, user_id, domain, COALESCE(inboxkit_order_id,''), status, included, COALESCE(redirect_url,''),
-			COALESCE(nameservers_json,''), created_at, updated_at
+			COALESCE(nameservers_json,''), COALESCE(last_error,''), last_synced_at, created_at, updated_at
 		FROM outreach_domains WHERE user_id=? ORDER BY id ASC
 	`, userID)
 	if err != nil {
@@ -173,32 +202,161 @@ func ListOutreachDomains(userID int64) ([]OutreachDomain, error) {
 
 func scanOutreachDomain(row interface{ Scan(...interface{}) error }) (OutreachDomain, error) {
 	var d OutreachDomain
+	var lastSynced sql.NullTime
 	err := row.Scan(&d.ID, &d.UserID, &d.Domain, &d.InboxkitOrderID, &d.Status, &d.Included, &d.RedirectURL,
-		&d.NameserversJSON, &d.CreatedAt, &d.UpdatedAt)
+		&d.NameserversJSON, &d.LastError, &lastSynced, &d.CreatedAt, &d.UpdatedAt)
+	if lastSynced.Valid {
+		t := lastSynced.Time
+		d.LastSyncedAt = &t
+	}
 	return d, err
+}
+
+// UpsertOutreachMailbox inserts or updates by (user_id, email) to avoid duplicates on retry.
+func UpsertOutreachMailbox(m OutreachMailbox) (int64, error) {
+	now := time.Now()
+	email := strings.ToLower(strings.TrimSpace(m.Email))
+	m.Email = email
+	var existing int64
+	_ = db.QueryRow(`SELECT id FROM outreach_mailboxes WHERE user_id=? AND lower(email)=lower(?)`, m.UserID, email).Scan(&existing)
+	if existing > 0 {
+		_, err := db.Exec(`
+			UPDATE outreach_mailboxes SET
+				domain_id=COALESCE(NULLIF(?,0), domain_id),
+				inboxkit_mailbox_id=COALESCE(NULLIF(?, ''), inboxkit_mailbox_id),
+				first_name=CASE WHEN ? <> '' THEN ? ELSE first_name END,
+				last_name=CASE WHEN ? <> '' THEN ? ELSE last_name END,
+				platform=CASE WHEN ? <> '' THEN ? ELSE platform END,
+				status=CASE WHEN status='ready' THEN status ELSE ? END,
+				is_admin=is_admin OR ?,
+				role=CASE WHEN ? <> '' THEN ? ELSE role END,
+				forwarding_email=CASE WHEN ? <> '' THEN ? ELSE forwarding_email END,
+				updated_at=?
+			WHERE id=?
+		`, m.DomainID, m.InboxkitMailboxID, m.FirstName, m.FirstName, m.LastName, m.LastName,
+			m.Platform, m.Platform, m.Status, m.IsAdmin, m.Role, m.Role, m.ForwardingEmail, m.ForwardingEmail, now, existing)
+		return existing, err
+	}
+	return CreateOutreachMailbox(m)
 }
 
 func CreateOutreachMailbox(m OutreachMailbox) (int64, error) {
 	now := time.Now()
 	var id int64
+	email := strings.ToLower(strings.TrimSpace(m.Email))
 	err := db.QueryRow(`
 		INSERT INTO outreach_mailboxes (
 			user_id, domain_id, smtp_account_id, inboxkit_mailbox_id, email, first_name, last_name,
-			platform, status, is_default, health_json, analytics_json, included, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			platform, status, is_default, is_admin, role, forwarding_email, last_error,
+			health_json, analytics_json, included, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		RETURNING id
-	`, m.UserID, nullInt64(m.DomainID), nullInt64(m.SMTPAccountID), m.InboxkitMailboxID, m.Email, m.FirstName, m.LastName,
-		m.Platform, m.Status, m.IsDefault, coalesceJSON(m.HealthJSON), coalesceJSON(m.AnalyticsJSON), m.Included, now, now,
+	`, m.UserID, nullInt64(m.DomainID), nullInt64(m.SMTPAccountID), m.InboxkitMailboxID, email, m.FirstName, m.LastName,
+		m.Platform, m.Status, m.IsDefault, m.IsAdmin, m.Role, m.ForwardingEmail, m.LastError,
+		coalesceJSON(m.HealthJSON), coalesceJSON(m.AnalyticsJSON), m.Included, now, now,
 	).Scan(&id)
 	return id, err
 }
 
 func UpdateOutreachMailboxReady(id int64, inboxkitID string, smtpAccountID int64, status string) error {
 	_, err := db.Exec(`
-		UPDATE outreach_mailboxes SET inboxkit_mailbox_id=?, smtp_account_id=?, status=?, updated_at=?
+		UPDATE outreach_mailboxes SET inboxkit_mailbox_id=?, smtp_account_id=?, status=?, last_error='', updated_at=?
 		WHERE id=?
 	`, inboxkitID, nullInt64(smtpAccountID), status, time.Now(), id)
 	return err
+}
+
+func SetOutreachMailboxError(id int64, lastError string) error {
+	_, err := db.Exec(`
+		UPDATE outreach_mailboxes SET last_error=?, updated_at=? WHERE id=?
+	`, lastError, time.Now(), id)
+	return err
+}
+
+func SetOutreachMailboxForwarding(id int64, forwardingEmail string) error {
+	_, err := db.Exec(`
+		UPDATE outreach_mailboxes SET forwarding_email=?, updated_at=? WHERE id=?
+	`, strings.TrimSpace(forwardingEmail), time.Now(), id)
+	return err
+}
+
+func SetOutreachMailboxMeta(id int64, isAdmin bool, role, forwardingEmail, status string) error {
+	now := time.Now()
+	_, err := db.Exec(`
+		UPDATE outreach_mailboxes SET
+			is_admin=?, role=COALESCE(NULLIF(?, ''), role),
+			forwarding_email=CASE WHEN ? <> '' THEN ? ELSE forwarding_email END,
+			status=CASE WHEN ? <> '' THEN ? ELSE status END,
+			updated_at=?
+		WHERE id=?
+	`, isAdmin, role, forwardingEmail, forwardingEmail, status, status, now, id)
+	return err
+}
+
+func MarkOutreachMailboxCancelled(id int64) error {
+	now := time.Now()
+	_, err := db.Exec(`
+		UPDATE outreach_mailboxes SET status='scheduled_cancel', cancelled_at=?, updated_at=? WHERE id=?
+	`, now, now, id)
+	return err
+}
+
+// CountCampaignsUsingSMTP counts distinct campaigns that queued sends via this SMTP account.
+func CountCampaignsUsingSMTP(smtpAccountID int64) int {
+	if smtpAccountID <= 0 {
+		return 0
+	}
+	var n int
+	_ = db.QueryRow(`
+		SELECT COUNT(DISTINCT campaign_id) FROM send_jobs
+		WHERE smtp_account_id=? AND COALESCE(campaign_id,0) > 0
+	`, smtpAccountID).Scan(&n)
+	return n
+}
+
+// UpdateMailboxWarmupSettings toggles local jupsend warmup on the linked SMTP account.
+func UpdateMailboxWarmupSettings(userID, mailboxID int64, enabled bool, dailyLimit int) error {
+	m, err := GetOutreachMailbox(mailboxID, userID)
+	if err != nil {
+		return err
+	}
+	if m.SMTPAccountID <= 0 {
+		return fmt.Errorf("mailbox has no SMTP account yet")
+	}
+	acc, err := GetSMTPAccount(m.SMTPAccountID)
+	if err != nil || acc.UserID != userID {
+		return fmt.Errorf("smtp account not found")
+	}
+	acc.WarmupEnabled = enabled
+	if dailyLimit > 0 {
+		acc.DailyLimit = dailyLimit
+		if enabled && acc.WarmupTargetDailyCap <= 0 {
+			acc.WarmupTargetDailyCap = dailyLimit
+		}
+	}
+	return UpdateSMTPAccount(acc)
+}
+
+// DecryptMailboxPassword returns the plaintext SMTP password for the mailbox owner (reveal/copy).
+func DecryptMailboxPassword(userID, mailboxID int64) (string, error) {
+	m, err := GetOutreachMailbox(mailboxID, userID)
+	if err != nil {
+		return "", err
+	}
+	if m.SMTPAccountID <= 0 {
+		return "", fmt.Errorf("no credentials")
+	}
+	acc, err := GetSMTPAccount(m.SMTPAccountID)
+	if err != nil || acc.UserID != userID {
+		return "", fmt.Errorf("smtp account not found")
+	}
+	if acc.MailboxSource == MailboxSourceShared {
+		return "", fmt.Errorf("shared Free mailbox credentials are not revealable")
+	}
+	if strings.TrimSpace(acc.SMTPPassword) == "" {
+		return "", fmt.Errorf("no password stored")
+	}
+	return googleoauth.Decrypt(acc.SMTPPassword)
 }
 
 func SetMailboxAnalytics(id int64, health, analytics string) error {
@@ -212,7 +370,8 @@ func ListOutreachMailboxes(userID int64) ([]OutreachMailbox, error) {
 	rows, err := db.Query(`
 		SELECT id, user_id, COALESCE(domain_id,0), COALESCE(smtp_account_id,0), COALESCE(inboxkit_mailbox_id,''),
 			email, COALESCE(first_name,''), COALESCE(last_name,''), platform, status, is_default,
-			COALESCE(health_json,'{}'), COALESCE(analytics_json,'{}'), included, created_at, updated_at
+			COALESCE(is_admin,FALSE), COALESCE(role,''), COALESCE(forwarding_email,''), COALESCE(last_error,''),
+			cancelled_at, COALESCE(health_json,'{}'), COALESCE(analytics_json,'{}'), included, created_at, updated_at
 		FROM outreach_mailboxes WHERE user_id=? ORDER BY is_default DESC, id ASC
 	`, userID)
 	if err != nil {
@@ -234,7 +393,8 @@ func GetOutreachMailbox(id, userID int64) (OutreachMailbox, error) {
 	row := db.QueryRow(`
 		SELECT id, user_id, COALESCE(domain_id,0), COALESCE(smtp_account_id,0), COALESCE(inboxkit_mailbox_id,''),
 			email, COALESCE(first_name,''), COALESCE(last_name,''), platform, status, is_default,
-			COALESCE(health_json,'{}'), COALESCE(analytics_json,'{}'), included, created_at, updated_at
+			COALESCE(is_admin,FALSE), COALESCE(role,''), COALESCE(forwarding_email,''), COALESCE(last_error,''),
+			cancelled_at, COALESCE(health_json,'{}'), COALESCE(analytics_json,'{}'), included, created_at, updated_at
 		FROM outreach_mailboxes WHERE id=? AND user_id=?
 	`, id, userID)
 	return scanOutreachMailbox(row)
@@ -242,11 +402,17 @@ func GetOutreachMailbox(id, userID int64) (OutreachMailbox, error) {
 
 func scanOutreachMailbox(row interface{ Scan(...interface{}) error }) (OutreachMailbox, error) {
 	var m OutreachMailbox
+	var cancelled sql.NullTime
 	err := row.Scan(
 		&m.ID, &m.UserID, &m.DomainID, &m.SMTPAccountID, &m.InboxkitMailboxID,
 		&m.Email, &m.FirstName, &m.LastName, &m.Platform, &m.Status, &m.IsDefault,
+		&m.IsAdmin, &m.Role, &m.ForwardingEmail, &m.LastError, &cancelled,
 		&m.HealthJSON, &m.AnalyticsJSON, &m.Included, &m.CreatedAt, &m.UpdatedAt,
 	)
+	if cancelled.Valid {
+		t := cancelled.Time
+		m.CancelledAt = &t
+	}
 	return m, err
 }
 

@@ -26,6 +26,7 @@
     <h3 class="card-title">Setup in progress</h3>
     <p class="text-sm text-gray-600">
       Domain <strong>{{.pendingDomain.Domain}}</strong> is <strong>{{.pendingDomain.Status}}</strong>.
+      {{if .pendingDomain.LastError}}<span class="text-red-600 block mt-1">{{.pendingDomain.LastError}}</span>{{end}}
     </p>
     <a href="/onboarding/domain/status?domain_id={{.pendingDomain.ID}}" class="btn-primary inline-flex">Continue setup</a>
   </div>
@@ -39,58 +40,26 @@
       <input name="domain" class="form-input" value="{{.connectDomain}}" placeholder="yourcompany.com" required {{if not .inboxkitOK}}disabled{{end}}>
     </div>
     <div class="space-y-4">
+      {{range $i, $n := .mailboxSlots}}
       <div class="rounded-lg border border-gray-200 p-4 space-y-3">
-        <p class="text-sm font-medium text-charcoal">Mailbox 1</p>
+        <p class="text-sm font-medium text-charcoal">Mailbox {{$n}}{{if gt $n 1}} <span class="text-gray-400 font-normal">(optional)</span>{{end}}</p>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
             <label class="form-label">First name</label>
-            <input name="first_name_1" class="form-input" required placeholder="Antanas" {{if not .inboxkitOK}}disabled{{end}}>
+            <input name="first_name_{{$n}}" class="form-input" {{if eq $n 1}}required{{end}} placeholder="First" {{if not $.inboxkitOK}}disabled{{end}}>
           </div>
           <div>
             <label class="form-label">Last name</label>
-            <input name="last_name_1" class="form-input" required placeholder="Kupstas" {{if not .inboxkitOK}}disabled{{end}}>
+            <input name="last_name_{{$n}}" class="form-input" {{if eq $n 1}}required{{end}} placeholder="Last" {{if not $.inboxkitOK}}disabled{{end}}>
           </div>
           <div>
             <label class="form-label">Email local part</label>
-            <input name="local_1" class="form-input" required placeholder="antanas" {{if not .inboxkitOK}}disabled{{end}}>
+            <input name="local_{{$n}}" class="form-input" {{if eq $n 1}}required{{end}} placeholder="name" {{if not $.inboxkitOK}}disabled{{end}}>
           </div>
         </div>
-        <p class="text-xs text-gray-500">Sends as First Last &lt;local@domain&gt;</p>
+        {{if eq $n 1}}<p class="text-xs text-gray-500">Sends as First Last &lt;local@domain&gt;</p>{{end}}
       </div>
-      <div class="rounded-lg border border-gray-200 p-4 space-y-3">
-        <p class="text-sm font-medium text-charcoal">Mailbox 2 <span class="text-gray-400 font-normal">(optional)</span></p>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div>
-            <label class="form-label">First name</label>
-            <input name="first_name_2" class="form-input" placeholder="Mark" {{if not .inboxkitOK}}disabled{{end}}>
-          </div>
-          <div>
-            <label class="form-label">Last name</label>
-            <input name="last_name_2" class="form-input" placeholder="Smith" {{if not .inboxkitOK}}disabled{{end}}>
-          </div>
-          <div>
-            <label class="form-label">Email local part</label>
-            <input name="local_2" class="form-input" placeholder="mark" {{if not .inboxkitOK}}disabled{{end}}>
-          </div>
-        </div>
-      </div>
-      <div class="rounded-lg border border-gray-200 p-4 space-y-3">
-        <p class="text-sm font-medium text-charcoal">Mailbox 3 <span class="text-gray-400 font-normal">(optional)</span></p>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div>
-            <label class="form-label">First name</label>
-            <input name="first_name_3" class="form-input" placeholder="Jordan" {{if not .inboxkitOK}}disabled{{end}}>
-          </div>
-          <div>
-            <label class="form-label">Last name</label>
-            <input name="last_name_3" class="form-input" placeholder="Lee" {{if not .inboxkitOK}}disabled{{end}}>
-          </div>
-          <div>
-            <label class="form-label">Email local part</label>
-            <input name="local_3" class="form-input" placeholder="jordan" {{if not .inboxkitOK}}disabled{{end}}>
-          </div>
-        </div>
-      </div>
+      {{end}}
     </div>
     <button type="submit" class="btn-primary" {{if not .inboxkitOK}}disabled{{end}}>Connect domain</button>
   </form>
@@ -125,30 +94,16 @@
     <div class="card space-y-4">
       <h3 class="card-title">Mailbox people</h3>
       <p class="text-sm text-gray-600">First + last name are the From display name. Local part is the address before @. Up to {{.includedCount}} included.</p>
+      {{range $i, $n := .mailboxSlots}}
       <div class="rounded-lg border border-gray-200 p-4 space-y-3">
-        <p class="text-sm font-medium">Mailbox 1</p>
+        <p class="text-sm font-medium">Mailbox {{$n}}{{if gt $n 1}} <span class="text-gray-400 font-normal">(optional)</span>{{end}}</p>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <input name="first_name_1" class="form-input" required placeholder="First name">
-          <input name="last_name_1" class="form-input" required placeholder="Last name">
-          <input name="local_1" class="form-input" required placeholder="local part">
+          <input name="first_name_{{$n}}" class="form-input" {{if eq $n 1}}required{{end}} placeholder="First name">
+          <input name="last_name_{{$n}}" class="form-input" {{if eq $n 1}}required{{end}} placeholder="Last name">
+          <input name="local_{{$n}}" class="form-input" {{if eq $n 1}}required{{end}} placeholder="local part">
         </div>
       </div>
-      <div class="rounded-lg border border-gray-200 p-4 space-y-3">
-        <p class="text-sm font-medium">Mailbox 2 <span class="text-gray-400 font-normal">(optional)</span></p>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <input name="first_name_2" class="form-input" placeholder="First name">
-          <input name="last_name_2" class="form-input" placeholder="Last name">
-          <input name="local_2" class="form-input" placeholder="local part">
-        </div>
-      </div>
-      <div class="rounded-lg border border-gray-200 p-4 space-y-3">
-        <p class="text-sm font-medium">Mailbox 3 <span class="text-gray-400 font-normal">(optional)</span></p>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <input name="first_name_3" class="form-input" placeholder="First name">
-          <input name="last_name_3" class="form-input" placeholder="Last name">
-          <input name="local_3" class="form-input" placeholder="local part">
-        </div>
-      </div>
+      {{end}}
       <button type="submit" class="btn-primary">Buy &amp; set up (included)</button>
     </div>
   </form>
@@ -159,7 +114,7 @@
   {{end}}
 
   <p class="text-xs text-gray-500 mt-4">
-    Prefer your own SMTP provider? <a href="/mailboxes" class="text-brand-600 font-medium">Attach credentials on Mailboxes</a>.
+    Prefer your own SMTP provider? <a href="/mailboxes?attach=1" class="text-brand-600 font-medium">Attach credentials on Mailboxes</a>.
   </p>
 </div>
 </main>

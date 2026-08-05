@@ -324,6 +324,8 @@ func runSchema() {
 			included BOOLEAN NOT NULL DEFAULT TRUE,
 			redirect_url TEXT DEFAULT '',
 			nameservers_json TEXT DEFAULT '',
+			last_error TEXT DEFAULT '',
+			last_synced_at TIMESTAMPTZ,
 			created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
 			UNIQUE (user_id, domain)
@@ -340,11 +342,17 @@ func runSchema() {
 			platform TEXT NOT NULL DEFAULT 'GOOGLE',
 			status TEXT NOT NULL DEFAULT 'pending',
 			is_default BOOLEAN NOT NULL DEFAULT FALSE,
+			is_admin BOOLEAN NOT NULL DEFAULT FALSE,
+			role TEXT DEFAULT '',
+			forwarding_email TEXT DEFAULT '',
+			last_error TEXT DEFAULT '',
+			cancelled_at TIMESTAMPTZ,
 			health_json TEXT DEFAULT '{}',
 			analytics_json TEXT DEFAULT '{}',
 			included BOOLEAN NOT NULL DEFAULT TRUE,
 			created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-			updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+			updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE (user_id, email)
 		)`,
 		`CREATE TABLE IF NOT EXISTS mailbox_purchases (
 			id BIGSERIAL PRIMARY KEY,

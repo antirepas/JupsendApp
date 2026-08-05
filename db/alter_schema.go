@@ -160,6 +160,13 @@ func runAlterSchema() {
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_conversation_messages_user_msgid
 			ON conversation_messages(user_id, message_id) WHERE message_id IS NOT NULL AND message_id <> ''`,
 		`CREATE INDEX IF NOT EXISTS idx_conversation_messages_contact ON conversation_messages(user_id, contact_id, occurred_at)`,
+		`ALTER TABLE outreach_domains ADD COLUMN IF NOT EXISTS last_error TEXT DEFAULT ''`,
+		`ALTER TABLE outreach_domains ADD COLUMN IF NOT EXISTS last_synced_at TIMESTAMPTZ`,
+		`ALTER TABLE outreach_mailboxes ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE`,
+		`ALTER TABLE outreach_mailboxes ADD COLUMN IF NOT EXISTS role TEXT DEFAULT ''`,
+		`ALTER TABLE outreach_mailboxes ADD COLUMN IF NOT EXISTS forwarding_email TEXT DEFAULT ''`,
+		`ALTER TABLE outreach_mailboxes ADD COLUMN IF NOT EXISTS last_error TEXT DEFAULT ''`,
+		`ALTER TABLE outreach_mailboxes ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ`,
 	}
 	for _, stmt := range alters {
 		if _, err := DB.Exec(stmt); err != nil {
@@ -172,4 +179,10 @@ func runAlterSchema() {
 	_, _ = DB.Exec(`ALTER TABLE smtp_accounts ADD COLUMN IF NOT EXISTS inboxkit_mailbox_id TEXT DEFAULT ''`)
 	_, _ = DB.Exec(`ALTER TABLE smtp_accounts ADD COLUMN IF NOT EXISTS is_default SMALLINT NOT NULL DEFAULT 0`)
 	_, _ = DB.Exec(`ALTER TABLE smtp_accounts ADD COLUMN IF NOT EXISTS mailbox_source TEXT NOT NULL DEFAULT ''`)
+	_, _ = DB.Exec(`
+		DELETE FROM outreach_mailboxes a USING outreach_mailboxes b
+		WHERE a.user_id = b.user_id AND lower(a.email) = lower(b.email) AND a.id > b.id
+	`)
+	_, _ = DB.Exec(`UPDATE outreach_mailboxes SET email = lower(email) WHERE email <> lower(email)`)
+	_, _ = DB.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_outreach_mailboxes_user_email ON outreach_mailboxes(user_id, email)`)
 }

@@ -376,12 +376,26 @@ func (c *Client) GetMailboxCredentials(mailboxID string) (MailboxCredentials, er
 }
 
 type MailboxListItem struct {
-	ID     string `json:"id"`
-	UID    string `json:"uid"`
-	UUID   string `json:"uuid"`
-	Email  string `json:"email"`
-	Status string `json:"status"`
-	Domain string `json:"domain"`
+	ID               string `json:"id"`
+	UID              string `json:"uid"`
+	UUID             string `json:"uuid"`
+	Email            string `json:"email"`
+	Status           string `json:"status"`
+	Domain           string `json:"domain"`
+	DomainName       string `json:"domain_name"`
+	FirstName        string `json:"first_name"`
+	LastName         string `json:"last_name"`
+	Platform         string `json:"platform"`
+	Role             string `json:"role"`
+	IsAdmin          bool   `json:"is_admin"`
+	Admin            bool   `json:"admin"`
+	ForwardingEmail  string `json:"forwarding_email"`
+	Forwarding       string `json:"forwarding"`
+	CreatedAt        string `json:"created_at"`
+	UpdatedAt        string `json:"updated_at"`
+	CancelledAt      string `json:"cancelled_at"`
+	ScheduledCancel  bool   `json:"scheduled_for_cancellation"`
+	CancelScheduled  bool   `json:"cancel_scheduled"`
 }
 
 func (m MailboxListItem) ResolvedID() string {
@@ -392,6 +406,35 @@ func (m MailboxListItem) ResolvedID() string {
 		return m.UID
 	}
 	return m.UUID
+}
+
+func (m MailboxListItem) ResolvedDomain() string {
+	if m.Domain != "" {
+		return m.Domain
+	}
+	return m.DomainName
+}
+
+func (m MailboxListItem) ResolvedForwarding() string {
+	if m.ForwardingEmail != "" {
+		return m.ForwardingEmail
+	}
+	return m.Forwarding
+}
+
+func (m MailboxListItem) ResolvedIsAdmin() bool {
+	if m.IsAdmin || m.Admin {
+		return true
+	}
+	return strings.EqualFold(m.Role, "admin")
+}
+
+func (m MailboxListItem) IsScheduledCancel() bool {
+	if m.ScheduledCancel || m.CancelScheduled {
+		return true
+	}
+	s := strings.ToLower(m.Status)
+	return s == "scheduled_for_cancellation" || s == "scheduled_cancel" || s == "cancelling" || s == "cancel_scheduled"
 }
 
 type mailboxListResponse struct {
@@ -541,6 +584,218 @@ func (c *Client) CheckNameservers(domain string) (NameserverResult, error) {
 		}, nil
 	}
 	return NameserverResult{Domain: domain}, nil
+}
+
+type apiErrorBody struct {
+	Error   bool   `json:"error"`
+	Message string `json:"message"`
+}
+
+func (r apiErrorBody) errOrNil(fallback string) error {
+	if !r.Error {
+		return nil
+	}
+	msg := strings.TrimSpace(r.Message)
+	if msg == "" {
+		msg = fallback
+	}
+	return fmt.Errorf("%s", msg)
+}
+
+// MailboxDetail is GET /api/mailboxes/:id (flexible field names).
+type MailboxDetail struct {
+	MailboxListItem
+	Username string `json:"username"`
+	Message  string `json:"message"`
+	Error    bool   `json:"error"`
+}
+
+func (c *Client) GetMailbox(mailboxID string) (MailboxDetail, error) {
+	mailboxID = strings.TrimSpace(mailboxID)
+	if mailboxID == "" {
+		return MailboxDetail{}, fmt.Errorf("mailbox id required")
+	}
+	var resp MailboxDetail
+	err := c.do("GET", "/api/mailboxes/"+mailboxID, nil, &resp)
+	if err != nil {
+		return resp, err
+	}
+	if err := (apiErrorBody{Error: resp.Error, Message: resp.Message}).errOrNil("failed to get mailbox"); err != nil {
+		return resp, err
+	}
+	if resp.ID == "" {
+		resp.ID = resp.ResolvedID()
+	}
+	if resp.Domain == "" {
+		resp.Domain = resp.ResolvedDomain()
+	}
+	return resp, nil
+}
+
+type UpdateMailboxRequest struct {
+	FirstName string `json:"first_name,omitempty"`
+	LastName  string `json:"last_name,omitempty"`
+	Username  string `json:"username,omitempty"`
+}
+
+func (c *Client) UpdateMailbox(mailboxID string, req UpdateMailboxRequest) error {
+	mailboxID = strings.TrimSpace(mailboxID)
+	if mailboxID == "" {
+		return fmt.Errorf("mailbox id required")
+	}
+	var resp apiErrorBody
+	err := c.do("POST", "/api/mailboxes/"+mailboxID+"/update", req, &resp)
+	if err != nil {
+		return err
+	}
+	return resp.errOrNil("failed to update mailbox")
+}
+
+type CancelMailboxesRequest struct {
+	UIDs []string `json:"uids"`
+}
+
+func (c *Client) CancelMailboxes(uids []string) error {
+	cleaned := make([]string, 0, len(uids))
+	for _, u := range uids {
+		u = strings.TrimSpace(u)
+		if u != "" {
+			cleaned = append(cleaned, u)
+		}
+	}
+	if len(cleaned) == 0 {
+		return fmt.Errorf("at least one mailbox uid required")
+	}
+	var resp apiErrorBody
+	err := c.do("POST", "/api/mailboxes/cancel", CancelMailboxesRequest{UIDs: cleaned}, &resp)
+	if err != nil {
+		return err
+	}
+	return resp.errOrNil("failed to cancel mailbox")
+}
+
+type ForwardingRequest struct {
+	UIDs            []string `json:"uids"`
+	ForwardingEmail string   `json:"forwarding_email,omitempty"`
+}
+
+type ForwardingJob struct {
+	ID     string `json:"id"`
+	UID    string `json:"uid"`
+	Status string `json:"status"`
+	Email  string `json:"forwarding_email"`
+}
+
+type forwardingResponse struct {
+	Error   bool            `json:"error"`
+	Message string          `json:"message"`
+	Jobs    []ForwardingJob `json:"jobs"`
+	Result  []ForwardingJob `json:"result"`
+	Data    []ForwardingJob `json:"data"`
+}
+
+func (r forwardingResponse) jobs() []ForwardingJob {
+	if len(r.Jobs) > 0 {
+		return r.Jobs
+	}
+	if len(r.Result) > 0 {
+		return r.Result
+	}
+	return r.Data
+}
+
+func (c *Client) SetupForwarding(uids []string, forwardingEmail string) ([]ForwardingJob, error) {
+	return c.forwardingOp("/api/mailboxes/forwarding/setup", uids, forwardingEmail, true)
+}
+
+func (c *Client) UpdateForwarding(uids []string, forwardingEmail string) ([]ForwardingJob, error) {
+	return c.forwardingOp("/api/mailboxes/forwarding/update", uids, forwardingEmail, true)
+}
+
+func (c *Client) RemoveForwarding(uids []string) ([]ForwardingJob, error) {
+	return c.forwardingOp("/api/mailboxes/forwarding/remove", uids, "", false)
+}
+
+func (c *Client) forwardingOp(path string, uids []string, forwardingEmail string, requireEmail bool) ([]ForwardingJob, error) {
+	cleaned := make([]string, 0, len(uids))
+	for _, u := range uids {
+		u = strings.TrimSpace(u)
+		if u != "" {
+			cleaned = append(cleaned, u)
+		}
+	}
+	if len(cleaned) == 0 {
+		return nil, fmt.Errorf("at least one mailbox uid required")
+	}
+	forwardingEmail = strings.TrimSpace(forwardingEmail)
+	if requireEmail && forwardingEmail == "" {
+		return nil, fmt.Errorf("forwarding email required")
+	}
+	body := ForwardingRequest{UIDs: cleaned}
+	if requireEmail {
+		body.ForwardingEmail = forwardingEmail
+	}
+	var resp forwardingResponse
+	err := c.do("POST", path, body, &resp)
+	if err != nil {
+		return nil, err
+	}
+	if err := (apiErrorBody{Error: resp.Error, Message: resp.Message}).errOrNil("forwarding request failed"); err != nil {
+		return nil, err
+	}
+	return resp.jobs(), nil
+}
+
+func (c *Client) ListForwardingJobs(uids []string) ([]ForwardingJob, error) {
+	body := map[string]any{}
+	cleaned := make([]string, 0, len(uids))
+	for _, u := range uids {
+		u = strings.TrimSpace(u)
+		if u != "" {
+			cleaned = append(cleaned, u)
+		}
+	}
+	if len(cleaned) > 0 {
+		body["uids"] = cleaned
+	}
+	var resp forwardingResponse
+	err := c.do("POST", "/api/mailboxes/forwarding/jobs", body, &resp)
+	if err != nil {
+		return nil, err
+	}
+	if err := (apiErrorBody{Error: resp.Error, Message: resp.Message}).errOrNil("failed to list forwarding jobs"); err != nil {
+		return nil, err
+	}
+	return resp.jobs(), nil
+}
+
+// CheckMailboxStatus refreshes status for mailbox UIDs.
+func (c *Client) CheckMailboxStatus(uids []string) ([]MailboxListItem, error) {
+	cleaned := make([]string, 0, len(uids))
+	for _, u := range uids {
+		u = strings.TrimSpace(u)
+		if u != "" {
+			cleaned = append(cleaned, u)
+		}
+	}
+	if len(cleaned) == 0 {
+		return nil, fmt.Errorf("at least one mailbox uid required")
+	}
+	var resp mailboxListResponse
+	err := c.do("POST", "/api/mailboxes/status", map[string]any{"uids": cleaned}, &resp)
+	if err != nil {
+		return nil, err
+	}
+	list := resp.Mailboxes
+	if len(list) == 0 {
+		list = resp.Data
+	}
+	for i := range list {
+		if list[i].ID == "" {
+			list[i].ID = list[i].ResolvedID()
+		}
+	}
+	return list, nil
 }
 
 // Insights fetches best-effort analytics JSON for a mailbox (shape varies by InboxKit).

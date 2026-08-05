@@ -186,3 +186,103 @@ func TestConfiguredRequiresWorkspace(t *testing.T) {
 		t.Fatal("plain order id should not be connect")
 	}
 }
+
+func TestGetMailboxParsesDetail(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/api/mailboxes/mb-1" {
+			t.Fatalf("%s %s", r.Method, r.URL.Path)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"uid": "mb-1", "email": "a@acme.com", "status": "active",
+			"domain_name": "acme.com", "is_admin": true, "forwarding_email": "fwd@x.com",
+			"first_name": "Ada", "last_name": "Lovelace", "platform": "GOOGLE",
+		})
+	}))
+	defer srv.Close()
+	client := &Client{APIKey: "test", WorkspaceID: "ws", BaseURL: srv.URL, HTTP: srv.Client()}
+	d, err := client.GetMailbox("mb-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.ResolvedID() != "mb-1" || d.ResolvedDomain() != "acme.com" || !d.ResolvedIsAdmin() {
+		t.Fatalf("%+v", d)
+	}
+	if d.ResolvedForwarding() != "fwd@x.com" {
+		t.Fatalf("forwarding=%q", d.ResolvedForwarding())
+	}
+}
+
+func TestCancelMailboxesPostsUIDs(t *testing.T) {
+	var gotBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/mailboxes/cancel" {
+			t.Fatalf("path=%s", r.URL.Path)
+		}
+		raw, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(raw, &gotBody)
+		_ = json.NewEncoder(w).Encode(map[string]any{"error": false})
+	}))
+	defer srv.Close()
+	client := &Client{APIKey: "test", WorkspaceID: "ws", BaseURL: srv.URL, HTTP: srv.Client()}
+	if err := client.CancelMailboxes([]string{"u1", "u2"}); err != nil {
+		t.Fatal(err)
+	}
+	uids, _ := gotBody["uids"].([]any)
+	if len(uids) != 2 {
+		t.Fatalf("%v", gotBody)
+	}
+}
+
+func TestSetupForwardingPostsBody(t *testing.T) {
+	var gotPath string
+	var gotBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		raw, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(raw, &gotBody)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"error": false,
+			"jobs":  []map[string]any{{"uid": "u1", "status": "queued", "forwarding_email": "me@x.com"}},
+		})
+	}))
+	defer srv.Close()
+	client := &Client{APIKey: "test", WorkspaceID: "ws", BaseURL: srv.URL, HTTP: srv.Client()}
+	jobs, err := client.SetupForwarding([]string{"u1"}, "me@x.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotPath != "/api/mailboxes/forwarding/setup" {
+		t.Fatalf("path=%s", gotPath)
+	}
+	if gotBody["forwarding_email"] != "me@x.com" {
+		t.Fatalf("%v", gotBody)
+	}
+	if len(jobs) != 1 || jobs[0].Status != "queued" {
+		t.Fatalf("%+v", jobs)
+	}
+}
+
+func TestRemoveForwardingPath(t *testing.T) {
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		_ = json.NewEncoder(w).Encode(map[string]any{"error": false, "result": []any{}})
+	}))
+	defer srv.Close()
+	client := &Client{APIKey: "test", WorkspaceID: "ws", BaseURL: srv.URL, HTTP: srv.Client()}
+	if _, err := client.RemoveForwarding([]string{"u1"}); err != nil {
+		t.Fatal(err)
+	}
+	if gotPath != "/api/mailboxes/forwarding/remove" {
+		t.Fatalf("path=%s", gotPath)
+	}
+}
+
+func TestMailboxListItemScheduledCancel(t *testing.T) {
+	if !(MailboxListItem{Status: "scheduled_for_cancellation"}).IsScheduledCancel() {
+		t.Fatal("expected scheduled")
+	}
+	if (MailboxListItem{Status: "active"}).IsScheduledCancel() {
+		t.Fatal("active should not be scheduled")
+	}
+}
