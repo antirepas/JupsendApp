@@ -577,6 +577,7 @@ func UpsertInboxKitSMTPAccount(userID int64, email, host, port, user, password, 
 	if port == "" {
 		port = "587"
 	}
+	port = normalizeGmailSMTPPort(host, port)
 	if user == "" {
 		user = email
 	}
@@ -639,6 +640,20 @@ func DecryptSMTPPassword(acc SMTPAccount) (string, error) {
 	return plain, nil
 }
 
+func normalizeGmailSMTPPort(host, port string) string {
+	port = strings.TrimSpace(port)
+	if !strings.EqualFold(strings.TrimSpace(host), "smtp.gmail.com") {
+		if port == "" {
+			return "587"
+		}
+		return port
+	}
+	if port == "" || port == "465" {
+		return "587"
+	}
+	return port
+}
+
 // AttachManualSendingMailbox attaches SMTP/IMAP credentials for a mailbox you already operate
 // (admin/Pro escape hatch when not provisioning via InboxKit purchase).
 func AttachManualSendingMailbox(userID int64, email, fromName, smtpHost, smtpPort, imapHost, imapPort, username, password string, isDefault bool) (int64, error) {
@@ -658,6 +673,7 @@ func AttachManualSendingMailbox(userID int64, email, fromName, smtpHost, smtpPor
 	if smtpPort == "" {
 		smtpPort = "587"
 	}
+	smtpPort = normalizeGmailSMTPPort(smtpHost, smtpPort)
 	if imapHost == "" {
 		imapHost = "imap.gmail.com"
 	}

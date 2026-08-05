@@ -49,7 +49,8 @@ func runAlterSchema() {
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS goal_meetings_per_month INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS goal_reply_to_meeting_pct INTEGER NOT NULL DEFAULT 50`,
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS goal_daily_send_cap INTEGER NOT NULL DEFAULT 0`,
-		`UPDATE smtp_accounts SET smtp_port = '465' WHERE smtp_host = 'smtp.gmail.com' AND smtp_port = '587'`,
+		// Prefer 587 STARTTLS for Gmail — 465/SMTPS often times out on VPS IPv6 routes.
+		`UPDATE smtp_accounts SET smtp_port = '587' WHERE smtp_host = 'smtp.gmail.com' AND smtp_port = '465'`,
 		`UPDATE smtp_accounts SET warmup_daily_cap = 20, warmup_increment_per_day = 20 WHERE warmup_enabled = 1 AND warmup_daily_cap = 5 AND warmup_increment_per_day = 5`,
 		`ALTER TABLE contact_lists ADD COLUMN IF NOT EXISTS variable_schema TEXT DEFAULT ''`,
 		`CREATE TABLE IF NOT EXISTS gmail_processed_messages (

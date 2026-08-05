@@ -65,8 +65,9 @@ func runUserSMTPCheck(userID int64) (from string, err error) {
 	}
 	port := acc.SMTPPort
 	if port == "" {
-		port = "465"
+		port = "587"
 	}
+	port = util.NormalizeGmailSMTPPort(host, port)
 	if acc.MailboxSource == "inboxkit" || acc.MailboxSource == model.MailboxSourceShared || acc.MailboxSource == model.MailboxSourceManual || (!acc.IsGoogleOAuth() && acc.SMTPPassword != "") {
 		pass := acc.SMTPPassword
 		if acc.MailboxSource == "inboxkit" || acc.MailboxSource == model.MailboxSourceShared || acc.MailboxSource == model.MailboxSourceManual {
