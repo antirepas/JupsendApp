@@ -65,7 +65,7 @@ func (s *EmailSender) SendWithMetaOAuth(to, subject, plainBody, htmlBody string,
 
 func (s *EmailSender) SendWithMetaAuth(to, subject, plainBody, htmlBody string, meta SendMeta, auth smtp.Auth) error {
 	if auth == nil {
-		auth = smtp.PlainAuth("", s.Config.Username, s.Config.Password, s.Config.Host)
+		auth = SMTPPasswordAuth(s.Config.Host, s.Config.Username, s.Config.Password, false)
 	}
 	return s.sendWithAuth(to, subject, plainBody, htmlBody, meta, auth)
 }
@@ -89,7 +89,7 @@ func ProbeSMTPPlain(host, port, username, password, from string) error {
 	if username == "" {
 		username = from
 	}
-	auth := smtp.PlainAuth("", username, password, host)
+	auth := SMTPPasswordAuth(host, username, password, false)
 	return sendMailAttempt(host, port, auth, from, nil, nil, ProbeSMTPSendTimeout)
 }
 
@@ -187,6 +187,9 @@ func sendMail(host, port string, implicitTLS bool, auth smtp.Auth, from string, 
 	}
 
 	if auth != nil {
+		if pa, ok := auth.(*smtpPasswordAuth); ok {
+			pa.connectionIsTLS = pa.connectionIsTLS || implicitTLS
+		}
 		if err := client.Auth(auth); err != nil {
 			return fmt.Errorf("smtp auth: %w", err)
 		}

@@ -137,7 +137,14 @@ func formatSMTPProbeError(host, port, accountLabel string, err error) error {
 	if strings.Contains(msg, "535") || strings.Contains(msg, "badcredentials") ||
 		strings.Contains(msg, "username and password not accepted") ||
 		strings.Contains(msg, "authentication failed") {
+		labelLower := strings.ToLower(accountLabel)
 		hostLower := strings.ToLower(host)
+		if strings.Contains(labelLower, "inboxkit") {
+			return fmt.Errorf("%sGoogle rejected the InboxKit password — click Refresh/Pull credentials from InboxKit, then Test SMTP again", prefix)
+		}
+		if strings.Contains(labelLower, "manual") && strings.Contains(hostLower, "gmail") {
+			return fmt.Errorf("%sGmail rejected the password. If this is a Workspace seat from jupsend, click Pull credentials from InboxKit — do not paste the Free-plan App Password. For a personal Gmail, use a Google App Password (no spaces) and turn on IMAP", prefix)
+		}
 		if strings.Contains(hostLower, "gmail") || strings.Contains(hostLower, "google") {
 			return fmt.Errorf("%sGmail rejected the password. Use a Google App Password (Account → Security → 2-Step Verification → App passwords), not your normal login password. Paste it without spaces. Also turn on IMAP in Gmail settings", prefix)
 		}
@@ -157,8 +164,60 @@ func MailboxesSMTPCheck(c *gin.Context) {
 	}
 	from, err := runUserSMTPCheck(userID, m.SMTPAccountID)
 	if err != nil {
-		c.Redirect(http.StatusFound, mailboxManageURL(id, "credentials", "SMTP test failed: "+err.Error(), ""))
+		// Auto-heal: Workspace seats often get broken when pasted as "manual". Relink from InboxKit.
+		var healNotes []string
+		if healErr := model.RelinkMailboxFromInboxKit(userID, id); healErr == nil {
+			m2, _ := model.GetOutreachMailbox(id, userID)
+			if m2.SMTPAccountID > 0 {
+				if from2, err2 := runUserSMTPCheck(userID, m2.SMTPAccountID); err2 == nil {
+					c.Redirect(http.StatusFound, mailboxManageURL(id, "credentials", "", "SMTP OK for "+from2+" — refreshed from InboxKit"))
+					return
+				} else {
+					healNotes = append(healNotes, "InboxKit refresh still failed: "+err2.Error())
+				}
+			}
+		} else {
+			healNotes = append(healNotes, "InboxKit relink: "+healErr.Error())
+		}
+		if healErr := model.ApplySharedSMTPCredentialsToMailbox(userID, id); healErr == nil {
+			m2, _ := model.GetOutreachMailbox(id, userID)
+			smtpID := m.SMTPAccountID
+			if m2.SMTPAccountID > 0 {
+				smtpID = m2.SMTPAccountID
+			}
+			if from2, err2 := runUserSMTPCheck(userID, smtpID); err2 == nil {
+				c.Redirect(http.StatusFound, mailboxManageURL(id, "credentials", "", "SMTP OK for "+from2+" — using server shared credentials"))
+				return
+			} else {
+				healNotes = append(healNotes, "shared SMTP still failed: "+err2.Error())
+			}
+		}
+		msg := "SMTP test failed: " + err.Error()
+		if len(healNotes) > 0 {
+			msg += " | " + strings.Join(healNotes, "; ")
+		}
+		c.Redirect(http.StatusFound, mailboxManageURL(id, "credentials", msg, ""))
 		return
 	}
 	c.Redirect(http.StatusFound, mailboxManageURL(id, "credentials", "", "SMTP OK for "+from))
+}
+
+func MailboxesRelinkInboxKit(c *gin.Context) {
+	userID := mustUserID(c)
+	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err := model.RelinkMailboxFromInboxKit(userID, id); err != nil {
+		c.Redirect(http.StatusFound, mailboxManageURL(id, "credentials", humanizeInboxKitError(err.Error()), ""))
+		return
+	}
+	m, err := model.GetOutreachMailbox(id, userID)
+	if err != nil || m.SMTPAccountID <= 0 {
+		c.Redirect(http.StatusFound, mailboxManageURL(id, "credentials", "", "Credentials refreshed from InboxKit"))
+		return
+	}
+	from, probeErr := runUserSMTPCheck(userID, m.SMTPAccountID)
+	if probeErr != nil {
+		c.Redirect(http.StatusFound, mailboxManageURL(id, "credentials", "Pulled InboxKit credentials but SMTP still failed: "+probeErr.Error(), ""))
+		return
+	}
+	c.Redirect(http.StatusFound, mailboxManageURL(id, "credentials", "", "SMTP OK for "+from+" — credentials from InboxKit"))
 }

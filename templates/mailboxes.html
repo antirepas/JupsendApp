@@ -313,9 +313,13 @@
         <form method="POST" action="/mailboxes/{{.ID}}/credentials/refresh">
           <button type="submit" class="btn-secondary text-sm w-full">Refresh from InboxKit</button>
         </form>
+        {{else}}
+        <form method="POST" action="/mailboxes/{{.ID}}/relink-inboxkit">
+          <button type="submit" class="btn-secondary text-sm w-full">Pull credentials from InboxKit</button>
+        </form>
         {{end}}
         <form method="POST" action="/mailboxes/{{.ID}}/smtp-check">
-          <button type="submit" class="btn-secondary text-sm w-full">Test SMTP for this mailbox</button>
+          <button type="submit" class="btn-primary text-sm w-full">Test SMTP for this mailbox</button>
         </form>
         {{if .CanEditCreds}}
         <details class="rounded-lg border border-gray-100 p-3">

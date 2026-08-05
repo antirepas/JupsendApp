@@ -105,6 +105,7 @@ func RegisterRoutes(server *gin.Engine) {
 		mailboxOnboarding.POST("/mailboxes/:id/credentials/refresh", MailboxesRefreshCredentials)
 		mailboxOnboarding.GET("/mailboxes/:id/password", MailboxesRevealPassword)
 		mailboxOnboarding.POST("/mailboxes/:id/smtp-check", MailboxesSMTPCheck)
+		mailboxOnboarding.POST("/mailboxes/:id/relink-inboxkit", MailboxesRelinkInboxKit)
 		mailboxOnboarding.POST("/mailboxes/:id/warmup", MailboxesUpdateWarmup)
 		mailboxOnboarding.POST("/mailboxes/:id/cancel", MailboxesCancel)
 		mailboxOnboarding.POST("/mailboxes/:id/forwarding", MailboxesForwarding)

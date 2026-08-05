@@ -615,6 +615,160 @@ func RefreshMailboxFromInboxKit(userID, mailboxID int64) error {
 	return nil
 }
 
+// RelinkMailboxFromInboxKit finds the InboxKit seat for this email and replaces local SMTP creds
+// with the live credentials from InboxKit (fixes broken "manual" copies of Workspace mailboxes).
+func RelinkMailboxFromInboxKit(userID, mailboxID int64) error {
+	m, err := GetOutreachMailbox(mailboxID, userID)
+	if err != nil {
+		return err
+	}
+	email := strings.ToLower(strings.TrimSpace(m.Email))
+	if email == "" || !strings.Contains(email, "@") {
+		return fmt.Errorf("mailbox email missing")
+	}
+	if !inboxkit.Configured() {
+		return fmt.Errorf("%s", inboxkit.ConfiguredHint())
+	}
+	domain := email[strings.Index(email, "@")+1:]
+	client := inboxkit.NewClient()
+	list, err := client.ListMailboxes(domain)
+	if err != nil {
+		return fmt.Errorf("list InboxKit mailboxes: %w", err)
+	}
+	var mbID string
+	for _, item := range list {
+		if strings.EqualFold(strings.TrimSpace(item.Email), email) {
+			mbID = item.ResolvedID()
+			break
+		}
+	}
+	if mbID == "" && m.InboxkitMailboxID != "" {
+		mbID = m.InboxkitMailboxID
+	}
+	if mbID == "" {
+		return fmt.Errorf("InboxKit has no mailbox %s — attach with the password InboxKit shows for that seat, or finish domain provisioning", email)
+	}
+	_ = UpdateOutreachMailboxReady(m.ID, mbID, m.SMTPAccountID, m.Status)
+	m.InboxkitMailboxID = mbID
+	return RefreshMailboxFromInboxKit(userID, m.ID)
+}
+
+// ApplySharedSMTPCredentialsToMailbox copies the server Free/shared SMTP env credentials onto this mailbox.
+// Use when the seat should send as the same address configured in SMTP_USER / APP_PASSWORD.
+func ApplySharedSMTPCredentialsToMailbox(userID, mailboxID int64) error {
+	m, err := GetOutreachMailbox(mailboxID, userID)
+	if err != nil {
+		return err
+	}
+	if config.SMTPHost == "" || config.SMTPUser == "" || config.SMTPPass == "" {
+		return fmt.Errorf("shared SMTP is not configured on the server")
+	}
+	email := strings.ToLower(strings.TrimSpace(m.Email))
+	if !strings.EqualFold(config.SMTPUser, email) && !strings.EqualFold(config.SMTPFrom, email) {
+		return fmt.Errorf("server shared SMTP is %s, not %s — cannot copy those credentials onto this mailbox", config.SMTPUser, m.Email)
+	}
+	port := config.SMTPPort
+	if port == "" {
+		port = "587"
+	}
+	host := config.SMTPHost
+	pass := config.SMTPPass
+	user := config.SMTPUser
+	return UpdateMailboxCredentials(userID, mailboxID, host, port, config.SharedIMAPHost(), config.SharedIMAPPort(), user, pass)
+}
+
+// AttachMailboxSmart attaches SMTP for an address. Prefer live InboxKit credentials when the
+// address belongs to an InboxKit domain; otherwise store the form password as manual.
+func AttachMailboxSmart(userID int64, email, fromName, smtpHost, smtpPort, imapHost, imapPort, username, password string, isDefault bool) (int64, error) {
+	email = strings.ToLower(strings.TrimSpace(email))
+	if inboxkit.Configured() && strings.Contains(email, "@") {
+		domain := email[strings.Index(email, "@")+1:]
+		client := inboxkit.NewClient()
+		if list, err := client.ListMailboxes(domain); err == nil {
+			for _, item := range list {
+				if !strings.EqualFold(strings.TrimSpace(item.Email), email) {
+					continue
+				}
+				mbID := item.ResolvedID()
+				if mbID == "" {
+					break
+				}
+				creds, cErr := client.GetMailboxCredentials(mbID)
+				if cErr != nil {
+					return 0, fmt.Errorf("InboxKit credentials for %s: %w", email, cErr)
+				}
+				pass := creds.ResolvedPassword()
+				if pass == "" {
+					return 0, fmt.Errorf("InboxKit returned empty credentials for %s", email)
+				}
+				host := creds.SMTPHost
+				if host == "" {
+					host = smtpHost
+				}
+				if host == "" {
+					host = "smtp.gmail.com"
+				}
+				port := normalizeGmailSMTPPort(host, firstNonEmpty(creds.SMTPPort, smtpPort, "587"))
+				user := creds.ResolvedSMTPUser()
+				if user == "" {
+					user = email
+				}
+				imapH := firstNonEmpty(creds.IMAPHost, imapHost, "imap.gmail.com")
+				imapP := firstNonEmpty(creds.IMAPPort, imapPort, "993")
+				daily := 50
+				if spec, err := PlanSpecForTier(PlanTierPro); err == nil && spec.DailyEmailCap > 0 {
+					daily = spec.DailyEmailCap
+				}
+				if fromName == "" {
+					fromName = strings.TrimSpace(item.FirstName + " " + item.LastName)
+				}
+				if fromName == "" {
+					fromName = email
+				}
+				smtpID, err := UpsertInboxKitSMTPAccount(userID, email, host, port, user, pass, fromName, mbID, isDefault, daily, imapH, imapP)
+				if err != nil {
+					return 0, err
+				}
+				domainID := int64(0)
+				if d, dErr := GetOutreachDomainByName(userID, domain); dErr == nil {
+					domainID = d.ID
+				}
+				oid, err := UpsertOutreachMailbox(OutreachMailbox{
+					UserID:            userID,
+					DomainID:          domainID,
+					SMTPAccountID:     smtpID,
+					InboxkitMailboxID: mbID,
+					Email:             email,
+					FirstName:         item.FirstName,
+					LastName:          item.LastName,
+					Platform:          firstNonEmpty(item.Platform, "GOOGLE"),
+					Status:            "ready",
+					IsDefault:         isDefault,
+					Included:          false,
+				})
+				if err != nil {
+					return 0, err
+				}
+				_ = UpdateOutreachMailboxReady(oid, mbID, smtpID, "ready")
+				if isDefault {
+					_ = SetDefaultOutreachMailbox(userID, oid)
+				}
+				return oid, nil
+			}
+		}
+	}
+	if username == "" {
+		username = email
+	}
+	if smtpHost == "" {
+		smtpHost = "smtp.gmail.com"
+	}
+	if smtpPort == "" {
+		smtpPort = "587"
+	}
+	return AttachManualSendingMailbox(userID, email, fromName, smtpHost, smtpPort, imapHost, imapPort, username, password, isDefault)
+}
+
 // CancelInboxKitMailbox cancels the seat at InboxKit and marks local status.
 func CancelInboxKitMailbox(userID, mailboxID int64) error {
 	m, err := GetOutreachMailbox(mailboxID, userID)

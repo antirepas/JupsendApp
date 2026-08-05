@@ -649,16 +649,18 @@ func MailboxesAttachManual(c *gin.Context) {
 	if smtpPort == "" {
 		smtpPort = "587"
 	}
-	if err := util.ProbeSMTPPlain(smtpHost, smtpPort, username, password, email); err != nil {
-		c.Redirect(http.StatusFound, "/mailboxes?error="+url.QueryEscape(formatSMTPProbeError(smtpHost, smtpPort, email, err).Error()))
-		return
-	}
-	_, err := model.AttachManualSendingMailbox(userID, email, fromName, smtpHost, smtpPort, imapHost, imapPort, username, password, isDefault)
+	oid, err := model.AttachMailboxSmart(userID, email, fromName, smtpHost, smtpPort, imapHost, imapPort, username, password, isDefault)
 	if err != nil {
-		c.Redirect(http.StatusFound, "/mailboxes?error="+url.QueryEscape(err.Error()))
+		c.Redirect(http.StatusFound, "/mailboxes?error="+url.QueryEscape(humanizeInboxKitError(err.Error())))
 		return
 	}
-	c.Redirect(http.StatusFound, "/mailboxes?success="+url.QueryEscape("Mailbox connected — sending and reply tracking use these SMTP/IMAP credentials"))
+	if m, mErr := model.GetOutreachMailbox(oid, userID); mErr == nil && m.SMTPAccountID > 0 {
+		if _, probeErr := runUserSMTPCheck(userID, m.SMTPAccountID); probeErr != nil {
+			c.Redirect(http.StatusFound, mailboxManageURL(oid, "credentials", "Connected but SMTP failed: "+probeErr.Error(), ""))
+			return
+		}
+	}
+	c.Redirect(http.StatusFound, "/mailboxes?success="+url.QueryEscape("Mailbox connected"))
 }
 
 func MailboxesUpdateCredentials(c *gin.Context) {
