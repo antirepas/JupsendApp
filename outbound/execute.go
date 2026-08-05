@@ -92,7 +92,7 @@ func executeJob(job model.SendJob, account model.SMTPAccount) error {
 		return fmt.Errorf("smtp account %d has no sender email configured", account.ID)
 	}
 	smtpPass := account.SMTPPassword
-	if account.MailboxSource == "inboxkit" || account.MailboxSource == model.MailboxSourceShared {
+	if account.MailboxSource == "inboxkit" || account.MailboxSource == model.MailboxSourceShared || account.MailboxSource == model.MailboxSourceManual {
 		dec, err := model.DecryptSMTPPassword(account)
 		if err != nil {
 			return fmt.Errorf("mailbox credentials: %w", err)

@@ -67,9 +67,9 @@ func runUserSMTPCheck(userID int64) (from string, err error) {
 	if port == "" {
 		port = "465"
 	}
-	if acc.MailboxSource == "inboxkit" || acc.MailboxSource == model.MailboxSourceShared || (!acc.IsGoogleOAuth() && acc.SMTPPassword != "") {
+	if acc.MailboxSource == "inboxkit" || acc.MailboxSource == model.MailboxSourceShared || acc.MailboxSource == model.MailboxSourceManual || (!acc.IsGoogleOAuth() && acc.SMTPPassword != "") {
 		pass := acc.SMTPPassword
-		if acc.MailboxSource == "inboxkit" || acc.MailboxSource == model.MailboxSourceShared {
+		if acc.MailboxSource == "inboxkit" || acc.MailboxSource == model.MailboxSourceShared || acc.MailboxSource == model.MailboxSourceManual {
 			pass, err = model.DecryptSMTPPassword(acc)
 			if err != nil {
 				return from, err
@@ -104,6 +104,15 @@ func formatSMTPProbeError(host, port string, err error) error {
 		strings.Contains(msg, "network is unreachable") ||
 		strings.Contains(msg, "no route to host") {
 		return fmt.Errorf("cannot reach %s:%s (%v) — outbound SMTP ports 465/587 may be blocked on this host", host, port, err)
+	}
+	if strings.Contains(msg, "535") || strings.Contains(msg, "badcredentials") ||
+		strings.Contains(msg, "username and password not accepted") ||
+		strings.Contains(msg, "authentication failed") {
+		hostLower := strings.ToLower(host)
+		if strings.Contains(hostLower, "gmail") || strings.Contains(hostLower, "google") {
+			return fmt.Errorf("Gmail rejected the password. Use a Google App Password (Account → Security → 2-Step Verification → App passwords), not your normal login password. Also turn on IMAP in Gmail settings")
+		}
+		return fmt.Errorf("SMTP rejected username/password for %s:%s — for Google use an App Password; for Microsoft enable SMTP AUTH / use an app password", host, port)
 	}
 	return fmt.Errorf("SMTP auth to %s:%s failed: %w", host, port, err)
 }

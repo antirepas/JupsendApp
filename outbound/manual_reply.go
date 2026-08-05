@@ -113,7 +113,7 @@ func SendManualReply(in ManualReplyInput) (int64, error) {
 		return 0, fmt.Errorf("mailbox has no sender email")
 	}
 	smtpPass := account.SMTPPassword
-	if account.MailboxSource == "inboxkit" || account.MailboxSource == model.MailboxSourceShared {
+	if account.MailboxSource == "inboxkit" || account.MailboxSource == model.MailboxSourceShared || account.MailboxSource == model.MailboxSourceManual {
 		dec, err := model.DecryptSMTPPassword(account)
 		if err != nil {
 			return 0, fmt.Errorf("mailbox credentials: %w", err)

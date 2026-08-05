@@ -101,6 +101,8 @@ func RegisterRoutes(server *gin.Engine) {
 		mailboxOnboarding.POST("/mailboxes/domains/buy/checkout", MailboxesBuyDomainCheckout)
 		mailboxOnboarding.POST("/mailboxes/:id/default", MailboxesSetDefault)
 		mailboxOnboarding.POST("/mailboxes/:id/from-name", MailboxesUpdateFromName)
+		mailboxOnboarding.POST("/mailboxes/:id/credentials", MailboxesUpdateCredentials)
+		mailboxOnboarding.POST("/mailboxes/:id/delete", MailboxesDelete)
 	}
 
 	v1 := server.Group("/api/v1")

@@ -46,7 +46,7 @@ func TestSearchDomainsSendsKeywordAndParsesName(t *testing.T) {
 			"error":   false,
 			"message": "ok",
 			"domains": []map[string]any{
-				{"name": "acme.io", "available": true, "price": 12.5, "is_premium": false},
+				{"name": "acme.com", "available": true, "price": 12.5, "is_premium": false},
 			},
 		})
 	}))
@@ -60,11 +60,53 @@ func TestSearchDomainsSendsKeywordAndParsesName(t *testing.T) {
 	if gotBody["keyword"] != "acme" {
 		t.Fatalf("keyword=%v body=%v", gotBody["keyword"], gotBody)
 	}
+	tlds, _ := gotBody["tlds"].([]any)
+	if len(tlds) == 0 {
+		t.Fatalf("missing tlds: %v", gotBody)
+	}
+	for _, tld := range tlds {
+		s, _ := tld.(string)
+		switch s {
+		case ".com", ".net", ".shop", ".org":
+		default:
+			t.Fatalf("disallowed tld %q in %v", s, tlds)
+		}
+	}
 	if gotBody["page"] == nil || gotBody["num"] == nil {
 		t.Fatalf("missing page/num: %v", gotBody)
 	}
-	if len(list) != 1 || list[0].Domain != "acme.io" {
+	if len(list) != 1 || list[0].Domain != "acme.com" {
 		t.Fatalf("unexpected results: %+v", list)
+	}
+}
+
+func TestSearchDomainsExactDomainStripsKeywordTLD(t *testing.T) {
+	var gotBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(raw, &gotBody)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"error": false,
+			"domains": []map[string]any{
+				{"name": "jupsend.com", "available": true, "price": 10},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	client := &Client{APIKey: "test", WorkspaceID: "ws", BaseURL: srv.URL, HTTP: srv.Client()}
+	list, err := client.SearchDomains("jupsend.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotBody["keyword"] != "jupsend" {
+		t.Fatalf("keyword=%v", gotBody["keyword"])
+	}
+	if gotBody["domain"] != "jupsend.com" {
+		t.Fatalf("domain=%v", gotBody["domain"])
+	}
+	if len(list) != 1 || list[0].Domain != "jupsend.com" {
+		t.Fatalf("%+v", list)
 	}
 }
 

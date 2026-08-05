@@ -13,6 +13,7 @@ import (
 	"emailtracker.com/inboxkit"
 	"emailtracker.com/model"
 	"emailtracker.com/outbound"
+	"emailtracker.com/util"
 	"emailtracker.com/whop"
 	"github.com/gin-gonic/gin"
 )
@@ -361,6 +362,13 @@ func MailboxesPage(c *gin.Context) {
 		FromName     string
 		WarmupLabel  string
 		InsightsHint string
+		Source       string
+		CanEditCreds bool
+		SMTPHost     string
+		SMTPPort     string
+		IMAPHost     string
+		IMAPPort     string
+		SMTPUser     string
 	}
 	var rows []mailboxRow
 	for _, m := range mailboxes {
@@ -371,6 +379,13 @@ func MailboxesPage(c *gin.Context) {
 				if strings.TrimSpace(acc.FromName) != "" {
 					row.FromName = acc.FromName
 				}
+				row.Source = acc.MailboxSource
+				row.CanEditCreds = acc.MailboxSource == model.MailboxSourceManual || acc.MailboxSource == model.MailboxSourceInboxKit
+				row.SMTPHost = acc.SMTPHost
+				row.SMTPPort = acc.SMTPPort
+				row.IMAPHost = acc.IMAPHost
+				row.IMAPPort = acc.IMAPPort
+				row.SMTPUser = acc.SMTPUser
 				schedule := outbound.EffectiveDailyCap(acc)
 				cap, hint := outbound.ApplyInsightsToCap(schedule, acc, m.AnalyticsJSON)
 				if acc.WarmupEnabled {
@@ -383,6 +398,14 @@ func MailboxesPage(c *gin.Context) {
 				} else if m.AnalyticsJSON != "" && m.AnalyticsJSON != "{}" {
 					row.InsightsHint = "Schedule warmup"
 				}
+			}
+		}
+		if row.Source == "" {
+			if strings.EqualFold(m.Platform, "MANUAL") {
+				row.Source = model.MailboxSourceManual
+				row.CanEditCreds = m.SMTPAccountID > 0
+			} else if m.InboxkitMailboxID != "" || strings.EqualFold(m.Platform, "GOOGLE") {
+				row.Source = model.MailboxSourceInboxKit
 			}
 		}
 		rows = append(rows, row)
@@ -427,12 +450,94 @@ func MailboxesAttachManual(c *gin.Context) {
 	username := strings.TrimSpace(c.PostForm("username"))
 	password := c.PostForm("password")
 	isDefault := c.PostForm("is_default") == "1" || c.PostForm("is_default") == "on"
+	if username == "" {
+		username = email
+	}
+	if smtpHost == "" {
+		smtpHost = "smtp.gmail.com"
+	}
+	if smtpPort == "" {
+		smtpPort = "587"
+	}
+	if err := util.ProbeSMTPPlain(smtpHost, smtpPort, username, password, email); err != nil {
+		c.Redirect(http.StatusFound, "/mailboxes?error="+url.QueryEscape(formatSMTPProbeError(smtpHost, smtpPort, err).Error()))
+		return
+	}
 	_, err := model.AttachManualSendingMailbox(userID, email, fromName, smtpHost, smtpPort, imapHost, imapPort, username, password, isDefault)
 	if err != nil {
 		c.Redirect(http.StatusFound, "/mailboxes?error="+url.QueryEscape(err.Error()))
 		return
 	}
 	c.Redirect(http.StatusFound, "/mailboxes?success="+url.QueryEscape("Mailbox connected — sending and reply tracking use these SMTP/IMAP credentials"))
+}
+
+func MailboxesUpdateCredentials(c *gin.Context) {
+	userID := mustUserID(c)
+	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
+	smtpHost := strings.TrimSpace(c.PostForm("smtp_host"))
+	smtpPort := strings.TrimSpace(c.PostForm("smtp_port"))
+	imapHost := strings.TrimSpace(c.PostForm("imap_host"))
+	imapPort := strings.TrimSpace(c.PostForm("imap_port"))
+	username := strings.TrimSpace(c.PostForm("username"))
+	password := c.PostForm("password")
+
+	m, err := model.GetOutreachMailbox(id, userID)
+	if err != nil {
+		c.Redirect(http.StatusFound, "/mailboxes?error="+url.QueryEscape("Mailbox not found"))
+		return
+	}
+	if m.SMTPAccountID <= 0 {
+		c.Redirect(http.StatusFound, "/mailboxes?error="+url.QueryEscape("No SMTP credentials on this mailbox"))
+		return
+	}
+	acc, err := model.GetSMTPAccount(m.SMTPAccountID)
+	if err != nil || acc.UserID != userID {
+		c.Redirect(http.StatusFound, "/mailboxes?error="+url.QueryEscape("SMTP account not found"))
+		return
+	}
+	probeHost := smtpHost
+	if probeHost == "" {
+		probeHost = acc.SMTPHost
+	}
+	probePort := smtpPort
+	if probePort == "" {
+		probePort = acc.SMTPPort
+	}
+	probeUser := username
+	if probeUser == "" {
+		probeUser = acc.SMTPUser
+	}
+	probePass := password
+	if strings.TrimSpace(probePass) == "" {
+		probePass, err = model.DecryptSMTPPassword(acc)
+		if err != nil {
+			c.Redirect(http.StatusFound, "/mailboxes?error="+url.QueryEscape("Could not read existing password — enter a new one"))
+			return
+		}
+	}
+	from := acc.SenderEmail()
+	if from == "" {
+		from = m.Email
+	}
+	if err := util.ProbeSMTPPlain(probeHost, probePort, probeUser, probePass, from); err != nil {
+		c.Redirect(http.StatusFound, "/mailboxes?error="+url.QueryEscape(formatSMTPProbeError(probeHost, probePort, err).Error()))
+		return
+	}
+	if err := model.UpdateMailboxCredentials(userID, id, smtpHost, smtpPort, imapHost, imapPort, username, password); err != nil {
+		c.Redirect(http.StatusFound, "/mailboxes?error="+url.QueryEscape(err.Error()))
+		return
+	}
+	c.Redirect(http.StatusFound, "/mailboxes?success="+url.QueryEscape("Credentials updated"))
+}
+
+func MailboxesDelete(c *gin.Context) {
+	userID := mustUserID(c)
+	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err := model.DeleteOutreachMailbox(userID, id); err != nil {
+		c.Redirect(http.StatusFound, "/mailboxes?error="+url.QueryEscape(err.Error()))
+		return
+	}
+	c.Redirect(http.StatusFound, "/mailboxes?success="+url.QueryEscape("Mailbox deleted"))
 }
 
 func MailboxesSetDefault(c *gin.Context) {

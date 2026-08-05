@@ -15,7 +15,7 @@ func TestFormatSMTPProbeErrorBlocked(t *testing.T) {
 
 func TestFormatSMTPProbeErrorAuth(t *testing.T) {
 	err := formatSMTPProbeError("smtp.gmail.com", "465", errors.New("535 Username and Password not accepted"))
-	if err == nil || !strings.Contains(err.Error(), "SMTP auth") {
+	if err == nil || !strings.Contains(err.Error(), "App Password") {
 		t.Fatalf("got %v", err)
 	}
 }

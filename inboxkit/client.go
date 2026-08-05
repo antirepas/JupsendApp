@@ -136,20 +136,25 @@ func (c *Client) SearchDomains(query string) ([]DomainSearchResult, error) {
 	if query == "" {
 		return nil, fmt.Errorf("enter a keyword to search")
 	}
+	keyword := query
 	body := map[string]any{
-		"keyword":                                 query,
-		"page":                                    1,
-		"num":                                     20,
-		"show_unavailable":                        false,
-		"check_banned":                            true,
-		"check_google_workspace_availability":     true,
-		"check_ms365_workspace_availability":      false,
-		"tlds":                                    []string{".com", ".net", ".io", ".co", ".org", ".ai"},
+		"page":                                1,
+		"num":                                 20,
+		"show_unavailable":                    false,
+		"check_banned":                        true,
+		"check_google_workspace_availability": true,
+		"check_ms365_workspace_availability":  false,
+		// InboxKit only allows these TLDs on /api/domains/search.
+		"tlds": []string{".com", ".net", ".shop", ".org"},
 	}
-	// Exact domain lookups also accept the "domain" field.
+	// Exact domain lookups: send domain + keyword without TLD.
 	if strings.Contains(query, ".") {
-		body["domain"] = query
+		body["domain"] = strings.ToLower(query)
+		if i := strings.Index(query, "."); i > 0 {
+			keyword = query[:i]
+		}
 	}
+	body["keyword"] = keyword
 
 	var resp domainSearchResponse
 	err := c.do("POST", "/api/domains/search", body, &resp)

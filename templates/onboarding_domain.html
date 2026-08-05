@@ -99,7 +99,8 @@
     <h3 class="card-title">Or find a new domain</h3>
     <div>
       <label class="form-label">Company or keyword</label>
-      <input name="q" class="form-input" value="{{.query}}" placeholder="acme, northwind…" {{if not .inboxkitOK}}disabled{{end}}>
+      <input name="q" class="form-input" value="{{.query}}" placeholder="acme, or acme.com" {{if not .inboxkitOK}}disabled{{end}}>
+      <p class="form-hint mt-1">Available endings: .com, .net, .org, .shop</p>
     </div>
     <button type="submit" class="btn-secondary" {{if not .inboxkitOK}}disabled{{end}}>Search domains</button>
   </form>

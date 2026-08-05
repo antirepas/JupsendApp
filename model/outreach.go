@@ -308,6 +308,97 @@ func UpdateMailboxFromName(userID, mailboxID int64, fromName string) error {
 	return nil
 }
 
+// UpdateMailboxCredentials updates SMTP/IMAP login for a mailbox (manual or InboxKit-linked).
+// Empty password keeps the existing password. Hosts/ports/username update when non-empty.
+func UpdateMailboxCredentials(userID, mailboxID int64, smtpHost, smtpPort, imapHost, imapPort, username, password string) error {
+	m, err := GetOutreachMailbox(mailboxID, userID)
+	if err != nil {
+		return err
+	}
+	if m.SMTPAccountID <= 0 {
+		return fmt.Errorf("this mailbox has no SMTP credentials to update")
+	}
+	acc, err := GetSMTPAccount(m.SMTPAccountID)
+	if err != nil || acc.UserID != userID {
+		return fmt.Errorf("smtp account not found")
+	}
+	if acc.MailboxSource == MailboxSourceShared {
+		return fmt.Errorf("shared Free mailbox credentials are managed by the server")
+	}
+	if smtpHost == "" {
+		smtpHost = acc.SMTPHost
+	}
+	if smtpPort == "" {
+		smtpPort = acc.SMTPPort
+	}
+	if imapHost == "" {
+		imapHost = acc.IMAPHost
+	}
+	if imapPort == "" {
+		imapPort = acc.IMAPPort
+	}
+	if username == "" {
+		username = acc.SMTPUser
+	}
+	encPass := acc.SMTPPassword
+	if strings.TrimSpace(password) != "" {
+		enc, err := googleoauth.Encrypt(password)
+		if err != nil {
+			return fmt.Errorf("encrypt password: %w", err)
+		}
+		encPass = enc
+	}
+	now := time.Now()
+	_, err = db.Exec(`
+		UPDATE smtp_accounts SET
+			smtp_host=?, smtp_port=?, smtp_user=?, smtp_password=?,
+			imap_host=?, imap_port=?, imap_user=?, imap_password=?,
+			auth_type='', status='active', updated_at=?
+		WHERE id=? AND user_id=?
+	`, smtpHost, smtpPort, username, encPass, imapHost, imapPort, username, encPass, now, acc.ID, userID)
+	return err
+}
+
+// DeleteOutreachMailbox removes a mailbox from the account. Deletes the linked SMTP row
+// when it is not shared and unused by other outreach mailboxes.
+func DeleteOutreachMailbox(userID, mailboxID int64) error {
+	m, err := GetOutreachMailbox(mailboxID, userID)
+	if err != nil {
+		return err
+	}
+	smtpID := m.SMTPAccountID
+	wasDefault := m.IsDefault
+	res, err := db.Exec(`DELETE FROM outreach_mailboxes WHERE id=? AND user_id=?`, mailboxID, userID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("mailbox not found")
+	}
+	if smtpID > 0 {
+		acc, err := GetSMTPAccount(smtpID)
+		if err == nil && acc.UserID == userID && acc.MailboxSource != MailboxSourceShared {
+			var refs int
+			_ = db.QueryRow(`SELECT COUNT(*) FROM outreach_mailboxes WHERE smtp_account_id=?`, smtpID).Scan(&refs)
+			if refs == 0 {
+				_, _ = db.Exec(`DELETE FROM smtp_accounts WHERE id=? AND user_id=?`, smtpID, userID)
+			}
+		}
+	}
+	if wasDefault {
+		var nextID int64
+		_ = db.QueryRow(`
+			SELECT id FROM outreach_mailboxes
+			WHERE user_id=? AND status='ready'
+			ORDER BY id ASC LIMIT 1
+		`, userID).Scan(&nextID)
+		if nextID > 0 {
+			_ = SetDefaultOutreachMailbox(userID, nextID)
+		}
+	}
+	return nil
+}
+
 // UpsertInboxKitSMTPAccount creates/updates an smtp_accounts row for plain SMTP sending.
 func UpsertInboxKitSMTPAccount(userID int64, email, host, port, user, password, fromName, inboxkitID string, isDefault bool, dailyLimit int, imapHost, imapPort string) (int64, error) {
 	encPass, err := googleoauth.Encrypt(password)
