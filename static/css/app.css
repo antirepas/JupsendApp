@@ -2328,6 +2328,18 @@ g.wf-edge-hovering .wf-edge-delete-btn {
     max-height: 24rem;
     overflow: auto;
 }
+.conv-msg-frame {
+    display: block;
+    width: 100%;
+    min-height: 12rem;
+    max-height: 28rem;
+    border: 1px solid #E5E7EB;
+    border-radius: 0.5rem;
+    background: #fff;
+}
+.conv-reply-inbound .conv-msg-frame {
+    max-height: 20rem;
+}
 .conv-msg-body img {
     max-width: 100%;
     height: auto;

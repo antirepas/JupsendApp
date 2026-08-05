@@ -1,6 +1,7 @@
 package outbound
 
 import (
+	"context"
 	"fmt"
 	"html"
 	"strings"
@@ -20,24 +21,42 @@ type ManualReplyInput struct {
 }
 
 // SendManualReply sends from the mailbox that last emailed this contact (or default).
+// Subject/body may contain {{variables}}; they are rendered with this lead's data before send.
 func SendManualReply(in ManualReplyInput) (int64, error) {
-	contact, _, err := model.GetContactForUser(in.ContactID, in.UserID)
+	contact, contactVars, err := model.GetContactForUser(in.ContactID, in.UserID)
 	if err != nil {
 		return 0, fmt.Errorf("contact not found")
 	}
 	subject := strings.TrimSpace(in.Subject)
+	bodyHTML := strings.TrimSpace(in.BodyHTML)
 	bodyText := strings.TrimSpace(in.BodyText)
 	if subject == "" {
 		return 0, fmt.Errorf("subject is required")
 	}
-	if bodyText == "" {
+	if bodyHTML == "" && bodyText == "" {
 		return 0, fmt.Errorf("message body is required")
 	}
-	bodyHTML := strings.TrimSpace(in.BodyHTML)
-	if bodyHTML == "" {
-		bodyHTML = util.WrapHTMLBody("<p>" + html.EscapeString(bodyText) + "</p>")
-	} else {
-		bodyHTML = util.WrapHTMLBody(bodyHTML)
+
+	sourceBody := bodyHTML
+	if sourceBody == "" {
+		sourceBody = "<p>" + html.EscapeString(bodyText) + "</p>"
+	}
+
+	renderedSubj, renderedBody, missing, err := util.RenderEmail(subject, sourceBody, contactVars, util.RenderOptions{
+		UserID: in.UserID,
+		Ctx:    context.Background(),
+	})
+	if err != nil {
+		return 0, fmt.Errorf("render reply: %w", err)
+	}
+	if len(missing) > 0 {
+		return 0, fmt.Errorf("missing required variable: %s", strings.Join(missing, ", "))
+	}
+	subject = renderedSubj
+	bodyHTML = util.WrapHTMLBody(renderedBody)
+	bodyText = util.StripHTML(bodyHTML)
+	if strings.TrimSpace(bodyText) == "" {
+		return 0, fmt.Errorf("message body is required")
 	}
 
 	accountID, _ := model.LatestSMTPAccountForContact(in.UserID, in.ContactID)
@@ -69,11 +88,6 @@ func SendManualReply(in ManualReplyInput) (int64, error) {
 		references = inReplyTo
 		if inbound.InReplyTo != "" {
 			references = inbound.InReplyTo + " " + inReplyTo
-		}
-		if subject == "" || !strings.HasPrefix(strings.ToLower(subject), "re:") {
-			if inbound.Subject != "" && !strings.HasPrefix(strings.ToLower(subject), "re:") {
-				subject = "Re: " + strings.TrimPrefix(strings.TrimPrefix(inbound.Subject, "Re: "), "RE: ")
-			}
 		}
 	}
 

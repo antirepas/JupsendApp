@@ -39,6 +39,7 @@ func RegisterRoutes(server *gin.Engine) {
 		"templates/contacts_list_detail.html",
 		"templates/contacts_form.html",
 		"templates/contact_detail.html",
+		"templates/contact_reply.html",
 		"templates/sends_list.html",
 		"templates/send_form.html",
 		"templates/sends_detail.html",
@@ -185,6 +186,7 @@ func RegisterRoutes(server *gin.Engine) {
 		authd.POST("/contacts/upload", UploadContacts)
 		authd.GET("/contacts/:id/variables", ContactVariablesJSON)
 		authd.GET("/contacts/:id/edit", EditContactPage)
+		authd.GET("/contacts/:id/reply", ReplyContactPage)
 		authd.GET("/contacts/:id", ContactDetailPage)
 		authd.POST("/contacts/:id/lists", UpdateContactLists)
 		authd.POST("/contacts/:id/reply", ReplyContactWeb)

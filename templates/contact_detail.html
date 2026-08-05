@@ -33,7 +33,11 @@
             </div>
             <p class="conv-msg-subject">{{if .Subject}}{{.Subject}}{{else}}(no subject){{end}}</p>
             <p class="text-xs text-gray-500 mb-2">{{.FromEmail}} → {{.ToEmail}}</p>
-            <div class="conv-msg-body">{{.DisplayHTML}}</div>
+            {{if .DisplaySrcDoc}}
+            <iframe class="conv-msg-frame" title="Email" sandbox="" srcdoc="{{.DisplaySrcDoc}}"></iframe>
+            {{else}}
+            <p class="text-sm text-gray-400">(empty message)</p>
+            {{end}}
             {{if and (not .IsInbound) .EmailSendID}}
             <a href="/sends/{{.EmailSendID}}" class="text-xs text-brand-600 font-medium">Send details</a>
             {{end}}
@@ -45,18 +49,10 @@
     {{end}}
 
     {{if .canReply}}
-    <form method="POST" action="/contacts/{{.summary.Contact.ID}}/reply" class="border-t border-gray-100 pt-4 space-y-3">
-        <h4 class="font-semibold text-sm text-charcoal">Reply from your mailbox</h4>
-        <div>
-            <label class="form-label">Subject</label>
-            <input name="subject" class="form-input" value="{{.replySubject}}" required>
-        </div>
-        <div>
-            <label class="form-label">Message</label>
-            <textarea name="body" class="form-input" rows="6" required placeholder="Write your reply…"></textarea>
-        </div>
-        <button type="submit" class="btn-primary text-sm">Send reply</button>
-    </form>
+    <div class="border-t border-gray-100 pt-4">
+        <a href="/contacts/{{.summary.Contact.ID}}/reply" class="btn-primary text-sm inline-flex">Compose reply</a>
+        <p class="text-xs text-gray-500 mt-2">Opens the full editor with variables, live preview, and their last message.</p>
+    </div>
     {{else if .summary.RecentSends}}
     <p class="text-xs text-gray-500 border-t border-gray-100 pt-4">Reply opens here after their first reply is detected (or when a send used a known mailbox).</p>
     {{end}}

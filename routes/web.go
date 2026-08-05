@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"log"
@@ -514,6 +515,7 @@ func ContactDetailPage(ctx *gin.Context) {
 		listMemberships = append(listMemberships, listMembership{List: l, Member: memberIDs[l.ID]})
 	}
 	conversation, _ := model.ListContactConversation(userID, id, 200)
+	enrichLegacyConversationBodies(userID, id, conversation)
 	replySubject := "Re: "
 	if inbound, err := model.LatestInboundMessage(userID, id); err == nil {
 		sub := strings.TrimSpace(inbound.Subject)
@@ -540,6 +542,129 @@ func ContactDetailPage(ctx *gin.Context) {
 	})
 }
 
+// enrichLegacyConversationBodies re-renders template source with this lead's variables
+// when an outbound message has no rendered snapshot yet.
+func enrichLegacyConversationBodies(userID, contactID int64, msgs []model.ConversationMessage) {
+	if len(msgs) == 0 {
+		return
+	}
+	_, vars, err := model.GetContactForUser(contactID, userID)
+	if err != nil {
+		return
+	}
+	for i := range msgs {
+		m := &msgs[i]
+		if m.Direction != model.ConversationOutbound || m.EmailSendID <= 0 {
+			continue
+		}
+		if strings.TrimSpace(m.BodyHTML) != "" || strings.TrimSpace(m.BodyText) != "" {
+			if !strings.Contains(m.BodyHTML, "{{") && !strings.Contains(m.BodyText, "{{") && !strings.Contains(m.Subject, "{{") {
+				continue
+			}
+		}
+		detail, err := model.GetEmailSendDetail(m.EmailSendID)
+		if err != nil || detail.TemplateID <= 0 {
+			continue
+		}
+		if detail.RenderedHTML != "" || detail.RenderedText != "" {
+			if detail.RenderedSubject != "" {
+				m.Subject = detail.RenderedSubject
+			}
+			if detail.RenderedHTML != "" {
+				m.BodyHTML = detail.RenderedHTML
+			}
+			if detail.RenderedText != "" {
+				m.BodyText = detail.RenderedText
+			}
+			continue
+		}
+		tmpl, err := model.GetTemplate(detail.TemplateID)
+		if err != nil {
+			continue
+		}
+		subj, body, _, err := util.RenderEmail(tmpl.Subject, tmpl.Body, vars, util.RenderOptions{
+			UserID:     userID,
+			ForPreview: true,
+		})
+		if err != nil {
+			continue
+		}
+		m.Subject = subj
+		m.BodyHTML = util.WrapHTMLBody(body)
+		m.BodyText = util.StripHTML(m.BodyHTML)
+	}
+}
+
+func ReplyContactPage(ctx *gin.Context) {
+	userID := mustUserID(ctx)
+	contactID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
+	if err != nil {
+		ctx.Redirect(http.StatusFound, "/contacts?error=Invalid+contact")
+		return
+	}
+	summary, err := model.GetContactSummary(userID, contactID)
+	if err != nil {
+		ctx.Redirect(http.StatusFound, "/contacts?error=Contact+not+found")
+		return
+	}
+	if !model.CanReplyInApp(userID, contactID, summary.RepliedAt) {
+		ctx.Redirect(http.StatusFound, "/contacts/"+strconv.FormatInt(contactID, 10)+"?error="+url.QueryEscape("Reply is not available for this contact yet")+"#conversation")
+		return
+	}
+
+	replySubject := "Re: "
+	var inbound *model.ConversationMessage
+	if msg, err := model.LatestInboundMessage(userID, contactID); err == nil {
+		inbound = &msg
+		sub := strings.TrimSpace(msg.Subject)
+		if strings.HasPrefix(strings.ToLower(sub), "re:") {
+			replySubject = sub
+		} else if sub != "" {
+			replySubject = "Re: " + sub
+		}
+	} else if len(summary.RecentSends) > 0 {
+		sub := summary.RecentSends[0].RenderedSubject
+		if sub == "" {
+			sub = summary.RecentSends[0].TemplateSubject
+		}
+		if sub != "" {
+			replySubject = "Re: " + sub
+		}
+	}
+
+	senderEmail, _ := templateBuilderContext(userID)
+	if acctID, err := model.LatestSMTPAccountForContact(userID, contactID); err == nil && acctID > 0 {
+		if acc, err := model.GetSMTPAccount(acctID); err == nil && acc.UserID == userID {
+			if e := acc.SenderEmail(); e != "" {
+				senderEmail = e
+			}
+		}
+	}
+
+	sample, _ := model.ContactVariableSample(userID, contactID)
+	if sample == nil {
+		sample = map[string]string{}
+	}
+	sampleJSON, _ := json.Marshal(sample)
+	contacts, _ := model.ListContacts(userID)
+	lists, _ := model.ListContactLists(userID)
+
+	ctx.HTML(http.StatusOK, "contact_reply.html", gin.H{
+		"title":             "Reply — " + summary.Contact.Email,
+		"active":            "contacts",
+		"contact":           summary.Contact,
+		"inbound":           inbound,
+		"replySubject":      replySubject,
+		"senderEmail":       senderEmail,
+		"defaultSampleJSON": string(sampleJSON),
+		"aiEnabled":         ai.Enabled(),
+		"contacts":          contacts,
+		"lists":             lists,
+		"lockPreview":       true,
+		"error":             ctx.Query("error"),
+	})
+}
+
 func ReplyContactWeb(ctx *gin.Context) {
 	userID := mustUserID(ctx)
 	contactID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
@@ -548,16 +673,18 @@ func ReplyContactWeb(ctx *gin.Context) {
 		return
 	}
 	subject := strings.TrimSpace(ctx.PostForm("subject"))
-	body := strings.TrimSpace(ctx.PostForm("body"))
+	bodyHTML := strings.TrimSpace(ctx.PostForm("body"))
+	bodyText := strings.TrimSpace(util.StripHTML(bodyHTML))
 	_, err = outbound.SendManualReply(outbound.ManualReplyInput{
 		UserID:    userID,
 		ContactID: contactID,
 		Subject:   subject,
-		BodyText:  body,
+		BodyText:  bodyText,
+		BodyHTML:  bodyHTML,
 	})
 	if err != nil {
 		log.Print(err)
-		ctx.Redirect(http.StatusFound, "/contacts/"+strconv.FormatInt(contactID, 10)+"?error="+url.QueryEscape(err.Error())+"#conversation")
+		ctx.Redirect(http.StatusFound, "/contacts/"+strconv.FormatInt(contactID, 10)+"/reply?error="+url.QueryEscape(err.Error()))
 		return
 	}
 	ctx.Redirect(http.StatusFound, "/contacts/"+strconv.FormatInt(contactID, 10)+"?success="+url.QueryEscape("Reply sent")+"#conversation")
@@ -732,16 +859,38 @@ func SendDetailPage(ctx *gin.Context) {
 	}
 
 	renderedBody := template.HTML("")
+	renderedBodySrcDoc := ""
 	if detail.RenderedHTML != "" {
-		renderedBody = template.HTML(util.SanitizeHTMLForDisplay(detail.RenderedHTML))
+		safe := util.SanitizeHTMLForDisplay(detail.RenderedHTML)
+		renderedBody = template.HTML(safe)
+		renderedBodySrcDoc = safe
+	} else if detail.RenderedText != "" {
+		safe := "<p>" + template.HTMLEscapeString(detail.RenderedText) + "</p>"
+		renderedBody = template.HTML(safe)
+		renderedBodySrcDoc = safe
+	} else if detail.TemplateID > 0 {
+		// Legacy: show template rendered with this contact's variables.
+		if tmpl, err := model.GetTemplate(detail.TemplateID); err == nil {
+			_, vars, _ := model.GetContactForUser(detail.ContactID, mustUserID(ctx))
+			_, body, _, err := util.RenderEmail(tmpl.Subject, tmpl.Body, vars, util.RenderOptions{
+				UserID:     mustUserID(ctx),
+				ForPreview: true,
+			})
+			if err == nil {
+				safe := util.SanitizeHTMLForDisplay(util.WrapHTMLBody(body))
+				renderedBody = template.HTML(safe)
+				renderedBodySrcDoc = safe
+			}
+		}
 	}
 
 	ctx.HTML(http.StatusOK, "sends_detail.html", gin.H{
-		"title":         "Send Detail",
-		"active":        "sends",
-		"send":          detail,
-		"renderedBody":  renderedBody,
-		"success":       ctx.Query("success"),
+		"title":              "Send Detail",
+		"active":             "sends",
+		"send":               detail,
+		"renderedBody":       renderedBody,
+		"renderedBodySrcDoc": renderedBodySrcDoc,
+		"success":            ctx.Query("success"),
 	})
 }
 

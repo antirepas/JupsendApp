@@ -1,0 +1,180 @@
+{{define "contact_reply.html"}}
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>{{template "head" .}}
+<link href="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.snow.css" rel="stylesheet">
+</head>
+<body class="h-full bg-ivory text-charcoal">
+<div class="flex h-full">
+{{template "sidebar" .}}
+<main class="flex-1 overflow-y-auto">
+<div class="max-w-7xl mx-auto p-8">
+<div class="mb-6">
+    <a href="/contacts/{{.contact.ID}}#conversation" class="text-sm text-brand-600 font-medium">← Back to conversation</a>
+    <h2 class="text-2xl font-bold text-slate-900 mt-2">Reply to {{.contact.Email}}</h2>
+    <p class="text-slate-500 mt-1">Write like a template — use <code class="text-xs bg-slate-100 px-1 rounded">{{"{{variable}}"}}</code>, preview with this lead’s data, then send from the same mailbox.</p>
+</div>
+
+{{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
+
+{{if .inbound}}
+<div class="card mb-6 conv-reply-inbound">
+    <div class="conv-msg-meta mb-2">
+        <span class="badge badge-violet">Their message</span>
+        <time class="text-xs text-gray-500">{{.inbound.OccurredAt.Format "Jan 2, 2006 · 15:04"}}</time>
+    </div>
+    <p class="conv-msg-subject">{{if .inbound.Subject}}{{.inbound.Subject}}{{else}}(no subject){{end}}</p>
+    <p class="text-xs text-gray-500 mb-3">{{.inbound.FromEmail}} → {{.inbound.ToEmail}}</p>
+    <iframe class="conv-msg-frame" title="Inbound email" sandbox="" srcdoc="{{.inbound.DisplaySrcDoc}}"></iframe>
+</div>
+{{else}}
+<div class="card mb-6">
+    <p class="text-sm text-slate-500">No inbound reply stored yet — you can still send a follow-up to this lead.</p>
+</div>
+{{end}}
+
+<form id="template-form" method="POST" action="/contacts/{{.contact.ID}}/reply" class="template-builder-grid"
+      data-ai-enabled="{{if .aiEnabled}}true{{else}}false{{end}}"
+      data-lock-preview-contact="{{.contact.ID}}">
+    <div class="template-editor-column space-y-5">
+        <div class="card">
+            <div>
+                <label class="form-label" for="template-subject">Subject</label>
+                <input type="text" id="template-subject" name="subject" class="form-input" value="{{.replySubject}}" required placeholder="Re: {{"{{name}}"}}">
+                <div id="template-subject-nudges" class="template-subject-nudges" hidden></div>
+            </div>
+            <div class="mt-4">
+                <label class="form-label">Body</label>
+                <div class="template-toolbar-wrap">
+                    <div id="template-editor"></div>
+                </div>
+                <textarea id="template-body" name="body" class="hidden" required></textarea>
+                <div id="template-starters" class="template-starters" hidden></div>
+            </div>
+            <div class="mt-4">
+                <label class="form-label">Variables</label>
+                <div id="template-var-chips" class="template-var-chips"></div>
+                <p class="form-hint mt-1">Filled from <strong>{{.contact.Email}}</strong>. See <a href="#template-syntax-guide" class="text-brand-600 font-medium">syntax guide</a> for filters and conditionals.</p>
+                <div class="mt-4 pt-4 border-t border-slate-100">
+                    <label class="form-label" for="template-source-columns">Browse contact or list columns</label>
+                    <select id="template-source-columns" class="form-input text-sm max-w-md">
+                        <option value="">—</option>
+                        <optgroup label="Contacts">
+                            {{range .contacts}}
+                            <option value="contact:{{.ID}}" {{if eq .ID $.contact.ID}}selected{{end}}>{{.Email}}</option>
+                            {{end}}
+                        </optgroup>
+                        <optgroup label="Lists">
+                            {{range .lists}}
+                            <option value="list:{{.ID}}">{{.Name}} ({{.MemberCount}})</option>
+                            {{end}}
+                        </optgroup>
+                    </select>
+                    <div id="template-source-vars" class="template-source-vars" hidden></div>
+                </div>
+            </div>
+            <div id="template-tone-banner" class="template-tone-banner" hidden>
+                <p class="template-tone-banner-text"></p>
+                <div class="template-tone-banner-actions">
+                    <button type="button" class="btn-primary btn-sm" data-tone-action="proceed">Sounds good</button>
+                    <button type="button" class="btn-secondary btn-sm" data-tone-action="soften">Soften</button>
+                </div>
+            </div>
+            <div class="flex gap-3 pt-4 border-t border-slate-100 mt-4">
+                <button type="submit" class="btn-primary">Send reply</button>
+                <a href="/contacts/{{.contact.ID}}#conversation" class="btn-secondary">Cancel</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="template-preview-column">
+        <div class="template-preview-panel card">
+            <h3 class="card-title">Live preview</h3>
+            <p class="text-sm text-slate-500 mb-4">How this reply will look for {{.contact.Email}}.</p>
+            <div class="template-inbox-mock">
+                <div class="template-inbox-row">
+                    <span class="template-inbox-label">From</span>
+                    <span class="template-inbox-value">{{.senderEmail}}</span>
+                </div>
+                <div class="template-inbox-row">
+                    <span class="template-inbox-label">Subject</span>
+                    <span class="template-inbox-value font-medium" id="preview-subject">{{.replySubject}}</span>
+                </div>
+            </div>
+            <iframe id="preview-frame" class="template-preview-frame" title="Email preview" sandbox=""></iframe>
+            <div id="preview-ai-notice" class="hidden text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-3" role="status"></div>
+            <div id="template-lint-sidebar" class="template-lint-sidebar" aria-live="polite"></div>
+            <div class="mt-4 pt-4 border-t border-slate-100">
+                <label class="form-label" for="template-preview-contact">Preview as contact</label>
+                <select id="template-preview-contact" class="form-input text-sm mb-3" {{if .lockPreview}}disabled{{end}}>
+                    <option value="">— Default sample values —</option>
+                    {{range .contacts}}
+                    <option value="{{.ID}}" {{if eq .ID $.contact.ID}}selected{{end}}>{{.Email}}</option>
+                    {{end}}
+                </select>
+                <p class="form-hint mb-3">{{if .lockPreview}}Locked to this lead so the preview matches what they will receive.{{else}}Fills variables used in this reply.{{end}}</p>
+                <p class="form-label mb-2">Preview sample data</p>
+                <div id="template-sample-fields" class="template-sample-fields"></div>
+                {{if .aiEnabled}}
+                <label class="flex items-center gap-2 mt-3 text-sm text-slate-600">
+                    <input type="checkbox" id="preview-use-ai" class="rounded border-slate-300">
+                    Preview with AI (uses credits)
+                </label>
+                {{end}}
+            </div>
+        </div>
+    </div>
+</form>
+
+<details id="template-syntax-guide" class="card mt-8 template-syntax-guide">
+    <summary class="card-title cursor-pointer select-none">Variable syntax guide</summary>
+    <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <h4 class="text-sm font-semibold text-slate-800 mb-1">Basics</h4>
+            <p class="text-xs text-slate-500 mb-2">Simple personalization from contact data.</p>
+            <code class="syntax-example text-xs block bg-white border border-slate-200 rounded px-2 py-1 font-mono">{{"{{name}}"}}, {{"{{company}}"}}</code>
+            <button type="button" class="btn-secondary btn-sm mt-2 syntax-copy" data-copy="{{"{{name}}"}}">Copy</button>
+        </div>
+        <div class="rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <h4 class="text-sm font-semibold text-slate-800 mb-1">Formatting</h4>
+            <p class="text-xs text-slate-500 mb-2">First name, title case, and fallback when empty.</p>
+            <code class="syntax-example text-xs block bg-white border border-slate-200 rounded px-2 py-1 font-mono">{{"{{name|first|default:there}}"}}</code>
+            <button type="button" class="btn-secondary btn-sm mt-2 syntax-copy" data-copy="{{"{{name|first|default:there}}"}}">Copy</button>
+        </div>
+        <div class="rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <h4 class="text-sm font-semibold text-slate-800 mb-1">Required &amp; fallback</h4>
+            <p class="text-xs text-slate-500 mb-2">Missing required values block the send.</p>
+            <code class="syntax-example text-xs block bg-white border border-slate-200 rounded px-2 py-1 font-mono">{{"{{company|required}}"}}</code>
+            <button type="button" class="btn-secondary btn-sm mt-2 syntax-copy" data-copy="{{"{{company|required}}"}}">Copy</button>
+        </div>
+        <div class="rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <h4 class="text-sm font-semibold text-slate-800 mb-1">Optional blocks</h4>
+            <p class="text-xs text-slate-500 mb-2">Hide a paragraph when the variable is empty.</p>
+            <code class="syntax-example text-xs block bg-white border border-slate-200 rounded px-2 py-1 font-mono whitespace-pre-wrap">{% if description %}I noticed {{"{{description}}"}}.{% endif %}</code>
+            <button type="button" class="btn-secondary btn-sm mt-2 syntax-copy" data-copy="{% if description %}I noticed {{"{{description}}"}}.{% endif %}">Copy</button>
+        </div>
+        {{if .aiEnabled}}
+        <div class="rounded-lg border border-slate-200 bg-slate-50 p-4 md:col-span-2">
+            <h4 class="text-sm font-semibold text-slate-800 mb-1">AI (uses credits at send)</h4>
+            <code class="syntax-example text-xs block bg-white border border-slate-200 rounded px-2 py-1 font-mono">{{"{{~description}}"}}</code>
+            <button type="button" class="btn-secondary btn-sm mt-2 syntax-copy" data-copy="{{"{{~description}}"}}">Copy</button>
+        </div>
+        {{end}}
+    </div>
+</details>
+
+<div id="template-selection-popover" class="template-ai-popover" hidden>
+    <button type="button" data-ai-action="shorten">Shorten</button>
+    <button type="button" data-ai-action="soften">Soften</button>
+    <button type="button" data-ai-action="direct">More direct</button>
+    <button type="button" data-ai-action="grammar">Fix grammar</button>
+</div>
+<script type="application/json" id="template-default-sample">{{.defaultSampleJSON}}</script>
+</div>
+</main>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.js"></script>
+<script src="{{assetURL "/static/js/template-editor.js"}}"></script>
+</body>
+</html>
+{{end}}

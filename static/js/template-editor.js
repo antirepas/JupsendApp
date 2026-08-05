@@ -847,4 +847,12 @@
 
     onContentChange();
     if (aiEnabled) loadStarters();
+
+    const lockPreviewContact = form.dataset.lockPreviewContact || '';
+    if (lockPreviewContact) {
+        if (previewContactSelect) {
+            previewContactSelect.value = lockPreviewContact;
+        }
+        loadPreviewContact(lockPreviewContact);
+    }
 })();

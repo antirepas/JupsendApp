@@ -217,7 +217,39 @@ func ListContactConversation(userID, contactID int64, limit int) ([]Conversation
 	if limit > 0 && len(merged) > limit {
 		merged = merged[:limit]
 	}
+	hydrateConversationFromSends(userID, merged)
 	return merged, nil
+}
+
+// hydrateConversationFromSends overlays email_sends.rendered_* onto outbound messages
+// so the thread shows exactly what was delivered (variables already filled).
+func hydrateConversationFromSends(userID int64, msgs []ConversationMessage) {
+	for i := range msgs {
+		m := &msgs[i]
+		if m.Direction != ConversationOutbound || m.EmailSendID <= 0 {
+			continue
+		}
+		var subj, htmlBody, textBody string
+		err := db.QueryRow(`
+			SELECT COALESCE(rendered_subject,''), COALESCE(rendered_html,''), COALESCE(rendered_text,'')
+			FROM email_sends WHERE id = ? AND user_id = ?
+		`, m.EmailSendID, userID).Scan(&subj, &htmlBody, &textBody)
+		if err != nil {
+			continue
+		}
+		if subj == "" && htmlBody == "" && textBody == "" {
+			continue
+		}
+		if subj != "" {
+			m.Subject = subj
+		}
+		if htmlBody != "" {
+			m.BodyHTML = htmlBody
+		}
+		if textBody != "" {
+			m.BodyText = textBody
+		}
+	}
 }
 
 func LatestInboundMessage(userID, contactID int64) (ConversationMessage, error) {
@@ -268,6 +300,12 @@ func (m ConversationMessage) DisplayHTML() htmltemplate.HTML {
 		return ""
 	}
 	return htmltemplate.HTML("<p>" + html.EscapeString(m.BodyText) + "</p>")
+}
+
+// DisplaySrcDoc returns sanitized HTML for an iframe srcdoc attribute (string so the
+// template engine attribute-escapes it; the browser then renders it as HTML).
+func (m ConversationMessage) DisplaySrcDoc() string {
+	return string(m.DisplayHTML())
 }
 
 // sanitizeHTMLForDisplay strips scripts/styles for safe embedding (kept in model to avoid util↔model import cycle).
