@@ -11,6 +11,7 @@
   <p class="text-gray-500 text-sm mb-6">
     {{if .needsNS}}
     Point this domain’s nameservers at InboxKit (no domain purchase). Provisioning continues after DNS propagates.
+    Use a domain with <strong>no existing DNS records</strong> — switching nameservers replaces your current DNS zone.
     {{else}}
     We’re registering the domain and provisioning mailboxes. This page refreshes automatically.
     {{end}}
@@ -27,8 +28,12 @@
     {{if .nameservers}}
     <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 space-y-2">
       <h3 class="font-semibold text-sm text-charcoal">Update nameservers at your registrar</h3>
-      <p class="text-xs text-gray-600">Replace your current NS records with these. Propagation can take a few minutes to 48 hours.</p>
-      <ul class="font-mono text-sm space-y-1">
+      <ol class="text-xs text-gray-700 space-y-1.5 list-decimal list-inside">
+        <li>This domain must <strong>not</strong> have any DNS records you still need (website A/CNAME, MX, TXT, etc.). Changing nameservers replaces the whole DNS zone.</li>
+        <li>At your registrar, set nameservers to <strong>custom / use the following</strong> and replace every current NS with the values below (usually two).</li>
+        <li>Save, then wait for propagation — often a few minutes, sometimes up to 48 hours.</li>
+      </ol>
+      <ul class="font-mono text-sm space-y-1 mt-2">
         {{range .nameservers}}
         <li class="bg-white/80 px-2 py-1 rounded border border-amber-100">{{.}}</li>
         {{end}}
