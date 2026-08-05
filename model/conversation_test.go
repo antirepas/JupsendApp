@@ -212,3 +212,102 @@ func TestConversationMessageIDDedupe(t *testing.T) {
 		t.Fatalf("expected dedupe same id, got %d and %d", id1, id2)
 	}
 }
+
+func TestFollowUpSubject(t *testing.T) {
+	if got := FollowUpSubject("Quick question", "Anything else"); got != "Re: Quick question" {
+		t.Fatalf("got %q", got)
+	}
+	if got := FollowUpSubject("Re: Quick question", "x"); got != "Re: Quick question" {
+		t.Fatalf("got %q", got)
+	}
+	if got := FollowUpSubject("", "Keep me"); got != "Keep me" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestResolveOutboundThreadWorkflowFollowUp(t *testing.T) {
+	db.OpenTestDB(t)
+	userID, err := CreateUser("thread-wf@example.com", "hash", "http://localhost")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var contactID, templateID int64
+	if err := db.QueryRow(`INSERT INTO contact (email, user_id) VALUES ('lead@example.com', ?) RETURNING id`, userID).Scan(&contactID); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow(`INSERT INTO template (name, subject, body, user_id) VALUES ('t','Quick question','body', ?) RETURNING id`, userID).Scan(&templateID); err != nil {
+		t.Fatal(err)
+	}
+	const instID int64 = 4242
+	firstID, err := CreateQueuedEmailSend(userID, templateID, contactID, fmt.Sprintf("track-first-%d", time.Now().UnixNano()), 0, "", instID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := MarkEmailSendSent(firstID, 0, 0); err != nil {
+		t.Fatal(err)
+	}
+	_, err = InsertConversationMessage(ConversationMessageInput{
+		UserID: userID, ContactID: contactID, EmailSendID: firstID,
+		Direction: ConversationOutbound, FromEmail: "me@test.com", ToEmail: "lead@example.com",
+		Subject: "Quick question", BodyText: "Hi", MessageID: "<first@test.com>",
+		OccurredAt: time.Now().Add(-time.Hour),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	secondID, err := CreateQueuedEmailSend(userID, templateID, contactID, fmt.Sprintf("track-second-%d", time.Now().UnixNano()), 0, "", instID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	thread, err := ResolveOutboundThread(userID, contactID, instID, 0, secondID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !thread.HasPrior {
+		t.Fatal("expected prior in workflow thread")
+	}
+	if thread.InReplyTo != "<first@test.com>" {
+		t.Fatalf("InReplyTo=%q", thread.InReplyTo)
+	}
+	if thread.References != "<first@test.com>" {
+		t.Fatalf("References=%q", thread.References)
+	}
+	if thread.RootSubject != "Quick question" {
+		t.Fatalf("RootSubject=%q", thread.RootSubject)
+	}
+	if got := FollowUpSubject(thread.RootSubject, "Bump"); got != "Re: Quick question" {
+		t.Fatalf("follow-up subject %q", got)
+	}
+
+	if err := MarkEmailSendSent(secondID, 0, 0); err != nil {
+		t.Fatal(err)
+	}
+	_, err = InsertConversationMessage(ConversationMessageInput{
+		UserID: userID, ContactID: contactID, EmailSendID: secondID,
+		Direction: ConversationOutbound, FromEmail: "me@test.com", ToEmail: "lead@example.com",
+		Subject: "Re: Quick question", BodyText: "Bump", MessageID: "<second@test.com>",
+		InReplyTo: "<first@test.com>", OccurredAt: time.Now(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	thirdID, err := CreateQueuedEmailSend(userID, templateID, contactID, fmt.Sprintf("track-third-%d", time.Now().UnixNano()), 0, "", instID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	thread3, err := ResolveOutboundThread(userID, contactID, instID, 0, thirdID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if thread3.InReplyTo != "<second@test.com>" {
+		t.Fatalf("InReplyTo=%q", thread3.InReplyTo)
+	}
+	if thread3.References != "<first@test.com> <second@test.com>" {
+		t.Fatalf("References=%q", thread3.References)
+	}
+	if thread3.RootSubject != "Quick question" {
+		t.Fatalf("RootSubject=%q", thread3.RootSubject)
+	}
+}

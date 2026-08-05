@@ -177,6 +177,17 @@ func TestListContactsInListFilteredAndSchema(t *testing.T) {
 	if len(cols) != 2 {
 		t.Fatalf("cols=%v", cols)
 	}
+	if rows[0].Variables != nil && len(rows[0].Variables) > 0 {
+		t.Fatalf("list detail should not load variables, got %+v", rows[0].Variables)
+	}
+
+	page, err := ListContactsInListPage(listID, userID, ListMembersFilter{Page: 1, PageSize: 1, Sort: "email"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page.Total != 2 || page.TotalPages != 2 || len(page.Items) != 1 {
+		t.Fatalf("pagination page=%+v items=%d", page, len(page.Items))
+	}
 
 	if err := RemoveContactFromList(listID, userID, aID); err != nil {
 		t.Fatal(err)

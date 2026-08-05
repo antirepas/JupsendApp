@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 
 	"emailtracker.com/model"
 	"emailtracker.com/outbound"
@@ -75,12 +76,20 @@ func ContactListDetailPage(c *gin.Context) {
 		c.Redirect(http.StatusFound, "/contacts?tab=lists&error=Invalid+list")
 		return
 	}
-	q := c.Query("q")
-	list, rows, columns, err := model.ListContactsInListFiltered(listID, userID, q)
+	pageNum, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	filter := model.ListMembersFilter{
+		Query:      c.Query("q"),
+		Engagement: c.Query("engagement"),
+		Sort:       c.DefaultQuery("sort", "email"),
+		Page:       pageNum,
+		PageSize:   50,
+	}
+	memberPage, err := model.ListContactsInListPage(listID, userID, filter)
 	if err != nil {
 		c.Redirect(http.StatusFound, "/contacts?tab=lists&error=List+not+found")
 		return
 	}
+	columns, _ := model.GetListVariableSchema(listID, userID)
 	allContacts, _ := model.ListContactPickerItems(userID, 2000)
 	memberIDs, _ := model.ListMemberContactIDs(listID, userID)
 	memberSet := map[int64]bool{}
@@ -93,16 +102,25 @@ func ContactListDetailPage(c *gin.Context) {
 			addable = append(addable, ct)
 		}
 	}
+	hasPrev := memberPage.Page > 1
+	hasNext := memberPage.TotalPages > 0 && memberPage.Page < memberPage.TotalPages
 	c.HTML(http.StatusOK, "contacts_list_detail.html", gin.H{
-		"title":       list.Name,
-		"active":      "contacts",
-		"list":        list,
-		"rows":        rows,
-		"columns":     columns,
-		"filterQ":     q,
-		"addContacts": addable,
-		"success":     c.Query("success"),
-		"error":       c.Query("error"),
+		"title":            memberPage.List.Name,
+		"active":           "contacts",
+		"list":             memberPage.List,
+		"rows":             memberPage.Items,
+		"columns":          columns,
+		"memberPage":       memberPage,
+		"filterQ":          filter.Query,
+		"filterEngagement": filter.Engagement,
+		"filterSort":       filter.Sort,
+		"hasPrev":          hasPrev,
+		"hasNext":          hasNext,
+		"prevPage":         memberPage.Page - 1,
+		"nextPage":         memberPage.Page + 1,
+		"addContacts":      addable,
+		"success":          c.Query("success"),
+		"error":            c.Query("error"),
 	})
 }
 
@@ -176,6 +194,44 @@ func RemoveListMember(c *gin.Context) {
 	}
 	_ = model.RemoveContactFromList(listID, userID, contactID)
 	c.Redirect(http.StatusFound, "/contacts/lists/"+strconv.FormatInt(listID, 10)+"?success=Removed+from+list")
+}
+
+func BulkListMembers(c *gin.Context) {
+	userID := mustUserID(c)
+	listID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.Redirect(http.StatusFound, "/contacts?tab=lists&error=Invalid+list")
+		return
+	}
+	ids := parseContactIDs(c)
+	action := strings.TrimSpace(c.PostForm("action"))
+	switch action {
+	case "delete":
+		n, _ := model.BulkDeleteContacts(userID, ids)
+		c.Redirect(http.StatusFound, "/contacts/lists/"+strconv.FormatInt(listID, 10)+"?success="+url.QueryEscape("Deleted "+strconv.Itoa(n)+" leads"))
+	default:
+		n, _ := model.RemoveContactsFromList(listID, userID, ids)
+		c.Redirect(http.StatusFound, "/contacts/lists/"+strconv.FormatInt(listID, 10)+"?success="+url.QueryEscape("Removed "+strconv.Itoa(n)+" from list"))
+	}
+}
+
+func DeleteListMemberContact(c *gin.Context) {
+	userID := mustUserID(c)
+	listID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.Redirect(http.StatusFound, "/contacts?tab=lists&error=Invalid+list")
+		return
+	}
+	contactID, err := strconv.ParseInt(c.Param("contact_id"), 10, 64)
+	if err != nil {
+		c.Redirect(http.StatusFound, "/contacts/lists/"+strconv.FormatInt(listID, 10)+"?error=Invalid+contact")
+		return
+	}
+	if err := model.DeleteContact(contactID, userID); err != nil {
+		c.Redirect(http.StatusFound, "/contacts/lists/"+strconv.FormatInt(listID, 10)+"?error="+url.QueryEscape("Could not delete lead"))
+		return
+	}
+	c.Redirect(http.StatusFound, "/contacts/lists/"+strconv.FormatInt(listID, 10)+"?success=Lead+deleted")
 }
 
 func AddCampaignList(c *gin.Context) {

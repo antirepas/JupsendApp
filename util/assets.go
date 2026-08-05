@@ -17,7 +17,11 @@ var (
 func StaticAssetVersion() string {
 	assetVersionOnce.Do(func() {
 		h := sha256.New()
-		for _, path := range []string{"static/css/tailwind.css", "static/css/app.css"} {
+		for _, path := range []string{
+			"static/css/tailwind.css",
+			"static/css/app.css",
+			"static/js/template-editor.js",
+		} {
 			f, err := os.Open(path)
 			if err != nil {
 				continue

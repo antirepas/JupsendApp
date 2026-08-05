@@ -271,6 +271,57 @@ func LatestInboundMessage(userID, contactID int64) (ConversationMessage, error) 
 	return m, err
 }
 
+func GetConversationMessageForUser(userID, contactID, messageID int64) (ConversationMessage, error) {
+	row := db.QueryRow(`
+		SELECT id, user_id, contact_id, COALESCE(smtp_account_id,0), COALESCE(email_send_id,0),
+			direction, from_email, to_email, subject, body_text, body_html,
+			COALESCE(message_id,''), COALESCE(in_reply_to,''), occurred_at, created_at
+		FROM conversation_messages
+		WHERE id = ? AND user_id = ? AND contact_id = ?
+	`, messageID, userID, contactID)
+	var m ConversationMessage
+	err := row.Scan(
+		&m.ID, &m.UserID, &m.ContactID, &m.SMTPAccountID, &m.EmailSendID,
+		&m.Direction, &m.FromEmail, &m.ToEmail, &m.Subject, &m.BodyText, &m.BodyHTML,
+		&m.MessageID, &m.InReplyTo, &m.OccurredAt, &m.CreatedAt,
+	)
+	return m, err
+}
+
+// ListReplyTargets returns messages in this contact thread that can be replied to
+// (newest first). Prefers inbound; includes outbound with a Message-ID for threading.
+func ListReplyTargets(userID, contactID int64, limit int) ([]ConversationMessage, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	rows, err := db.Query(`
+		SELECT id, user_id, contact_id, COALESCE(smtp_account_id,0), COALESCE(email_send_id,0),
+			direction, from_email, to_email, subject, body_text, body_html,
+			COALESCE(message_id,''), COALESCE(in_reply_to,''), occurred_at, created_at
+		FROM conversation_messages
+		WHERE user_id = ? AND contact_id = ?
+		ORDER BY occurred_at DESC, id DESC
+		LIMIT ?
+	`, userID, contactID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ConversationMessage
+	for rows.Next() {
+		var m ConversationMessage
+		if err := rows.Scan(
+			&m.ID, &m.UserID, &m.ContactID, &m.SMTPAccountID, &m.EmailSendID,
+			&m.Direction, &m.FromEmail, &m.ToEmail, &m.Subject, &m.BodyText, &m.BodyHTML,
+			&m.MessageID, &m.InReplyTo, &m.OccurredAt, &m.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	return out, nil
+}
+
 func HasInboundConversation(userID, contactID int64) bool {
 	var n int
 	_ = db.QueryRow(`
@@ -357,4 +408,140 @@ func CanReplyInApp(userID, contactID int64, repliedAt *time.Time) bool {
 	// Also allow reply if we've sent them something from a known mailbox.
 	id, err := LatestSMTPAccountForContact(userID, contactID)
 	return err == nil && id > 0
+}
+
+// OutboundThreadHeaders holds SMTP threading fields for follow-up sends.
+type OutboundThreadHeaders struct {
+	InReplyTo   string
+	References  string
+	RootSubject string // first outbound subject in the thread (for Re: follow-ups)
+	HasPrior    bool
+}
+
+// ResolveOutboundThread finds the previous outbound message to thread against.
+// Prefers the same workflow instance; falls back to the same campaign + contact.
+func ResolveOutboundThread(userID, contactID, workflowInstanceID, campaignID, excludeSendID int64) (OutboundThreadHeaders, error) {
+	var out OutboundThreadHeaders
+	if contactID <= 0 || userID <= 0 {
+		return out, nil
+	}
+
+	var priorMsgID, priorInReplyTo, priorSubject string
+	var err error
+	switch {
+	case workflowInstanceID > 0:
+		err = db.QueryRow(`
+			SELECT cm.message_id, COALESCE(cm.in_reply_to,''), COALESCE(cm.subject,'')
+			FROM conversation_messages cm
+			INNER JOIN email_sends es ON es.id = cm.email_send_id
+			WHERE cm.user_id = ? AND cm.contact_id = ? AND cm.direction = 'outbound'
+				AND COALESCE(cm.message_id,'') <> ''
+				AND es.workflow_instance_id = ?
+				AND es.delivery_status = 'sent'
+				AND cm.email_send_id <> ?
+			ORDER BY cm.occurred_at DESC, cm.id DESC
+			LIMIT 1
+		`, userID, contactID, workflowInstanceID, excludeSendID).Scan(&priorMsgID, &priorInReplyTo, &priorSubject)
+	case campaignID > 0:
+		err = db.QueryRow(`
+			SELECT cm.message_id, COALESCE(cm.in_reply_to,''), COALESCE(cm.subject,'')
+			FROM conversation_messages cm
+			INNER JOIN email_sends es ON es.id = cm.email_send_id
+			WHERE cm.user_id = ? AND cm.contact_id = ? AND cm.direction = 'outbound'
+				AND COALESCE(cm.message_id,'') <> ''
+				AND es.campaign_id = ?
+				AND es.delivery_status = 'sent'
+				AND cm.email_send_id <> ?
+			ORDER BY cm.occurred_at DESC, cm.id DESC
+			LIMIT 1
+		`, userID, contactID, campaignID, excludeSendID).Scan(&priorMsgID, &priorInReplyTo, &priorSubject)
+	default:
+		return out, nil
+	}
+	if err == sql.ErrNoRows {
+		return out, nil
+	}
+	if err != nil {
+		return out, err
+	}
+	priorMsgID = normalizeAngleAddr(priorMsgID)
+	if priorMsgID == "" {
+		return out, nil
+	}
+
+	out.HasPrior = true
+	out.InReplyTo = priorMsgID
+	if priorInReplyTo != "" {
+		out.References = strings.TrimSpace(normalizeAngleAddr(priorInReplyTo) + " " + priorMsgID)
+	} else {
+		out.References = priorMsgID
+	}
+
+	var rootSubj string
+	switch {
+	case workflowInstanceID > 0:
+		_ = db.QueryRow(`
+			SELECT COALESCE(cm.subject,'')
+			FROM conversation_messages cm
+			INNER JOIN email_sends es ON es.id = cm.email_send_id
+			WHERE cm.user_id = ? AND cm.contact_id = ? AND cm.direction = 'outbound'
+				AND es.workflow_instance_id = ?
+				AND es.delivery_status = 'sent'
+				AND cm.email_send_id <> ?
+			ORDER BY cm.occurred_at ASC, cm.id ASC
+			LIMIT 1
+		`, userID, contactID, workflowInstanceID, excludeSendID).Scan(&rootSubj)
+	case campaignID > 0:
+		_ = db.QueryRow(`
+			SELECT COALESCE(cm.subject,'')
+			FROM conversation_messages cm
+			INNER JOIN email_sends es ON es.id = cm.email_send_id
+			WHERE cm.user_id = ? AND cm.contact_id = ? AND cm.direction = 'outbound'
+				AND es.campaign_id = ?
+				AND es.delivery_status = 'sent'
+				AND cm.email_send_id <> ?
+			ORDER BY cm.occurred_at ASC, cm.id ASC
+			LIMIT 1
+		`, userID, contactID, campaignID, excludeSendID).Scan(&rootSubj)
+	}
+	if rootSubj == "" {
+		rootSubj = priorSubject
+	}
+	out.RootSubject = rootSubj
+	return out, nil
+}
+
+// FollowUpSubject returns a Re: subject based on the thread root (classic follow-up threading).
+func FollowUpSubject(rootSubject, currentSubject string) string {
+	root := strings.TrimSpace(rootSubject)
+	if root == "" {
+		return currentSubject
+	}
+	for {
+		lower := strings.ToLower(root)
+		switch {
+		case strings.HasPrefix(lower, "re:"):
+			root = strings.TrimSpace(root[3:])
+		case strings.HasPrefix(lower, "fwd:"):
+			root = strings.TrimSpace(root[4:])
+		case strings.HasPrefix(lower, "fw:"):
+			root = strings.TrimSpace(root[3:])
+		default:
+			return "Re: " + root
+		}
+	}
+}
+
+func normalizeAngleAddr(id string) string {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return ""
+	}
+	if !strings.HasPrefix(id, "<") {
+		id = "<" + id
+	}
+	if !strings.HasSuffix(id, ">") {
+		id = id + ">"
+	}
+	return id
 }

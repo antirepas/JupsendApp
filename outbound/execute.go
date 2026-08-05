@@ -101,10 +101,21 @@ func executeJob(job model.SendJob, account model.SMTPAccount) error {
 	}
 	sender := util.NewEmailSender(account.SMTPHost, account.SMTPPort, account.SMTPUser, smtpPass, from)
 	messageID := fmt.Sprintf("<%s@%s>", trackID, messageIDDomain(from))
+
+	thread, _ := model.ResolveOutboundThread(job.UserID, job.ContactID, job.WorkflowInstanceID, job.CampaignID, emailSendID)
+	inReplyTo := thread.InReplyTo
+	references := thread.References
+	if thread.HasPrior {
+		// Keep the sequence in one inbox thread (classic follow-up style).
+		newSubject = model.FollowUpSubject(thread.RootSubject, newSubject)
+	}
+
 	meta := util.SendMeta{
 		MessageID:          messageID,
 		EmailTrackerSendID: fmt.Sprintf("%d", emailSendID),
 		FromName:           account.FromName,
+		InReplyTo:          inReplyTo,
+		References:         references,
 	}
 	var sendErr error
 	if account.IsGoogleOAuth() {
@@ -137,6 +148,7 @@ func executeJob(job model.SendJob, account model.SMTPAccount) error {
 		BodyText:      plainBody,
 		BodyHTML:      replacedLinksBody,
 		MessageID:     messageID,
+		InReplyTo:     inReplyTo,
 		OccurredAt:    time.Now(),
 	})
 	if err := model.CompleteSendJob(job.ID, account.ID); err != nil {

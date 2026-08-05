@@ -11,7 +11,7 @@ import (
 	"emailtracker.com/db"
 )
 
-// ListContactRow is a contact with variables for list detail views.
+// ListContactRow is a contact row for list detail views.
 type ListContactRow struct {
 	ID               int64
 	Email            string
@@ -20,6 +20,28 @@ type ListContactRow struct {
 	LastCampaignName string
 	LastSignal       string
 	LastActivity     *time.Time
+	Suppressed       bool
+	RepliedAt        *time.Time
+}
+
+// ListMembersFilter controls pagination and filtering for list detail.
+type ListMembersFilter struct {
+	Query      string
+	Engagement string // "", opened_no_reply, clicked_no_reply, replied, interested
+	Sort       string // email, newest
+	Page       int
+	PageSize   int
+}
+
+// ListMembersPage is a paginated list-members result.
+type ListMembersPage struct {
+	List       ContactList
+	Items      []ListContactRow
+	Total      int
+	Page       int
+	PageSize   int
+	TotalPages int
+	Filter     ListMembersFilter
 }
 
 func parseVariableSchema(raw sql.NullString) []string {
@@ -214,81 +236,145 @@ func addContactToListValidated(listID, userID, contactID int64) error {
 	return err
 }
 
-// ListContactsInList returns members and the column keys to display.
+// ListContactsInList returns members (no variable columns; use schema helpers for import keys).
 func ListContactsInList(listID, userID int64) (list ContactList, rows []ListContactRow, columns []string, err error) {
-	return ListContactsInListFiltered(listID, userID, "")
+	page, err := ListContactsInListPage(listID, userID, ListMembersFilter{Page: 1, PageSize: 5000})
+	if err != nil {
+		return ContactList{}, nil, nil, err
+	}
+	columns, _ = GetListVariableSchema(listID, userID)
+	return page.List, page.Items, columns, nil
 }
 
-// ListContactsInListFiltered returns members optionally filtered by email search.
+// ListContactsInListFiltered returns members optionally filtered by email search (unpaginated, legacy).
 func ListContactsInListFiltered(listID, userID int64, query string) (list ContactList, rows []ListContactRow, columns []string, err error) {
-	list, err = GetContactListForUser(listID, userID)
+	page, err := ListContactsInListPage(listID, userID, ListMembersFilter{Query: query, Page: 1, PageSize: 5000})
 	if err != nil {
-		return list, nil, nil, err
+		return ContactList{}, nil, nil, err
 	}
-	columns, err = GetListVariableSchema(listID, userID)
-	if err != nil {
-		return list, nil, nil, err
-	}
+	columns, _ = GetListVariableSchema(listID, userID)
+	return page.List, page.Items, columns, nil
+}
 
-	sqlQuery := `
-		SELECT c.id, c.email
-		FROM contact_list_members m
-		INNER JOIN contact c ON c.id = m.contact_id
-		WHERE m.list_id = ? AND c.user_id = ?`
+// ListContactsInListPage returns paginated list members without loading contact variables.
+func ListContactsInListPage(listID, userID int64, f ListMembersFilter) (ListMembersPage, error) {
+	out := ListMembersPage{Filter: f}
+	list, err := GetContactListForUser(listID, userID)
+	if err != nil {
+		return out, err
+	}
+	out.List = list
+
+	if f.Page < 1 {
+		f.Page = 1
+	}
+	if f.PageSize < 1 {
+		f.PageSize = 50
+	}
+	if f.PageSize > 200 {
+		f.PageSize = 200
+	}
+	out.Filter = f
+	out.Page = f.Page
+	out.PageSize = f.PageSize
+
+	where := []string{"m.list_id = ?", "c.user_id = ?"}
 	args := []interface{}{listID, userID}
-	if q := strings.TrimSpace(query); q != "" {
-		sqlQuery += ` AND LOWER(c.email) LIKE ?`
+	if q := strings.TrimSpace(f.Query); q != "" {
+		where = append(where, "LOWER(c.email) LIKE ?")
 		args = append(args, "%"+strings.ToLower(q)+"%")
 	}
-	sqlQuery += ` ORDER BY c.email ASC`
+	if f.Engagement == "replied" {
+		where = append(where, "c.replied_at IS NOT NULL")
+	} else if clause, _ := engagementFilterSQL(f.Engagement); clause != "" {
+		where = append(where, "("+clause+")")
+	}
+	whereSQL := strings.Join(where, " AND ")
 
-	memberRows, err := db.Query(sqlQuery, args...)
+	countQ := `
+		SELECT COUNT(*)
+		FROM contact_list_members m
+		INNER JOIN contact c ON c.id = m.contact_id
+		WHERE ` + whereSQL
+	if err := db.QueryRow(countQ, args...).Scan(&out.Total); err != nil {
+		return out, err
+	}
+	out.TotalPages = out.Total / f.PageSize
+	if out.Total%f.PageSize != 0 || out.TotalPages == 0 && out.Total > 0 {
+		out.TotalPages++
+	}
+	if out.Total == 0 {
+		out.TotalPages = 0
+	}
+	if f.Page > out.TotalPages && out.TotalPages > 0 {
+		f.Page = out.TotalPages
+		out.Page = f.Page
+		out.Filter.Page = f.Page
+	}
+
+	order := "LOWER(c.email) ASC"
+	if f.Sort == "newest" {
+		order = "c.id DESC"
+	}
+	offset := (f.Page - 1) * f.PageSize
+	sqlQuery := `
+		SELECT c.id, c.email, c.replied_at,
+			EXISTS(SELECT 1 FROM contact_suppressions s WHERE s.contact_id = c.id) AS suppressed
+		FROM contact_list_members m
+		INNER JOIN contact c ON c.id = m.contact_id
+		WHERE ` + whereSQL + `
+		ORDER BY ` + order + `
+		LIMIT ? OFFSET ?`
+	queryArgs := append(append([]interface{}{}, args...), f.PageSize, offset)
+	memberRows, err := db.Query(sqlQuery, queryArgs...)
 	if err != nil {
-		return list, nil, nil, err
+		return out, err
 	}
 	defer memberRows.Close()
-
-	colSet := map[string]bool{}
-	for _, k := range columns {
-		colSet[k] = true
-	}
 
 	var ids []int64
 	for memberRows.Next() {
 		var row ListContactRow
-		if err := memberRows.Scan(&row.ID, &row.Email); err != nil {
-			return list, nil, nil, err
+		var replied sql.NullTime
+		var suppressed bool
+		if err := memberRows.Scan(&row.ID, &row.Email, &replied, &suppressed); err != nil {
+			return out, err
 		}
-		_, vars, err := GetContact(row.ID)
-		if err != nil {
-			return list, nil, nil, err
+		if replied.Valid {
+			t := replied.Time
+			row.RepliedAt = &t
 		}
-		row.Variables = map[string]string{}
-		for _, v := range vars {
-			row.Variables[v.Key] = v.Value
-			if len(columns) == 0 && v.Key != "" {
-				colSet[v.Key] = true
-			}
-		}
+		row.Suppressed = suppressed
 		ids = append(ids, row.ID)
-		rows = append(rows, row)
-	}
-	if len(columns) == 0 {
-		for k := range colSet {
-			columns = append(columns, k)
-		}
-		sort.Strings(columns)
+		out.Items = append(out.Items, row)
 	}
 	engMap, _ := EnrichContactsEngagement(userID, ids)
-	for i := range rows {
-		if eng, ok := engMap[rows[i].ID]; ok {
-			rows[i].LastCampaignID = eng.LastCampaignID
-			rows[i].LastCampaignName = eng.LastCampaignName
-			rows[i].LastSignal = eng.LastSignal
-			rows[i].LastActivity = eng.LastActivity
+	for i := range out.Items {
+		if eng, ok := engMap[out.Items[i].ID]; ok {
+			out.Items[i].LastCampaignID = eng.LastCampaignID
+			out.Items[i].LastCampaignName = eng.LastCampaignName
+			out.Items[i].LastSignal = eng.LastSignal
+			out.Items[i].LastActivity = eng.LastActivity
 		}
 	}
-	return list, rows, columns, nil
+	return out, nil
+}
+
+// RemoveContactsFromList removes many members from a list (does not delete contacts).
+func RemoveContactsFromList(listID, userID int64, contactIDs []int64) (int, error) {
+	if _, err := GetContactListForUser(listID, userID); err != nil {
+		return 0, err
+	}
+	n := 0
+	for _, cid := range contactIDs {
+		if cid <= 0 {
+			continue
+		}
+		if err := RemoveContactFromList(listID, userID, cid); err == nil {
+			n++
+		}
+	}
+	return n, nil
 }
 
 // ListVariableSample returns schema keys and sample values from the first list member.

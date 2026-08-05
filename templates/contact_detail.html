@@ -31,15 +31,18 @@
                 {{end}}
                 <time class="text-xs text-gray-500">{{.OccurredAt.Format "Jan 2, 2006 · 15:04"}}</time>
             </div>
-            <p class="conv-msg-subject">{{if .Subject}}{{.Subject}}{{else}}(no subject){{end}}</p>
-            <p class="text-xs text-gray-500 mb-2">{{.FromEmail}} → {{.ToEmail}}</p>
-            {{if .DisplaySrcDoc}}
-            <iframe class="conv-msg-frame" title="Email" sandbox="" srcdoc="{{.DisplaySrcDoc}}"></iframe>
-            {{else}}
-            <p class="text-sm text-gray-400">(empty message)</p>
-            {{end}}
+            <p class="conv-msg-subject">
+                {{if and (not .IsInbound) .EmailSendID}}
+                <a href="/sends/{{.EmailSendID}}" class="text-brand-600 hover:underline">{{if .Subject}}{{.Subject}}{{else}}(no subject){{end}}</a>
+                {{else}}
+                {{if .Subject}}{{.Subject}}{{else}}(no subject){{end}}
+                {{end}}
+            </p>
+            <p class="text-xs text-gray-500">{{.FromEmail}} → {{.ToEmail}}</p>
             {{if and (not .IsInbound) .EmailSendID}}
             <a href="/sends/{{.EmailSendID}}" class="text-xs text-brand-600 font-medium">Send details</a>
+            {{else if .IsInbound}}
+            <a href="/contacts/{{$.summary.Contact.ID}}/reply?reply_to={{.ID}}" class="text-xs text-brand-600 font-medium">Reply to this</a>
             {{end}}
         </div>
         {{end}}
@@ -51,7 +54,7 @@
     {{if .canReply}}
     <div class="border-t border-gray-100 pt-4">
         <a href="/contacts/{{.summary.Contact.ID}}/reply" class="btn-primary text-sm inline-flex">Compose reply</a>
-        <p class="text-xs text-gray-500 mt-2">Opens the full editor with variables, live preview, and their last message.</p>
+        <p class="text-xs text-gray-500 mt-2">Opens the full editor with variables, live preview, and the message you’re replying to.</p>
     </div>
     {{else if .summary.RecentSends}}
     <p class="text-xs text-gray-500 border-t border-gray-100 pt-4">Reply opens here after their first reply is detected (or when a send used a known mailbox).</p>

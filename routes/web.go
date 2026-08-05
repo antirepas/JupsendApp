@@ -612,11 +612,43 @@ func ReplyContactPage(ctx *gin.Context) {
 		return
 	}
 
+	targets, _ := model.ListReplyTargets(userID, contactID, 100)
+	// Prefer rendered subjects on outbound targets that have a send snapshot.
+	enrichLegacyConversationBodies(userID, contactID, targets)
+
+	var selected *model.ConversationMessage
+	if replyToID, err := strconv.ParseInt(ctx.Query("reply_to"), 10, 64); err == nil && replyToID > 0 {
+		if msg, err := model.GetConversationMessageForUser(userID, contactID, replyToID); err == nil {
+			selected = &msg
+		}
+	}
+	if selected == nil {
+		for i := range targets {
+			if targets[i].Direction == model.ConversationInbound {
+				selected = &targets[i]
+				break
+			}
+		}
+	}
+	if selected == nil && len(targets) > 0 {
+		selected = &targets[0]
+	}
+	if selected != nil {
+		tmp := []model.ConversationMessage{*selected}
+		enrichLegacyConversationBodies(userID, contactID, tmp)
+		selected = &tmp[0]
+		// Keep list in sync with selected subject's filled vars.
+		for i := range targets {
+			if targets[i].ID == selected.ID {
+				targets[i] = *selected
+				break
+			}
+		}
+	}
+
 	replySubject := "Re: "
-	var inbound *model.ConversationMessage
-	if msg, err := model.LatestInboundMessage(userID, contactID); err == nil {
-		inbound = &msg
-		sub := strings.TrimSpace(msg.Subject)
+	if selected != nil {
+		sub := strings.TrimSpace(selected.Subject)
 		if strings.HasPrefix(strings.ToLower(sub), "re:") {
 			replySubject = sub
 		} else if sub != "" {
@@ -646,21 +678,17 @@ func ReplyContactPage(ctx *gin.Context) {
 		sample = map[string]string{}
 	}
 	sampleJSON, _ := json.Marshal(sample)
-	contacts, _ := model.ListContacts(userID)
-	lists, _ := model.ListContactLists(userID)
 
 	ctx.HTML(http.StatusOK, "contact_reply.html", gin.H{
 		"title":             "Reply — " + summary.Contact.Email,
 		"active":            "contacts",
 		"contact":           summary.Contact,
-		"inbound":           inbound,
+		"replyTargets":      targets,
+		"selectedReply":     selected,
 		"replySubject":      replySubject,
 		"senderEmail":       senderEmail,
-		"defaultSampleJSON": string(sampleJSON),
+		"defaultSampleJSON": template.JS(string(sampleJSON)),
 		"aiEnabled":         ai.Enabled(),
-		"contacts":          contacts,
-		"lists":             lists,
-		"lockPreview":       true,
 		"error":             ctx.Query("error"),
 	})
 }
@@ -675,16 +703,22 @@ func ReplyContactWeb(ctx *gin.Context) {
 	subject := strings.TrimSpace(ctx.PostForm("subject"))
 	bodyHTML := strings.TrimSpace(ctx.PostForm("body"))
 	bodyText := strings.TrimSpace(util.StripHTML(bodyHTML))
+	replyToID, _ := strconv.ParseInt(ctx.PostForm("reply_to_id"), 10, 64)
 	_, err = outbound.SendManualReply(outbound.ManualReplyInput{
-		UserID:    userID,
-		ContactID: contactID,
-		Subject:   subject,
-		BodyText:  bodyText,
-		BodyHTML:  bodyHTML,
+		UserID:           userID,
+		ContactID:        contactID,
+		Subject:          subject,
+		BodyText:         bodyText,
+		BodyHTML:         bodyHTML,
+		ReplyToMessageID: replyToID,
 	})
 	if err != nil {
 		log.Print(err)
-		ctx.Redirect(http.StatusFound, "/contacts/"+strconv.FormatInt(contactID, 10)+"/reply?error="+url.QueryEscape(err.Error()))
+		q := "/contacts/" + strconv.FormatInt(contactID, 10) + "/reply?error=" + url.QueryEscape(err.Error())
+		if replyToID > 0 {
+			q += "&reply_to=" + strconv.FormatInt(replyToID, 10)
+		}
+		ctx.Redirect(http.StatusFound, q)
 		return
 	}
 	ctx.Redirect(http.StatusFound, "/contacts/"+strconv.FormatInt(contactID, 10)+"?success="+url.QueryEscape("Reply sent")+"#conversation")

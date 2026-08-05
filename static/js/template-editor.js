@@ -160,15 +160,22 @@
     function renderChips(keys) {
         if (!chipsEl) return;
         chipsEl.innerHTML = '';
-        if (keys.length === 0) {
-            chipsEl.innerHTML = '<span class="text-sm text-slate-400">Type {{name}} in subject or body — variables are detected automatically.</span>';
+        const locked = !!form.dataset.lockPreviewContact;
+        const contactKeys = locked && previewContactSample
+            ? Object.keys(previewContactSample).filter(isValidVarKey)
+            : [];
+        const merged = [...new Set([...contactKeys, ...keys.filter(isValidVarKey)])].sort();
+        if (merged.length === 0) {
+            chipsEl.innerHTML = locked
+                ? '<span class="text-sm text-slate-400">No variables on this contact yet — add them on the contact page, or type {{name}} in the body.</span>'
+                : '<span class="text-sm text-slate-400">Type {{name}} in subject or body — variables are detected automatically.</span>';
             return;
         }
         const hint = document.createElement('p');
         hint.className = 'text-xs text-slate-400 w-full mb-1';
-        hint.textContent = 'Click to insert plain {{key}} — add filters from the syntax guide.';
+        hint.textContent = 'Click to insert {{key}} — add filters from the syntax guide.';
         chipsEl.appendChild(hint);
-        keys.forEach((key) => {
+        merged.forEach((key) => {
             const btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'template-var-chip';
@@ -217,9 +224,19 @@
     function renderSampleFields(keys) {
         if (!sampleFieldsEl) return;
         sampleFieldsEl.innerHTML = '';
-        const allKeys = keys.filter(isValidVarKey).sort();
+        const locked = !!form.dataset.lockPreviewContact;
+        let allKeys = keys.filter(isValidVarKey);
+        if (locked && previewContactSample) {
+            allKeys = [...new Set([
+                ...Object.keys(previewContactSample).filter(isValidVarKey),
+                ...allKeys,
+            ])];
+        }
+        allKeys.sort();
         if (allKeys.length === 0) {
-            sampleFieldsEl.innerHTML = '<p class="text-xs text-slate-400">Add variables to the subject or body, then pick a contact above to preview with real data.</p>';
+            sampleFieldsEl.innerHTML = locked
+                ? '<p class="text-xs text-slate-400">This contact has no variables yet. Add them on the contact page.</p>'
+                : '<p class="text-xs text-slate-400">Add variables to the subject or body, then pick a contact above to preview with real data.</p>';
             return;
         }
         allKeys.forEach((key) => {
@@ -751,13 +768,14 @@
     function applyPreviewContactSample() {
         const usedKeys = extractVariables();
         if (previewContactSample) {
-            usedKeys.forEach((k) => {
-                if (previewContactSample[k] !== undefined) {
+            Object.keys(previewContactSample).forEach((k) => {
+                if (isValidVarKey(k)) {
                     sampleValues[k] = previewContactSample[k];
                 }
             });
         }
         renderSampleFields(usedKeys);
+        renderChips(usedKeys);
         schedulePreview();
     }
 
@@ -788,11 +806,21 @@
                 return;
             }
             const sample = await fetchContactSample('/contacts/' + contactID + '/variables');
-            if (!sample) return;
+            if (!sample) {
+                // Fall back to embedded default sample (already contact-scoped on reply page).
+                if (Object.keys(defaultSample).length) {
+                    previewContactSample = { ...defaultSample };
+                    applyPreviewContactSample();
+                }
+                return;
+            }
             previewContactSample = sample;
             applyPreviewContactSample();
         } catch (_) {
-            /* ignore */
+            if (Object.keys(defaultSample).length) {
+                previewContactSample = { ...defaultSample };
+                applyPreviewContactSample();
+            }
         }
     }
 
@@ -850,9 +878,24 @@
 
     const lockPreviewContact = form.dataset.lockPreviewContact || '';
     if (lockPreviewContact) {
+        // Seed immediately from embedded contact sample, then refresh from API.
+        if (Object.keys(defaultSample).length) {
+            previewContactSample = { ...defaultSample };
+            Object.assign(sampleValues, defaultSample);
+            applyPreviewContactSample();
+            renderSourceVars(Object.keys(defaultSample), defaultSample, 'This contact');
+        }
         if (previewContactSelect) {
             previewContactSelect.value = lockPreviewContact;
         }
-        loadPreviewContact(lockPreviewContact);
+        loadPreviewContact(lockPreviewContact).then(() => {
+            if (previewContactSample) {
+                renderSourceVars(
+                    Object.keys(previewContactSample),
+                    previewContactSample,
+                    'This contact'
+                );
+            }
+        });
     }
 })();

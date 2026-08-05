@@ -13,11 +13,12 @@ import (
 
 // ManualReplyInput is a freeform reply from the contact conversation UI.
 type ManualReplyInput struct {
-	UserID    int64
-	ContactID int64
-	Subject   string
-	BodyText  string
-	BodyHTML  string
+	UserID            int64
+	ContactID         int64
+	Subject           string
+	BodyText          string
+	BodyHTML          string
+	ReplyToMessageID  int64 // conversation_messages.id to thread against
 }
 
 // SendManualReply sends from the mailbox that last emailed this contact (or default).
@@ -78,6 +79,12 @@ func SendManualReply(in ManualReplyInput) (int64, error) {
 	}
 
 	inbound, inboundErr := model.LatestInboundMessage(in.UserID, in.ContactID)
+	if in.ReplyToMessageID > 0 {
+		if msg, err := model.GetConversationMessageForUser(in.UserID, in.ContactID, in.ReplyToMessageID); err == nil {
+			inbound = msg
+			inboundErr = nil
+		}
+	}
 	inReplyTo := ""
 	references := ""
 	if inboundErr == nil {
@@ -87,7 +94,11 @@ func SendManualReply(in ManualReplyInput) (int64, error) {
 		}
 		references = inReplyTo
 		if inbound.InReplyTo != "" {
-			references = inbound.InReplyTo + " " + inReplyTo
+			ref := inbound.InReplyTo
+			if !strings.HasPrefix(ref, "<") {
+				ref = "<" + ref + ">"
+			}
+			references = ref + " " + inReplyTo
 		}
 	}
 

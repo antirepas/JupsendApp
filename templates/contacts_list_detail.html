@@ -17,8 +17,8 @@
 {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
 
 <div class="card mb-6">
-    <h3 class="card-title">Variable schema</h3>
-    <p class="text-sm text-gray-500 mb-3">Required column names for this list. Missing values are OK; unknown keys on import are rejected.</p>
+    <h3 class="card-title">Import schema</h3>
+    <p class="text-sm text-gray-500 mb-3">Column names expected on import. Missing values are OK; unknown keys are rejected.</p>
     {{if .columns}}
     <div class="flex flex-wrap gap-2 mb-4">
         {{range .columns}}<span class="badge badge-blue">{{.}}</span>{{end}}
@@ -56,33 +56,69 @@
     {{end}}
 </div>
 
+<div class="card mb-4">
+    <form method="GET" action="/contacts/lists/{{.list.ID}}" class="flex flex-wrap gap-3 items-end">
+        <div class="flex-1 min-w-[180px]">
+            <label class="form-label">Search email</label>
+            <input type="search" name="q" class="form-input" value="{{.filterQ}}" placeholder="alice@example.com">
+        </div>
+        <div class="min-w-[180px]">
+            <label class="form-label">Engagement</label>
+            <select name="engagement" class="form-input">
+                <option value="" {{if eq .filterEngagement ""}}selected{{end}}>Any</option>
+                <option value="opened_no_reply" {{if eq .filterEngagement "opened_no_reply"}}selected{{end}}>Opened, no reply (7d)</option>
+                <option value="clicked_no_reply" {{if eq .filterEngagement "clicked_no_reply"}}selected{{end}}>Clicked, no reply</option>
+                <option value="replied" {{if eq .filterEngagement "replied"}}selected{{end}}>Replied</option>
+                <option value="interested" {{if eq .filterEngagement "interested"}}selected{{end}}>Interested (90d)</option>
+            </select>
+        </div>
+        <div class="min-w-[140px]">
+            <label class="form-label">Sort</label>
+            <select name="sort" class="form-input">
+                <option value="email" {{if or (eq .filterSort "email") (eq .filterSort "")}}selected{{end}}>Email A–Z</option>
+                <option value="newest" {{if eq .filterSort "newest"}}selected{{end}}>Newest</option>
+            </select>
+        </div>
+        <button type="submit" class="btn-secondary">Filter</button>
+        {{if or .filterQ .filterEngagement}}
+        <a href="/contacts/lists/{{.list.ID}}" class="text-sm text-gray-500 pb-2">Clear</a>
+        {{end}}
+    </form>
+</div>
+
+<form method="POST" action="/contacts/lists/{{.list.ID}}/members/bulk" id="list-bulk-form">
+<input type="hidden" name="action" id="list-bulk-action" value="remove">
 <div class="card overflow-hidden">
-    <div class="px-4 py-3 border-b border-gray-100 flex flex-wrap gap-3 items-center justify-between">
-        <form method="GET" action="/contacts/lists/{{.list.ID}}" class="flex gap-2 items-center">
-            <input type="search" name="q" value="{{.filterQ}}" class="form-input" placeholder="Search email…" style="min-width:200px">
-            <button type="submit" class="btn-secondary">Search</button>
-            {{if .filterQ}}<a href="/contacts/lists/{{.list.ID}}" class="text-sm text-gray-500">Clear</a>{{end}}
-        </form>
-        <span class="text-sm text-gray-400">{{len .rows}} shown</span>
+    <div class="px-4 py-2 border-b border-gray-100 flex flex-wrap items-center gap-3 text-sm">
+        <label class="flex items-center gap-2"><input type="checkbox" id="select-all-page"> Select page</label>
+        <button type="submit" class="text-amber-700 font-medium" onclick="document.getElementById('list-bulk-action').value='remove'; return confirm('Remove selected from this list?');">Remove from list</button>
+        <button type="submit" class="text-red-600 font-medium" onclick="document.getElementById('list-bulk-action').value='delete'; return confirm('Permanently delete selected leads? This cannot be undone.');">Delete leads</button>
+        <span class="text-gray-400">{{.memberPage.Total}} match{{if gt .memberPage.TotalPages 0}} · page {{.memberPage.Page}} of {{.memberPage.TotalPages}}{{end}}</span>
     </div>
+</div>
+</form>
+
+<div class="card overflow-hidden -mt-px">
     {{if .rows}}
     <table class="data-table">
         <thead>
             <tr>
+                <th class="w-10"></th>
                 <th>Email</th>
-                {{range .columns}}<th>{{.}}</th>{{end}}
                 <th>Last campaign</th>
                 <th>Last signal</th>
-                <th></th>
+                <th class="text-right">Actions</th>
             </tr>
         </thead>
         <tbody>
             {{range $row := .rows}}
             <tr>
-                <td class="font-medium"><a href="/contacts/{{$row.ID}}" class="text-brand-600 hover:underline">{{$row.Email}}</a></td>
-                {{range $.columns}}
-                <td class="text-sm text-gray-600">{{index $row.Variables .}}</td>
-                {{end}}
+                <td><input form="list-bulk-form" type="checkbox" name="contact_ids" value="{{$row.ID}}" class="list-member-cb"></td>
+                <td class="font-medium">
+                    <a href="/contacts/{{$row.ID}}" class="text-brand-600 hover:underline">{{$row.Email}}</a>
+                    {{if $row.Suppressed}}<span class="badge badge-red ml-1">suppressed</span>{{end}}
+                    {{if $row.RepliedAt}}<span class="badge badge-green ml-1">replied</span>{{end}}
+                </td>
                 <td class="text-sm text-gray-600">
                     {{if $row.LastCampaignID}}
                     <a href="/campaigns/{{$row.LastCampaignID}}" class="text-brand-600 hover:underline">{{$row.LastCampaignName}}</a>
@@ -92,20 +128,37 @@
                     {{if and $row.LastSignal (ne $row.LastSignal "none")}}{{$row.LastSignal}}{{if $row.LastActivity}} <span class="text-gray-400">· {{$row.LastActivity.Format "Jan 2"}}</span>{{end}}
                     {{else}}—{{end}}
                 </td>
-                <td class="text-right">
+                <td class="text-right space-x-3 whitespace-nowrap">
+                    <a href="/contacts/{{$row.ID}}" class="text-brand-600 text-sm font-medium">View</a>
                     <form method="POST" action="/contacts/lists/{{$.list.ID}}/members/{{$row.ID}}/remove" class="inline" onsubmit="return confirm('Remove from list?');">
-                        <button type="submit" class="text-sm text-red-600 font-medium">Remove</button>
+                        <button type="submit" class="text-sm text-amber-700 font-medium">Remove</button>
+                    </form>
+                    <form method="POST" action="/contacts/lists/{{$.list.ID}}/members/{{$row.ID}}/delete" class="inline" onsubmit="return confirm('Permanently delete this lead?');">
+                        <button type="submit" class="text-sm text-red-600 font-medium">Delete</button>
                     </form>
                 </td>
             </tr>
             {{end}}
         </tbody>
     </table>
+    {{if gt .memberPage.TotalPages 1}}
+    <div class="flex items-center justify-between px-4 py-3 border-t border-gray-100 text-sm">
+        <span class="text-gray-500">Page {{.memberPage.Page}} of {{.memberPage.TotalPages}}</span>
+        <div class="flex gap-2">
+            {{if .hasPrev}}
+            <a href="/contacts/lists/{{.list.ID}}?page={{.prevPage}}&q={{.filterQ}}&engagement={{.filterEngagement}}&sort={{.filterSort}}" class="btn-secondary text-xs">Previous</a>
+            {{end}}
+            {{if .hasNext}}
+            <a href="/contacts/lists/{{.list.ID}}?page={{.nextPage}}&q={{.filterQ}}&engagement={{.filterEngagement}}&sort={{.filterSort}}" class="btn-secondary text-xs">Next</a>
+            {{end}}
+        </div>
+    </div>
+    {{end}}
     {{else}}
     <div class="empty-state">
-        {{if .filterQ}}
-        <p>No members match “{{.filterQ}}”.</p>
-        <a href="/contacts/lists/{{.list.ID}}" class="btn-secondary mt-4">Clear search</a>
+        {{if or .filterQ .filterEngagement}}
+        <p>No members match your filters.</p>
+        <a href="/contacts/lists/{{.list.ID}}" class="btn-secondary mt-4">Clear filters</a>
         {{else}}
         <p>No contacts in this list yet.</p>
         <a href="/contacts?tab=import" class="btn-primary mt-4">Import contacts</a>
@@ -117,6 +170,17 @@
 </div>
 </main>
 </div>
+<script>
+(function () {
+    const all = document.getElementById('select-all-page');
+    if (!all) return;
+    all.addEventListener('change', function () {
+        document.querySelectorAll('.list-member-cb').forEach(function (cb) {
+            cb.checked = all.checked;
+        });
+    });
+})();
+</script>
 </body>
 </html>
 {{end}}
