@@ -276,13 +276,15 @@ func (o OrderStatus) IsError() bool {
 type BuyMailboxItem struct {
 	FirstName      string `json:"first_name"`
 	LastName       string `json:"last_name"`
-	Username       string `json:"username"`
+	Email          string `json:"email,omitempty"`
+	Username       string `json:"username,omitempty"`
 	Platform       string `json:"platform"`
-	DomainName     string `json:"domain_name"`
+	DomainName     string `json:"domain_name,omitempty"`
 	ProfilePicture string `json:"profile_picture,omitempty"`
 }
 
 type BuyMailboxesRequest struct {
+	Domain           string           `json:"domain,omitempty"`
 	Mailboxes        []BuyMailboxItem `json:"mailboxes"`
 	UseWalletBalance bool             `json:"use_wallet_balance,omitempty"`
 }
@@ -295,6 +297,8 @@ type BuyMailboxesResponse struct {
 	Status    string `json:"status"`
 	Mailboxes []struct {
 		UID        string `json:"uid"`
+		ID         string `json:"id"`
+		Email      string `json:"email"`
 		DomainName string `json:"domain_name"`
 		Username   string `json:"username"`
 		Status     string `json:"status"`
@@ -313,9 +317,14 @@ func BuyItemsFromOrderMailboxes(domain string, mailboxes []OrderMailbox) []BuyMa
 		if platform == "" {
 			platform = "GOOGLE"
 		}
+		email := strings.ToLower(strings.TrimSpace(m.Email))
+		if email == "" {
+			email = user + "@" + domain
+		}
 		out = append(out, BuyMailboxItem{
 			FirstName:  m.FirstName,
 			LastName:   m.LastName,
+			Email:      email,
 			Username:   user,
 			Platform:   platform,
 			DomainName: domain,
@@ -325,6 +334,19 @@ func BuyItemsFromOrderMailboxes(domain string, mailboxes []OrderMailbox) []BuyMa
 }
 
 func (c *Client) BuyMailboxes(req BuyMailboxesRequest) (BuyMailboxesResponse, error) {
+	if strings.TrimSpace(req.Domain) == "" && len(req.Mailboxes) > 0 {
+		req.Domain = strings.ToLower(strings.TrimSpace(req.Mailboxes[0].DomainName))
+		if req.Domain == "" {
+			if email := req.Mailboxes[0].Email; strings.Contains(email, "@") {
+				req.Domain = strings.ToLower(email[strings.Index(email, "@")+1:])
+			}
+		}
+	}
+	// Charge InboxKit workspace wallet when buying seats outside a Whop checkout.
+	req.UseWalletBalance = true
+	if len(req.Mailboxes) == 0 {
+		return BuyMailboxesResponse{}, fmt.Errorf("at least one mailbox is required")
+	}
 	var resp BuyMailboxesResponse
 	err := c.do("POST", "/api/mailboxes/buy", req, &resp)
 	if err != nil {

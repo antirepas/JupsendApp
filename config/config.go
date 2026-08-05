@@ -67,7 +67,7 @@ func reloadFromEnv() {
 	SMTPHost = envOr("SMTP_HOST", "smtp.gmail.com")
 	SMTPPort = envOr("SMTP_PORT", "587")
 	SMTPUser = strings.TrimSpace(os.Getenv("SMTP_USER"))
-	SMTPPass = normalizeAppPassword(os.Getenv("APP_PASSWORD"))
+	SMTPPass = NormalizeAppPassword(os.Getenv("APP_PASSWORD"))
 	SMTPFrom = strings.TrimSpace(os.Getenv("SMTP_FROM"))
 	if SMTPFrom == "" {
 		SMTPFrom = SMTPUser
@@ -161,10 +161,11 @@ func SharedIMAPPort() string {
 	return "993"
 }
 
-func normalizeAppPassword(password string) string {
+// NormalizeAppPassword strips quotes/spaces so Gmail app passwords pasted as
+// "xxxx xxxx xxxx xxxx" match what Free shared SMTP uses from APP_PASSWORD.
+func NormalizeAppPassword(password string) string {
 	password = strings.TrimSpace(password)
 	password = strings.Trim(password, "\"'")
-	// Gmail app passwords are often shown in groups; SMTP accepts without spaces.
 	return strings.ReplaceAll(password, " ", "")
 }
 

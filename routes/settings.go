@@ -79,7 +79,7 @@ func UpdateSettings(c *gin.Context) {
 }
 
 func SettingsSMTPCheck(c *gin.Context) {
-	from, err := runUserSMTPCheck(mustUserID(c))
+	from, err := runUserSMTPCheck(mustUserID(c), 0)
 	if err != nil {
 		c.Redirect(http.StatusFound, "/settings?error="+url.QueryEscape("SMTP test failed: "+err.Error()))
 		return

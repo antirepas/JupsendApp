@@ -213,6 +213,7 @@ func buyPendingMailboxesForDomain(userID, domainID int64, domain, platform strin
 	}
 	client := inboxkit.NewClient()
 	resp, err := client.BuyMailboxes(inboxkit.BuyMailboxesRequest{
+		Domain:    domain,
 		Mailboxes: inboxkit.BuyItemsFromOrderMailboxes(domain, pending),
 	})
 	if err != nil {
@@ -465,6 +466,9 @@ func PlaceExtraMailboxesOrder(userID, domainID int64, specs []StarterMailboxSpec
 	if err != nil {
 		return "", err
 	}
+	if d.Status != "ready" && d.Status != "processing" {
+		return "", fmt.Errorf("domain %s is still %s — finish domain setup before buying more mailboxes", d.Domain, d.Status)
+	}
 	platform := config.InboxKitPlatform
 	if platform == "" {
 		platform = "GOOGLE"
@@ -475,6 +479,9 @@ func PlaceExtraMailboxesOrder(userID, domainID int64, specs []StarterMailboxSpec
 		if local == "" {
 			local = sanitizeLocalPart(s.FirstName + "." + s.LastName)
 		}
+		if local == "" {
+			return "", fmt.Errorf("invalid email local part for %s %s", s.FirstName, s.LastName)
+		}
 		mboxes = append(mboxes, inboxkit.OrderMailbox{
 			FirstName: s.FirstName,
 			LastName:  s.LastName,
@@ -483,9 +490,14 @@ func PlaceExtraMailboxesOrder(userID, domainID int64, specs []StarterMailboxSpec
 			Platform:  platform,
 		})
 	}
+	if len(mboxes) == 0 {
+		return "", fmt.Errorf("add at least one mailbox")
+	}
 	client := inboxkit.NewClient()
+	items := inboxkit.BuyItemsFromOrderMailboxes(d.Domain, mboxes)
 	resp, err := client.BuyMailboxes(inboxkit.BuyMailboxesRequest{
-		Mailboxes: inboxkit.BuyItemsFromOrderMailboxes(d.Domain, mboxes),
+		Domain:    d.Domain,
+		Mailboxes: items,
 	})
 	if err != nil {
 		return "", err
@@ -494,8 +506,36 @@ func PlaceExtraMailboxesOrder(userID, domainID int64, specs []StarterMailboxSpec
 	if orderID == "" {
 		orderID = resp.ID
 	}
+
+	uidByEmail := map[string]string{}
+	uidByUser := map[string]string{}
+	for _, bought := range resp.Mailboxes {
+		uid := bought.UID
+		if uid == "" {
+			uid = bought.ID
+		}
+		if uid == "" {
+			continue
+		}
+		if bought.Email != "" {
+			uidByEmail[strings.ToLower(bought.Email)] = uid
+		}
+		user := strings.ToLower(bought.Username)
+		if user == "" && bought.Email != "" {
+			if i := strings.Index(bought.Email, "@"); i > 0 {
+				user = strings.ToLower(bought.Email[:i])
+			}
+		}
+		if user != "" {
+			uidByUser[user] = uid
+		}
+		if bought.DomainName != "" && user != "" {
+			uidByEmail[user+"@"+strings.ToLower(bought.DomainName)] = uid
+		}
+	}
+
 	for _, mb := range mboxes {
-		_, _ = UpsertOutreachMailbox(OutreachMailbox{
+		localID, uErr := UpsertOutreachMailbox(OutreachMailbox{
 			UserID:    userID,
 			DomainID:  domainID,
 			Email:     mb.Email,
@@ -505,6 +545,23 @@ func PlaceExtraMailboxesOrder(userID, domainID int64, specs []StarterMailboxSpec
 			Status:    "provisioning",
 			Included:  false,
 		})
+		if uErr != nil {
+			log.Printf("upsert mailbox after buy %s: %v", mb.Email, uErr)
+			continue
+		}
+		user := mb.ResolvedUsername()
+		uid := uidByEmail[strings.ToLower(mb.Email)]
+		if uid == "" {
+			uid = uidByUser[user]
+		}
+		if uid != "" {
+			_ = UpdateOutreachMailboxReady(localID, uid, 0, "provisioning")
+		}
+	}
+
+	// Pull credentials immediately so the list updates without waiting for another page poll.
+	if syncErr := syncMailboxCredentials(userID, domainID, d.Domain); syncErr != nil {
+		log.Printf("sync credentials after buy on %s: %v", d.Domain, syncErr)
 	}
 	return orderID, nil
 }

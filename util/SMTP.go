@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"emailtracker.com/config"
 	"emailtracker.com/googleoauth"
 )
 
@@ -82,6 +83,9 @@ func ProbeSMTPAuth(host, port, from, accessToken string) error {
 
 // ProbeSMTPPlain verifies username/password SMTP login without sending a message.
 func ProbeSMTPPlain(host, port, username, password, from string) error {
+	password = config.NormalizeAppPassword(password)
+	username = strings.TrimSpace(username)
+	from = strings.TrimSpace(from)
 	if username == "" {
 		username = from
 	}

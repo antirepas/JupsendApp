@@ -650,7 +650,7 @@ func MailboxesAttachManual(c *gin.Context) {
 		smtpPort = "587"
 	}
 	if err := util.ProbeSMTPPlain(smtpHost, smtpPort, username, password, email); err != nil {
-		c.Redirect(http.StatusFound, "/mailboxes?error="+url.QueryEscape(formatSMTPProbeError(smtpHost, smtpPort, err).Error()))
+		c.Redirect(http.StatusFound, "/mailboxes?error="+url.QueryEscape(formatSMTPProbeError(smtpHost, smtpPort, email, err).Error()))
 		return
 	}
 	_, err := model.AttachManualSendingMailbox(userID, email, fromName, smtpHost, smtpPort, imapHost, imapPort, username, password, isDefault)
@@ -710,7 +710,7 @@ func MailboxesUpdateCredentials(c *gin.Context) {
 		from = m.Email
 	}
 	if err := util.ProbeSMTPPlain(probeHost, probePort, probeUser, probePass, from); err != nil {
-		c.Redirect(http.StatusFound, "/mailboxes?error="+url.QueryEscape(formatSMTPProbeError(probeHost, probePort, err).Error()))
+		c.Redirect(http.StatusFound, mailboxManageURL(id, "credentials", formatSMTPProbeError(probeHost, probePort, from, err).Error(), ""))
 		return
 	}
 	if err := model.UpdateMailboxCredentials(userID, id, smtpHost, smtpPort, imapHost, imapPort, username, password); err != nil {
@@ -828,16 +828,39 @@ func MailboxesBuyPage(c *gin.Context) {
 		c.Redirect(http.StatusFound, "/settings/billing?error="+url.QueryEscape("Buying mailboxes requires Pro"))
 		return
 	}
+	if !inboxkit.Configured() {
+		c.HTML(http.StatusOK, "mailboxes_buy.html", gin.H{
+			"title":  "Buy mailboxes",
+			"active": "mailboxes",
+			"error":  inboxkit.ConfiguredHint(),
+		})
+		return
+	}
 	domains, _ := model.ListOutreachDomains(userID)
-	if len(domains) == 0 {
-		c.Redirect(http.StatusFound, "/onboarding/domain")
+	var ready []model.OutreachDomain
+	var pending []model.OutreachDomain
+	for _, d := range domains {
+		if d.Status == "ready" {
+			ready = append(ready, d)
+		} else if d.Status != "error" {
+			pending = append(pending, d)
+		}
+	}
+	if len(ready) == 0 {
+		msg := "Set up a domain first, then buy more mailboxes."
+		if len(pending) > 0 {
+			msg = fmt.Sprintf("Finish setting up %s before buying more seats.", pending[0].Domain)
+			c.Redirect(http.StatusFound, "/onboarding/domain/status?domain_id="+strconv.FormatInt(pending[0].ID, 10)+"&error="+url.QueryEscape(msg))
+			return
+		}
+		c.Redirect(http.StatusFound, "/onboarding/domain?new=1&error="+url.QueryEscape(msg))
 		return
 	}
 	c.HTML(http.StatusOK, "mailboxes_buy.html", gin.H{
 		"title":   "Buy mailboxes",
 		"active":  "mailboxes",
-		"domains": domains,
-		"error":   c.Query("error"),
+		"domains": ready,
+		"error":   humanizeInboxKitError(c.Query("error")),
 		"whopOK":  config.WhopMailboxAddonID != "" && whop.IsConfigured(),
 	})
 }
@@ -848,17 +871,25 @@ func MailboxesBuyCheckout(c *gin.Context) {
 		c.Redirect(http.StatusFound, "/settings/billing?error="+url.QueryEscape("Buying mailboxes requires Pro"))
 		return
 	}
+	if !inboxkit.Configured() {
+		c.Redirect(http.StatusFound, "/mailboxes/buy?error="+url.QueryEscape(inboxkit.ConfiguredHint()))
+		return
+	}
 	domainID, _ := strconv.ParseInt(c.PostForm("domain_id"), 10, 64)
 	qty, _ := strconv.Atoi(c.PostForm("quantity"))
 	if qty < 1 {
 		qty = 1
 	}
-	if qty > 50 {
-		qty = 50
+	if qty > 5 {
+		qty = 5
 	}
 	d, err := model.GetOutreachDomain(domainID, userID)
 	if err != nil {
 		c.Redirect(http.StatusFound, "/mailboxes/buy?error="+url.QueryEscape("Pick a domain"))
+		return
+	}
+	if d.Status != "ready" {
+		c.Redirect(http.StatusFound, "/mailboxes/buy?error="+url.QueryEscape("That domain is not ready yet — finish setup first"))
 		return
 	}
 	var specs []model.StarterMailboxSpec
@@ -879,16 +910,16 @@ func MailboxesBuyCheckout(c *gin.Context) {
 		return
 	}
 	if config.WhopMailboxAddonID == "" || !whop.IsConfigured() {
-		// Dev/fallback: provision immediately without Whop when addon not configured.
 		orderID, pErr := model.PlaceExtraMailboxesOrder(userID, d.ID, specs)
 		if pErr != nil {
+			log.Printf("buy mailboxes user=%d domain=%s: %v", userID, d.Domain, pErr)
 			_ = model.UpdateMailboxPurchase(purchaseID, "needs_support", "", "", pErr.Error())
-			c.Redirect(http.StatusFound, "/mailboxes?error="+url.QueryEscape(pErr.Error()))
+			c.Redirect(http.StatusFound, "/mailboxes/buy?error="+url.QueryEscape(humanizeInboxKitError(pErr.Error())))
 			return
 		}
-		_ = model.UpdateMailboxPurchase(purchaseID, "provisioning", "", orderID, "")
+		_ = model.UpdateMailboxPurchase(purchaseID, "fulfilled", "", orderID, "")
 		_ = model.SyncInboxKitOrder(userID, d.ID)
-		c.Redirect(http.StatusFound, "/mailboxes?success="+url.QueryEscape("Mailboxes ordered"))
+		c.Redirect(http.StatusFound, "/mailboxes?success="+url.QueryEscape("Mailbox ordered — it will appear as Active once credentials are ready"))
 		return
 	}
 
@@ -899,6 +930,7 @@ func MailboxesBuyCheckout(c *gin.Context) {
 		"purpose":             "mailbox_addon",
 	})
 	if err != nil {
+		log.Printf("whop mailbox checkout: %v", err)
 		c.Redirect(http.StatusFound, "/mailboxes/buy?error="+url.QueryEscape(err.Error()))
 		return
 	}

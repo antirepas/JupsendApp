@@ -181,7 +181,7 @@
     <div class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
       <strong>Gmail tip:</strong> use an
       <a class="underline font-medium" href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener">App Password</a>
-      after enabling 2-Step Verification, and turn on IMAP in Gmail settings.
+      (not your normal login). Paste it with or without spaces — we strip spaces the same way as Free shared SMTP. Enable 2-Step Verification and turn on IMAP.
     </div>
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
       <div>
@@ -228,7 +228,8 @@
   {{end}}{{/* isPro */}}
 
   <p class="text-xs text-gray-500 mt-6">
-    <a href="/settings/smtp-check" class="text-brand-600 font-medium">Test SMTP</a> from this server using your default mailbox.
+    <a href="/settings/smtp-check" class="text-brand-600 font-medium">Test SMTP</a> uses your <strong>default</strong> mailbox.
+    To test another seat, open Manage → Credentials → Test SMTP for this mailbox.
   </p>
 </div>
 </main>
@@ -313,6 +314,9 @@
           <button type="submit" class="btn-secondary text-sm w-full">Refresh from InboxKit</button>
         </form>
         {{end}}
+        <form method="POST" action="/mailboxes/{{.ID}}/smtp-check">
+          <button type="submit" class="btn-secondary text-sm w-full">Test SMTP for this mailbox</button>
+        </form>
         {{if .CanEditCreds}}
         <details class="rounded-lg border border-gray-100 p-3">
           <summary class="cursor-pointer text-sm font-medium">Update credentials manually</summary>

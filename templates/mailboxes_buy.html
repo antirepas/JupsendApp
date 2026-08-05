@@ -8,25 +8,26 @@
 <main class="flex-1 overflow-y-auto">
 <div class="max-w-xl mx-auto p-8">
   <h2 class="text-2xl font-bold text-charcoal mb-2">Buy more mailboxes</h2>
-  <p class="text-gray-500 text-sm mb-6">Add seats on an existing outreach domain. First and last name become the From name recipients see.{{if .whopOK}} You’ll complete payment via Whop.{{else}} Provisioning runs immediately when Whop add-on is not configured.{{end}}</p>
+  <p class="text-gray-500 text-sm mb-6">Add seats on a ready outreach domain. First and last name become the From name recipients see.{{if .whopOK}} You’ll complete payment via Whop.{{else}} Seats are provisioned on your InboxKit wallet immediately.{{end}}</p>
 
   {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
 
-  <form method="POST" action="/mailboxes/buy/checkout" class="card space-y-4">
+  {{if .domains}}
+  <form method="POST" action="/mailboxes/buy/checkout" class="card space-y-4" id="buy-mailboxes-form">
     <div>
       <label class="form-label">Domain</label>
       <select name="domain_id" class="form-input" required>
         {{range .domains}}
-        <option value="{{.ID}}">{{.Domain}} ({{.Status}})</option>
+        <option value="{{.ID}}">{{.Domain}}</option>
         {{end}}
       </select>
     </div>
     <div>
       <label class="form-label">Quantity</label>
-      <input name="quantity" type="number" class="form-input" min="1" max="5" value="1" required>
+      <input name="quantity" id="buy-qty" type="number" class="form-input" min="1" max="5" value="1" required>
     </div>
-    <div class="space-y-4">
-      <div class="rounded-lg border border-gray-200 p-3 space-y-2">
+    <div class="space-y-4" id="buy-slots">
+      <div class="buy-slot rounded-lg border border-gray-200 p-3 space-y-2" data-slot="1">
         <p class="text-sm font-medium">Mailbox 1</p>
         <div class="grid grid-cols-1 gap-2">
           <input name="first_name_1" class="form-input" required placeholder="First name">
@@ -34,32 +35,32 @@
           <input name="local_1" class="form-input" required placeholder="local part (e.g. sales)">
         </div>
       </div>
-      <div class="rounded-lg border border-gray-200 p-3 space-y-2">
-        <p class="text-sm font-medium">Mailbox 2 <span class="text-gray-400 font-normal">(if qty ≥ 2)</span></p>
+      <div class="buy-slot rounded-lg border border-gray-200 p-3 space-y-2 hidden" data-slot="2">
+        <p class="text-sm font-medium">Mailbox 2</p>
         <div class="grid grid-cols-1 gap-2">
           <input name="first_name_2" class="form-input" placeholder="First name">
           <input name="last_name_2" class="form-input" placeholder="Last name">
           <input name="local_2" class="form-input" placeholder="local part">
         </div>
       </div>
-      <div class="rounded-lg border border-gray-200 p-3 space-y-2">
-        <p class="text-sm font-medium">Mailbox 3 <span class="text-gray-400 font-normal">(if qty ≥ 3)</span></p>
+      <div class="buy-slot rounded-lg border border-gray-200 p-3 space-y-2 hidden" data-slot="3">
+        <p class="text-sm font-medium">Mailbox 3</p>
         <div class="grid grid-cols-1 gap-2">
           <input name="first_name_3" class="form-input" placeholder="First name">
           <input name="last_name_3" class="form-input" placeholder="Last name">
           <input name="local_3" class="form-input" placeholder="local part">
         </div>
       </div>
-      <div class="rounded-lg border border-gray-200 p-3 space-y-2">
-        <p class="text-sm font-medium">Mailbox 4 <span class="text-gray-400 font-normal">(if qty ≥ 4)</span></p>
+      <div class="buy-slot rounded-lg border border-gray-200 p-3 space-y-2 hidden" data-slot="4">
+        <p class="text-sm font-medium">Mailbox 4</p>
         <div class="grid grid-cols-1 gap-2">
           <input name="first_name_4" class="form-input" placeholder="First name">
           <input name="last_name_4" class="form-input" placeholder="Last name">
           <input name="local_4" class="form-input" placeholder="local part">
         </div>
       </div>
-      <div class="rounded-lg border border-gray-200 p-3 space-y-2">
-        <p class="text-sm font-medium">Mailbox 5 <span class="text-gray-400 font-normal">(if qty ≥ 5)</span></p>
+      <div class="buy-slot rounded-lg border border-gray-200 p-3 space-y-2 hidden" data-slot="5">
+        <p class="text-sm font-medium">Mailbox 5</p>
         <div class="grid grid-cols-1 gap-2">
           <input name="first_name_5" class="form-input" placeholder="First name">
           <input name="last_name_5" class="form-input" placeholder="Last name">
@@ -67,9 +68,46 @@
         </div>
       </div>
     </div>
-    <button type="submit" class="btn-primary w-full justify-center">{{if .whopOK}}Continue to checkout{{else}}Provision mailboxes{{end}}</button>
+    <button type="submit" class="btn-primary w-full justify-center" id="buy-submit">{{if .whopOK}}Continue to checkout{{else}}Provision mailboxes{{end}}</button>
     <a href="/mailboxes" class="btn-secondary inline-flex w-full justify-center">Cancel</a>
   </form>
+  <script>
+  (function () {
+    var qty = document.getElementById('buy-qty');
+    var form = document.getElementById('buy-mailboxes-form');
+    var submit = document.getElementById('buy-submit');
+    function syncSlots() {
+      var n = parseInt(qty.value, 10) || 1;
+      if (n < 1) n = 1;
+      if (n > 5) n = 5;
+      document.querySelectorAll('.buy-slot').forEach(function (slot) {
+        var i = parseInt(slot.getAttribute('data-slot'), 10);
+        var on = i <= n;
+        slot.classList.toggle('hidden', !on);
+        slot.querySelectorAll('input').forEach(function (inp) {
+          if (i === 1) return;
+          inp.required = on;
+          if (!on) inp.value = '';
+        });
+      });
+    }
+    qty.addEventListener('input', syncSlots);
+    qty.addEventListener('change', syncSlots);
+    syncSlots();
+    form.addEventListener('submit', function () {
+      if (submit) {
+        submit.disabled = true;
+        submit.textContent = 'Provisioning…';
+      }
+    });
+  })();
+  </script>
+  {{else}}
+  <div class="card space-y-3">
+    <p class="text-sm text-gray-600">No ready domains yet. Connect or buy a domain first.</p>
+    <a href="/onboarding/domain?new=1" class="btn-primary inline-flex">Set up domain</a>
+  </div>
+  {{end}}
 </div>
 </main>
 </div>

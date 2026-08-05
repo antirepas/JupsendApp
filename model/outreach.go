@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"emailtracker.com/config"
 	"emailtracker.com/db"
 	"emailtracker.com/googleoauth"
 )
@@ -356,7 +357,7 @@ func DecryptMailboxPassword(userID, mailboxID int64) (string, error) {
 	if strings.TrimSpace(acc.SMTPPassword) == "" {
 		return "", fmt.Errorf("no password stored")
 	}
-	return googleoauth.Decrypt(acc.SMTPPassword)
+	return DecryptSMTPPassword(acc)
 }
 
 func SetMailboxAnalytics(id int64, health, analytics string) error {
@@ -508,6 +509,7 @@ func UpdateMailboxCredentials(userID, mailboxID int64, smtpHost, smtpPort, imapH
 	}
 	encPass := acc.SMTPPassword
 	if strings.TrimSpace(password) != "" {
+		password = config.NormalizeAppPassword(password)
 		enc, err := googleoauth.Encrypt(password)
 		if err != nil {
 			return fmt.Errorf("encrypt password: %w", err)
@@ -567,6 +569,7 @@ func DeleteOutreachMailbox(userID, mailboxID int64) error {
 
 // UpsertInboxKitSMTPAccount creates/updates an smtp_accounts row for plain SMTP sending.
 func UpsertInboxKitSMTPAccount(userID int64, email, host, port, user, password, fromName, inboxkitID string, isDefault bool, dailyLimit int, imapHost, imapPort string) (int64, error) {
+	password = config.NormalizeAppPassword(password)
 	encPass, err := googleoauth.Encrypt(password)
 	if err != nil {
 		return 0, fmt.Errorf("encrypt smtp password: %w", err)
@@ -627,17 +630,35 @@ func UpsertInboxKitSMTPAccount(userID int64, email, host, port, user, password, 
 // DecryptSMTPPassword returns plaintext password for InboxKit/shared/manual-sourced accounts.
 func DecryptSMTPPassword(acc SMTPAccount) (string, error) {
 	if acc.MailboxSource != MailboxSourceInboxKit && acc.MailboxSource != MailboxSourceShared && acc.MailboxSource != MailboxSourceManual && acc.AuthType != "" {
-		return acc.SMTPPassword, nil
+		return config.NormalizeAppPassword(acc.SMTPPassword), nil
 	}
 	if acc.SMTPPassword == "" {
 		return "", nil
 	}
 	plain, err := googleoauth.Decrypt(acc.SMTPPassword)
 	if err != nil {
-		// Legacy plaintext fallback
-		return acc.SMTPPassword, nil
+		// Legacy plaintext only when the stored value is clearly not ciphertext.
+		if looksLikeEncryptedSecret(acc.SMTPPassword) {
+			return "", fmt.Errorf("could not decrypt stored SMTP password — re-enter it under Mailboxes → Manage → Credentials")
+		}
+		return config.NormalizeAppPassword(acc.SMTPPassword), nil
 	}
-	return plain, nil
+	return config.NormalizeAppPassword(plain), nil
+}
+
+func looksLikeEncryptedSecret(s string) bool {
+	s = strings.TrimSpace(s)
+	if len(s) < 32 {
+		return false
+	}
+	// Our Encrypt() output is standard base64 of nonce+ciphertext.
+	for _, r := range s {
+		if (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '+' || r == '/' || r == '=' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func normalizeGmailSMTPPort(host, port string) string {
@@ -661,6 +682,10 @@ func AttachManualSendingMailbox(userID int64, email, fromName, smtpHost, smtpPor
 	if email == "" || !strings.Contains(email, "@") {
 		return 0, fmt.Errorf("valid email is required")
 	}
+	if password == "" {
+		return 0, fmt.Errorf("password is required")
+	}
+	password = config.NormalizeAppPassword(password)
 	if password == "" {
 		return 0, fmt.Errorf("password is required")
 	}

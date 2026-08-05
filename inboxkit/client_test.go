@@ -163,8 +163,45 @@ func TestBuyItemsFromOrderMailboxes(t *testing.T) {
 	items := BuyItemsFromOrderMailboxes("Acme.COM", []OrderMailbox{
 		{FirstName: "A", LastName: "B", Email: "alex@acme.com", Platform: "GOOGLE"},
 	})
-	if len(items) != 1 || items[0].Username != "alex" || items[0].DomainName != "acme.com" {
+	if len(items) != 1 || items[0].Username != "alex" || items[0].DomainName != "acme.com" || items[0].Email != "alex@acme.com" {
 		t.Fatalf("%+v", items)
+	}
+}
+
+func TestBuyMailboxesSendsDomainAndWallet(t *testing.T) {
+	var gotBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/mailboxes/buy" {
+			t.Fatalf("path=%s", r.URL.Path)
+		}
+		raw, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(raw, &gotBody)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"error":    false,
+			"order_id": "ord-1",
+			"mailboxes": []map[string]any{
+				{"uid": "mb-9", "email": "alex@acme.com", "username": "alex", "domain_name": "acme.com"},
+			},
+		})
+	}))
+	defer srv.Close()
+	client := &Client{APIKey: "test", WorkspaceID: "ws", BaseURL: srv.URL, HTTP: srv.Client()}
+	resp, err := client.BuyMailboxes(BuyMailboxesRequest{
+		Mailboxes: BuyItemsFromOrderMailboxes("acme.com", []OrderMailbox{
+			{FirstName: "A", LastName: "B", Email: "alex@acme.com", Platform: "GOOGLE"},
+		}),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotBody["domain"] != "acme.com" {
+		t.Fatalf("domain=%v body=%v", gotBody["domain"], gotBody)
+	}
+	if gotBody["use_wallet_balance"] != true {
+		t.Fatalf("wallet=%v", gotBody["use_wallet_balance"])
+	}
+	if resp.OrderID != "ord-1" || len(resp.Mailboxes) != 1 || resp.Mailboxes[0].UID != "mb-9" {
+		t.Fatalf("%+v", resp)
 	}
 }
 
