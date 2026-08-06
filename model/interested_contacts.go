@@ -44,7 +44,7 @@ func ListInterestedContacts(userID int64, limit int) ([]InterestedContact, error
 		INNER JOIN contact c ON c.id = es.contact_id
 		LEFT JOIN campaigns camp ON camp.id = es.campaign_id
 		LEFT JOIN email_events ee ON (ee.email_send_id = es.id OR ee.tracking_id = es.tracking_id)
-			AND ee.event_type IN ('open', 'click')
+			AND (ee.event_type = 'click' OR (ee.event_type = 'open' AND COALESCE(ee.is_bot, 0) = 0))
 		WHERE es.user_id = ? AND es.sent_at >= CURRENT_TIMESTAMP - (90 * INTERVAL '1 day')
 	`, userID)
 	if err != nil {

@@ -147,9 +147,9 @@ func getContactEngagementFast(campaignID int64, contactIDs []int64, hasB bool, a
 	rows, err := db.Query(`
 		SELECT
 			es.id, es.contact_id, es.variant, es.sent_at,
-			COALESCE(SUM(CASE WHEN ee.event_type = 'open' THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN ee.event_type = 'open' AND COALESCE(ee.is_bot, 0) = 0 THEN 1 ELSE 0 END), 0),
 			COALESCE(SUM(CASE WHEN ee.event_type = 'click' THEN 1 ELSE 0 END), 0),
-			MIN(CASE WHEN ee.event_type = 'open' THEN ee.created_at END),
+			MIN(CASE WHEN ee.event_type = 'open' AND COALESCE(ee.is_bot, 0) = 0 THEN ee.created_at END),
 			MAX(ee.created_at)
 		FROM email_sends es
 		LEFT JOIN email_events ee ON ee.email_send_id = es.id OR ee.tracking_id = es.tracking_id
@@ -454,7 +454,7 @@ func loadCampaignContactSendStats(campaignID int64) map[int64]struct{ sent, open
 	result := map[int64]struct{ sent, opens, clicks int }{}
 	rows, err := db.Query(`
 		SELECT es.contact_id, COUNT(*),
-			COALESCE(SUM(CASE WHEN ee.event_type = 'open' THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN ee.event_type = 'open' AND COALESCE(ee.is_bot, 0) = 0 THEN 1 ELSE 0 END), 0),
 			COALESCE(SUM(CASE WHEN ee.event_type = 'click' THEN 1 ELSE 0 END), 0)
 		FROM email_sends es
 		LEFT JOIN email_events ee ON ee.email_send_id = es.id OR ee.tracking_id = es.tracking_id

@@ -47,6 +47,9 @@
     <div class="stat-card"><p class="stat-label">Sent</p><p class="stat-value">{{.analytics.Overview.SentCount}}</p></div>
     <div class="stat-card"><p class="stat-label">Pending</p><p class="stat-value text-slate-500">{{.analytics.Overview.PendingCount}}</p></div>
     <div class="stat-card"><p class="stat-label">Unique opens</p><p class="stat-value text-blue-600">{{.analytics.Overview.UniqueOpens}}</p><p class="text-xs text-slate-500">{{printf "%.1f" .analytics.Overview.OpenRate}}% rate</p></div>
+    {{if gt .analytics.Overview.TotalBotOpens 0}}
+    <div class="stat-card"><p class="stat-label">Bot / scanned</p><p class="stat-value text-slate-500">{{.analytics.Overview.TotalBotOpens}}</p><p class="text-xs text-slate-500">Excluded from open rate</p></div>
+    {{end}}
     <div class="stat-card"><p class="stat-label">Unique clicks</p><p class="stat-value text-emerald-600">{{.analytics.Overview.UniqueClicks}}</p><p class="text-xs text-slate-500">{{printf "%.1f" .analytics.Overview.ClickRate}}% rate</p></div>
     <div class="stat-card"><p class="stat-label">Replies</p><p class="stat-value text-violet-600">{{.analytics.Overview.ReplyCount}}</p>{{template "reply_pro_note" .}}</div>
     <div class="stat-card"><p class="stat-label">Click-to-open</p><p class="stat-value">{{printf "%.1f" .analytics.Overview.ClickToOpenRate}}%</p>{{if .analytics.Overview.AvgMinutesToOpen}}<p class="text-xs text-slate-500">Avg {{printf "%.0f" .analytics.Overview.AvgMinutesToOpen}} min to open</p>{{end}}</div>

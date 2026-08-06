@@ -12,7 +12,7 @@ type ContactEngagementLite struct {
 func GetCampaignContactEngagementLite(campaignID int64) (map[int64]ContactEngagementLite, error) {
 	rows, err := db.Query(`
 		SELECT es.contact_id, es.id,
-			COALESCE(SUM(CASE WHEN ee.event_type = 'open' THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN ee.event_type = 'open' AND COALESCE(ee.is_bot, 0) = 0 THEN 1 ELSE 0 END), 0),
 			COALESCE(SUM(CASE WHEN ee.event_type = 'click' THEN 1 ELSE 0 END), 0)
 		FROM email_sends es
 		LEFT JOIN email_events ee ON ee.email_send_id = es.id

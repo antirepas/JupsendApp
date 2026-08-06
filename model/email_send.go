@@ -26,6 +26,7 @@ type EmailSendListItem struct {
 	TrackingID      string
 	SentAt          time.Time
 	OpenCount       int
+	BotOpenCount    int
 	ClickCount      int
 	DeliveryStatus  string
 	DeliveryError   string
@@ -82,6 +83,9 @@ func CreateManualReplyEmailSend(userID, contactID int64, trackID string, smtpAcc
 }
 
 func GetEmailSendSentAt(sendID int64) (time.Time, error) {
+	if sendID <= 0 {
+		return time.Time{}, nil
+	}
 	var sentAt sql.NullTime
 	err := db.QueryRow(`SELECT sent_at FROM email_sends WHERE id = ?`, sendID).Scan(&sentAt)
 	if err != nil {
@@ -199,7 +203,7 @@ func scanEmailSendListItem(
 	err := scan(
 		&item.ID, &templateID, &item.ContactID, &item.TrackingID, &sentAt,
 		&item.TemplateName, &item.TemplateSubject, &item.ContactEmail, &item.SenderEmail,
-		&item.OpenCount, &item.ClickCount, &item.DeliveryStatus, &item.DeliveryError, &item.JobStatus,
+		&item.OpenCount, &item.BotOpenCount, &item.ClickCount, &item.DeliveryStatus, &item.DeliveryError, &item.JobStatus,
 		&item.CampaignID, &item.CampaignName,
 		&item.RenderedSubject, &item.RenderedHTML, &item.RenderedText, &item.SMTPAccountID,
 	)
@@ -220,7 +224,8 @@ const emailSendListSelect = `
 			es.id, COALESCE(es.template_id, 0), es.contact_id, es.tracking_id, es.sent_at,
 			COALESCE(t.name, ''), COALESCE(NULLIF(es.rendered_subject, ''), COALESCE(t.subject, '')), COALESCE(c.email, ''),
 			COALESCE(NULLIF(sa.google_email, ''), NULLIF(sa.from_email, ''), NULLIF(sa.smtp_user, ''), ''),
-			COALESCE(SUM(CASE WHEN ee.event_type = 'open' THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN ee.event_type = 'open' AND COALESCE(ee.is_bot, 0) = 0 THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN ee.event_type = 'open' AND COALESCE(ee.is_bot, 0) <> 0 THEN 1 ELSE 0 END), 0),
 			COALESCE(SUM(CASE WHEN ee.event_type = 'click' THEN 1 ELSE 0 END), 0),
 			COALESCE(NULLIF(es.delivery_status, ''), 'unknown'),
 			COALESCE(sj.last_error, ''),

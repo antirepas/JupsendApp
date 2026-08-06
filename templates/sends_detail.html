@@ -76,20 +76,25 @@
 
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
     <div class="stat-card">
-        <p class="stat-label">Opens</p>
+        <p class="stat-label">Opens (human)</p>
         <p class="stat-value text-blue-600">{{.send.OpenCount}}</p>
         {{if eq .send.OpenCount 0}}
         <p class="text-xs text-slate-500 mt-1">Opens are recorded when your mail client loads images. In Gmail, click <strong>Display images</strong> below the message.</p>
         {{end}}
     </div>
     <div class="stat-card">
+        <p class="stat-label">Bot / scanned</p>
+        <p class="stat-value text-slate-500">{{.send.BotOpenCount}}</p>
+        <p class="text-xs text-slate-500 mt-1">Privacy proxies &amp; security scanners (&lt;5s, known bots, datacenter IPs)</p>
+    </div>
+    <div class="stat-card">
         <p class="stat-label">Clicks</p>
         <p class="stat-value text-emerald-600">{{.send.ClickCount}}</p>
     </div>
-    <div class="stat-card">
-        <p class="stat-label">Tracking ID</p>
-        <p class="text-sm font-mono text-slate-600">{{.send.TrackingID}}</p>
-    </div>
+</div>
+
+<div class="card mb-8">
+    <p class="text-sm text-slate-500">Tracking ID: <span class="font-mono text-slate-600">{{.send.TrackingID}}</span></p>
 </div>
 
 <div class="card">
@@ -98,10 +103,11 @@
     <div class="space-y-0">
         {{range .send.Events}}
         <div class="flex items-start gap-4 py-4 border-b border-slate-100 last:border-0">
-            <span class="badge {{if eq .EventType "open"}}badge-blue{{else if eq .EventType "click"}}badge-green{{else}}badge-gray{{end}}">{{.EventType}}</span>
+            <span class="badge {{if and (eq .EventType "open") .IsBot}}badge-gray{{else if eq .EventType "open"}}badge-blue{{else if eq .EventType "click"}}badge-green{{else}}badge-gray{{end}}">{{if and (eq .EventType "open") .IsBot}}bot open{{else}}{{.EventType}}{{end}}</span>
             <div class="flex-1">
                 <p class="text-sm text-slate-700">{{.CreatedAt.Format "Jan 2, 2006 at 15:04:05"}}</p>
                 <p class="text-xs text-slate-400 mt-1">IP: {{.IPAddress}}</p>
+                {{if .BotReason}}<p class="text-xs text-amber-700 mt-1">Flagged: {{.BotReason}}</p>{{end}}
                 {{if .UserAgent}}<p class="text-xs text-slate-400 truncate">{{.UserAgent}}</p>{{end}}
             </div>
         </div>

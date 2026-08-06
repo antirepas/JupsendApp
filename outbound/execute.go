@@ -78,7 +78,9 @@ func executeJob(job model.SendJob, account model.SMTPAccount) error {
 	}
 
 	newBody = util.WrapHTMLBody(newBody)
-	newBody = util.InjectTrackingPixelWithBase(newBody, trackID, baseURL)
+	if model.CampaignOpenTrackingEnabled(detail.CampaignID) {
+		newBody = util.InjectTrackingPixelWithBase(newBody, trackID, baseURL)
+	}
 	replacedLinksBody := util.RewriteLinksWithBase(newBody, emailSendID, baseURL)
 	plainBody := util.StripHTML(replacedLinksBody)
 

@@ -231,6 +231,7 @@ func ListContactTimeline(userID, contactID int64, limit int) ([]ContactTimelineI
 		LEFT JOIN tracked_links tl ON tl.tracking_id = ee.tracking_id
 		WHERE es.contact_id = ? AND es.user_id = ?
 			AND ee.event_type IN ('open', 'click', 'bounce', 'reply')
+			AND (ee.event_type <> 'open' OR COALESCE(ee.is_bot, 0) = 0)
 		ORDER BY ee.created_at DESC
 		LIMIT ?
 	`, contactID, userID, limit)

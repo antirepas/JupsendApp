@@ -92,7 +92,7 @@ func buildSendListWhere(userID int64, f SendListFilter) (string, []interface{}) 
 		where = append(where, `LOWER(COALESCE(es.delivery_status, '')) = 'sent'`)
 		where = append(where, `EXISTS (
 			SELECT 1 FROM email_events ee2
-			WHERE (ee2.email_send_id = es.id OR ee2.tracking_id = es.tracking_id) AND ee2.event_type = 'open'
+			WHERE (ee2.email_send_id = es.id OR ee2.tracking_id = es.tracking_id) AND ee2.event_type = 'open' AND COALESCE(ee2.is_bot, 0) = 0
 		)`)
 	case "clicked":
 		where = append(where, `EXISTS (
@@ -150,7 +150,8 @@ func ListEmailSendsFiltered(userID int64, f SendListFilter) (SendListPage, error
 			es.id, COALESCE(es.template_id, 0), es.contact_id, es.tracking_id, es.sent_at,
 			COALESCE(t.name, ''), COALESCE(NULLIF(es.rendered_subject, ''), COALESCE(t.subject, '')), COALESCE(c.email, ''),
 			COALESCE(NULLIF(sa.google_email, ''), NULLIF(sa.from_email, ''), NULLIF(sa.smtp_user, ''), ''),
-			COALESCE(SUM(CASE WHEN ee.event_type = 'open' THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN ee.event_type = 'open' AND COALESCE(ee.is_bot, 0) = 0 THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN ee.event_type = 'open' AND COALESCE(ee.is_bot, 0) <> 0 THEN 1 ELSE 0 END), 0),
 			COALESCE(SUM(CASE WHEN ee.event_type = 'click' THEN 1 ELSE 0 END), 0),
 			COALESCE(NULLIF(es.delivery_status, ''), 'unknown'),
 			COALESCE(sj.last_error, ''),

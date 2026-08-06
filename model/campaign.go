@@ -10,21 +10,22 @@ import (
 )
 
 type Campaign struct {
-	ID                  int64
-	UserID              int64
-	Name                string
-	TemplateAID         int64
-	TemplateBID         int64
-	Status              string
-	IsSending           bool
-	CreatedAt           time.Time
-	ScheduledAt         *time.Time
-	ExecutionMode       string
-	WorkflowVersionID   int64
-	ContactListID       int64
-	ExperimentVariable  string
+	ID                   int64
+	UserID               int64
+	Name                 string
+	TemplateAID          int64
+	TemplateBID          int64
+	Status               string
+	IsSending            bool
+	CreatedAt            time.Time
+	ScheduledAt          *time.Time
+	ExecutionMode        string
+	WorkflowVersionID    int64
+	ContactListID        int64
+	ExperimentVariable   string
 	ExperimentHypothesis string
-	SuccessMetric       string
+	SuccessMetric        string
+	OpenTrackingEnabled  bool
 }
 
 type CampaignListItem struct {
@@ -210,7 +211,8 @@ func GetCampaign(id int64) (Campaign, error) {
 		SELECT id, COALESCE(user_id, 0), name, template_a_id, template_b_id, status, created_at, scheduled_at,
 			COALESCE(execution_mode, 'bulk'), COALESCE(workflow_version_id, 0), COALESCE(is_sending, 0),
 			COALESCE(contact_list_id, 0),
-			COALESCE(experiment_variable, ''), COALESCE(experiment_hypothesis, ''), COALESCE(success_metric, 'reply')
+			COALESCE(experiment_variable, ''), COALESCE(experiment_hypothesis, ''), COALESCE(success_metric, 'reply'),
+			COALESCE(open_tracking_enabled, TRUE)
 		FROM campaigns WHERE id = ?
 	`, id)
 	return scanCampaignRow(row)
@@ -221,7 +223,8 @@ func GetCampaignForUser(id, userID int64) (Campaign, error) {
 		SELECT id, COALESCE(user_id, 0), name, template_a_id, template_b_id, status, created_at, scheduled_at,
 			COALESCE(execution_mode, 'bulk'), COALESCE(workflow_version_id, 0), COALESCE(is_sending, 0),
 			COALESCE(contact_list_id, 0),
-			COALESCE(experiment_variable, ''), COALESCE(experiment_hypothesis, ''), COALESCE(success_metric, 'reply')
+			COALESCE(experiment_variable, ''), COALESCE(experiment_hypothesis, ''), COALESCE(success_metric, 'reply'),
+			COALESCE(open_tracking_enabled, TRUE)
 		FROM campaigns WHERE id = ? AND user_id = ?
 	`, id, userID)
 	return scanCampaignRow(row)
@@ -235,7 +238,7 @@ func scanCampaignRow(row interface{ Scan(...interface{}) error }) (Campaign, err
 	var listID sql.NullInt64
 	err := row.Scan(&c.ID, &c.UserID, &c.Name, &c.TemplateAID, &bID, &c.Status, &c.CreatedAt, &scheduled,
 		&c.ExecutionMode, &c.WorkflowVersionID, &isSending, &listID,
-		&c.ExperimentVariable, &c.ExperimentHypothesis, &c.SuccessMetric)
+		&c.ExperimentVariable, &c.ExperimentHypothesis, &c.SuccessMetric, &c.OpenTrackingEnabled)
 	if err != nil {
 		return Campaign{}, err
 	}
@@ -248,6 +251,49 @@ func scanCampaignRow(row interface{ Scan(...interface{}) error }) (Campaign, err
 	c.ScheduledAt = scanScheduledAt(scheduled)
 	c.IsSending = isSending == 1
 	return c, nil
+}
+
+// SetCampaignOpenTracking updates whether open pixels are injected for a campaign.
+func SetCampaignOpenTracking(campaignID, userID int64, enabled bool) error {
+	res, err := db.Exec(`
+		UPDATE campaigns SET open_tracking_enabled = ?
+		WHERE id = ? AND user_id = ? AND status NOT IN ('sent', 'sending')
+	`, enabled, campaignID, userID)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("campaign not found or already launched")
+	}
+	return nil
+}
+
+// CampaignOpenTrackingEnabled reports whether open pixels should be injected for this campaign.
+// Non-campaign / missing rows default to enabled.
+func CampaignOpenTrackingEnabled(campaignID int64) bool {
+	if campaignID <= 0 {
+		return true
+	}
+	var enabled bool
+	err := db.QueryRow(`SELECT COALESCE(open_tracking_enabled, TRUE) FROM campaigns WHERE id = ?`, campaignID).Scan(&enabled)
+	if err != nil {
+		return true
+	}
+	return enabled
+}
+
+// EmailSendOpenTrackingEnabled checks the campaign setting for a send (one-off sends stay enabled).
+func EmailSendOpenTrackingEnabled(emailSendID int64) bool {
+	if emailSendID <= 0 {
+		return true
+	}
+	var campID int64
+	err := db.QueryRow(`SELECT COALESCE(campaign_id, 0) FROM email_sends WHERE id = ?`, emailSendID).Scan(&campID)
+	if err != nil || campID <= 0 {
+		return true
+	}
+	return CampaignOpenTrackingEnabled(campID)
 }
 
 func GetCampaignDetail(id, userID int64) (CampaignDetail, error) {
@@ -343,7 +389,7 @@ func getVariantStats(campaignID int64, variant string, templateID int64) (Varian
 	query := `
 		SELECT
 			COUNT(es.id),
-			COALESCE(SUM(CASE WHEN ee.event_type = 'open' THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN ee.event_type = 'open' AND COALESCE(ee.is_bot, 0) = 0 THEN 1 ELSE 0 END), 0),
 			COALESCE(SUM(CASE WHEN ee.event_type = 'click' THEN 1 ELSE 0 END), 0)
 		FROM email_sends es
 		LEFT JOIN email_events ee ON ee.email_send_id = es.id

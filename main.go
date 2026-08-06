@@ -39,7 +39,10 @@ func main() {
 	}
 
 	server := gin.Default()
-	server.SetTrustedProxies(nil)
+	if err := server.SetTrustedProxies(config.TrustedProxies); err != nil {
+		log.Printf("SetTrustedProxies: %v — falling back to localhost only", err)
+		_ = server.SetTrustedProxies([]string{"127.0.0.1", "::1"})
+	}
 	store := cookie.NewStore([]byte(secret))
 	store.Options(sessions.Options{
 		Path:     "/",

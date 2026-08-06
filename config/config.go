@@ -45,6 +45,7 @@ var (
 	InboxKitRegistrantName  string
 	InboxKitRegistrantOrg   string
 	AdminEmails           map[string]struct{}
+	TrustedProxies        []string
 	OpenAIAPIKey          string
 	OpenAIModel           string
 	OpenAIFallbackModel   string
@@ -94,14 +95,34 @@ func reloadFromEnv() {
 	InboxKitBaseURL = strings.TrimRight(strings.TrimSpace(envOr("INBOXKIT_BASE_URL", "https://api.inboxkit.com/v1")), "/")
 	InboxKitRedirectURL = strings.TrimSpace(envOr("INBOXKIT_REDIRECT_URL", BaseURL))
 	InboxKitPlatform = strings.ToUpper(strings.TrimSpace(envOr("INBOXKIT_DEFAULT_PLATFORM", "GOOGLE")))
-	InboxKitIncludedMBs = envOr("INBOXKIT_INCLUDED_MAILBOXES", "3")
+	InboxKitIncludedMBs = envOr("INBOXKIT_INCLUDED_MAILBOXES", "1")
 	InboxKitRegistrantEmail = strings.TrimSpace(os.Getenv("INBOXKIT_REGISTRANT_EMAIL"))
 	InboxKitRegistrantName = strings.TrimSpace(os.Getenv("INBOXKIT_REGISTRANT_NAME"))
 	InboxKitRegistrantOrg = strings.TrimSpace(os.Getenv("INBOXKIT_REGISTRANT_ORG"))
 	AdminEmails = parseEmailList(os.Getenv("ADMIN_EMAILS"))
+	TrustedProxies = parseTrustedProxies(os.Getenv("TRUSTED_PROXIES"))
 	OpenAIAPIKey = strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
 	OpenAIModel = envOr("OPENAI_MODEL", "gpt-5-nano")
 	OpenAIFallbackModel = strings.TrimSpace(os.Getenv("OPENAI_FALLBACK_MODEL"))
+}
+
+func parseTrustedProxies(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		// Default: trust local reverse proxies (nginx/caddy/docker) so ClientIP uses X-Forwarded-For.
+		return []string{"127.0.0.1", "::1", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"}
+	}
+	if raw == "none" || raw == "false" {
+		return nil
+	}
+	var out []string
+	for _, p := range strings.Split(raw, ",") {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 func AIEnabled() bool {
@@ -111,7 +132,7 @@ func AIEnabled() bool {
 func InboxKitIncludedMailboxCount() int {
 	n, err := strconv.Atoi(strings.TrimSpace(InboxKitIncludedMBs))
 	if err != nil || n < 1 {
-		return 3
+		return 1
 	}
 	if n > 10 {
 		return 10

@@ -145,6 +145,16 @@
             {{end}}
         </div>
 
+        <div class="rounded-lg border border-slate-200 p-4 space-y-2">
+            <label class="flex items-start gap-3 cursor-pointer">
+                <input type="checkbox" name="open_tracking_enabled" value="1" class="mt-1" checked>
+                <span>
+                    <span class="font-medium text-charcoal text-sm">Track email opens</span>
+                    <span class="block text-xs text-slate-500 mt-1">Adds a tiny tracking pixel. Turn off for cold outreach when you want to avoid privacy-proxy / scanner noise and slightly better deliverability. Link click tracking still works.</span>
+                </span>
+            </label>
+        </div>
+
         <div class="flex gap-3 pt-2">
             <button type="submit" class="btn-primary">Create campaign</button>
             <a href="/campaigns" class="btn-secondary">Cancel</a>

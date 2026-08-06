@@ -120,6 +120,10 @@ func CreateCampaign(ctx *gin.Context) {
 		ctx.Redirect(http.StatusFound, "/campaigns/new?error=Failed+to+create+campaign")
 		return
 	}
+	openTracking := ctx.PostForm("open_tracking_enabled") == "1"
+	if err := model.SetCampaignOpenTracking(id, userID, openTracking); err != nil {
+		log.Printf("open tracking setting: %v", err)
+	}
 
 	ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(id, 10)+"?success=Campaign+created")
 }

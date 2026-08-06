@@ -14,8 +14,12 @@ import (
 )
 
 var storeEvent = model.StoreEvent
+var storeEventClassified = model.StoreEventClassified
 var getOriginalURL = model.GetOriginalURL
 var recordEngagementEventFn = recordEngagementEvent
+var resolveSendIDForOpen = model.ResolveEmailSendIDForTracking
+var emailSendOpenTrackingEnabled = model.EmailSendOpenTrackingEnabled
+var getEmailSendSentAt = model.GetEmailSendSentAt
 
 var trackingPixelGIF = mustDecodeTrackingPixel()
 
@@ -42,15 +46,33 @@ func trackResponseHeaders(ctx *gin.Context) {
 
 func TrackOpen(ctx *gin.Context) {
 	trackingId := ctx.Param("id")
+	ua := ctx.Request.UserAgent()
+	ip := util.RequestClientIP(ctx)
+	now := time.Now()
 
-	err := storeEvent(trackingId, "open", ctx.Request.UserAgent(), ctx.ClientIP())
-	if err != nil {
-		log.Printf("track open error for %s: %v", trackingId, err)
-	} else {
-		log.Printf("track open recorded: id=%s ua=%s", trackingId, ctx.Request.UserAgent())
+	sendID := resolveSendIDForOpen(trackingId)
+	if sendID > 0 {
+		if !emailSendOpenTrackingEnabled(sendID) {
+			writeTrackingPixel(ctx)
+			return
+		}
 	}
 
-	recordEngagementEventFn(trackingId, "OPEN", nil)
+	sentAt, _ := getEmailSendSentAt(sendID)
+	class := util.ClassifyOpen(ua, ip, sentAt, now)
+
+	err := storeEventClassified(trackingId, "open", ua, ip, class.IsBot, class.Reason)
+	if err != nil {
+		log.Printf("track open error for %s: %v", trackingId, err)
+	} else if class.IsBot {
+		log.Printf("track open bot/scanned: id=%s reason=%s ip=%s ua=%s", trackingId, class.Reason, ip, ua)
+	} else {
+		log.Printf("track open recorded: id=%s ip=%s ua=%s", trackingId, ip, ua)
+	}
+
+	if !class.IsBot {
+		recordEngagementEventFn(trackingId, "OPEN", nil)
+	}
 	writeTrackingPixel(ctx)
 }
 
@@ -71,7 +93,7 @@ func TrackClick(ctx *gin.Context) {
 		return
 	}
 
-	err = storeEvent(trackingID, "click", ctx.Request.UserAgent(), ctx.ClientIP())
+	err = storeEvent(trackingID, "click", ctx.Request.UserAgent(), util.RequestClientIP(ctx))
 	if err != nil {
 		log.Print(err)
 	}

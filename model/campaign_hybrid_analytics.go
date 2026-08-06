@@ -177,7 +177,7 @@ func loadStarterVariantMetrics(campaignID int64, firstSendNodeKey, variant strin
 
 	_ = db.QueryRow(`
 		SELECT
-			COALESCE(SUM(CASE WHEN ee.event_type = 'open' THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN ee.event_type = 'open' AND COALESCE(ee.is_bot, 0) = 0 THEN 1 ELSE 0 END), 0),
 			COALESCE(SUM(CASE WHEN ee.event_type = 'click' THEN 1 ELSE 0 END), 0)
 		FROM email_events ee
 		INNER JOIN email_sends es ON es.id = ee.email_send_id OR ee.tracking_id = es.tracking_id
@@ -196,7 +196,7 @@ func loadStarterVariantMetrics(campaignID int64, firstSendNodeKey, variant strin
 	_ = db.QueryRow(`
 		SELECT COUNT(DISTINCT es.contact_id) FROM email_sends es
 		`+starterSendJoin+`
-		INNER JOIN email_events ee ON (ee.email_send_id = es.id OR ee.tracking_id = es.tracking_id) AND ee.event_type = 'open'
+		INNER JOIN email_events ee ON (ee.email_send_id = es.id OR ee.tracking_id = es.tracking_id) AND ee.event_type = 'open' AND COALESCE(ee.is_bot, 0) = 0
 		WHERE `+starterSendWhere+` AND es.variant = ?
 	`, campaignID, firstSendNodeKey, variant).Scan(&va.UniqueOpens)
 
@@ -224,9 +224,9 @@ func getStarterContactEngagement(campaignID int64, firstSendNodeKey string, cont
 	rows, err := db.Query(`
 		SELECT
 			es.id, es.contact_id, es.variant, es.sent_at,
-			COALESCE(SUM(CASE WHEN ee.event_type = 'open' THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN ee.event_type = 'open' AND COALESCE(ee.is_bot, 0) = 0 THEN 1 ELSE 0 END), 0),
 			COALESCE(SUM(CASE WHEN ee.event_type = 'click' THEN 1 ELSE 0 END), 0),
-			MIN(CASE WHEN ee.event_type = 'open' THEN ee.created_at END),
+			MIN(CASE WHEN ee.event_type = 'open' AND COALESCE(ee.is_bot, 0) = 0 THEN ee.created_at END),
 			MAX(ee.created_at)
 		FROM email_sends es
 		`+starterSendJoin+`

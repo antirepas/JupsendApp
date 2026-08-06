@@ -9,17 +9,18 @@ import (
 )
 
 type CampaignOverview struct {
-	ContactCount    int
-	SentCount       int
-	PendingCount    int
-	TotalOpens      int
-	UniqueOpens     int
-	TotalClicks     int
-	UniqueClicks    int
-	ReplyCount      int
-	OpenRate        float64
-	ClickRate       float64
-	ClickToOpenRate float64
+	ContactCount     int
+	SentCount        int
+	PendingCount     int
+	TotalOpens       int
+	TotalBotOpens    int
+	UniqueOpens      int
+	TotalClicks      int
+	UniqueClicks     int
+	ReplyCount       int
+	OpenRate         float64
+	ClickRate        float64
+	ClickToOpenRate  float64
 	AvgMinutesToOpen float64
 }
 
@@ -151,7 +152,7 @@ func loadVariantMetrics(campaignID int64, variant string, va *VariantAnalytics) 
 
 	_ = db.QueryRow(`
 		SELECT
-			COALESCE(SUM(CASE WHEN ee.event_type = 'open' THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN ee.event_type = 'open' AND COALESCE(ee.is_bot, 0) = 0 THEN 1 ELSE 0 END), 0),
 			COALESCE(SUM(CASE WHEN ee.event_type = 'click' THEN 1 ELSE 0 END), 0)
 		FROM email_events ee
 		INNER JOIN email_sends es ON es.id = ee.email_send_id OR ee.tracking_id = es.tracking_id
@@ -168,7 +169,7 @@ func loadVariantMetrics(campaignID int64, variant string, va *VariantAnalytics) 
 
 	_ = db.QueryRow(`
 		SELECT COUNT(DISTINCT es.contact_id) FROM email_sends es
-		INNER JOIN email_events ee ON (ee.email_send_id = es.id OR ee.tracking_id = es.tracking_id) AND ee.event_type = 'open'
+		INNER JOIN email_events ee ON (ee.email_send_id = es.id OR ee.tracking_id = es.tracking_id) AND ee.event_type = 'open' AND COALESCE(ee.is_bot, 0) = 0
 		WHERE es.campaign_id = ? AND es.variant = ?
 	`, campaignID, variant).Scan(&va.UniqueOpens)
 
@@ -226,9 +227,9 @@ func getContactEngagement(campaignID int64, contactIDs []int64, hasB bool, templ
 	rows, err := db.Query(`
 		SELECT
 			es.id, es.contact_id, es.variant, es.sent_at,
-			COALESCE(SUM(CASE WHEN ee.event_type = 'open' THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN ee.event_type = 'open' AND COALESCE(ee.is_bot, 0) = 0 THEN 1 ELSE 0 END), 0),
 			COALESCE(SUM(CASE WHEN ee.event_type = 'click' THEN 1 ELSE 0 END), 0),
-			MIN(CASE WHEN ee.event_type = 'open' THEN ee.created_at END),
+			MIN(CASE WHEN ee.event_type = 'open' AND COALESCE(ee.is_bot, 0) = 0 THEN ee.created_at END),
 			MAX(ee.created_at)
 		FROM email_sends es
 		LEFT JOIN email_events ee ON ee.email_send_id = es.id OR ee.tracking_id = es.tracking_id
@@ -320,7 +321,7 @@ func getCampaignDailyStats(campaignID int64) []CampaignDailyStat {
 	openRows, _ := db.Query(`
 		SELECT (ee.created_at)::date, COUNT(*) FROM email_events ee
 		INNER JOIN email_sends es ON es.id = ee.email_send_id
-		WHERE es.campaign_id = ? AND ee.event_type = 'open'
+		WHERE es.campaign_id = ? AND ee.event_type = 'open' AND COALESCE(ee.is_bot, 0) = 0
 		GROUP BY (ee.created_at)::date
 	`, campaignID)
 	if openRows != nil {
@@ -505,16 +506,17 @@ func fillOverview(a *CampaignAnalytics) {
 	o.PendingCount = o.ContactCount - o.SentCount
 
 	_ = db.QueryRow(`
-		SELECT COALESCE(SUM(CASE WHEN ee.event_type = 'open' THEN 1 ELSE 0 END), 0),
+		SELECT COALESCE(SUM(CASE WHEN ee.event_type = 'open' AND COALESCE(ee.is_bot, 0) = 0 THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN ee.event_type = 'open' AND COALESCE(ee.is_bot, 0) <> 0 THEN 1 ELSE 0 END), 0),
 			COALESCE(SUM(CASE WHEN ee.event_type = 'click' THEN 1 ELSE 0 END), 0)
 		FROM email_events ee
 		INNER JOIN email_sends es ON es.id = ee.email_send_id
 		WHERE es.campaign_id = ?
-	`, a.CampaignID).Scan(&o.TotalOpens, &o.TotalClicks)
+	`, a.CampaignID).Scan(&o.TotalOpens, &o.TotalBotOpens, &o.TotalClicks)
 
 	_ = db.QueryRow(`
 		SELECT COUNT(DISTINCT es.contact_id) FROM email_sends es
-		INNER JOIN email_events ee ON (ee.email_send_id = es.id OR ee.tracking_id = es.tracking_id) AND ee.event_type = 'open'
+		INNER JOIN email_events ee ON (ee.email_send_id = es.id OR ee.tracking_id = es.tracking_id) AND ee.event_type = 'open' AND COALESCE(ee.is_bot, 0) = 0
 		WHERE es.campaign_id = ?
 	`, a.CampaignID).Scan(&o.UniqueOpens)
 

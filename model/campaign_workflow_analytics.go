@@ -70,7 +70,7 @@ func getCampaignWorkflowEngagement(campaignID int64, contactCount int) CampaignW
 
 	_ = db.QueryRow(`
 		SELECT COUNT(DISTINCT es.contact_id) FROM email_sends es
-		INNER JOIN email_events ee ON (ee.email_send_id = es.id OR ee.tracking_id = es.tracking_id) AND ee.event_type = 'open'
+		INNER JOIN email_events ee ON (ee.email_send_id = es.id OR ee.tracking_id = es.tracking_id) AND ee.event_type = 'open' AND COALESCE(ee.is_bot, 0) = 0
 		WHERE es.campaign_id = ?
 	`, campaignID).Scan(&eng.UniqueOpens)
 
@@ -116,7 +116,7 @@ func getCampaignStepEngagement(campaignID int64) map[string]stepEngagement {
 	result := map[string]stepEngagement{}
 	rows, err := db.Query(`
 		SELECT we.node_key,
-			COUNT(DISTINCT CASE WHEN ee.event_type = 'open' THEN es.contact_id END),
+			COUNT(DISTINCT CASE WHEN ee.event_type = 'open' AND COALESCE(ee.is_bot, 0) = 0 THEN es.contact_id END),
 			COUNT(DISTINCT CASE WHEN ee.event_type = 'click' THEN es.contact_id END)
 		FROM workflow_executions we
 		INNER JOIN workflow_instances wi ON wi.id = we.instance_id
@@ -166,7 +166,7 @@ func buildCampaignWorkflowContactAnalytics(campaignID, versionID int64, contactI
 	sendMap := map[int64]struct{ sent, opens, clicks int }{}
 	rows, err := db.Query(`
 		SELECT es.contact_id, COUNT(*),
-			COALESCE(SUM(CASE WHEN ee.event_type = 'open' THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN ee.event_type = 'open' AND COALESCE(ee.is_bot, 0) = 0 THEN 1 ELSE 0 END), 0),
 			COALESCE(SUM(CASE WHEN ee.event_type = 'click' THEN 1 ELSE 0 END), 0)
 		FROM email_sends es
 		LEFT JOIN email_events ee ON ee.email_send_id = es.id OR ee.tracking_id = es.tracking_id

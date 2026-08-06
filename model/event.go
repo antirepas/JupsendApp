@@ -21,12 +21,21 @@ type EventRecord struct {
 	EventType   string
 	UserAgent   string
 	IPAddress   string
+	IsBot       bool
+	BotReason   string
 	CreatedAt   time.Time
 }
+
+// HumanOpenPredicate is SQL that matches opens counted as human engagement.
+const HumanOpenPredicate = `ee.event_type = 'open' AND COALESCE(ee.is_bot, 0) = 0`
+
+// BotOpenPredicate matches scanner / privacy-proxy opens.
+const BotOpenPredicate = `ee.event_type = 'open' AND COALESCE(ee.is_bot, 0) <> 0`
 
 type DashboardStats struct {
 	TotalSends    int
 	TotalOpens    int
+	TotalBotOpens int
 	TotalClicks   int
 	TotalReplies  int
 	OpenRate      float64
@@ -62,23 +71,38 @@ func resolveEmailSendID(trackingID string) int64 {
 	return 0
 }
 
+// ResolveEmailSendIDForTracking resolves a pixel or link tracking id to an email_sends row.
+func ResolveEmailSendIDForTracking(trackingID string) int64 {
+	return resolveEmailSendID(trackingID)
+}
+
 func StoreEvent(trackingID, eventType, userAgent, ip string) error {
+	return StoreEventClassified(trackingID, eventType, userAgent, ip, false, "")
+}
+
+// StoreEventClassified records a tracking event; for opens set isBot when scanners/privacy proxies hit the pixel.
+func StoreEventClassified(trackingID, eventType, userAgent, ip string, isBot bool, botReason string) error {
 	emailSendID := resolveEmailSendID(trackingID)
 	var sendID interface{}
 	if emailSendID > 0 {
 		sendID = emailSendID
 	}
+	botFlag := 0
+	if isBot {
+		botFlag = 1
+	}
 	query := `
-		INSERT INTO email_events (email_send_id, tracking_id, event_type, user_agent, ip_address, created_at)
-		VALUES (?, ?, ?, ?, ?, ?)
+		INSERT INTO email_events (email_send_id, tracking_id, event_type, user_agent, ip_address, is_bot, bot_reason, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 	`
-	_, err := db.Exec(query, sendID, trackingID, eventType, userAgent, ip, time.Now())
+	_, err := db.Exec(query, sendID, trackingID, eventType, userAgent, ip, botFlag, botReason, time.Now())
 	return err
 }
 
 func GetEventsForSend(emailSendID int64) ([]EventRecord, error) {
 	query := `
-		SELECT id, email_send_id, tracking_id, event_type, user_agent, ip_address, created_at
+		SELECT id, email_send_id, tracking_id, event_type, user_agent, ip_address,
+			COALESCE(is_bot, 0), COALESCE(bot_reason, ''), created_at
 		FROM email_events
 		WHERE email_send_id = ?
 		ORDER BY created_at DESC
@@ -92,10 +116,13 @@ func GetEventsForSend(emailSendID int64) ([]EventRecord, error) {
 	var events []EventRecord
 	for rows.Next() {
 		var e EventRecord
-		err := rows.Scan(&e.ID, &e.EmailSendID, &e.TrackingID, &e.EventType, &e.UserAgent, &e.IPAddress, &e.CreatedAt)
+		var botFlag int
+		err := rows.Scan(&e.ID, &e.EmailSendID, &e.TrackingID, &e.EventType, &e.UserAgent, &e.IPAddress,
+			&botFlag, &e.BotReason, &e.CreatedAt)
 		if err != nil {
 			return nil, err
 		}
+		e.IsBot = botFlag != 0
 		events = append(events, e)
 	}
 	return events, nil
@@ -112,8 +139,17 @@ func GetDashboardStats(userID int64) (DashboardStats, error) {
 	err = db.QueryRow(`
 		SELECT COUNT(*) FROM email_events ee
 		INNER JOIN email_sends es ON es.id = ee.email_send_id
-		WHERE ee.event_type = 'open' AND es.user_id = ?
+		WHERE `+HumanOpenPredicate+` AND es.user_id = ?
 	`, userID).Scan(&stats.TotalOpens)
+	if err != nil {
+		return stats, err
+	}
+
+	err = db.QueryRow(`
+		SELECT COUNT(*) FROM email_events ee
+		INNER JOIN email_sends es ON es.id = ee.email_send_id
+		WHERE `+BotOpenPredicate+` AND es.user_id = ?
+	`, userID).Scan(&stats.TotalBotOpens)
 	if err != nil {
 		return stats, err
 	}
@@ -146,7 +182,8 @@ func GetDashboardStats(userID int64) (DashboardStats, error) {
 
 func GetRecentEvents(userID int64, limit int) ([]EventRecord, error) {
 	query := `
-		SELECT ee.id, ee.email_send_id, ee.tracking_id, ee.event_type, ee.user_agent, ee.ip_address, ee.created_at
+		SELECT ee.id, ee.email_send_id, ee.tracking_id, ee.event_type, ee.user_agent, ee.ip_address,
+			COALESCE(ee.is_bot, 0), COALESCE(ee.bot_reason, ''), ee.created_at
 		FROM email_events ee
 		INNER JOIN email_sends es ON es.id = ee.email_send_id
 		WHERE es.user_id = ?
@@ -162,10 +199,13 @@ func GetRecentEvents(userID int64, limit int) ([]EventRecord, error) {
 	var events []EventRecord
 	for rows.Next() {
 		var e EventRecord
-		err := rows.Scan(&e.ID, &e.EmailSendID, &e.TrackingID, &e.EventType, &e.UserAgent, &e.IPAddress, &e.CreatedAt)
+		var botFlag int
+		err := rows.Scan(&e.ID, &e.EmailSendID, &e.TrackingID, &e.EventType, &e.UserAgent, &e.IPAddress,
+			&botFlag, &e.BotReason, &e.CreatedAt)
 		if err != nil {
 			return nil, err
 		}
+		e.IsBot = botFlag != 0
 		events = append(events, e)
 	}
 	return events, nil
@@ -197,7 +237,7 @@ const recentContactActivitySQL = `
 	INNER JOIN contact c ON c.id = es.contact_id
 	LEFT JOIN tracked_links tl ON tl.tracking_id = ee.tracking_id AND ee.event_type = 'click'
 	LEFT JOIN campaigns camp ON camp.id = es.campaign_id
-	WHERE es.user_id = ? AND ee.event_type IN ('open', 'click')
+	WHERE es.user_id = ? AND (ee.event_type = 'click' OR (ee.event_type = 'open' AND COALESCE(ee.is_bot, 0) = 0))
 	UNION ALL
 	SELECT c.id, c.email, COALESCE(ce.email_send_id, 0), 'reply',
 		'', COALESCE(camp.name, ''), ce.occurred_at
@@ -300,7 +340,7 @@ func GetDailyStats(userID int64, days int) ([]DailyStat, error) {
 		SELECT (ee.created_at)::date as day, COUNT(*) as opens
 		FROM email_events ee
 		INNER JOIN email_sends es ON es.id = ee.email_send_id
-		WHERE ee.event_type = 'open' AND es.user_id = ? AND ee.created_at >= CURRENT_TIMESTAMP - (? * INTERVAL '1 day')
+		WHERE `+HumanOpenPredicate+` AND es.user_id = ? AND ee.created_at >= CURRENT_TIMESTAMP - (? * INTERVAL '1 day')
 		GROUP BY (ee.created_at)::date
 	`
 	openRows, err := db.Query(openQuery, userID, days)
@@ -324,7 +364,7 @@ func GetDailyStats(userID int64, days int) ([]DailyStat, error) {
 		SELECT (ee.created_at)::date as day, COUNT(DISTINCT es.contact_id) as unique_opens
 		FROM email_events ee
 		INNER JOIN email_sends es ON es.id = ee.email_send_id
-		WHERE ee.event_type = 'open' AND es.user_id = ? AND ee.created_at >= CURRENT_TIMESTAMP - (? * INTERVAL '1 day')
+		WHERE `+HumanOpenPredicate+` AND es.user_id = ? AND ee.created_at >= CURRENT_TIMESTAMP - (? * INTERVAL '1 day')
 		GROUP BY (ee.created_at)::date
 	`
 	uniqueOpenRows, err := db.Query(uniqueOpenQuery, userID, days)

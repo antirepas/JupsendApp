@@ -46,7 +46,7 @@ func GetAccountBenchmark(userID int64, periodDays int) AccountBenchmark {
 	`, periodDays, periodDays*2, periodDays, userID).Scan(&b.TotalSends, &priorSends)
 	_ = db.QueryRow(`
 		SELECT COUNT(DISTINCT es.contact_id) FROM email_sends es
-		INNER JOIN email_events ee ON (ee.email_send_id = es.id OR ee.tracking_id = es.tracking_id) AND ee.event_type = 'open'
+		INNER JOIN email_events ee ON (ee.email_send_id = es.id OR ee.tracking_id = es.tracking_id) AND ee.event_type = 'open' AND COALESCE(ee.is_bot, 0) = 0
 		WHERE es.user_id = ? AND es.sent_at >= CURRENT_TIMESTAMP - (? * INTERVAL '1 day')
 	`, userID, periodDays).Scan(&uniqueOpens)
 

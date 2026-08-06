@@ -74,6 +74,7 @@ func runSchema() {
 			workflow_version_id BIGINT,
 			execution_mode TEXT DEFAULT 'bulk',
 			is_sending SMALLINT DEFAULT 0,
+			open_tracking_enabled BOOLEAN NOT NULL DEFAULT TRUE,
 			contact_list_id BIGINT REFERENCES contact_lists(id) ON DELETE SET NULL
 		)`,
 
@@ -133,6 +134,8 @@ func runSchema() {
 			event_type TEXT NOT NULL CHECK (event_type IN ('open', 'click', 'reply', 'bounce')),
 			user_agent TEXT,
 			ip_address TEXT,
+			is_bot SMALLINT NOT NULL DEFAULT 0,
+			bot_reason TEXT NOT NULL DEFAULT '',
 			created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 		)`,
 
