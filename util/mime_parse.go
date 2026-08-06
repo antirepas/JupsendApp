@@ -131,11 +131,13 @@ func decodeTransfer(body, encoding string) string {
 	}
 }
 
-// SanitizeHTMLForDisplay strips scripts and event handlers for safe embedding.
+// SanitizeHTMLForDisplay strips scripts, event handlers, and tracking pixels/links
+// for safe in-app embedding (so previews do not fire false opens).
 func SanitizeHTMLForDisplay(html string) string {
 	if html == "" {
 		return ""
 	}
+	html = StripTrackingForDisplay(html)
 	lower := strings.ToLower(html)
 	// Remove script/style blocks (best-effort).
 	for {

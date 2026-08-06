@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"html"
 	htmltemplate "html/template"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -359,11 +360,14 @@ func (m ConversationMessage) DisplaySrcDoc() string {
 	return string(m.DisplayHTML())
 }
 
-// sanitizeHTMLForDisplay strips scripts/styles for safe embedding (kept in model to avoid util↔model import cycle).
+// sanitizeHTMLForDisplay strips scripts/styles/tracking for safe embedding
+// (kept in model to avoid util↔model import cycle).
 func sanitizeHTMLForDisplay(s string) string {
 	if s == "" {
 		return ""
 	}
+	s = RewriteTrackedClicksForDisplay(s)
+	s = stripTrackingForDisplay(s)
 	lower := strings.ToLower(s)
 	for {
 		start := strings.Index(lower, "<script")
@@ -394,6 +398,30 @@ func sanitizeHTMLForDisplay(s string) string {
 		lower = strings.ToLower(s)
 	}
 	return strings.ReplaceAll(s, "javascript:", "")
+}
+
+var (
+	convTrackImgRe   = regexp.MustCompile(`(?is)<img\b[^>]*\bsrc\s*=\s*["'][^"']*/track/open/[^"']*["'][^>]*/?>`)
+	convTrackBgRe    = regexp.MustCompile(`(?is)background-image\s*:\s*url\(\s*['"]?[^)'"]*/track/open/[^)'"]*['"]?\s*\)\s*;?`)
+	convTrackDivRe   = regexp.MustCompile(`(?is)<div[^>]*(?:aria-hidden\s*=\s*["']true["']|max-height\s*:\s*0|display\s*:\s*none)[^>]*>\s*(?:<img\b[^>]*\bsrc\s*=\s*["'][^"']*/track/open/[^"']*["'][^>]*/?>)?\s*</div>`)
+	convTrackClickRe = regexp.MustCompile(`(?is)(\bhref\s*=\s*)(["'])([^"']*/track/click/[^"']*)(["'])`)
+)
+
+func stripTrackingForDisplay(html string) string {
+	if html == "" {
+		return html
+	}
+	out := html
+	lower := strings.ToLower(out)
+	if strings.Contains(lower, "/track/open/") {
+		out = convTrackDivRe.ReplaceAllString(out, "")
+		out = convTrackImgRe.ReplaceAllString(out, "")
+		out = convTrackBgRe.ReplaceAllString(out, "")
+	}
+	if strings.Contains(strings.ToLower(out), "/track/click/") {
+		out = convTrackClickRe.ReplaceAllString(out, `${1}${2}#${4}`)
+	}
+	return out
 }
 
 func (m ConversationMessage) IsInbound() bool {

@@ -895,7 +895,7 @@ func SendDetailPage(ctx *gin.Context) {
 	renderedBody := template.HTML("")
 	renderedBodySrcDoc := ""
 	if detail.RenderedHTML != "" {
-		safe := util.SanitizeHTMLForDisplay(detail.RenderedHTML)
+		safe := util.SanitizeHTMLForDisplay(model.RewriteTrackedClicksForDisplay(detail.RenderedHTML))
 		renderedBody = template.HTML(safe)
 		renderedBodySrcDoc = safe
 	} else if detail.RenderedText != "" {
