@@ -181,11 +181,20 @@ func apiSaveWorkflowGraph(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if err := model.SaveWorkflowGraph(vid, input); err != nil {
+	saveVID := vid
+	if v.Status != "draft" {
+		forked, fErr := model.ForkEditableVersionFrom(wid, vid)
+		if fErr != nil {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": fErr.Error()})
+			return
+		}
+		saveVID = forked
+	}
+	if err := model.SaveWorkflowGraph(saveVID, input); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	ctx.JSON(http.StatusOK, gin.H{"message": "saved"})
+	ctx.JSON(http.StatusOK, gin.H{"message": "saved", "version_id": saveVID})
 }
 
 func apiPublishWorkflow(ctx *gin.Context) {

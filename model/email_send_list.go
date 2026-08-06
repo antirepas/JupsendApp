@@ -147,7 +147,7 @@ func ListEmailSendsFiltered(userID int64, f SendListFilter) (SendListPage, error
 	offset := (f.Page - 1) * f.PageSize
 	listQ := `
 		SELECT
-			es.id, es.template_id, es.contact_id, es.tracking_id, es.sent_at,
+			es.id, COALESCE(es.template_id, 0), es.contact_id, es.tracking_id, es.sent_at,
 			COALESCE(t.name, ''), COALESCE(NULLIF(es.rendered_subject, ''), COALESCE(t.subject, '')), COALESCE(c.email, ''),
 			COALESCE(NULLIF(sa.google_email, ''), NULLIF(sa.from_email, ''), NULLIF(sa.smtp_user, ''), ''),
 			COALESCE(SUM(CASE WHEN ee.event_type = 'open' THEN 1 ELSE 0 END), 0),

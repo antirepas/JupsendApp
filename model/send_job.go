@@ -40,12 +40,12 @@ type SendJobCounts struct {
 
 func scanSendJob(row interface{ Scan(...interface{}) error }) (SendJob, error) {
 	var j SendJob
-	var smtpID, campID, wfID, sendID sql.NullInt64
+	var smtpID, campID, wfID, sendID, templateID sql.NullInt64
 	var claimed, lockExp sql.NullTime
 	var lockToken sql.NullString
 	var userID sql.NullInt64
 	err := row.Scan(
-		&j.ID, &userID, &smtpID, &j.ContactID, &j.TemplateID, &campID, &j.Variant, &wfID, &sendID,
+		&j.ID, &userID, &smtpID, &j.ContactID, &templateID, &campID, &j.Variant, &wfID, &sendID,
 		&j.Status, &j.Priority, &j.ScheduledAt, &claimed, &lockToken, &lockExp,
 		&j.Attempts, &j.MaxAttempts, &j.LastError, &j.CreatedAt, &j.UpdatedAt,
 	)
@@ -57,6 +57,9 @@ func scanSendJob(row interface{ Scan(...interface{}) error }) (SendJob, error) {
 	}
 	if smtpID.Valid {
 		j.SMTPAccountID = smtpID.Int64
+	}
+	if templateID.Valid {
+		j.TemplateID = templateID.Int64
 	}
 	if campID.Valid {
 		j.CampaignID = campID.Int64

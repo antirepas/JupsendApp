@@ -54,13 +54,29 @@ func WorkflowBuilderPage(ctx *gin.Context) {
 		ctx.HTML(http.StatusNotFound, "error.html", gin.H{"title": "Error", "active": "workflows", "error": "Not found"})
 		return
 	}
+	versionID := w.CurrentVersionID
+	hasLivePublished := false
+	if !model.WorkflowIsArchived(w) {
+		vid, _, ensureErr := model.EnsureEditableWorkflowVersion(w.ID)
+		if ensureErr != nil {
+			log.Print(ensureErr)
+			ctx.HTML(http.StatusInternalServerError, "error.html", gin.H{"title": "Error", "active": "workflows", "error": "Failed to open workflow for editing"})
+			return
+		}
+		versionID = vid
+		w, _ = model.GetWorkflowForUser(id, mustUserID(ctx))
+		pubID, _ := model.LatestPublishedVersionID(w.ID)
+		hasLivePublished = pubID > 0 && pubID != versionID
+	}
 	templates, _ := model.ListTemplates(mustUserID(ctx))
 	ctx.HTML(http.StatusOK, "workflows_builder.html", gin.H{
-		"title":     w.Name,
-		"active":    "workflows",
-		"workflow":  w,
-		"versionID": w.CurrentVersionID,
-		"templates": templates,
+		"title":             w.Name,
+		"active":            "workflows",
+		"workflow":          w,
+		"versionID":         versionID,
+		"hasLivePublished":  hasLivePublished,
+		"editingDraft":      true,
+		"templates":         templates,
 	})
 }
 

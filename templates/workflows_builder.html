@@ -9,18 +9,24 @@
 <div class="max-w-7xl mx-auto p-6">
 {{if eq .workflow.Status "archived"}}
 <div class="alert-error mb-4">This workflow is archived. In-flight contacts still run, but you cannot edit or use it for new campaigns.</div>
+{{else if .hasLivePublished}}
+<div class="mb-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">Editing a draft. Campaigns still use the last published version until you Publish again.</div>
 {{end}}
 <div class="flex items-center justify-between mb-4">
     <div>
         <a href="/workflows" class="text-sm text-brand-600">← Workflows</a>
         <h2 class="text-2xl font-bold text-slate-900 mt-1">{{.workflow.Name}}</h2>
         <p class="text-sm text-slate-500 mt-1">Drag nodes on the canvas. Drag the dot below a node to another node to connect. Hover a line and click × to remove it. Link each condition to the email it should check.</p>
-    </div>
-    <div class="flex gap-2">
         {{if ne .workflow.Status "archived"}}
+        <p class="text-xs text-slate-500 mt-1"><span class="font-medium text-slate-700">Save</span> keeps a draft. <span class="font-medium text-slate-700">Publish</span> makes it available for new campaigns.</p>
+        {{end}}
+    </div>
+    <div class="flex gap-2 items-center">
+        {{if ne .workflow.Status "archived"}}
+        <span class="text-xs font-medium uppercase tracking-wide px-2 py-1 rounded bg-slate-100 text-slate-600">Draft</span>
         <button type="button" class="btn-secondary text-red-600" data-archive-workflow data-workflow-id="{{.workflow.ID}}" data-workflow-name="{{.workflow.Name}}">Archive</button>
         <button type="button" id="btn-validate" class="btn-secondary">Validate</button>
-        <button type="button" id="btn-save" class="btn-primary">Save</button>
+        <button type="button" id="btn-save" class="btn-secondary">Save draft</button>
         <button type="button" id="btn-publish" class="btn-primary">Publish</button>
         {{else}}
         <a href="/workflows/{{.workflow.ID}}/analytics" class="btn-secondary">Analytics</a>
@@ -105,7 +111,7 @@
 </div>
 <script>
 const WORKFLOW_ID = {{.workflow.ID}};
-const VERSION_ID = {{.versionID}};
+let VERSION_ID = {{.versionID}};
 const WORKFLOW_ARCHIVED = {{if eq .workflow.Status "archived"}}true{{else}}false{{end}};
 const TEMPLATES = [
     {{range .templates}}{ id: {{.ID}}, name: "{{.Name}}" },{{end}}

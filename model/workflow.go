@@ -1,6 +1,7 @@
 package model
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -77,9 +78,10 @@ func ListWorkflows(userID int64) ([]Workflow, error) {
 
 func GetPublishedWorkflows(userID int64) ([]Workflow, error) {
 	rows, err := db.Query(`
-		SELECT w.id, w.name, w.description, COALESCE(w.current_version_id, 0), w.status, w.created_at, w.updated_at
+		SELECT w.id, w.name, w.description, wv.id, w.status, w.created_at, w.updated_at
 		FROM workflows w
-		WHERE w.tenant_id = ? AND w.current_version_id IS NOT NULL AND w.status = 'active'
+		INNER JOIN workflow_versions wv ON wv.workflow_id = w.id AND wv.status = 'published'
+		WHERE w.tenant_id = ? AND w.status = 'active'
 		ORDER BY w.name
 	`, userID)
 	if err != nil {
@@ -144,6 +146,152 @@ func CreateWorkflowVersion(workflowID int64) (int64, error) {
 	var id int64
 	err := row.Scan(&id)
 	return id, err
+}
+
+// CopyWorkflowGraph copies nodes and edges from one version into another (empty target expected).
+func CopyWorkflowGraph(fromVersionID, toVersionID int64) error {
+	if fromVersionID <= 0 || toVersionID <= 0 {
+		return fmt.Errorf("invalid version ids")
+	}
+	if fromVersionID == toVersionID {
+		return nil
+	}
+	nodes, err := getWorkflowNodes(fromVersionID)
+	if err != nil {
+		return err
+	}
+	edges, err := getWorkflowEdges(fromVersionID)
+	if err != nil {
+		return err
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	_, err = tx.Exec(`DELETE FROM workflow_edges WHERE version_id = ?`, toVersionID)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(`DELETE FROM workflow_nodes WHERE version_id = ?`, toVersionID)
+	if err != nil {
+		return err
+	}
+	for _, n := range nodes {
+		cfg := n.ConfigJSON
+		if cfg == "" {
+			cfg = "{}"
+		}
+		_, err = tx.Exec(`
+			INSERT INTO workflow_nodes (version_id, node_key, node_type, label, config_json, position_x, position_y)
+			VALUES (?, ?, ?, ?, ?, ?, ?)
+		`, toVersionID, n.NodeKey, n.NodeType, n.Label, cfg, n.PositionX, n.PositionY)
+		if err != nil {
+			return err
+		}
+	}
+	for _, e := range edges {
+		cond := e.ConditionJSON
+		if cond == "" {
+			cond = "{}"
+		}
+		edgeType := e.EdgeType
+		if edgeType == "" {
+			edgeType = "default"
+		}
+		_, err = tx.Exec(`
+			INSERT INTO workflow_edges (version_id, source_node_key, target_node_key, edge_type, priority, condition_json)
+			VALUES (?, ?, ?, ?, ?, ?)
+		`, toVersionID, e.SourceNodeKey, e.TargetNodeKey, edgeType, e.Priority, cond)
+		if err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// LatestPublishedVersionID returns the published version for a workflow, or 0 if none.
+func LatestPublishedVersionID(workflowID int64) (int64, error) {
+	var id int64
+	err := db.QueryRow(`
+		SELECT id FROM workflow_versions
+		WHERE workflow_id = ? AND status = 'published'
+		ORDER BY version DESC
+		LIMIT 1
+	`, workflowID).Scan(&id)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return 0, nil
+		}
+		return 0, err
+	}
+	return id, nil
+}
+
+// EnsureEditableWorkflowVersion returns a draft version for editing.
+// If the current version is already a draft, it is returned.
+// If it is published (or otherwise non-draft), a new draft is forked from it.
+func EnsureEditableWorkflowVersion(workflowID int64) (versionID int64, forked bool, err error) {
+	w, err := GetWorkflow(workflowID)
+	if err != nil {
+		return 0, false, err
+	}
+	if w.CurrentVersionID <= 0 {
+		vid, cErr := CreateWorkflowVersion(workflowID)
+		if cErr != nil {
+			return 0, false, cErr
+		}
+		_, _ = db.Exec(`UPDATE workflows SET current_version_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, vid, workflowID)
+		return vid, true, nil
+	}
+	v, err := GetWorkflowVersion(w.CurrentVersionID)
+	if err != nil {
+		return 0, false, err
+	}
+	if v.Status == "draft" {
+		return v.ID, false, nil
+	}
+	newID, err := CreateWorkflowVersion(workflowID)
+	if err != nil {
+		return 0, false, err
+	}
+	if err := CopyWorkflowGraph(v.ID, newID); err != nil {
+		return 0, false, err
+	}
+	_, err = db.Exec(`UPDATE workflows SET current_version_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, newID, workflowID)
+	if err != nil {
+		return 0, false, err
+	}
+	return newID, true, nil
+}
+
+// ForkEditableVersionFrom creates a new draft from versionID (must belong to workflowID)
+// and points the workflow at it. Used when a client still has a published version_id.
+func ForkEditableVersionFrom(workflowID, versionID int64) (int64, error) {
+	v, err := GetWorkflowVersion(versionID)
+	if err != nil {
+		return 0, err
+	}
+	if v.WorkflowID != workflowID {
+		return 0, fmt.Errorf("version does not belong to workflow")
+	}
+	if v.Status == "draft" {
+		_, _ = db.Exec(`UPDATE workflows SET current_version_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, v.ID, workflowID)
+		return v.ID, nil
+	}
+	newID, err := CreateWorkflowVersion(workflowID)
+	if err != nil {
+		return 0, err
+	}
+	if err := CopyWorkflowGraph(versionID, newID); err != nil {
+		return 0, err
+	}
+	_, err = db.Exec(`UPDATE workflows SET current_version_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, newID, workflowID)
+	if err != nil {
+		return 0, err
+	}
+	return newID, nil
 }
 
 func GetWorkflowVersion(versionID int64) (WorkflowVersion, error) {

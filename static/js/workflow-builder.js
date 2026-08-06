@@ -1037,8 +1037,15 @@
       body: JSON.stringify(body)
     });
     const data = await res.json();
-    if (!res.ok) showMsg(data.error || 'Save failed', false);
-    else showMsg('Workflow saved', true);
+    if (!res.ok) {
+      showMsg(data.error || 'Save failed', false);
+      return false;
+    }
+    if (data.version_id) {
+      VERSION_ID = data.version_id;
+    }
+    showMsg('Workflow saved', true);
+    return true;
   }
 
   document.getElementById('btn-save')?.addEventListener('click', saveGraph);
@@ -1052,11 +1059,16 @@
   });
 
   document.getElementById('btn-publish')?.addEventListener('click', async () => {
-    await saveGraph();
+    const saved = await saveGraph();
+    if (saved === false) return;
     const res = await fetch('/api/v1/workflows/' + WORKFLOW_ID + '/versions/' + VERSION_ID + '/publish', { method: 'POST' });
     const data = await res.json();
-    if (!res.ok) showMsg(data.error || 'Publish failed', false);
-    else showMsg('Workflow published', true);
+    if (!res.ok) {
+      showMsg(data.error || 'Publish failed', false);
+      return;
+    }
+    showMsg('Workflow published — reloading editable draft…', true);
+    setTimeout(() => location.reload(), 600);
   });
 
   loadGraph();

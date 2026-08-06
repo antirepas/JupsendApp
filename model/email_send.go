@@ -195,8 +195,9 @@ func scanEmailSendListItem(
 ) (EmailSendListItem, error) {
 	var item EmailSendListItem
 	var sentAt sql.NullTime
+	var templateID sql.NullInt64
 	err := scan(
-		&item.ID, &item.TemplateID, &item.ContactID, &item.TrackingID, &sentAt,
+		&item.ID, &templateID, &item.ContactID, &item.TrackingID, &sentAt,
 		&item.TemplateName, &item.TemplateSubject, &item.ContactEmail, &item.SenderEmail,
 		&item.OpenCount, &item.ClickCount, &item.DeliveryStatus, &item.DeliveryError, &item.JobStatus,
 		&item.CampaignID, &item.CampaignName,
@@ -204,6 +205,9 @@ func scanEmailSendListItem(
 	)
 	if err != nil {
 		return EmailSendListItem{}, err
+	}
+	if templateID.Valid {
+		item.TemplateID = templateID.Int64
 	}
 	if sentAt.Valid {
 		item.SentAt = sentAt.Time
@@ -213,7 +217,7 @@ func scanEmailSendListItem(
 
 const emailSendListSelect = `
 		SELECT
-			es.id, es.template_id, es.contact_id, es.tracking_id, es.sent_at,
+			es.id, COALESCE(es.template_id, 0), es.contact_id, es.tracking_id, es.sent_at,
 			COALESCE(t.name, ''), COALESCE(NULLIF(es.rendered_subject, ''), COALESCE(t.subject, '')), COALESCE(c.email, ''),
 			COALESCE(NULLIF(sa.google_email, ''), NULLIF(sa.from_email, ''), NULLIF(sa.smtp_user, ''), ''),
 			COALESCE(SUM(CASE WHEN ee.event_type = 'open' THEN 1 ELSE 0 END), 0),

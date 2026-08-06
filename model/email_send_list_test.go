@@ -177,3 +177,44 @@ func TestDeleteEmailSendForUserSkipsSent(t *testing.T) {
 		t.Fatal("queued should delete")
 	}
 }
+
+func TestListEmailSendsAllowsNullTemplateID(t *testing.T) {
+	db.OpenTestDB(t)
+	userID, _ := CreateUser(fmt.Sprintf("null-tmpl-%d@test.com", time.Now().UnixNano()), "hash", "http://localhost")
+	var contactID int64
+	_ = db.QueryRow(`INSERT INTO contact (email, user_id) VALUES ('reply@test.com', ?) RETURNING id`, userID).Scan(&contactID)
+
+	sendID, err := CreateManualReplyEmailSend(userID, contactID, "track-manual-reply", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = db.Exec(`UPDATE email_sends SET delivery_status='sent', sent_at=CURRENT_TIMESTAMP, rendered_subject='Re: hello' WHERE id=?`, sendID)
+
+	page, err := ListEmailSendsFiltered(userID, SendListFilter{Status: "all", Page: 1, PageSize: 25})
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, item := range page.Items {
+		if item.ID == sendID {
+			found = true
+			if item.TemplateID != 0 {
+				t.Fatalf("template_id=%d want 0", item.TemplateID)
+			}
+			if item.TemplateSubject != "Re: hello" {
+				t.Fatalf("subject=%q", item.TemplateSubject)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("manual reply send missing from list")
+	}
+
+	detail, err := GetEmailSendDetailForUser(sendID, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if detail.TemplateID != 0 {
+		t.Fatalf("detail template_id=%d", detail.TemplateID)
+	}
+}
