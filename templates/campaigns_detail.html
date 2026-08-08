@@ -155,7 +155,20 @@
             </div>
         </div>
         <p class="text-xs text-slate-500">{{.temperaturePreview}}</p>
-        <button type="submit" class="btn-secondary text-sm">Save temperature rules</button>
+        <input type="hidden" name="has_stop_policy" value="1">
+        <div class="border-t border-slate-100 pt-4 space-y-2">
+            <h4 class="text-sm font-semibold text-slate-900">Workflow stop rules</h4>
+            <p class="text-xs text-slate-500">Cancel remaining workflow steps for a lead when these fire. Applies to workflow campaigns only.</p>
+            <label class="flex items-center gap-2 text-sm text-slate-700">
+                <input type="checkbox" name="stop_on_reply" value="1" {{if .campaign.StopOnReply}}checked{{end}}>
+                Fully stop sending once the lead has replied
+            </label>
+            <label class="flex items-center gap-2 text-sm text-slate-700">
+                <input type="checkbox" name="stop_on_hot" value="1" {{if .campaign.StopOnHot}}checked{{end}}>
+                Fully stop sending once the lead is hot
+            </label>
+        </div>
+        <button type="submit" class="btn-secondary text-sm">Save temperature &amp; stop rules</button>
     </form>
 </div>
 

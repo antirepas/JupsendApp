@@ -274,7 +274,16 @@ func handleReply(userID int64, match ReplyMatch, msg inboxMessage, accountID int
 	})
 
 	_ = model.MarkContactReplied(match.ContactID)
-	_ = model.CancelActiveInstancesForContact(match.ContactID)
+	campaignID := int64(0)
+	if match.EmailSendID > 0 {
+		if detail, err := model.GetEmailSendDetail(match.EmailSendID); err == nil {
+			campaignID = detail.CampaignID
+		}
+	}
+	model.ApplyStopOnReplyForContact(match.ContactID, campaignID)
+	if campaignID > 0 {
+		model.MaybeStopWorkflowOnHot(campaignID, match.ContactID)
+	}
 }
 
 func replyDedupeKey(match ReplyMatch, imapMessageID string) string {

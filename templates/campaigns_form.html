@@ -193,6 +193,19 @@
                 </div>
             </div>
             <p class="text-xs text-slate-500" id="temp-rules-preview">Warm = ≥2 opens and ≥1 click. Hot = ≥3 opens and ≥2 clicks (or any reply). Otherwise cold.</p>
+            <input type="hidden" name="has_stop_policy" value="1">
+            <div class="border-t border-slate-100 pt-3 space-y-2">
+                <h3 class="font-medium text-charcoal text-sm">Workflow stop rules</h3>
+                <p class="text-xs text-slate-500">For workflow campaigns: cancel remaining steps for a lead when these fire.</p>
+                <label class="flex items-center gap-2 text-sm text-slate-700">
+                    <input type="checkbox" name="stop_on_reply" value="1" checked>
+                    Fully stop sending once the lead has replied
+                </label>
+                <label class="flex items-center gap-2 text-sm text-slate-700">
+                    <input type="checkbox" name="stop_on_hot" value="1">
+                    Fully stop sending once the lead is hot
+                </label>
+            </div>
         </div>
 
         <div class="flex gap-3 pt-2">

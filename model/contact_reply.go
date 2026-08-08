@@ -16,20 +16,8 @@ func MarkContactReplied(contactID int64) error {
 }
 
 func CancelActiveInstancesForContact(contactID int64) error {
-	rows, err := db.Query(`
-		SELECT id FROM workflow_instances
-		WHERE contact_id = ? AND status IN ('active', 'waiting')
-	`, contactID)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var id int64
-		if rows.Scan(&id) == nil {
-			_ = CancelInstance(id)
-		}
-	}
+	// Legacy helper: cancel only for campaigns with stop_on_reply (default true).
+	ApplyStopOnReplyForContact(contactID, 0)
 	return nil
 }
 

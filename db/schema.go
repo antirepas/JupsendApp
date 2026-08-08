@@ -77,6 +77,8 @@ func runSchema() {
 			is_sending SMALLINT DEFAULT 0,
 			open_tracking_enabled BOOLEAN NOT NULL DEFAULT TRUE,
 			temperature_rules_json TEXT NOT NULL DEFAULT '',
+			stop_on_reply BOOLEAN NOT NULL DEFAULT TRUE,
+			stop_on_hot BOOLEAN NOT NULL DEFAULT FALSE,
 			contact_list_id BIGINT REFERENCES contact_lists(id) ON DELETE SET NULL
 		)`,
 

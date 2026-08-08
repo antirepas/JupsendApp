@@ -27,6 +27,8 @@ type Campaign struct {
 	SuccessMetric        string
 	OpenTrackingEnabled  bool
 	TemperatureRulesJSON string
+	StopOnReply          bool
+	StopOnHot            bool
 }
 
 type CampaignListItem struct {
@@ -67,6 +69,8 @@ type CampaignDetail struct {
 	ExperimentHypothesis string
 	OpenTrackingEnabled  bool
 	TemperatureRules     LeadTemperatureRules
+	StopOnReply          bool
+	StopOnHot            bool
 	VariantA             VariantStats
 	VariantB             VariantStats
 }
@@ -215,7 +219,8 @@ func GetCampaign(id int64) (Campaign, error) {
 			COALESCE(execution_mode, 'bulk'), COALESCE(workflow_version_id, 0), COALESCE(is_sending, 0),
 			COALESCE(contact_list_id, 0),
 			COALESCE(experiment_variable, ''), COALESCE(experiment_hypothesis, ''), COALESCE(success_metric, 'reply'),
-			COALESCE(open_tracking_enabled, TRUE), COALESCE(temperature_rules_json, '')
+			COALESCE(open_tracking_enabled, TRUE), COALESCE(temperature_rules_json, ''),
+			COALESCE(stop_on_reply, TRUE), COALESCE(stop_on_hot, FALSE)
 		FROM campaigns WHERE id = ?
 	`, id)
 	return scanCampaignRow(row)
@@ -227,7 +232,8 @@ func GetCampaignForUser(id, userID int64) (Campaign, error) {
 			COALESCE(execution_mode, 'bulk'), COALESCE(workflow_version_id, 0), COALESCE(is_sending, 0),
 			COALESCE(contact_list_id, 0),
 			COALESCE(experiment_variable, ''), COALESCE(experiment_hypothesis, ''), COALESCE(success_metric, 'reply'),
-			COALESCE(open_tracking_enabled, TRUE), COALESCE(temperature_rules_json, '')
+			COALESCE(open_tracking_enabled, TRUE), COALESCE(temperature_rules_json, ''),
+			COALESCE(stop_on_reply, TRUE), COALESCE(stop_on_hot, FALSE)
 		FROM campaigns WHERE id = ? AND user_id = ?
 	`, id, userID)
 	return scanCampaignRow(row)
@@ -242,7 +248,7 @@ func scanCampaignRow(row interface{ Scan(...interface{}) error }) (Campaign, err
 	err := row.Scan(&c.ID, &c.UserID, &c.Name, &c.TemplateAID, &bID, &c.Status, &c.CreatedAt, &scheduled,
 		&c.ExecutionMode, &c.WorkflowVersionID, &isSending, &listID,
 		&c.ExperimentVariable, &c.ExperimentHypothesis, &c.SuccessMetric, &c.OpenTrackingEnabled,
-		&c.TemperatureRulesJSON)
+		&c.TemperatureRulesJSON, &c.StopOnReply, &c.StopOnHot)
 	if err != nil {
 		return Campaign{}, err
 	}
@@ -269,6 +275,23 @@ func SetCampaignOpenTracking(campaignID, userID int64, enabled bool) error {
 	n, _ := res.RowsAffected()
 	if n == 0 {
 		return fmt.Errorf("campaign not found or already launched")
+	}
+	return nil
+}
+
+// SetCampaignStopPolicy updates workflow stop-on-reply / stop-on-hot for a campaign.
+// Allowed while draft or while sending/sent so operators can change mid-flight.
+func SetCampaignStopPolicy(campaignID, userID int64, stopOnReply, stopOnHot bool) error {
+	res, err := db.Exec(`
+		UPDATE campaigns SET stop_on_reply = ?, stop_on_hot = ?
+		WHERE id = ? AND user_id = ?
+	`, stopOnReply, stopOnHot, campaignID, userID)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("campaign not found")
 	}
 	return nil
 }
@@ -347,6 +370,8 @@ func GetCampaignDetail(id, userID int64) (CampaignDetail, error) {
 		ExperimentHypothesis: c.ExperimentHypothesis,
 		OpenTrackingEnabled:  c.OpenTrackingEnabled,
 		TemperatureRules:     ParseLeadTemperatureRulesJSON(c.TemperatureRulesJSON),
+		StopOnReply:          c.StopOnReply,
+		StopOnHot:            c.StopOnHot,
 		VariantA:             variantA,
 		VariantB:             variantB,
 	}

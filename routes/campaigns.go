@@ -129,6 +129,15 @@ func CreateCampaign(ctx *gin.Context) {
 	if err := model.SetCampaignTemperatureRules(id, userID, tempRules); err != nil {
 		log.Printf("temperature rules: %v", err)
 	}
+	stopOnReply := true
+	stopOnHot := false
+	if ctx.PostForm("has_stop_policy") == "1" {
+		stopOnReply = ctx.PostForm("stop_on_reply") == "1"
+		stopOnHot = ctx.PostForm("stop_on_hot") == "1"
+	}
+	if err := model.SetCampaignStopPolicy(id, userID, stopOnReply, stopOnHot); err != nil {
+		log.Printf("stop policy: %v", err)
+	}
 
 	ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(id, 10)+"?success=Campaign+created")
 }
@@ -163,7 +172,15 @@ func SaveCampaignTemperatureRules(ctx *gin.Context) {
 		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error="+url.QueryEscape(err.Error()))
 		return
 	}
-	ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?success="+url.QueryEscape("Lead temperature rules saved"))
+	if ctx.PostForm("has_stop_policy") == "1" {
+		stopOnReply := ctx.PostForm("stop_on_reply") == "1"
+		stopOnHot := ctx.PostForm("stop_on_hot") == "1"
+		if err := model.SetCampaignStopPolicy(campaignID, userID, stopOnReply, stopOnHot); err != nil {
+			ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error="+url.QueryEscape(err.Error()))
+			return
+		}
+	}
+	ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?success="+url.QueryEscape("Lead temperature and stop rules saved"))
 }
 
 func parseStepTemplatesFromForm(ctx *gin.Context) map[string]int64 {

@@ -149,6 +149,10 @@ func recordEngagementEvent(trackingID, eventType string, meta map[string]interfa
 		DedupeKey:          dedupe,
 	})
 
+	if detail.CampaignID > 0 {
+		model.MaybeStopWorkflowOnHot(detail.CampaignID, detail.ContactID)
+	}
+
 	workflow.DispatchContactEvent(detail.ContactID, eventType)
 }
 

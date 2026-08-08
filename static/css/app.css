@@ -465,6 +465,25 @@
 .sidebar-nav {
     padding: 0.75rem 0 1.25rem;
     overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: #059669 transparent;
+}
+
+.sidebar-nav::-webkit-scrollbar {
+    width: 5px;
+}
+
+.sidebar-nav::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.sidebar-nav::-webkit-scrollbar-thumb {
+    background: #059669;
+    border-radius: 999px;
+}
+
+.sidebar-nav::-webkit-scrollbar-thumb:hover {
+    background: #047857;
 }
 
 .sidebar-section {

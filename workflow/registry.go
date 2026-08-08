@@ -59,6 +59,12 @@ func (SendEmailExecutor) Execute(ctx ExecutionContext) (NodeResult, error) {
 	if campaignID > 0 && model.CampaignIsStopped(campaignID) {
 		return NodeResult{Failed: true, ErrorMessage: "campaign stopped"}, nil
 	}
+	if campaignID > 0 {
+		if block, reason := model.ShouldBlockWorkflowSend(campaignID, ctx.Instance.ContactID); block {
+			_ = model.CancelActiveInstancesForContactCampaign(ctx.Instance.ContactID, campaignID)
+			return NodeResult{Failed: true, ErrorMessage: reason}, nil
+		}
+	}
 
 	templateID, err := model.ResolveCampaignSendTemplate(campaignID, ctx.Node.NodeKey, variant, ctx.Instance.WorkflowVersionID)
 	if err != nil || templateID == 0 {
