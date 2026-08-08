@@ -35,6 +35,7 @@ func ListCampaignsPage(ctx *gin.Context) {
 		"title":     "Campaigns",
 		"active":    "campaigns",
 		"campaigns": campaigns,
+		"playbook":  playbookCampaigns(),
 		"success":   ctx.Query("success"),
 		"error":     ctx.Query("error"),
 	})

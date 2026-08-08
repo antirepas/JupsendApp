@@ -18,6 +18,7 @@ func runSchema() {
 			whop_member_id TEXT DEFAULT '',
 			subscription_ends_at TIMESTAMPTZ,
 			is_admin BOOLEAN NOT NULL DEFAULT FALSE,
+			wizard_dismissed_at TIMESTAMPTZ,
 			created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 		)`,
 

@@ -1,0 +1,47 @@
+{{define "guide_sends.html"}}
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>{{template "head" .}}</head>
+<body class="h-full bg-ivory text-charcoal">
+<div class="flex h-full">
+{{template "sidebar" .}}
+<main class="flex-1 overflow-y-auto">
+<div class="max-w-3xl mx-auto p-8 guide-prose">
+<a href="/guides" class="text-sm text-brand-600 font-medium">← All guides</a>
+<h2 class="text-2xl font-bold text-charcoal mt-2 mb-1">{{.pageTitle}}</h2>
+<p class="text-gray-500 text-sm mb-8">{{.subtitle}}</p>
+
+<div class="card guide-section">
+  <h3>What Sends shows</h3>
+  <p>Every outbound email becomes a send record: queued → sent (or failed), then opens, clicks, replies. Use this page to verify delivery before you trust campaign stats.</p>
+</div>
+
+<div class="card guide-section">
+  <h3>How to read a send</h3>
+  <ul>
+    <li><strong>Delivery status</strong> — queued, sent, failed. Failed needs SMTP/mailbox attention.</li>
+    <li><strong>Human opens</strong> — bots/scanners are filtered; don’t panic over instant “opens.”</li>
+    <li><strong>Clicks</strong> — strong intent signal for warm/hot rules.</li>
+    <li><strong>Preview</strong> — in-app HTML is sanitized so tracking pixels/links don’t fire false events.</li>
+  </ul>
+</div>
+
+<div class="card guide-section">
+  <h3>Perfect-outreach habits</h3>
+  <ol>
+    <li>After launch, spot-check 5–10 sends for “sent.”</li>
+    <li>If opens look weird, check bot/scanned metrics on the send detail.</li>
+    <li>Use send detail when a contact says “never got it.”</li>
+  </ol>
+</div>
+
+<div class="card guide-section">
+  <h3>Next</h3>
+  <p><a href="/sends" class="text-brand-600 font-medium">Open Sends</a> · <a href="/guides/analytics" class="text-brand-600 font-medium">Analytics</a></p>
+</div>
+</div>
+</main>
+</div>
+</body>
+</html>
+{{end}}

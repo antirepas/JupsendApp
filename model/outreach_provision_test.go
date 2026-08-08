@@ -41,14 +41,17 @@ func TestPlaceStarterDomainOrderIdempotentAndQuota(t *testing.T) {
 	db.OpenTestDB(t)
 	prevKey, prevWS := config.InboxKitAPIKey, config.InboxKitWorkspaceID
 	prevEmail := config.InboxKitRegistrantEmail
+	prevManual := config.ManualInboxKitFulfillment
 	t.Cleanup(func() {
 		config.InboxKitAPIKey = prevKey
 		config.InboxKitWorkspaceID = prevWS
 		config.InboxKitRegistrantEmail = prevEmail
+		config.ManualInboxKitFulfillment = prevManual
 		createInboxKitOrder = func(req inboxkit.CreateOrderRequest) (inboxkit.CreateOrderResponse, error) {
 			return inboxkit.NewClient().CreateOrder(req)
 		}
 	})
+	config.ManualInboxKitFulfillment = false
 	config.InboxKitAPIKey = "test-key"
 	config.InboxKitWorkspaceID = "test-ws"
 	config.InboxKitRegistrantEmail = "reg@example.com"
@@ -171,13 +174,16 @@ func TestPlaceStarterDomainOrderRequiresRegistrant(t *testing.T) {
 	db.OpenTestDB(t)
 	prevKey, prevWS := config.InboxKitAPIKey, config.InboxKitWorkspaceID
 	prevEmail, prevName, prevOrg := config.InboxKitRegistrantEmail, config.InboxKitRegistrantName, config.InboxKitRegistrantOrg
+	prevManual := config.ManualInboxKitFulfillment
 	t.Cleanup(func() {
 		config.InboxKitAPIKey = prevKey
 		config.InboxKitWorkspaceID = prevWS
 		config.InboxKitRegistrantEmail = prevEmail
 		config.InboxKitRegistrantName = prevName
 		config.InboxKitRegistrantOrg = prevOrg
+		config.ManualInboxKitFulfillment = prevManual
 	})
+	config.ManualInboxKitFulfillment = false
 	config.InboxKitAPIKey = "k"
 	config.InboxKitWorkspaceID = "w"
 	config.InboxKitRegistrantEmail = ""

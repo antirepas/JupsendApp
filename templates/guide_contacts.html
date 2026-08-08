@@ -7,40 +7,48 @@
 {{template "sidebar" .}}
 <main class="flex-1 overflow-y-auto">
 <div class="max-w-3xl mx-auto p-8 guide-prose">
-<a href="/" class="text-sm text-brand-600 font-medium">← Dashboard</a>
+<a href="/guides" class="text-sm text-brand-600 font-medium">← All guides</a>
 <h2 class="text-2xl font-bold text-charcoal mt-2 mb-1">{{.pageTitle}}</h2>
 <p class="text-gray-500 text-sm mb-8">{{.subtitle}}</p>
 
-<div class="card mb-6 space-y-4">
-    <h3 class="font-semibold text-charcoal">Why import contacts?</h3>
-    <p class="text-sm text-gray-600 leading-relaxed">Contacts are the people you email. Each contact has an email address plus optional variables (like name or company) that fill <code class="text-xs bg-gray-100 px-1 rounded">{{"{{placeholders}}"}}</code> in your templates. Import a list once, then reuse it across campaigns.</p>
+<div class="card guide-section">
+  <h3>Why list quality wins</h3>
+  <p>Deliverability and reply rate start with who you email. Perfect outreach uses a focused list with real personalization fields — not a scraped megadump.</p>
 </div>
 
-<div class="card mb-6 space-y-4">
-    <h3 class="font-semibold text-charcoal">Step-by-step</h3>
-    <ol class="space-y-4 text-sm text-gray-600">
-        <li class="flex gap-3"><span class="onboarding-step-num shrink-0">1</span><span>Open <a href="/contacts?tab=import" class="text-brand-600 font-medium">Contacts → Import</a>.</span></li>
-        <li class="flex gap-3"><span class="onboarding-step-num shrink-0">2</span><span><strong>Paste</strong> rows or <strong>upload Excel/CSV</strong>. Column names do not need to be exact — you’ll map them.</span></li>
-        <li class="flex gap-3"><span class="onboarding-step-num shrink-0">3</span><span>In the mapping dialog, pick which column is <strong>email</strong>, skip unused columns, and keep the rest as variables (name, company, …).</span></li>
-        <li class="flex gap-3"><span class="onboarding-step-num shrink-0">4</span><span>Optionally add everyone to a <strong>list</strong> so you can target them together in campaigns.</span></li>
-        <li class="flex gap-3"><span class="onboarding-step-num shrink-0">5</span><span>Confirm the import. You can also add one contact at a time with <a href="/contacts/new" class="text-brand-600 font-medium">New contact</a>.</span></li>
-    </ol>
+<div class="card guide-section">
+  <h3>Exact steps</h3>
+  <ol>
+    <li>Open Contacts → Import. Paste or upload Excel/CSV.</li>
+    <li>Map columns to variables your templates use (<code>first_name</code>, <code>company</code>, etc.).</li>
+    <li>If a cell has multiple emails, jupsend prefers hello@ → contact@ → support@ → first valid.</li>
+    <li>Put people on a named list so campaigns stay organized.</li>
+    <li>Suppress bounces / unsubscribes so you don’t re-mail them.</li>
+  </ol>
 </div>
 
-<div class="card mb-6 space-y-3">
-    <h3 class="font-semibold text-charcoal">Tips</h3>
-    <ul class="text-sm text-gray-600 list-disc list-inside space-y-1">
-        <li>Headers like <code class="text-xs bg-gray-100 px-1 rounded">Email Address</code> work — map them to Email in the dialog.</li>
-        <li>Skip columns you don’t need; map others to variable names that match your templates.</li>
-        <li>If a cell has several emails separated by <code class="text-xs bg-gray-100 px-1 rounded">,</code> or <code class="text-xs bg-gray-100 px-1 rounded">;</code>, we keep one preferred address per row (<code class="text-xs bg-gray-100 px-1 rounded">hello@</code> → <code class="text-xs bg-gray-100 px-1 rounded">contact@</code> → <code class="text-xs bg-gray-100 px-1 rounded">support@</code> → first valid).</li>
-        <li>Download a sample Excel file from the Import tab if you want a ready-made format.</li>
-        <li>Invalid or bounced addresses can be managed under <strong>Suppressions</strong>.</li>
-    </ul>
+<div class="card guide-section">
+  <h3>Perfect-outreach recipe</h3>
+  <ul>
+    <li>One ICP per campaign (same role / industry).</li>
+    <li>Verify you can fill every required template variable.</li>
+    <li>Remove role accounts (info@, sales@) unless that’s the ICP.</li>
+    <li>Refresh lists before relaunch — don’t keep dead emails.</li>
+  </ul>
 </div>
 
-<div class="flex gap-3">
-    <a href="/contacts?tab=import" class="btn-primary">Import contacts</a>
-    <a href="/" class="btn-secondary">Back to dashboard</a>
+<div class="card guide-section guide-mistake">
+  <h3 class="!mb-2">Common mistakes</h3>
+  <ul>
+    <li>Leaving first_name unmapped → empty greetings.</li>
+    <li>Importing the same people into every campaign without suppressions.</li>
+    <li>Skipping sample download — column mapping errors are hard to spot later.</li>
+  </ul>
+</div>
+
+<div class="card guide-section">
+  <h3>Next</h3>
+  <p><a href="/contacts?tab=import" class="text-brand-600 font-medium">Import now</a> · <a href="/guides/templates" class="text-brand-600 font-medium">Templates</a></p>
 </div>
 </div>
 </main>

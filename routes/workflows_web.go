@@ -20,6 +20,7 @@ func ListWorkflowsPage(ctx *gin.Context) {
 		"title":     "Workflows",
 		"active":    "workflows",
 		"workflows": workflows,
+		"playbook":  playbookWorkflows(),
 		"success":   ctx.Query("success"),
 		"error":     ctx.Query("error"),
 	})

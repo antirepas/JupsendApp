@@ -7,29 +7,27 @@
 {{template "sidebar" .}}
 <main class="flex-1 overflow-y-auto">
 <div class="max-w-3xl mx-auto p-8 guide-prose">
-<a href="/" class="text-sm text-brand-600 font-medium">← Dashboard</a>
+<a href="/guides" class="text-sm text-brand-600 font-medium">← All guides</a>
 <h2 class="text-2xl font-bold text-charcoal mt-2 mb-1">{{.pageTitle}}</h2>
 <p class="text-gray-500 text-sm mb-8">{{.subtitle}}</p>
 
-<div class="card mb-6 space-y-4">
-    <h3 class="font-semibold text-charcoal">Google for accounts only</h3>
-    <p class="text-sm text-gray-600 leading-relaxed">jupsend uses Google sign-in to create and log into your account (<code class="text-xs bg-gray-100 px-1 rounded">openid</code>, <code class="text-xs bg-gray-100 px-1 rounded">email</code>, <code class="text-xs bg-gray-100 px-1 rounded">profile</code>). It does <strong>not</strong> request Gmail send access.</p>
-    <p class="text-sm text-gray-600 leading-relaxed">Outbound email uses your Free shared mailbox or Pro InboxKit mailboxes — manage those under <a href="/mailboxes" class="text-brand-600 font-medium">Mailboxes</a>.</p>
+<div class="card guide-section">
+  <h3>What Google does</h3>
+  <p>Sign in with Google creates your jupsend account and session. It is <strong>not</strong> the same as “send through my Gmail” for Free/Pro outreach seats.</p>
 </div>
 
-<div class="card mb-6 space-y-4">
-    <h3 class="font-semibold text-charcoal">Step-by-step</h3>
-    <ol class="space-y-4 text-sm text-gray-600">
-        <li class="flex gap-3"><span class="onboarding-step-num shrink-0">1</span><span>Choose Free or Pro on the pricing page, then continue with Google.</span></li>
-        <li class="flex gap-3"><span class="onboarding-step-num shrink-0">2</span><span>Sign in with Google and allow basic profile/email access.</span></li>
-        <li class="flex gap-3"><span class="onboarding-step-num shrink-0">3</span><span>Set up sending on <a href="/mailboxes" class="text-brand-600 font-medium">Mailboxes</a> (shared SMTP on Free, domain + mailboxes on Pro).</span></li>
-        <li class="flex gap-3"><span class="onboarding-step-num shrink-0">4</span><span>Optional: <a href="/settings/smtp-check" class="text-brand-600 font-medium">Test SMTP from server</a> to confirm outbound mail works from your host.</span></li>
-    </ol>
+<div class="card guide-section">
+  <h3>Where sending comes from</h3>
+  <ul>
+    <li><strong>Free</strong> — shared SMTP mailbox managed by the app.</li>
+    <li><strong>Pro</strong> — your InboxKit domain seats (or attached SMTP).</li>
+  </ul>
+  <p class="mt-2">See <a href="/guides/mailboxes" class="text-brand-600 font-medium">Mailboxes playbook</a> for setup.</p>
 </div>
 
-<div class="flex gap-3">
-    <a href="/signup/free" class="btn-primary">Sign up</a>
-    <a href="/mailboxes" class="btn-secondary">Mailboxes</a>
+<div class="card guide-section">
+  <h3>Next</h3>
+  <p><a href="/guides/getting-started" class="text-brand-600 font-medium">Getting started</a> · <a href="/mailboxes" class="text-brand-600 font-medium">Mailboxes</a></p>
 </div>
 </div>
 </main>

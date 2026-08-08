@@ -12,6 +12,7 @@ import (
 	"emailtracker.com/config"
 	"emailtracker.com/inboxkit"
 	"emailtracker.com/model"
+	"emailtracker.com/notify"
 	"emailtracker.com/outbound"
 	"emailtracker.com/util"
 	"emailtracker.com/whop"
@@ -350,15 +351,16 @@ func OnboardingDomainStatus(c *gin.Context) {
 		errMsg = humanizeInboxKitError(errMsg)
 	}
 	c.HTML(http.StatusOK, "onboarding_domain_status.html", gin.H{
-		"title":        "Setting up domain",
-		"active":       "mailboxes",
-		"domain":       d,
-		"mailboxes":    domainMailboxes,
-		"nameservers":  nameservers,
-		"nsPropagated": nsPropagated,
-		"needsNS":      needsNS,
-		"supportEmail": config.SupportEmail,
-		"error":        errMsg,
+		"title":         "Setting up domain",
+		"active":        "mailboxes",
+		"domain":        d,
+		"mailboxes":     domainMailboxes,
+		"nameservers":   nameservers,
+		"nsPropagated":  nsPropagated,
+		"needsNS":       needsNS && !model.IsManualPendingDomain(d),
+		"manualPending": model.IsManualPendingDomain(d),
+		"supportEmail":  config.SupportEmail,
+		"error":         errMsg,
 	})
 }
 
@@ -631,6 +633,7 @@ func MailboxesPage(c *gin.Context) {
 		"manageRow":       manageRow,
 		"manageTab":       manageTab,
 		"showAttach":      showAttach,
+		"playbook":        playbookMailboxes(),
 	})
 }
 
@@ -935,16 +938,16 @@ func MailboxesBuyCheckout(c *gin.Context) {
 		return
 	}
 	if config.WhopMailboxAddonID == "" || !whop.IsConfigured() {
-		orderID, pErr := model.PlaceExtraMailboxesOrder(userID, d.ID, specs)
-		if pErr != nil {
+		if pErr := FulfillMailboxPurchase(purchaseID); pErr != nil {
 			log.Printf("buy mailboxes user=%d domain=%s: %v", userID, d.Domain, pErr)
-			_ = model.UpdateMailboxPurchase(purchaseID, "needs_support", "", "", pErr.Error())
 			c.Redirect(http.StatusFound, "/mailboxes/buy?error="+url.QueryEscape(humanizeInboxKitError(pErr.Error())))
 			return
 		}
-		_ = model.UpdateMailboxPurchase(purchaseID, "fulfilled", "", orderID, "")
-		_ = model.SyncInboxKitOrder(userID, d.ID)
-		c.Redirect(http.StatusFound, "/mailboxes?success="+url.QueryEscape("Mailbox ordered — it will appear as Active once credentials are ready"))
+		msg := "Mailbox ordered — it will appear as Active once credentials are ready"
+		if config.ManualInboxKitFulfillment {
+			msg = "Mailbox request received — setup usually takes about 2 hours. We'll email you when it's ready."
+		}
+		c.Redirect(http.StatusFound, "/mailboxes?success="+url.QueryEscape(msg))
 		return
 	}
 
@@ -975,6 +978,29 @@ func FulfillMailboxPurchase(purchaseID int64) error {
 	if err != nil || len(specs) == 0 {
 		return fmt.Errorf("invalid mailbox purchase payload")
 	}
+
+	var domainName string
+	var emails []string
+	if d, dErr := model.GetOutreachDomain(p.DomainID, p.UserID); dErr == nil {
+		domainName = d.Domain
+		for _, s := range specs {
+			local := strings.TrimSpace(s.LocalPart)
+			if local == "" {
+				local = strings.TrimSpace(s.FirstName + "." + s.LastName)
+			}
+			emails = append(emails, strings.ToLower(local)+"@"+domainName)
+		}
+	}
+
+	// First payment webhook / checkout: queue. Admin re-entry with pending_manual: place now.
+	if config.ManualInboxKitFulfillment && strings.ToLower(p.Status) != "pending_manual" && p.Status != "needs_support" {
+		return model.QueueMailboxPurchase(purchaseID, "extra mailboxes", domainName, emails)
+	}
+
+	prevManual := config.ManualInboxKitFulfillment
+	config.ManualInboxKitFulfillment = false
+	defer func() { config.ManualInboxKitFulfillment = prevManual }()
+
 	orderID, err := model.PlaceExtraMailboxesOrder(p.UserID, p.DomainID, specs)
 	if err != nil {
 		_ = model.UpdateMailboxPurchase(purchaseID, "needs_support", "", "", err.Error())
@@ -983,6 +1009,8 @@ func FulfillMailboxPurchase(purchaseID int64) error {
 	_ = model.UpdateMailboxPurchase(purchaseID, "provisioning", "", orderID, "")
 	_ = model.SyncInboxKitOrder(p.UserID, p.DomainID)
 	_ = model.UpdateMailboxPurchase(purchaseID, "fulfilled", "", orderID, "")
+	email, label := userNotifyMeta(p.UserID)
+	notify.NotifyProvisionReady(email, label, domainName)
 	return nil
 }
 
@@ -1104,10 +1132,26 @@ func FulfillDomainPurchase(purchaseID int64) error {
 		_ = model.UpdateMailboxPurchase(purchaseID, "needs_support", "", "", "invalid domain purchase payload")
 		return fmt.Errorf("invalid domain purchase payload")
 	}
+
+	// Already queued: fulfill the domain row via InboxKit.
+	if d, dErr := model.GetOutreachDomainByName(p.UserID, payload.Domain); dErr == nil && model.IsManualPendingDomain(d) {
+		if err := model.FulfillQueuedDomainOrder(d.ID); err != nil {
+			_ = model.UpdateMailboxPurchase(purchaseID, "needs_support", "", "", err.Error())
+			return err
+		}
+		_ = model.UpdateMailboxPurchase(purchaseID, "fulfilled", "", "", "")
+		_ = model.MarkOutreachDomainPaid(d.ID)
+		return nil
+	}
+
 	domainID, orderID, err := model.PlaceStarterDomainOrder(p.UserID, payload.Domain, payload.Mailboxes, false)
 	if err != nil {
 		_ = model.UpdateMailboxPurchase(purchaseID, "needs_support", "", "", err.Error())
 		return err
+	}
+	if strings.HasPrefix(orderID, "manual:") {
+		_ = model.UpdateMailboxPurchase(purchaseID, "pending_manual", "", orderID, "")
+		return nil
 	}
 	_ = model.UpdateMailboxPurchase(purchaseID, "provisioning", "", orderID, "")
 	_ = model.SyncInboxKitOrder(p.UserID, domainID)

@@ -9,7 +9,10 @@
 <div class="max-w-xl mx-auto p-8">
   <h2 class="text-2xl font-bold text-charcoal mb-2">Setting up {{.domain.Domain}}</h2>
   <p class="text-gray-500 text-sm mb-6">
-    {{if .needsNS}}
+    {{if .manualPending}}
+    We’ve received your request and are provisioning domain and mailboxes. This usually takes about <strong>2 hours</strong>.
+    We’ll email you when everything is ready to send.
+    {{else if .needsNS}}
     Point this domain’s nameservers at InboxKit (no domain purchase). Provisioning continues after DNS propagates.
     Use a domain with <strong>no existing DNS records</strong> — switching nameservers replaces your current DNS zone.
     {{else}}
@@ -73,16 +76,22 @@
     {{end}}
 
     <a href="/onboarding/domain/status?domain_id={{.domain.ID}}" class="btn-secondary inline-flex w-full justify-center">Refresh status</a>
+    {{if .manualPending}}
+    <p class="text-xs text-gray-500">Typical wait ~2 hours.{{if .supportEmail}} Questions? Email <a class="underline" href="mailto:{{.supportEmail}}">{{.supportEmail}}</a>.{{end}}</p>
+    {{else}}
     <p class="text-xs text-gray-500">Provisioning usually finishes within a few minutes after nameservers propagate.{{if .supportEmail}} Stuck? Email <a class="underline" href="mailto:{{.supportEmail}}">{{.supportEmail}}</a>.{{end}}</p>
+    {{end}}
   </div>
 </div>
 </main>
 </div>
+{{if not .manualPending}}
 <script>
   setTimeout(function () {
     window.location.reload();
   }, 8000);
 </script>
+{{end}}
 </body>
 </html>
 {{end}}

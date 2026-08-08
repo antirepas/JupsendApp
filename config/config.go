@@ -49,6 +49,10 @@ var (
 	OpenAIAPIKey          string
 	OpenAIModel           string
 	OpenAIFallbackModel   string
+	// ManualInboxKitFulfillment queues domain/mailbox buys for ~2h manual InboxKit funding
+	// instead of charging the InboxKit wallet immediately. Default true; set
+	// MANUAL_INBOXKIT_FULFILLMENT=0 to buy instantly.
+	ManualInboxKitFulfillment bool
 )
 
 func Load() {
@@ -104,6 +108,15 @@ func reloadFromEnv() {
 	OpenAIAPIKey = strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
 	OpenAIModel = envOr("OPENAI_MODEL", "gpt-5-nano")
 	OpenAIFallbackModel = strings.TrimSpace(os.Getenv("OPENAI_FALLBACK_MODEL"))
+	ManualInboxKitFulfillment = envBoolDefaultTrue("MANUAL_INBOXKIT_FULFILLMENT")
+}
+
+func envBoolDefaultTrue(key string) bool {
+	v := strings.TrimSpace(strings.ToLower(os.Getenv(key)))
+	if v == "" {
+		return true
+	}
+	return v != "0" && v != "false" && v != "no" && v != "off"
 }
 
 func parseTrustedProxies(raw string) []string {

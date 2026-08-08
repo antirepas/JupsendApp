@@ -41,6 +41,7 @@ func SettingsPage(c *gin.Context) {
 		"gmailError":      model.GmailSendBlocked(userID),
 		"subscribed":      model.UserHasAppAccess(user),
 		"isPro":           model.UserIsPro(userID),
+		"playbook":        playbookSettings(),
 		"success":         c.Query("success"),
 		"error":           c.Query("error"),
 	})

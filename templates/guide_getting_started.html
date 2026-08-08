@@ -1,0 +1,90 @@
+{{define "guide_getting_started.html"}}
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>{{template "head" .}}</head>
+<body class="h-full bg-ivory text-charcoal">
+<div class="flex h-full">
+{{template "sidebar" .}}
+<main class="flex-1 overflow-y-auto">
+<div class="max-w-3xl mx-auto p-8 guide-prose">
+<a href="/guides" class="text-sm text-brand-600 font-medium">← All guides</a>
+<h2 class="text-2xl font-bold text-charcoal mt-2 mb-1">{{.pageTitle}}</h2>
+<p class="text-gray-500 text-sm mb-8">{{.subtitle}}</p>
+
+<div class="card guide-section">
+  <h3>Why this order</h3>
+  <p>Perfect outreach is a system: a trustworthy sender, a clean list, a clear message, a smart sequence, then disciplined follow-up on interest. Skip steps and you burn domain reputation or send generic mail nobody answers.</p>
+</div>
+
+<div class="card guide-section">
+  <h3>1. Get a mailbox ready</h3>
+  <p><strong>Free:</strong> jupsend attaches a shared sending address — confirm Mailboxes shows send-ready.</p>
+  <p class="mt-2"><strong>Pro:</strong> buy or connect your outreach domain, wait until seats are ready, then send a test.</p>
+  <p class="mt-3"><a href="/mailboxes" class="text-brand-600 font-medium">Open Mailboxes</a> · <a href="/guides/mailboxes" class="text-brand-600 font-medium">Mailboxes playbook</a></p>
+</div>
+
+<div class="card guide-section">
+  <h3>2. Import contacts the right way</h3>
+  <ol>
+    <li>Use a dedicated outreach list (not your whole CRM dump).</li>
+    <li>Map columns so <code>{{"{{first_name}}"}}</code> (and similar) actually fill.</li>
+    <li>Prefer one best email per row; suppress bad addresses.</li>
+  </ol>
+  <p class="mt-3"><a href="/contacts?tab=import" class="text-brand-600 font-medium">Import contacts</a> · <a href="/guides/contacts" class="text-brand-600 font-medium">Contacts playbook</a></p>
+</div>
+
+<div class="card guide-section">
+  <h3>3. Write a reply-worthy template</h3>
+  <ul>
+    <li>One idea, one ask. Subject that sounds human.</li>
+    <li>Personalize with real variables — never “Hi {{"{{first_name}}"}}” empty.</li>
+    <li>Include a tracked link only when it helps the story.</li>
+  </ul>
+  <p class="mt-3"><a href="/templates/new" class="text-brand-600 font-medium">Create template</a> · <a href="/guides/templates" class="text-brand-600 font-medium">Templates playbook</a></p>
+</div>
+
+<div class="card guide-section">
+  <h3>4. (Optional) Design a workflow</h3>
+  <p>For multi-touch sequences: Send → Wait → branch on open/click/reply or <strong>Lead temperature</strong> (hot / warm / cold from campaign rules) → different follow-ups. Publish the workflow before attaching it to a campaign.</p>
+  <p class="mt-3"><a href="/workflows/new" class="text-brand-600 font-medium">New workflow</a> · <a href="/guides/workflows" class="text-brand-600 font-medium">Workflows playbook</a></p>
+</div>
+
+<div class="card guide-section">
+  <h3>5. Launch a campaign</h3>
+  <ol>
+    <li>Pick bulk (one send) or workflow / workflow A/B.</li>
+    <li>Set <strong>lead temperature</strong> rules (e.g. warm = 2 opens + 1 click).</li>
+    <li>Add contacts, map templates to send steps, then send or schedule.</li>
+  </ol>
+  <p class="mt-3"><a href="/campaigns/new" class="text-brand-600 font-medium">Create campaign</a> · <a href="/guides/campaigns" class="text-brand-600 font-medium">Campaigns playbook</a></p>
+</div>
+
+<div class="card guide-section">
+  <h3>6. Work interested leads daily</h3>
+  <p>Replies and engaged contacts appear under Interested. Follow up personally while they’re warm — don’t wait for the next automated bump if they already replied.</p>
+  <p class="mt-3"><a href="/contacts/interested" class="text-brand-600 font-medium">Interested contacts</a> · <a href="/guides/interested" class="text-brand-600 font-medium">Interested playbook</a> · <a href="/guides/analytics" class="text-brand-600 font-medium">Analytics</a></p>
+</div>
+
+<div class="card guide-section guide-mistake">
+  <h3 class="!mb-2">Common mistakes</h3>
+  <ul>
+    <li>Sending from a brand-new domain with no warmup / huge volume day one.</li>
+    <li>Launching a workflow campaign without mapping every send step’s template.</li>
+    <li>Trusting raw opens without checking bot/scanned opens on send detail.</li>
+  </ul>
+</div>
+
+<div class="flex flex-wrap gap-3 mt-6">
+  <a href="/campaigns/new" class="btn-primary">Create campaign</a>
+  <form method="POST" action="/guides/wizard/dismiss">
+    <input type="hidden" name="next" value="/">
+    <button type="submit" class="btn-secondary">Done — hide banner</button>
+  </form>
+  <a href="/guides" class="btn-secondary">All guides</a>
+</div>
+</div>
+</main>
+</div>
+</body>
+</html>
+{{end}}

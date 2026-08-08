@@ -7,54 +7,61 @@
 {{template "sidebar" .}}
 <main class="flex-1 overflow-y-auto">
 <div class="max-w-3xl mx-auto p-8 guide-prose">
-<a href="/" class="text-sm text-brand-600 font-medium">← Dashboard</a>
+<a href="/guides" class="text-sm text-brand-600 font-medium">← All guides</a>
 <h2 class="text-2xl font-bold text-charcoal mt-2 mb-1">{{.pageTitle}}</h2>
 <p class="text-gray-500 text-sm mb-8">{{.subtitle}}</p>
 
-<div class="card mb-6 space-y-4">
-    <h3 class="font-semibold text-charcoal">Campaign flow</h3>
-    <p class="text-sm text-gray-600 leading-relaxed">A campaign ties together a template (or A/B pair), a list of contacts, and a send action. jupsend queues emails, respects your mailbox rate limits (shared Free mailbox or Pro seats), and records opens, clicks, and replies per contact on your dashboard.</p>
+<div class="card guide-section">
+  <h3>Why campaigns matter</h3>
+  <p>A campaign is the launch vehicle: who gets mail, which template or workflow runs, and where opens/clicks/replies are attributed. Perfect outreach treats each campaign as an experiment with a clear hypothesis — not a blast.</p>
 </div>
 
-<div class="card mb-6 space-y-4">
-    <h3 class="font-semibold text-charcoal">Campaign types</h3>
-    <ul class="text-sm text-gray-600 space-y-2">
-        <li><strong>One-time send</strong> — pick a template (optional A/B), add contacts, send once.</li>
-        <li><strong>Automated follow-ups</strong> — attach a published workflow; launching starts the workflow for every contact on the campaign. Replies stop remaining steps.</li>
-    </ul>
-    <p class="text-sm text-gray-600">Design workflows under <a href="/guides/workflows" class="text-brand-600 font-medium">Workflows</a>, then attach them when creating a campaign.</p>
+<div class="card guide-section">
+  <h3>When to use which type</h3>
+  <ul>
+    <li><strong>One-time (bulk)</strong> — announcement or single touch. Optional Template B for A/B on the first email.</li>
+    <li><strong>Workflow</strong> — multi-step sequences (intro → wait → follow-up). Attach a <em>published</em> workflow.</li>
+    <li><strong>Workflow A/B</strong> — first send step alternates templates A/B; later steps use mapped templates.</li>
+  </ul>
 </div>
 
-<div class="card mb-6 space-y-4">
-    <h3 class="font-semibold text-charcoal">Step-by-step (one-time send)</h3>
-    <ol class="space-y-4 text-sm text-gray-600">
-        <li class="flex gap-3"><span class="onboarding-step-num shrink-0">1</span><span><a href="/guides/contacts" class="text-brand-600 font-medium">Import contacts</a> (paste or Excel) so you have recipients ready.</span></li>
-        <li class="flex gap-3"><span class="onboarding-step-num shrink-0">2</span><span>Create at least one <a href="/templates/new" class="text-brand-600 font-medium">template</a>. Optionally add Template B for A/B testing.</span></li>
-        <li class="flex gap-3"><span class="onboarding-step-num shrink-0">3</span><span><a href="/campaigns/new" class="text-brand-600 font-medium">Create a campaign</a> — pick Template A (and B if you want).</span></li>
-        <li class="flex gap-3"><span class="onboarding-step-num shrink-0">4</span><span>On the campaign page, add contacts from your list or import more. Variable columns must match your template.</span></li>
-        <li class="flex gap-3"><span class="onboarding-step-num shrink-0">5</span><span>Review personalized previews, then <strong>Send now</strong> or schedule for later.</span></li>
-        <li class="flex gap-3"><span class="onboarding-step-num shrink-0">6</span><span>Watch the dashboard <strong>Contact activity</strong> feed and campaign analytics for opens, clicks, and replies.</span></li>
-    </ol>
+<div class="card guide-section">
+  <h3>Perfect-outreach launch checklist</h3>
+  <ol>
+    <li>Mailbox send-ready; domain warmed if Pro.</li>
+    <li>Contacts imported with variables that match templates.</li>
+    <li>Templates written; for workflows, every send step mapped.</li>
+    <li>Set <strong>Lead temperature</strong> (campaign rules): e.g. warm ≥2 human opens + ≥1 click; hot = reply or higher thresholds.</li>
+    <li>Decide open tracking: on for learning; off for ultra-cold if scanner noise worries you (clicks/replies still work).</li>
+    <li>Preview a few contacts → Send now or schedule.</li>
+    <li>Watch analytics + Interested; stop the campaign if something’s wrong.</li>
+  </ol>
 </div>
 
-<div class="card mb-6 space-y-3">
-    <h3 class="font-semibold text-charcoal">Run experiments (A/B)</h3>
-    <p class="text-sm text-gray-600">When you add Template B, label what you're testing (subject, opener, offer) and write a short hypothesis. jupsend picks a <strong>winner by reply rate</strong> once enough sends land, compares the campaign to your 30-day average, and lets you promote the winner as a new template.</p>
+<div class="card guide-section">
+  <h3>Lead temperature in campaigns</h3>
+  <p>Defined once per campaign and scored only from that campaign’s engagement. Workflows can branch with a <strong>Lead temperature</strong> node (hot / warm / cold) so warm leads get a different email than cold ones.</p>
+  <p class="mt-2">Edit rules on the campaign page. Defaults: warm = 2 opens + 1 click; hot = 3 opens + 2 clicks or any reply.</p>
 </div>
 
-<div class="card mb-6 space-y-3">
-    <h3 class="font-semibold text-charcoal">Your outreach lab</h3>
-    <p class="text-sm text-gray-600">The dashboard tracks your reply-rate benchmark, personal best, monthly goals, and recent experiments. Use <a href="/contacts/interested" class="text-brand-600 font-medium">Interested contacts</a> to see who replied, clicked, or opened — then follow up.</p>
+<div class="card guide-section">
+  <h3>A/B and experiments</h3>
+  <p>When Template B exists, label what you’re testing and write a hypothesis. jupsend can promote a winner by reply rate. Use experiments to improve one variable at a time (subject, opener, CTA) — not five at once.</p>
 </div>
 
-<div class="card mb-6 space-y-3">
-    <h3 class="font-semibold text-charcoal">A/B assignment</h3>
-    <p class="text-sm text-gray-600">Contacts alternate between Variant A and B (when Template B exists). Compare performance under campaign analytics after sending.</p>
+<div class="card guide-section guide-mistake">
+  <h3 class="!mb-2">Common mistakes</h3>
+  <ul>
+    <li>Attaching a draft workflow — publish first.</li>
+    <li>Missing template on a follow-up step (contacts stall).</li>
+    <li>Huge first send on a fresh domain.</li>
+    <li>Ignoring Interested while the sequence keeps bumping people who already replied (replies stop remaining steps, but you still need human follow-up).</li>
+  </ul>
 </div>
 
-<div class="flex gap-3">
-    <a href="/campaigns/new" class="btn-primary">Create campaign</a>
-    <a href="/" class="btn-secondary">Back to dashboard</a>
+<div class="card guide-section">
+  <h3>Next</h3>
+  <p><a href="/guides/workflows" class="text-brand-600 font-medium">Workflows playbook</a> · <a href="/guides/analytics" class="text-brand-600 font-medium">Analytics</a> · <a href="/campaigns/new" class="text-brand-600 font-medium">Create campaign</a></p>
 </div>
 </div>
 </main>

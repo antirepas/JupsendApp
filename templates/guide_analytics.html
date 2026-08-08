@@ -1,0 +1,47 @@
+{{define "guide_analytics.html"}}
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>{{template "head" .}}</head>
+<body class="h-full bg-ivory text-charcoal">
+<div class="flex h-full">
+{{template "sidebar" .}}
+<main class="flex-1 overflow-y-auto">
+<div class="max-w-3xl mx-auto p-8 guide-prose">
+<a href="/guides" class="text-sm text-brand-600 font-medium">← All guides</a>
+<h2 class="text-2xl font-bold text-charcoal mt-2 mb-1">{{.pageTitle}}</h2>
+<p class="text-gray-500 text-sm mb-8">{{.subtitle}}</p>
+
+<div class="card guide-section">
+  <h3>What to optimize for</h3>
+  <p>Perfect outreach optimizes for <strong>replies</strong> (and meetings), not vanity opens. Opens help diagnose; clicks show curiosity; replies are the goal.</p>
+</div>
+
+<div class="card guide-section">
+  <h3>Where to look</h3>
+  <ul>
+    <li><strong>Dashboard</strong> — account pulse, activity feed, goals after first sends.</li>
+    <li><strong>Campaign analytics</strong> — variant performance, funnel, per-contact engagement.</li>
+    <li><strong>Workflow analytics</strong> — where contacts sit in the graph; which steps leak.</li>
+  </ul>
+</div>
+
+<div class="card guide-section">
+  <h3>How to iterate</h3>
+  <ol>
+    <li>If open rate is fine but replies are low — rewrite ask/CTA, not just subject.</li>
+    <li>If clicks are high — warm path is working; tighten hot email.</li>
+    <li>If cold path never converts — shorten sequence or improve targeting.</li>
+    <li>Use A/B for one change at a time; promote winners.</li>
+  </ol>
+</div>
+
+<div class="card guide-section">
+  <h3>Next</h3>
+  <p><a href="/" class="text-brand-600 font-medium">Dashboard</a> · <a href="/guides/campaigns" class="text-brand-600 font-medium">Campaigns</a></p>
+</div>
+</div>
+</main>
+</div>
+</body>
+</html>
+{{end}}

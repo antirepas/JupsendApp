@@ -7,39 +7,66 @@
 {{template "sidebar" .}}
 <main class="flex-1 overflow-y-auto">
 <div class="max-w-3xl mx-auto p-8 guide-prose">
-<a href="/" class="text-sm text-brand-600 font-medium">← Dashboard</a>
+<a href="/guides" class="text-sm text-brand-600 font-medium">← All guides</a>
 <h2 class="text-2xl font-bold text-charcoal mt-2 mb-1">{{.pageTitle}}</h2>
 <p class="text-gray-500 text-sm mb-8">{{.subtitle}}</p>
 
-<div class="card mb-6 space-y-4">
-    <h3 class="font-semibold text-charcoal">What workflows do</h3>
-    <p class="text-sm text-gray-600 leading-relaxed">Workflows define multi-step automation: send, wait, branch on opens/clicks/replies, then follow up. You build them in the visual editor, publish, and attach them to a <strong>campaign</strong> — contacts only enter a workflow when you launch that campaign.</p>
+<div class="card guide-section">
+  <h3>Why workflows</h3>
+  <p>Workflows turn “send and hope” into a sequence that reacts to behavior. Perfect outreach uses short waits, clear branches, and different copy for cold vs warm vs hot leads — then stops when someone replies.</p>
 </div>
 
-<div class="card mb-6 space-y-4">
-    <h3 class="font-semibold text-charcoal">Building a workflow</h3>
-    <ol class="space-y-3 text-sm text-gray-600 list-decimal list-inside">
-        <li>Create templates for each email step.</li>
-        <li>Go to <a href="/workflows/new" class="text-brand-600 font-medium">Workflows → New</a> and open the visual builder.</li>
-        <li>Drag nodes: <strong>Send email</strong>, <strong>Wait</strong>, <strong>Condition</strong> (opened? clicked? replied?), <strong>Lead temperature</strong> (hot / warm / cold from campaign rules), <strong>End</strong>.</li>
-        <li>Connect nodes with edges; set template and delay on each action node.</li>
-        <li><strong>Publish</strong> the workflow, then create a campaign and choose <strong>Automated follow-ups</strong> to attach it.</li>
-        <li>Add contacts to the campaign and click <strong>Start workflow</strong>.</li>
-    </ol>
+<div class="card guide-section">
+  <h3>Node types</h3>
+  <ul>
+    <li><strong>Start</strong> — campaign launched for a contact.</li>
+    <li><strong>Send email</strong> — maps to a template on the campaign.</li>
+    <li><strong>Wait</strong> — pause days before the next check or send.</li>
+    <li><strong>Condition</strong> — yes/no on opened, clicked, replied (optionally after a wait).</li>
+    <li><strong>Lead temperature</strong> — three-way branch: hot / warm / cold using <em>this campaign’s</em> temperature rules.</li>
+    <li><strong>End</strong> — sequence complete for that contact.</li>
+  </ul>
 </div>
 
-<div class="card mb-6 space-y-3">
-    <h3 class="font-semibold text-charcoal">Campaigns vs workflows</h3>
-    <ul class="text-sm text-gray-600 list-disc list-inside space-y-1">
-        <li><strong>Campaign</strong> — where you add contacts and launch (one-time send or workflow)</li>
-        <li><strong>Workflow</strong> — the automation blueprint (send/wait/branch steps)</li>
-        <li><strong>Individual send</strong> — one email to one contact from the Sends page</li>
-    </ul>
+<div class="card guide-section">
+  <h3>Perfect sequence recipe</h3>
+  <ol>
+    <li>Send a short intro with one clear CTA.</li>
+    <li>Wait 2–3 days (not hours — give humans time).</li>
+    <li>Branch: Lead temperature → hot path (direct ask) / warm path (value bump) / cold path (lighter bump or end).</li>
+    <li>Alternatively nest open/click/reply conditions when you need finer control on one email.</li>
+    <li>Always connect End on every path. Publish when the graph validates.</li>
+  </ol>
 </div>
 
-<div class="flex gap-3">
-    <a href="/workflows/new" class="btn-primary">Create workflow</a>
-    <a href="/" class="btn-secondary">Back to dashboard</a>
+<div class="card guide-section">
+  <h3>Build → publish → attach</h3>
+  <ol>
+    <li>Create workflow in the builder; auto-links help, then fix yes/no or hot/warm/cold edges.</li>
+    <li><strong>Publish</strong> a version (drafts aren’t launchable).</li>
+    <li>Create a workflow campaign and select that published version.</li>
+    <li>Map a template to every send step on the campaign page.</li>
+    <li>Add contacts and launch — each contact gets a workflow instance.</li>
+  </ol>
+</div>
+
+<div class="card guide-section">
+  <h3>Replies stop the sequence</h3>
+  <p>When a contact replies, remaining automated steps cancel for them. Treat that as success: move to Interested and continue the conversation yourself.</p>
+</div>
+
+<div class="card guide-section guide-mistake">
+  <h3 class="!mb-2">Common mistakes</h3>
+  <ul>
+    <li>Lead temperature node without hot, warm, and cold edges (won’t publish).</li>
+    <li>Condition on “not opened” with no wait — everyone fails instantly.</li>
+    <li>Editing a live published graph without understanding draft-fork: publish creates the version campaigns use.</li>
+  </ul>
+</div>
+
+<div class="card guide-section">
+  <h3>Next</h3>
+  <p><a href="/guides/campaigns" class="text-brand-600 font-medium">Campaigns playbook</a> · <a href="/workflows/new" class="text-brand-600 font-medium">New workflow</a></p>
 </div>
 </div>
 </main>

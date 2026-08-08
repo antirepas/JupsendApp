@@ -1,0 +1,97 @@
+{{define "guides_index.html"}}
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>{{template "head" .}}</head>
+<body class="h-full bg-ivory text-charcoal">
+<div class="flex h-full">
+{{template "sidebar" .}}
+<main class="flex-1 overflow-y-auto">
+<div class="max-w-4xl mx-auto p-8">
+  <h2 class="text-2xl font-bold text-charcoal mb-1">Guides</h2>
+  <p class="text-gray-500 text-sm mb-8">Deep playbooks for running outbound outreach in jupsend. Optional — reopen anytime from Help.</p>
+
+  <div class="card mb-8 flex flex-wrap items-center justify-between gap-4">
+    <div>
+      <p class="help-card-label">Start here</p>
+      <h3 class="font-semibold text-charcoal mt-2">Getting started</h3>
+      <p class="text-sm text-gray-600 mt-1">Mailbox → contacts → templates → workflows → campaigns → replies.</p>
+    </div>
+    <div class="flex flex-wrap gap-2">
+      <a href="/guides/getting-started" class="btn-primary">Open wizard</a>
+      <form method="POST" action="/guides/wizard/restart">
+        <button type="submit" class="btn-secondary">Restart &amp; show banner</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="guides-grid">
+    <a class="help-card" href="/guides/mailboxes">
+      <div>
+        <span class="help-card-label">Setup</span>
+        <p class="font-semibold text-charcoal mt-2">Mailboxes</p>
+        <p class="text-sm text-gray-600 mt-1">Free shared seat vs Pro domains, warmup, deliverability.</p>
+      </div>
+    </a>
+    <a class="help-card" href="/guides/contacts">
+      <div>
+        <span class="help-card-label">Data</span>
+        <p class="font-semibold text-charcoal mt-2">Contacts</p>
+        <p class="text-sm text-gray-600 mt-1">Import mapping, lists, suppressions, list hygiene.</p>
+      </div>
+    </a>
+    <a class="help-card" href="/guides/templates">
+      <div>
+        <span class="help-card-label">Copy</span>
+        <p class="font-semibold text-charcoal mt-2">Templates</p>
+        <p class="text-sm text-gray-600 mt-1">Personalization, CTAs, variables that earn replies.</p>
+      </div>
+    </a>
+    <a class="help-card" href="/guides/workflows">
+      <div>
+        <span class="help-card-label">Automation</span>
+        <p class="font-semibold text-charcoal mt-2">Workflows</p>
+        <p class="text-sm text-gray-600 mt-1">Waits, branches, lead temperature, publish &amp; attach.</p>
+      </div>
+    </a>
+    <a class="help-card" href="/guides/campaigns">
+      <div>
+        <span class="help-card-label">Launch</span>
+        <p class="font-semibold text-charcoal mt-2">Campaigns</p>
+        <p class="text-sm text-gray-600 mt-1">Bulk vs workflow, A/B, temperature rules, analytics.</p>
+      </div>
+    </a>
+    <a class="help-card" href="/guides/sends">
+      <div>
+        <span class="help-card-label">Delivery</span>
+        <p class="font-semibold text-charcoal mt-2">Sends</p>
+        <p class="text-sm text-gray-600 mt-1">Queue status, human vs bot opens, debugging one send.</p>
+      </div>
+    </a>
+    <a class="help-card" href="/guides/interested">
+      <div>
+        <span class="help-card-label">Pipeline</span>
+        <p class="font-semibold text-charcoal mt-2">Interested contacts</p>
+        <p class="text-sm text-gray-600 mt-1">Who to prioritize and how to follow up while warm.</p>
+      </div>
+    </a>
+    <a class="help-card" href="/guides/analytics">
+      <div>
+        <span class="help-card-label">Learn</span>
+        <p class="font-semibold text-charcoal mt-2">Analytics</p>
+        <p class="text-sm text-gray-600 mt-1">What metrics mean and how to iterate campaigns.</p>
+      </div>
+    </a>
+    <a class="help-card" href="/guides/gmail">
+      <div>
+        <span class="help-card-label">Account</span>
+        <p class="font-semibold text-charcoal mt-2">Google sign-in</p>
+        <p class="text-sm text-gray-600 mt-1">Auth vs sending — what Google does (and doesn’t) do.</p>
+      </div>
+    </a>
+  </div>
+</div>
+</main>
+</div>
+</body>
+</html>
+{{end}}

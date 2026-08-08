@@ -9,6 +9,7 @@ import (
 )
 
 func RegisterRoutes(server *gin.Engine) {
+	wireProvisionNotifications()
 	server.SetFuncMap(template.FuncMap{
 		"assetURL": func(path string) string {
 			return path + "?v=" + util.StaticAssetVersion()
@@ -26,6 +27,7 @@ func RegisterRoutes(server *gin.Engine) {
 		"templates/onboarding_activating.html",
 		"templates/onboarding_domain.html",
 		"templates/onboarding_domain_status.html",
+		"templates/ops_provisioning.html",
 		"templates/mailboxes.html",
 		"templates/mailboxes_buy.html",
 		"templates/mailboxes_buy_domain.html",
@@ -55,11 +57,19 @@ func RegisterRoutes(server *gin.Engine) {
 		"templates/workflows_builder.html",
 		"templates/workflows_analytics.html",
 		"templates/suppressions_list.html",
+		"templates/partials/contact_import_map_modal.html",
+		"templates/partials/page_playbook.html",
+		"templates/guides_index.html",
+		"templates/guide_getting_started.html",
 		"templates/guide_gmail.html",
 		"templates/guide_contacts.html",
 		"templates/guide_templates.html",
 		"templates/guide_campaigns.html",
 		"templates/guide_workflows.html",
+		"templates/guide_mailboxes.html",
+		"templates/guide_sends.html",
+		"templates/guide_interested.html",
+		"templates/guide_analytics.html",
 		"templates/unsubscribe_confirm.html",
 		"templates/error.html",
 	)
@@ -139,11 +149,19 @@ func RegisterRoutes(server *gin.Engine) {
 		settings.GET("/settings/gmail/callback", GmailCallback)
 		settings.GET("/settings/smtp-check", SettingsSMTPCheck)
 
+		settings.GET("/guides", GuidesIndex)
+		settings.GET("/guides/getting-started", GuideGettingStarted)
+		settings.POST("/guides/wizard/dismiss", GuideWizardDismiss)
+		settings.POST("/guides/wizard/restart", GuideWizardRestart)
 		settings.GET("/guides/gmail", GuideGmail)
 		settings.GET("/guides/contacts", GuideContacts)
 		settings.GET("/guides/templates", GuideTemplates)
 		settings.GET("/guides/campaigns", GuideCampaigns)
 		settings.GET("/guides/workflows", GuideWorkflows)
+		settings.GET("/guides/mailboxes", GuideMailboxes)
+		settings.GET("/guides/sends", GuideSends)
+		settings.GET("/guides/interested", GuideInterested)
+		settings.GET("/guides/analytics", GuideAnalytics)
 	}
 
 	authd := server.Group("/")
@@ -265,5 +283,13 @@ func RegisterRoutes(server *gin.Engine) {
 	ops.Use(RequireAuth(), RequireAdmin())
 	{
 		ops.GET("/queue", OpsQueue)
+	}
+
+	adminOps := server.Group("/ops")
+	adminOps.Use(RequireAuth(), RequireAdmin(), RequireMailboxSetup())
+	{
+		adminOps.GET("/provisioning", OpsProvisioningPage)
+		adminOps.POST("/provisioning/domains/:id/fulfill", OpsFulfillDomain)
+		adminOps.POST("/provisioning/purchases/:id/fulfill", OpsFulfillPurchase)
 	}
 }

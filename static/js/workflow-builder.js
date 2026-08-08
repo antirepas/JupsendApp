@@ -17,7 +17,9 @@
   const edgePriorityInput = document.getElementById('edge-priority');
 
   const NODE_W = 168;
-  const NODE_H = 56;
+  const NODE_H_FALLBACK = 56;
+  const CANVAS_MIN_W = 1200;
+  const CANVAS_MIN_H = 560;
 
   let dragState = null;
   let connectDrag = null;
@@ -258,63 +260,154 @@
     render();
   }
 
-  function nodeOutPoint(n) {
-    return { x: n.position_x + NODE_W / 2, y: n.position_y + NODE_H };
+  function nodeEl(key) {
+    return canvas.querySelector(`[data-key="${key}"]`);
   }
 
-  function nodeInPoint(n) {
-    return { x: n.position_x + NODE_W / 2, y: n.position_y };
+  function nodeSize(n) {
+    const el = nodeEl(n.node_key);
+    if (el) {
+      return { w: el.offsetWidth || NODE_W, h: el.offsetHeight || NODE_H_FALLBACK };
+    }
+    return { w: NODE_W, h: NODE_H_FALLBACK };
   }
 
   function nodeCenter(n) {
-    return { x: n.position_x + NODE_W / 2, y: n.position_y + NODE_H / 2 };
+    const { w, h } = nodeSize(n);
+    return { x: n.position_x + w / 2, y: n.position_y + h / 2 };
   }
 
-  function edgePath(from, to) {
+  /** Anchor point on a node side: top | bottom | left | right */
+  function nodeAnchor(n, side) {
+    const { w, h } = nodeSize(n);
+    const x = n.position_x;
+    const y = n.position_y;
+    switch (side) {
+      case 'left': return { x: x, y: y + h / 2 };
+      case 'right': return { x: x + w, y: y + h / 2 };
+      case 'top': return { x: x + w / 2, y: y };
+      case 'bottom':
+      default: return { x: x + w / 2, y: y + h };
+    }
+  }
+
+  function pickConnectionSides(fromNode, toNode) {
+    const a = nodeCenter(fromNode);
+    const b = nodeCenter(toNode);
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    if (Math.abs(dx) > Math.abs(dy) * 1.15) {
+      return dx >= 0 ? { from: 'right', to: 'left' } : { from: 'left', to: 'right' };
+    }
+    return dy >= 0 ? { from: 'bottom', to: 'top' } : { from: 'top', to: 'bottom' };
+  }
+
+  function nodeOutPoint(n, toward) {
+    if (toward) {
+      return nodeAnchor(n, pickConnectionSides(n, toward).from);
+    }
+    return nodeAnchor(n, 'bottom');
+  }
+
+  function nodeInPoint(n, from) {
+    if (from) {
+      return nodeAnchor(n, pickConnectionSides(from, n).to);
+    }
+    return nodeAnchor(n, 'top');
+  }
+
+  function edgePath(from, to, fromSide, toSide) {
     const startX = from.x;
     const startY = from.y;
     const endX = to.x;
     const endY = to.y;
-    const midY = (startY + endY) / 2;
-    return `M ${startX} ${startY} C ${startX} ${midY}, ${endX} ${midY}, ${endX} ${endY}`;
+    const dx = endX - startX;
+    const dy = endY - startY;
+    const dist = Math.hypot(dx, dy) || 1;
+    const pull = Math.min(80, Math.max(28, dist * 0.35));
+
+    function ctrl(side, x, y, outward) {
+      const s = outward ? 1 : -1;
+      switch (side) {
+        case 'left': return { x: x - pull * s, y };
+        case 'right': return { x: x + pull * s, y };
+        case 'top': return { x, y: y - pull * s };
+        case 'bottom':
+        default: return { x, y: y + pull * s };
+      }
+    }
+
+    const c1 = fromSide ? ctrl(fromSide, startX, startY, true) : { x: startX, y: (startY + endY) / 2 };
+    const c2 = toSide ? ctrl(toSide, endX, endY, true) : { x: endX, y: (startY + endY) / 2 };
+    return `M ${startX} ${startY} C ${c1.x} ${c1.y}, ${c2.x} ${c2.y}, ${endX} ${endY}`;
   }
 
-  function edgeMidpoint(from, to) {
-    const startX = from.x;
-    const startY = from.y;
-    const endX = to.x;
-    const endY = to.y;
-    const midY = (startY + endY) / 2;
+  function edgeMidpoint(from, to, fromSide, toSide) {
+    const startX = from.x, startY = from.y, endX = to.x, endY = to.y;
+    const dx = endX - startX;
+    const dy = endY - startY;
+    const dist = Math.hypot(dx, dy) || 1;
+    const pull = Math.min(80, Math.max(28, dist * 0.35));
+    function ctrl(side, x, y) {
+      switch (side) {
+        case 'left': return { x: x - pull, y };
+        case 'right': return { x: x + pull, y };
+        case 'top': return { x, y: y - pull };
+        case 'bottom':
+        default: return { x, y: y + pull };
+      }
+    }
+    const c1 = fromSide ? ctrl(fromSide, startX, startY) : { x: startX, y: (startY + endY) / 2 };
+    const c2 = toSide ? ctrl(toSide, endX, endY) : { x: endX, y: (startY + endY) / 2 };
     const t = 0.5;
     const mt = 1 - t;
-    const x = mt * mt * mt * startX
-      + 3 * mt * mt * t * startX
-      + 3 * mt * t * t * endX
-      + t * t * t * endX;
-    const y = mt * mt * mt * startY
-      + 3 * mt * mt * t * midY
-      + 3 * mt * t * t * midY
-      + t * t * t * endY;
-    return { x, y };
+    return {
+      x: mt * mt * mt * startX + 3 * mt * mt * t * c1.x + 3 * mt * t * t * c2.x + t * t * t * endX,
+      y: mt * mt * mt * startY + 3 * mt * mt * t * c1.y + 3 * mt * t * t * c2.y + t * t * t * endY
+    };
+  }
+
+  function ensureCanvasBounds() {
+    let maxX = CANVAS_MIN_W;
+    let maxY = CANVAS_MIN_H;
+    nodes.forEach(n => {
+      const { w, h } = nodeSize(n);
+      maxX = Math.max(maxX, n.position_x + w + 80);
+      maxY = Math.max(maxY, n.position_y + h + 80);
+    });
+    canvas.style.minWidth = maxX + 'px';
+    canvas.style.minHeight = maxY + 'px';
+    return { w: maxX, h: maxY };
   }
 
   function drawEdges() {
-    const w = Math.max(canvasWrap.scrollWidth, 1200);
-    const h = Math.max(canvasWrap.scrollHeight, 560);
-    edgeSvg.setAttribute('width', w);
-    edgeSvg.setAttribute('height', h);
-    edgeSvg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+    const { w, h } = ensureCanvasBounds();
+    edgeSvg.removeAttribute('viewBox');
+    edgeSvg.setAttribute('width', String(w));
+    edgeSvg.setAttribute('height', String(h));
+    edgeSvg.style.width = w + 'px';
+    edgeSvg.style.height = h + 'px';
 
     const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+    // refX = markerWidth so the tip sits on the path endpoint (port center).
     defs.innerHTML = `
-      <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <marker id="arrow" markerWidth="8" markerHeight="8" refX="8" refY="3" orient="auto" markerUnits="userSpaceOnUse">
         <path d="M0,0 L0,6 L8,3 z" fill="#64748b"/>
       </marker>
-      <marker id="arrow-true" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <marker id="arrow-true" markerWidth="8" markerHeight="8" refX="8" refY="3" orient="auto" markerUnits="userSpaceOnUse">
         <path d="M0,0 L0,6 L8,3 z" fill="#16a34a"/>
       </marker>
-      <marker id="arrow-false" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <marker id="arrow-false" markerWidth="8" markerHeight="8" refX="8" refY="3" orient="auto" markerUnits="userSpaceOnUse">
         <path d="M0,0 L0,6 L8,3 z" fill="#dc2626"/>
+      </marker>
+      <marker id="arrow-hot" markerWidth="8" markerHeight="8" refX="8" refY="3" orient="auto" markerUnits="userSpaceOnUse">
+        <path d="M0,0 L0,6 L8,3 z" fill="#dc2626"/>
+      </marker>
+      <marker id="arrow-warm" markerWidth="8" markerHeight="8" refX="8" refY="3" orient="auto" markerUnits="userSpaceOnUse">
+        <path d="M0,0 L0,6 L8,3 z" fill="#d97706"/>
+      </marker>
+      <marker id="arrow-cold" markerWidth="8" markerHeight="8" refX="8" refY="3" orient="auto" markerUnits="userSpaceOnUse">
+        <path d="M0,0 L0,6 L8,3 z" fill="#2563eb"/>
       </marker>`;
     edgeSvg.innerHTML = '';
     edgeSvg.appendChild(defs);
@@ -325,10 +418,11 @@
       const src = getNode(params.email_node_key);
       if (!src || src.node_type !== 'action_send_email') return;
 
-      const from = nodeCenter(cond);
-      const to = nodeCenter(src);
+      const sides = pickConnectionSides(cond, src);
+      const from = nodeAnchor(cond, sides.from);
+      const to = nodeAnchor(src, sides.to);
       const refPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-      refPath.setAttribute('d', edgePath(from, to));
+      refPath.setAttribute('d', edgePath(from, to, sides.from, sides.to));
       refPath.setAttribute('fill', 'none');
       refPath.setAttribute('class', 'wf-ref-edge');
       edgeSvg.appendChild(refPath);
@@ -339,9 +433,22 @@
       const toNode = getNode(e.target_node_key);
       if (!fromNode || !toNode) return;
 
-      const from = nodeOutPoint(fromNode);
-      const to = nodeInPoint(toNode);
-      const path = edgePath(from, to);
+      const sides = pickConnectionSides(fromNode, toNode);
+      // Fan out multiple edges from the same source so they don't stack.
+      const siblings = edges.filter(x => x.source_node_key === e.source_node_key);
+      const siblingIdx = siblings.indexOf(e);
+      const siblingCount = siblings.length;
+      let from = nodeAnchor(fromNode, sides.from);
+      let to = nodeAnchor(toNode, sides.to);
+      if (siblingCount > 1) {
+        const spread = 14;
+        const offset = (siblingIdx - (siblingCount - 1) / 2) * spread;
+        if (sides.from === 'bottom' || sides.from === 'top') from = { x: from.x + offset, y: from.y };
+        else from = { x: from.x, y: from.y + offset };
+        if (sides.to === 'bottom' || sides.to === 'top') to = { x: to.x + offset * 0.4, y: to.y };
+        else to = { x: to.x, y: to.y + offset * 0.4 };
+      }
+      const path = edgePath(from, to, sides.from, sides.to);
 
       const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
       g.dataset.edgeIndex = String(edgeIndex);
@@ -366,6 +473,15 @@
       } else if (e.edge_type === 'false') {
         visPath.setAttribute('stroke', '#dc2626');
         visPath.setAttribute('marker-end', 'url(#arrow-false)');
+      } else if (e.edge_type === 'hot') {
+        visPath.setAttribute('stroke', '#dc2626');
+        visPath.setAttribute('marker-end', 'url(#arrow-hot)');
+      } else if (e.edge_type === 'warm') {
+        visPath.setAttribute('stroke', '#d97706');
+        visPath.setAttribute('marker-end', 'url(#arrow-warm)');
+      } else if (e.edge_type === 'cold') {
+        visPath.setAttribute('stroke', '#2563eb');
+        visPath.setAttribute('marker-end', 'url(#arrow-cold)');
       } else {
         visPath.setAttribute('stroke', '#64748b');
         visPath.setAttribute('marker-end', 'url(#arrow)');
@@ -375,7 +491,7 @@
         visPath.classList.add('wf-edge-selected');
       }
 
-      const mid = edgeMidpoint(from, to);
+      const mid = edgeMidpoint(from, to, sides.from, sides.to);
       const deleteBtn = document.createElementNS('http://www.w3.org/2000/svg', 'g');
       deleteBtn.setAttribute('class', 'wf-edge-delete-btn');
       deleteBtn.setAttribute('transform', `translate(${mid.x},${mid.y})`);
@@ -421,8 +537,6 @@
 
       if (e.edge_type === 'true' || e.edge_type === 'false' || e.edge_type === 'hot' || e.edge_type === 'warm' || e.edge_type === 'cold') {
         const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        const midX = (from.x + to.x) / 2;
-        const midY = (from.y + to.y) / 2;
         let dx = 0;
         let color = '#64748b';
         let text = e.edge_type;
@@ -431,8 +545,8 @@
         else if (e.edge_type === 'hot') { dx = -24; color = '#dc2626'; text = 'hot'; }
         else if (e.edge_type === 'warm') { dx = 0; color = '#d97706'; text = 'warm'; }
         else if (e.edge_type === 'cold') { dx = 24; color = '#2563eb'; text = 'cold'; }
-        label.setAttribute('x', midX + dx);
-        label.setAttribute('y', midY);
+        label.setAttribute('x', mid.x + dx);
+        label.setAttribute('y', mid.y - 10);
         label.setAttribute('fill', color);
         label.setAttribute('font-size', '11');
         label.setAttribute('font-weight', '600');
@@ -451,10 +565,20 @@
 
   function updatePreviewLine(endX, endY) {
     if (!connectDrag) return;
-    const path = edgePath(
-      { x: connectDrag.startX, y: connectDrag.startY },
-      { x: endX, y: endY }
-    );
+    const fromNode = getNode(connectDrag.fromKey);
+    const fromSide = connectDrag.fromSide || 'bottom';
+    const start = fromNode
+      ? nodeAnchor(fromNode, fromSide)
+      : { x: connectDrag.startX, y: connectDrag.startY };
+    const dx = endX - start.x;
+    const dy = endY - start.y;
+    let toSide = 'top';
+    if (Math.abs(dx) > Math.abs(dy) * 1.15) {
+      toSide = dx >= 0 ? 'left' : 'right';
+    } else if (dy < 0) {
+      toSide = 'bottom';
+    }
+    const path = edgePath(start, { x: endX, y: endY }, fromSide, toSide);
     if (!previewPathEl) {
       previewPathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
       previewPathEl.setAttribute('class', 'wf-edge-preview');
@@ -691,12 +815,15 @@
       }
       el.innerHTML = `
         <div class="wf-port wf-port-in" title="Connect here (input)"></div>
+        <div class="wf-port wf-port-left" title="Connect here (side)"></div>
+        <div class="wf-port wf-port-right" title="Drag to connect (side)"></div>
         <p class="font-semibold text-sm ${nodeColorClass(n.node_type)}">${escapeHtml(n.label)}</p>
         ${subtitle}
         <div class="wf-port wf-port-out" title="Drag to connect (output)"></div>`;
 
-      const portOut = el.querySelector('.wf-port-out');
-      portOut.addEventListener('mousedown', (ev) => startConnectDrag(ev, n.node_key));
+      el.querySelectorAll('.wf-port-out, .wf-port-right').forEach(portOut => {
+        portOut.addEventListener('mousedown', (ev) => startConnectDrag(ev, n.node_key));
+      });
 
       el.addEventListener('mousedown', (ev) => {
         if (ev.target.closest('.wf-port')) return;
@@ -725,6 +852,8 @@
       canvas.appendChild(el);
     });
     drawEdges();
+    // Re-measure after layout so tall condition nodes get correct port anchors.
+    requestAnimationFrame(() => drawEdges());
     refreshEdgeSelects();
   }
 
@@ -747,8 +876,13 @@
     ev.stopPropagation();
     const n = getNode(key);
     if (!n) return;
-    const pt = nodeOutPoint(n);
-    connectDrag = { fromKey: key, startX: pt.x, startY: pt.y };
+    // Prefer the port the user grabbed so the preview starts on that handle.
+    let side = 'bottom';
+    if (ev.currentTarget && ev.currentTarget.classList.contains('wf-port-right')) side = 'right';
+    else if (ev.currentTarget && ev.currentTarget.classList.contains('wf-port-left')) side = 'left';
+    else if (ev.currentTarget && ev.currentTarget.classList.contains('wf-port-in')) side = 'top';
+    const pt = nodeAnchor(n, side);
+    connectDrag = { fromKey: key, startX: pt.x, startY: pt.y, fromSide: side };
     document.addEventListener('mousemove', onConnectDrag);
     document.addEventListener('mouseup', onConnectDragEnd);
   }
@@ -990,7 +1124,7 @@
     const data = JSON.parse(raw);
     const rect = canvas.getBoundingClientRect();
     const x = ev.clientX - rect.left + canvasWrap.scrollLeft - NODE_W / 2;
-    const y = ev.clientY - rect.top + canvasWrap.scrollTop - NODE_H / 2;
+    const y = ev.clientY - rect.top + canvasWrap.scrollTop - NODE_H_FALLBACK / 2;
     addNode(data.type, data.label, Math.max(8, x), Math.max(8, y));
   });
 

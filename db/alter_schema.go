@@ -5,6 +5,7 @@ import "log"
 func runAlterSchema() {
 	alters := []string{
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_status TEXT NOT NULL DEFAULT 'none'`,
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS wizard_dismissed_at TIMESTAMPTZ`,
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_tier TEXT NOT NULL DEFAULT 'free'`,
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS whop_membership_id TEXT DEFAULT ''`,
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS whop_member_id TEXT DEFAULT ''`,

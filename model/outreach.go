@@ -132,6 +132,16 @@ func UpdateOutreachDomainStatus(id int64, status, orderID string) error {
 	return err
 }
 
+// ResetOutreachDomainForFulfill clears a manual queue marker so InboxKit place can run.
+func ResetOutreachDomainForFulfill(id int64) error {
+	_, err := db.Exec(`
+		UPDATE outreach_domains
+		SET status='ordering', inboxkit_order_id='', last_error='', updated_at=?
+		WHERE id=?
+	`, time.Now(), id)
+	return err
+}
+
 func SetOutreachDomainError(id int64, status, lastError string) error {
 	now := time.Now()
 	_, err := db.Exec(`

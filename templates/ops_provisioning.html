@@ -1,0 +1,67 @@
+{{define "ops_provisioning.html"}}
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>{{template "head" .}}</head>
+<body class="h-full bg-ivory text-charcoal">
+<div class="flex h-full">
+{{template "sidebar" .}}
+<main class="flex-1 overflow-y-auto">
+<div class="max-w-4xl mx-auto p-8">
+  <h2 class="text-2xl font-bold text-charcoal mb-1">Manual provisioning</h2>
+  <p class="text-gray-500 text-sm mb-6">
+    Domain and mailbox buys are queued (~2 hours). Top up InboxKit, then fulfill here.
+    {{if .manualEnabled}}<span class="text-amber-700 font-medium">Manual mode is ON.</span>{{else}}Manual mode is off — orders go straight to InboxKit.{{end}}
+  </p>
+
+  {{if .success}}<div class="alert-success mb-6">{{.success}}</div>{{end}}
+  {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
+
+  <div class="card mb-8">
+    <h3 class="card-title">Queued domains</h3>
+    {{if .domains}}
+    <ul class="divide-y divide-gray-100">
+      {{range .domains}}
+      <li class="py-4 flex flex-wrap items-start justify-between gap-4">
+        <div class="text-sm space-y-1">
+          <p class="font-semibold text-charcoal">{{.Domain.Domain}}</p>
+          <p class="text-gray-500">{{.UserEmail}} · {{.Kind}} · {{.Domain.Status}}</p>
+          {{if .MailboxEmails}}<p class="text-xs text-gray-500">{{range $i, $e := .MailboxEmails}}{{if $i}}, {{end}}{{$e}}{{end}}</p>{{end}}
+          <p class="text-xs text-gray-400 font-mono">{{.Domain.InboxkitOrderID}}</p>
+        </div>
+        <form method="POST" action="/ops/provisioning/domains/{{.Domain.ID}}/fulfill">
+          <button type="submit" class="btn-primary text-sm">Fulfill in InboxKit</button>
+        </form>
+      </li>
+      {{end}}
+    </ul>
+    {{else}}
+    <p class="text-sm text-gray-400">No domains waiting.</p>
+    {{end}}
+  </div>
+
+  <div class="card">
+    <h3 class="card-title">Queued purchases (extra seats / paid domains)</h3>
+    {{if .purchases}}
+    <ul class="divide-y divide-gray-100">
+      {{range .purchases}}
+      <li class="py-4 flex flex-wrap items-start justify-between gap-4">
+        <div class="text-sm space-y-1">
+          <p class="font-semibold text-charcoal">#{{.Purchase.ID}} {{if .Domain}}{{.Domain}}{{end}}</p>
+          <p class="text-gray-500">{{.UserEmail}} · {{.Summary}} · {{.Purchase.Status}}</p>
+        </div>
+        <form method="POST" action="/ops/provisioning/purchases/{{.Purchase.ID}}/fulfill">
+          <button type="submit" class="btn-primary text-sm">Fulfill</button>
+        </form>
+      </li>
+      {{end}}
+    </ul>
+    {{else}}
+    <p class="text-sm text-gray-400">No purchases waiting.</p>
+    {{end}}
+  </div>
+</div>
+</main>
+</div>
+</body>
+</html>
+{{end}}

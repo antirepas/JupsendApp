@@ -1,0 +1,46 @@
+{{define "guide_interested.html"}}
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>{{template "head" .}}</head>
+<body class="h-full bg-ivory text-charcoal">
+<div class="flex h-full">
+{{template "sidebar" .}}
+<main class="flex-1 overflow-y-auto">
+<div class="max-w-3xl mx-auto p-8 guide-prose">
+<a href="/guides" class="text-sm text-brand-600 font-medium">← All guides</a>
+<h2 class="text-2xl font-bold text-charcoal mt-2 mb-1">{{.pageTitle}}</h2>
+<p class="text-gray-500 text-sm mb-8">{{.subtitle}}</p>
+
+<div class="card guide-section">
+  <h3>Why this page exists</h3>
+  <p>Automation finds interest; humans close it. Interested contacts are people who replied, clicked, or opened — sorted so you work the hottest first.</p>
+</div>
+
+<div class="card guide-section">
+  <h3>Perfect follow-up habit</h3>
+  <ol>
+    <li>Check Interested daily (or after each campaign wave).</li>
+    <li>Prioritize replies → clicks → meaningful opens.</li>
+    <li>Reply in-thread from your real mailbox conversation when possible.</li>
+    <li>Dismiss noise so the list stays actionable.</li>
+  </ol>
+</div>
+
+<div class="card guide-section guide-mistake">
+  <h3 class="!mb-2">Common mistakes</h3>
+  <ul>
+    <li>Letting automation keep “following up” while you ignore a reply (sequence stops, but silence from you kills deals).</li>
+    <li>Treating bot opens as interest — cross-check send detail.</li>
+  </ul>
+</div>
+
+<div class="card guide-section">
+  <h3>Next</h3>
+  <p><a href="/contacts/interested" class="text-brand-600 font-medium">Open Interested</a> · <a href="/guides/campaigns" class="text-brand-600 font-medium">Campaigns</a></p>
+</div>
+</div>
+</main>
+</div>
+</body>
+</html>
+{{end}}

@@ -10,6 +10,22 @@
 {{if .success}}<div class="alert-success mb-6">{{.success}}</div>{{end}}
 {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
 
+{{if .showWizardBanner}}
+<div class="dash-setup-strip mb-6">
+    <div>
+        <p class="dash-setup-strip-title">Learn how to run outreach in jupsend</p>
+        <p class="dash-setup-strip-sub">Optional playbook: mailbox → contacts → templates → workflows → campaigns → replies. Skip anytime — reopen from Help.</p>
+    </div>
+    <div class="flex flex-wrap gap-2 shrink-0">
+        <a href="/guides/getting-started" class="btn-primary">Start guide</a>
+        <form method="POST" action="/guides/wizard/dismiss" class="inline">
+            <input type="hidden" name="next" value="/">
+            <button type="submit" class="btn-secondary">Skip</button>
+        </form>
+    </div>
+</div>
+{{end}}
+
 {{if .isEmpty}}
 {{if gt .stepsLeft 0}}
 <div class="dash-setup-strip mb-6">
@@ -340,6 +356,7 @@
 })();
 </script>
 {{end}}
+{{template "page_playbook" .}}
 </div>
 </main>
 </div>

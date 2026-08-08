@@ -1,0 +1,56 @@
+{{define "guide_mailboxes.html"}}
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>{{template "head" .}}</head>
+<body class="h-full bg-ivory text-charcoal">
+<div class="flex h-full">
+{{template "sidebar" .}}
+<main class="flex-1 overflow-y-auto">
+<div class="max-w-3xl mx-auto p-8 guide-prose">
+<a href="/guides" class="text-sm text-brand-600 font-medium">← All guides</a>
+<h2 class="text-2xl font-bold text-charcoal mt-2 mb-1">{{.pageTitle}}</h2>
+<p class="text-gray-500 text-sm mb-8">{{.subtitle}}</p>
+
+<div class="card guide-section">
+  <h3>Why mailboxes come first</h3>
+  <p>Recipients and filters judge the sender. Perfect outreach protects reputation: right mailbox type, sane volume, warm-up on new domains.</p>
+</div>
+
+<div class="card guide-section">
+  <h3>Free vs Pro</h3>
+  <ul>
+    <li><strong>Free</strong> — shared sending address configured by the app. Good to learn the product; limited volume.</li>
+    <li><strong>Pro</strong> — your domain + included seats via InboxKit. Connect or buy a domain under onboarding, wait until status is ready, then send.</li>
+  </ul>
+  <p class="mt-2"><a href="/guides/gmail" class="text-brand-600 font-medium">Google sign-in</a> is only for logging into jupsend — not for sending as Gmail OAuth by default.</p>
+</div>
+
+<div class="card guide-section">
+  <h3>Perfect-outreach setup</h3>
+  <ol>
+    <li>Use a dedicated outreach domain (not your main website domain if you can avoid it).</li>
+    <li>Real first/last names on seats — From name builds trust.</li>
+    <li>Start small daily volume; enable warmup where available.</li>
+    <li>Test SMTP from Mailboxes after provisioning.</li>
+  </ol>
+</div>
+
+<div class="card guide-section guide-mistake">
+  <h3 class="!mb-2">Common mistakes</h3>
+  <ul>
+    <li>Pointing nameservers on a domain that still hosts a live site’s DNS.</li>
+    <li>Blasting thousands on day one of a new domain.</li>
+    <li>Ignoring seats stuck in provisioning — stay on the status page / Mailboxes sync.</li>
+  </ul>
+</div>
+
+<div class="card guide-section">
+  <h3>Next</h3>
+  <p><a href="/mailboxes" class="text-brand-600 font-medium">Mailboxes</a> · <a href="/guides/getting-started" class="text-brand-600 font-medium">Getting started</a></p>
+</div>
+</div>
+</main>
+</div>
+</body>
+</html>
+{{end}}

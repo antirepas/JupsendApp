@@ -1,0 +1,23 @@
+{{define "page_playbook"}}
+{{if .playbook}}
+<section class="page-playbook mt-10 mb-4" aria-labelledby="page-playbook-title">
+  <div class="page-playbook-card">
+    <div class="page-playbook-head">
+      <span class="help-card-label">How to use this</span>
+      <h3 id="page-playbook-title" class="page-playbook-title">{{.playbook.Title}}</h3>
+      {{if .playbook.Intro}}<p class="page-playbook-intro">{{.playbook.Intro}}</p>{{end}}
+    </div>
+    {{if .playbook.Bullets}}
+    <ul class="page-playbook-list">
+      {{range .playbook.Bullets}}
+      <li>{{.}}</li>
+      {{end}}
+    </ul>
+    {{end}}
+    {{if .playbook.GuideHref}}
+    <a href="{{.playbook.GuideHref}}" class="page-playbook-link">Read full guide →</a>
+    {{end}}
+  </div>
+</section>
+{{end}}
+{{end}}

@@ -10,23 +10,24 @@ import (
 )
 
 type User struct {
-	ID                 int64
-	Email              string
-	PasswordHash       string
-	BaseURL            string
-	SubscriptionStatus string
-	PlanTier           string
-	WhopMembershipID   string
-	WhopMemberID       string
-	SubscriptionEndsAt *time.Time
-	IsAdmin            bool
-	AIcreditsUsedToday int
-	AIcreditsResetAt   *time.Time
-	SendCooldownDays        int
+	ID                      int64
+	Email                   string
+	PasswordHash            string
+	BaseURL                 string
+	SubscriptionStatus      string
+	PlanTier                string
+	WhopMembershipID        string
+	WhopMemberID            string
+	SubscriptionEndsAt      *time.Time
+	IsAdmin                 bool
+	AIcreditsUsedToday      int
+	AIcreditsResetAt        *time.Time
+	SendCooldownDays             int
 	IncludeUnsubscribeLink  bool
 	GoalMeetingsPerMonth    int
 	GoalReplyToMeetingPct   int
 	GoalDailySendCap        int
+	WizardDismissedAt       *time.Time
 	CreatedAt               time.Time
 }
 
@@ -78,7 +79,7 @@ func GetUserByEmail(email string) (User, error) {
 			COALESCE(plan_tier, 'free'),
 			COALESCE(ai_credits_used_today, 0), ai_credits_reset_at,
 			COALESCE(goal_meetings_per_month, 0), COALESCE(goal_reply_to_meeting_pct, 50), COALESCE(goal_daily_send_cap, 0),
-			created_at
+			wizard_dismissed_at, created_at
 		FROM users WHERE email = ?
 	`, strings.TrimSpace(strings.ToLower(email)))
 	return scanUser(row)
@@ -92,7 +93,7 @@ func GetUserByID(id int64) (User, error) {
 			COALESCE(plan_tier, 'free'),
 			COALESCE(ai_credits_used_today, 0), ai_credits_reset_at,
 			COALESCE(goal_meetings_per_month, 0), COALESCE(goal_reply_to_meeting_pct, 50), COALESCE(goal_daily_send_cap, 0),
-			created_at
+			wizard_dismissed_at, created_at
 		FROM users WHERE id = ?
 	`, id)
 	return scanUser(row)
@@ -102,11 +103,13 @@ func scanUser(row interface{ Scan(...interface{}) error }) (User, error) {
 	var u User
 	var ends sql.NullTime
 	var resetAt sql.NullTime
+	var wizardDismissed sql.NullTime
 	err := row.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.BaseURL,
 		&u.SubscriptionStatus, &u.WhopMembershipID, &u.WhopMemberID, &ends, &u.IsAdmin, &u.SendCooldownDays, &u.IncludeUnsubscribeLink,
 		&u.PlanTier,
 		&u.AIcreditsUsedToday, &resetAt,
-		&u.GoalMeetingsPerMonth, &u.GoalReplyToMeetingPct, &u.GoalDailySendCap, &u.CreatedAt)
+		&u.GoalMeetingsPerMonth, &u.GoalReplyToMeetingPct, &u.GoalDailySendCap,
+		&wizardDismissed, &u.CreatedAt)
 	if ends.Valid {
 		t := ends.Time
 		u.SubscriptionEndsAt = &t
@@ -115,7 +118,26 @@ func scanUser(row interface{ Scan(...interface{}) error }) (User, error) {
 		t := resetAt.Time
 		u.AIcreditsResetAt = &t
 	}
+	if wizardDismissed.Valid {
+		t := wizardDismissed.Time
+		u.WizardDismissedAt = &t
+	}
 	return u, err
+}
+
+// UserWizardDismissed reports whether the optional getting-started banner should stay hidden.
+func UserWizardDismissed(u User) bool {
+	return u.WizardDismissedAt != nil
+}
+
+func SetWizardDismissed(userID int64) error {
+	_, err := db.Exec(`UPDATE users SET wizard_dismissed_at = COALESCE(wizard_dismissed_at, ?) WHERE id = ?`, time.Now(), userID)
+	return err
+}
+
+func ClearWizardDismissed(userID int64) error {
+	_, err := db.Exec(`UPDATE users SET wizard_dismissed_at = NULL WHERE id = ?`, userID)
+	return err
 }
 
 func EmailExists(email string) (bool, error) {

@@ -204,6 +204,8 @@ func Dashboard(ctx *gin.Context) {
 		"mailboxReady":        mailboxReady,
 		"isPro":               isPro,
 		"warmupProgress":      warmupProgress,
+		"showWizardBanner":    !model.UserWizardDismissed(user),
+		"playbook":            playbookAnalytics(),
 		"success":             ctx.Query("success"),
 		"error":               ctx.Query("error"),
 	})
@@ -221,6 +223,7 @@ func ListTemplatesPage(ctx *gin.Context) {
 		"title":     "Templates",
 		"active":    "templates",
 		"templates": templates,
+		"playbook":  playbookTemplates(),
 		"success":   ctx.Query("success"),
 		"error":     ctx.Query("error"),
 	})
@@ -333,6 +336,7 @@ func InterestedContactsPage(ctx *gin.Context) {
 		"contacts":        contacts,
 		"interestedCount": len(contacts),
 		"lists":           lists,
+		"playbook":        playbookInterested(),
 		"success":         ctx.Query("success"),
 		"error":           ctx.Query("error"),
 	})
@@ -397,6 +401,7 @@ func ListContactsPage(ctx *gin.Context) {
 		"hasNext":          hasNext,
 		"success":          ctx.Query("success"),
 		"error":            ctx.Query("error"),
+		"playbook":         playbookContacts(),
 	})
 }
 
@@ -788,6 +793,7 @@ func ListSendsPage(ctx *gin.Context) {
 		"success":          ctx.Query("success"),
 		"error":            ctx.Query("error"),
 		"gmailSendBlocked": model.GmailSendBlocked(userID),
+		"playbook":         playbookSends(),
 	})
 }
 

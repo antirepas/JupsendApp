@@ -108,10 +108,8 @@ func registrantOrError() (map[string]any, error) {
 
 // PlaceStarterDomainOrder buys a domain + mailboxes via InboxKit.
 // When included is true, enforces the Pro included-domain quota.
+// When config.ManualInboxKitFulfillment is on, queues for ~2h manual fulfill instead.
 func PlaceStarterDomainOrder(userID int64, domain string, specs []StarterMailboxSpec, included bool) (domainID int64, orderID string, err error) {
-	if !inboxkit.Configured() {
-		return 0, "", fmt.Errorf("%s", inboxkit.ConfiguredHint())
-	}
 	domain = strings.ToLower(strings.TrimSpace(domain))
 	if domain == "" || !strings.Contains(domain, ".") {
 		return 0, "", fmt.Errorf("pick a valid domain")
@@ -123,6 +121,14 @@ func PlaceStarterDomainOrder(userID int64, domain string, specs []StarterMailbox
 	if len(specs) > n {
 		specs = specs[:n]
 	}
+
+	if config.ManualInboxKitFulfillment {
+		return queueStarterDomainOrder(userID, domain, specs, included)
+	}
+	if !inboxkit.Configured() {
+		return 0, "", fmt.Errorf("%s", inboxkit.ConfiguredHint())
+	}
+
 	platform := config.InboxKitPlatform
 	if platform == "" {
 		platform = "GOOGLE"
@@ -137,15 +143,22 @@ func PlaceStarterDomainOrder(userID int64, domain string, specs []StarterMailbox
 	if existing, gErr := GetOutreachDomainByName(userID, domain); gErr == nil {
 		st := strings.ToLower(existing.Status)
 		oid := strings.TrimSpace(existing.InboxkitOrderID)
-		if st != "error" && oid != "" && !isPendingOrderID(oid) {
+		if st == "pending_manual" || isManualOrderID(oid) {
+			if config.ManualInboxKitFulfillment {
+				return queueStarterDomainOrder(userID, domain, specs, included)
+			}
+			// Fulfill path: continue and place a real InboxKit order.
+		} else if st != "error" && oid != "" && !isPendingOrderID(oid) {
 			_ = ensureStarterMailboxRows(userID, existing.ID, mboxes, platform, existing.Included)
 			return existing.ID, oid, nil
 		}
 	}
 
 	if included {
-		if qErr := assertIncludedDomainQuota(userID); qErr != nil {
-			return 0, "", qErr
+		if _, gErr := GetOutreachDomainByName(userID, domain); gErr != nil {
+			if qErr := assertIncludedDomainQuota(userID); qErr != nil {
+				return 0, "", qErr
+			}
 		}
 	}
 
@@ -217,9 +230,6 @@ func PlaceStarterDomainOrder(userID int64, domain string, specs []StarterMailbox
 // PlaceConnectExistingDomainOrder connects a domain you already own (no registration purchase).
 // Step 1: InboxKit creates Cloudflare NS for the domain. Step 2: after NS propagate, mailboxes are bought.
 func PlaceConnectExistingDomainOrder(userID int64, domain string, specs []StarterMailboxSpec) (domainID int64, orderID string, nameservers []string, err error) {
-	if !inboxkit.Configured() {
-		return 0, "", nil, fmt.Errorf("%s", inboxkit.ConfiguredHint())
-	}
 	domain = strings.ToLower(strings.TrimSpace(domain))
 	if domain == "" || !strings.Contains(domain, ".") {
 		return 0, "", nil, fmt.Errorf("enter a valid domain")
@@ -231,6 +241,14 @@ func PlaceConnectExistingDomainOrder(userID int64, domain string, specs []Starte
 	if len(specs) > n {
 		specs = specs[:n]
 	}
+
+	if config.ManualInboxKitFulfillment {
+		return queueConnectDomainOrder(userID, domain, specs)
+	}
+	if !inboxkit.Configured() {
+		return 0, "", nil, fmt.Errorf("%s", inboxkit.ConfiguredHint())
+	}
+
 	platform := config.InboxKitPlatform
 	if platform == "" {
 		platform = "GOOGLE"
@@ -244,14 +262,20 @@ func PlaceConnectExistingDomainOrder(userID int64, domain string, specs []Starte
 	if existing, gErr := GetOutreachDomainByName(userID, domain); gErr == nil {
 		st := strings.ToLower(existing.Status)
 		oid := strings.TrimSpace(existing.InboxkitOrderID)
-		if st != "error" && oid != "" {
+		if st == "pending_manual" || isManualOrderID(oid) {
+			if config.ManualInboxKitFulfillment {
+				return queueConnectDomainOrder(userID, domain, specs)
+			}
+		} else if st != "error" && oid != "" {
 			_ = ensureStarterMailboxRows(userID, existing.ID, mboxes, platform, existing.Included)
 			return existing.ID, oid, existing.Nameservers(), nil
 		}
 	}
 
-	if qErr := assertIncludedDomainQuota(userID); qErr != nil {
-		return 0, "", nil, qErr
+	if _, gErr := GetOutreachDomainByName(userID, domain); gErr != nil {
+		if qErr := assertIncludedDomainQuota(userID); qErr != nil {
+			return 0, "", nil, qErr
+		}
 	}
 
 	ns, err := connectInboxKitNameservers(domain)
@@ -398,6 +422,9 @@ func SyncInboxKitOrder(userID, domainID int64) error {
 	if err != nil {
 		return err
 	}
+	if IsManualPendingDomain(d) {
+		return nil
+	}
 	if inboxkit.IsConnectOrderID(d.InboxkitOrderID) || d.Status == "connecting" {
 		return syncConnectedDomain(userID, domainID, d)
 	}
@@ -412,13 +439,20 @@ func SyncInboxKitOrder(userID, domainID int64) error {
 	}
 	status := order.Status
 	if order.IsDone() {
-		status = "ready"
+		// Keep non-ready until MarkOutreachDomainReady so we can notify once.
+		if status == "" || strings.EqualFold(status, "ready") {
+			status = "processing"
+		}
 	} else if order.IsError() {
 		status = "error"
 	} else if status == "" {
 		status = "processing"
 	}
-	_ = UpdateOutreachDomainStatus(domainID, status, d.InboxkitOrderID)
+	if !order.IsDone() {
+		_ = UpdateOutreachDomainStatus(domainID, status, d.InboxkitOrderID)
+	} else {
+		_ = UpdateOutreachDomainStatus(domainID, status, d.InboxkitOrderID)
+	}
 	if order.IsError() {
 		_ = SetOutreachDomainError(domainID, "error", "InboxKit order failed")
 	}
@@ -430,7 +464,8 @@ func SyncInboxKitOrder(userID, domainID int64) error {
 
 	if order.IsDone() {
 		_ = ClearOutreachDomainError(domainID)
-		_ = UpdateOutreachDomainStatus(domainID, "ready", d.InboxkitOrderID)
+		became, _ := MarkOutreachDomainReady(domainID, d.InboxkitOrderID)
+		maybeNotifyDomainReady(userID, d.Domain, became)
 	} else {
 		_ = TouchOutreachDomainSynced(domainID)
 	}
@@ -466,7 +501,8 @@ func syncConnectedDomain(userID, domainID int64, d OutreachDomain) error {
 	}
 	if UserHasReadyMailbox(userID) {
 		_ = ClearOutreachDomainError(domainID)
-		_ = UpdateOutreachDomainStatus(domainID, "ready", d.InboxkitOrderID)
+		became, _ := MarkOutreachDomainReady(domainID, d.InboxkitOrderID)
+		maybeNotifyDomainReady(userID, d.Domain, became)
 	} else {
 		_ = UpdateOutreachDomainStatus(domainID, "connecting", d.InboxkitOrderID)
 		_ = TouchOutreachDomainSynced(domainID)
