@@ -306,12 +306,16 @@ func UpdateSMTPAccount(a SMTPAccount) error {
 	if a.WarmupEnabled {
 		warmup = 1
 	}
+	var warmupStart interface{}
+	if a.WarmupStartedAt != nil {
+		warmupStart = *a.WarmupStartedAt
+	}
 	_, err := db.Exec(`
 		UPDATE smtp_accounts SET
 			name=?, smtp_host=?, smtp_port=?, smtp_user=?, smtp_password=?, from_email=?, from_name=?,
 			imap_host=?, imap_port=?, imap_user=?, imap_password=?, status=?, daily_limit=?,
 			per_minute_limit=?, min_seconds_between_sends=?, warmup_enabled=?, warmup_daily_cap=?,
-			warmup_target_daily_cap=?, warmup_increment_per_day=?,
+			warmup_target_daily_cap=?, warmup_increment_per_day=?, warmup_started_at=?,
 			auth_type=?, oauth_refresh_token=?, oauth_access_token=?, oauth_expiry=?, google_email=?,
 			updated_at=?
 		WHERE id=?
@@ -319,11 +323,26 @@ func UpdateSMTPAccount(a SMTPAccount) error {
 		a.Name, a.SMTPHost, a.SMTPPort, a.SMTPUser, a.SMTPPassword, a.FromEmail, a.FromName,
 		a.IMAPHost, a.IMAPPort, a.IMAPUser, a.IMAPPassword, a.Status, a.DailyLimit,
 		a.PerMinuteLimit, a.MinSecondsBetweenSends, warmup, a.WarmupDailyCap,
-		a.WarmupTargetDailyCap, a.WarmupIncrementPerDay,
+		a.WarmupTargetDailyCap, a.WarmupIncrementPerDay, warmupStart,
 		a.AuthType, a.OAuthRefreshToken, a.OAuthAccessToken, nullTime(a.OAuthExpiry), a.GoogleEmail,
 		time.Now(), a.ID,
 	)
 	return err
+}
+
+// EnsureWarmupStartedAt stamps warmup_started_at when warmup is on but the clock was never set.
+// Without this the ramp stays forever at the start cap.
+func EnsureWarmupStartedAt(a *SMTPAccount) bool {
+	if a == nil || !a.WarmupEnabled || a.WarmupStartedAt != nil || a.ID <= 0 {
+		return false
+	}
+	start := time.Now()
+	if !a.CreatedAt.IsZero() {
+		start = a.CreatedAt
+	}
+	a.WarmupStartedAt = &start
+	_, err := db.Exec(`UPDATE smtp_accounts SET warmup_started_at=?, updated_at=? WHERE id=? AND warmup_started_at IS NULL`, start, time.Now(), a.ID)
+	return err == nil
 }
 
 func SetSMTPAccountStatus(id int64, status string) error {

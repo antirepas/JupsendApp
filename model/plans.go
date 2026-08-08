@@ -210,7 +210,7 @@ func ApplyPlanLimitsToUser(userID int64, tier PlanTier) error {
 			warmup_target_daily_cap=?,
 			warmup_increment_per_day=?,
 			warmup_started_at=CASE
-				WHEN ? = 1 AND COALESCE(warmup_enabled, 0) = 0 THEN ?
+				WHEN ? = 1 AND (COALESCE(warmup_enabled, 0) = 0 OR warmup_started_at IS NULL) THEN ?
 				WHEN ? = 0 THEN NULL
 				ELSE warmup_started_at
 			END,

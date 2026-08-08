@@ -18,17 +18,31 @@ func TestClassifyOpenTooFast(t *testing.T) {
 }
 
 func TestClassifyOpenUserAgent(t *testing.T) {
-	cases := []string{
-		"Mozilla/5.0 GoogleImageProxy",
+	botCases := []string{
 		"Barracuda Sentinel",
 		"Mimecast-URL",
 		"Proofpoint URL Defense",
+		"Mozilla/5.0 (Macintosh) ApplePrivacy",
 		"",
 	}
-	for _, ua := range cases {
+	for _, ua := range botCases {
 		got := ClassifyOpen(ua, "8.8.8.8", time.Time{}, time.Now())
 		if !got.IsBot || got.Reason != "user_agent" {
 			t.Fatalf("ua=%q got %+v", ua, got)
+		}
+	}
+
+	// Gmail (and Yahoo) load tracking pixels via their image proxies — real human opens.
+	humanCases := []string{
+		"Mozilla/5.0 (Windows NT 5.1; rv:11.0) Gecko Firefox/11.0 (via ggpht.com GoogleImageProxy)",
+		"Mozilla/5.0 GoogleImageProxy",
+		"YahooMailProxy; https://help.yahoo.com/kb/yahoo-mail-proxy-SLN28749.html",
+	}
+	sent := time.Now().Add(-time.Minute)
+	for _, ua := range humanCases {
+		got := ClassifyOpen(ua, "8.8.8.8", sent, time.Now())
+		if got.IsBot {
+			t.Fatalf("webmail proxy should count as human open: ua=%q got %+v", ua, got)
 		}
 	}
 }

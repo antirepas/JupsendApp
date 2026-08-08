@@ -149,7 +149,7 @@ Full app access requires an active Whop subscription. After signup, users land o
 | `INBOXKIT_WORKSPACE_ID` | InboxKit workspace id (**required** with API key) |
 | `INBOXKIT_BASE_URL` | InboxKit API base (default `https://api.inboxkit.com/v1`) |
 | `INBOXKIT_DEFAULT_PLATFORM` | Mailbox platform — `GOOGLE` (default) |
-| `INBOXKIT_INCLUDED_MAILBOXES` | Starter mailboxes included with domain (default `1`) |
+| `INBOXKIT_INCLUDED_MAILBOXES` | Starter mailboxes included with domain (default `3`) |
 | `INBOXKIT_REGISTRANT_EMAIL` / `_NAME` / `_ORG` | Domain WHOIS contact defaults |
 
 Checkout metadata includes `user_id` so webhooks can match the app account. Email matching is a fallback only.

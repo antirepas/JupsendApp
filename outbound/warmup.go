@@ -33,6 +33,7 @@ func EffectiveDailyCap(account model.SMTPAccount) int {
 
 // EffectiveDailyCapWithInsights applies the Pro warmup schedule, then optional InboxKit clamps.
 func EffectiveDailyCapWithInsights(account model.SMTPAccount, analyticsJSON string) int {
+	_ = model.EnsureWarmupStartedAt(&account)
 	schedule := scheduleDailyCap(account)
 	cap, _ := ApplyInsightsToCap(schedule, account, analyticsJSON)
 	return cap
@@ -56,14 +57,18 @@ func scheduleDailyCap(account model.SMTPAccount) int {
 	}
 	started := account.WarmupStartedAt
 	if started == nil {
+		// Defensive: treat as day 0 so we still enforce the start cap (EnsureWarmupStartedAt should stamp).
 		return minInt(target, startCap)
 	}
 	days := int(time.Since(*started).Hours() / 24)
+	if days < 0 {
+		days = 0
+	}
 	cap := startCap + days*increment
 	if cap > target {
 		cap = target
 	}
-	if cap > account.DailyLimit && account.DailyLimit > 0 {
+	if account.DailyLimit > 0 && cap > account.DailyLimit {
 		cap = account.DailyLimit
 	}
 	return cap
@@ -75,6 +80,7 @@ func ComputeWarmupProgress(account model.SMTPAccount, hasAccount bool) WarmupPro
 	if !hasAccount {
 		return p
 	}
+	_ = model.EnsureWarmupStartedAt(&account)
 
 	p.SenderEmail = account.SenderEmail()
 	p.SendsToday = account.SendsToday

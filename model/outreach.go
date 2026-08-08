@@ -376,12 +376,31 @@ func UpdateMailboxWarmupSettings(userID, mailboxID int64, enabled bool, dailyLim
 	if err != nil || acc.UserID != userID {
 		return fmt.Errorf("smtp account not found")
 	}
+	wasEnabled := acc.WarmupEnabled
 	acc.WarmupEnabled = enabled
 	if dailyLimit > 0 {
 		acc.DailyLimit = dailyLimit
 		if enabled && acc.WarmupTargetDailyCap <= 0 {
 			acc.WarmupTargetDailyCap = dailyLimit
 		}
+	}
+	if enabled {
+		if acc.WarmupDailyCap <= 0 {
+			acc.WarmupDailyCap = DefaultWarmupDailyCap
+		}
+		if acc.WarmupIncrementPerDay <= 0 {
+			acc.WarmupIncrementPerDay = DefaultWarmupIncrementPerDay
+		}
+		if acc.WarmupTargetDailyCap <= 0 {
+			acc.WarmupTargetDailyCap = acc.DailyLimit
+		}
+		// Start (or restart) the ramp clock when turning warmup on, or when it was never stamped.
+		if !wasEnabled || acc.WarmupStartedAt == nil {
+			now := time.Now()
+			acc.WarmupStartedAt = &now
+		}
+	} else {
+		acc.WarmupStartedAt = nil
 	}
 	return UpdateSMTPAccount(acc)
 }
@@ -783,10 +802,10 @@ func AttachManualSendingMailbox(userID int64, email, fromName, smtpHost, smtpPor
 				name=?, smtp_host=?, smtp_port=?, smtp_user=?, smtp_password=?, from_email=?, from_name=?,
 				imap_host=?, imap_port=?, imap_user=?, imap_password=?,
 				status='active', auth_type='', is_default=?, mailbox_source=?, daily_limit=?,
-				warmup_enabled=1, updated_at=?
+				warmup_enabled=1, warmup_started_at=COALESCE(warmup_started_at, ?), updated_at=?
 			WHERE id=?
 		`, email, smtpHost, smtpPort, username, encPass, email, fromName,
-			imapHost, imapPort, username, encPass, def, MailboxSourceManual, daily, now, existingID)
+			imapHost, imapPort, username, encPass, def, MailboxSourceManual, daily, now, now, existingID)
 		if err != nil {
 			return 0, err
 		}
@@ -799,12 +818,12 @@ func AttachManualSendingMailbox(userID int64, email, fromName, smtpHost, smtpPor
 		INSERT INTO smtp_accounts (
 			user_id, name, smtp_host, smtp_port, smtp_user, smtp_password, from_email, from_name,
 			imap_host, imap_port, imap_user, imap_password,
-			status, daily_limit, per_minute_limit, min_seconds_between_sends, warmup_enabled,
+			status, daily_limit, per_minute_limit, min_seconds_between_sends, warmup_enabled, warmup_started_at,
 			auth_type, is_default, mailbox_source, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, 2, 30, 1, '', ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, 2, 30, 1, ?, '', ?, ?, ?, ?)
 		RETURNING id
 	`, userID, email, smtpHost, smtpPort, username, encPass, email, fromName,
-		imapHost, imapPort, username, encPass, daily, def, MailboxSourceManual, now, now).Scan(&id)
+		imapHost, imapPort, username, encPass, daily, now, def, MailboxSourceManual, now, now).Scan(&id)
 	if err != nil {
 		return 0, err
 	}

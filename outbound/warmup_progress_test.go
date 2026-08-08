@@ -67,6 +67,36 @@ func TestComputeWarmupProgressMidRamp(t *testing.T) {
 	}
 }
 
+func TestScheduleDailyCapRampsWithStartedAt(t *testing.T) {
+	start := time.Now().Add(-3 * 24 * time.Hour)
+	acc := model.SMTPAccount{
+		WarmupEnabled:         true,
+		WarmupDailyCap:        20,
+		WarmupTargetDailyCap:  100,
+		WarmupIncrementPerDay: 20,
+		DailyLimit:            250,
+		WarmupStartedAt:       &start,
+	}
+	cap := scheduleDailyCap(acc)
+	if cap != 80 { // 20 + 3*20
+		t.Fatalf("cap=%d want 80", cap)
+	}
+}
+
+func TestScheduleDailyCapNilStartedStaysAtStart(t *testing.T) {
+	acc := model.SMTPAccount{
+		WarmupEnabled:         true,
+		WarmupDailyCap:        20,
+		WarmupTargetDailyCap:  100,
+		WarmupIncrementPerDay: 20,
+		DailyLimit:            250,
+	}
+	cap := scheduleDailyCap(acc)
+	if cap != 20 {
+		t.Fatalf("cap=%d want 20", cap)
+	}
+}
+
 func mathAbs(f float64) float64 {
 	if f < 0 {
 		return -f

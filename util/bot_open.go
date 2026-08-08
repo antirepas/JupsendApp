@@ -16,8 +16,8 @@ type OpenClassification struct {
 }
 
 var botUserAgentNeedles = []string{
-	"googleimageproxy",
-	"ggpht.com",
+	// NOTE: Do NOT list Gmail/Yahoo image proxies (GoogleImageProxy, ggpht.com, YahooMailProxy).
+	// Those UAs are how real humans load pixels in webmail — treating them as bots zeros open rates.
 	"appleprivacy",
 	"privacyprotection",
 	"barracuda",
@@ -39,8 +39,6 @@ var botUserAgentNeedles = []string{
 	"safelinks",
 	"protection.outlook",
 	"microsoft office excel", // link preview bots often use Office UAs oddly; keep narrow
-	"yahoo mail proxy",
-	"yahoomailproxy",
 	"facebookexternalhit",
 	"twitterbot",
 	"linkedinbot",

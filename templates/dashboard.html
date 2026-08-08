@@ -10,38 +10,12 @@
 {{if .success}}<div class="alert-success mb-6">{{.success}}</div>{{end}}
 {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
 
-{{if .showWizardBanner}}
-<div class="dash-setup-strip mb-6">
-    <div>
-        <p class="dash-setup-strip-title">Learn how to run outreach in jupsend</p>
-        <p class="dash-setup-strip-sub">Optional playbook: mailbox → contacts → templates → workflows → campaigns → replies. Skip anytime — reopen from Help.</p>
-    </div>
-    <div class="flex flex-wrap gap-2 shrink-0">
-        <a href="/guides/getting-started" class="btn-primary">Start guide</a>
-        <form method="POST" action="/guides/wizard/dismiss" class="inline">
-            <input type="hidden" name="next" value="/">
-            <button type="submit" class="btn-secondary">Skip</button>
-        </form>
-    </div>
-</div>
-{{end}}
-
 {{if .isEmpty}}
-{{if gt .stepsLeft 0}}
-<div class="dash-setup-strip mb-6">
+{{if eq .stepsLeft 0}}
+<div class="mb-6 flex flex-wrap items-center justify-between gap-3">
     <div>
-        <p class="dash-setup-strip-title">
-            {{if eq .stepsLeft 1}}You’re 1 step from first send{{else}}You’re {{.stepsLeft}} steps from first send{{end}}
-        </p>
-        <p class="dash-setup-strip-sub">Finish setup, then launch — opens and clicks will show here.</p>
-    </div>
-    <a href="{{.nextSetupHref}}" class="btn-primary shrink-0">Continue setup</a>
-</div>
-{{else}}
-<div class="dash-setup-strip mb-6">
-    <div>
-        <p class="dash-setup-strip-title">Ready to send</p>
-        <p class="dash-setup-strip-sub">Everything’s in place. Launch your first campaign to unlock live analytics.</p>
+        <h2 class="text-xl font-bold text-charcoal">Ready to send</h2>
+        <p class="text-sm text-gray-500 mt-0.5">Everything’s in place. Launch your first campaign to unlock live analytics.</p>
     </div>
     <a href="/campaigns/new" class="btn-primary shrink-0">Create campaign</a>
 </div>
@@ -356,6 +330,38 @@
 })();
 </script>
 {{end}}
+
+{{if or .showWizardBanner (and .isEmpty (gt .stepsLeft 0))}}
+<section class="dash-bottom-hints" aria-label="Setup tips">
+  {{if and .isEmpty (gt .stepsLeft 0)}}
+  <div class="dash-bottom-hint">
+    <div class="dash-bottom-hint-copy">
+      <p class="dash-bottom-hint-title">
+        {{if eq .stepsLeft 1}}One step left before your first send{{else}}{{.stepsLeft}} steps left before your first send{{end}}
+      </p>
+      <p class="dash-bottom-hint-sub">Finish setup, then launch — opens and clicks will show up here.</p>
+    </div>
+    <a href="{{.nextSetupHref}}" class="dash-bottom-hint-link">Continue setup →</a>
+  </div>
+  {{end}}
+  {{if .showWizardBanner}}
+  <div class="dash-bottom-hint">
+    <div class="dash-bottom-hint-copy">
+      <p class="dash-bottom-hint-title">Optional: how to run outreach in jupsend</p>
+      <p class="dash-bottom-hint-sub">Mailbox → contacts → templates → workflows → campaigns → replies. Reopen anytime from Help.</p>
+    </div>
+    <div class="dash-bottom-hint-actions">
+      <a href="/guides/getting-started" class="dash-bottom-hint-link">Read guide →</a>
+      <form method="POST" action="/guides/wizard/dismiss" class="inline">
+        <input type="hidden" name="next" value="/">
+        <button type="submit" class="dash-bottom-hint-dismiss">Dismiss</button>
+      </form>
+    </div>
+  </div>
+  {{end}}
+</section>
+{{end}}
+
 {{template "page_playbook" .}}
 </div>
 </main>

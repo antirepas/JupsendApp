@@ -99,7 +99,7 @@ func reloadFromEnv() {
 	InboxKitBaseURL = strings.TrimRight(strings.TrimSpace(envOr("INBOXKIT_BASE_URL", "https://api.inboxkit.com/v1")), "/")
 	InboxKitRedirectURL = strings.TrimSpace(envOr("INBOXKIT_REDIRECT_URL", BaseURL))
 	InboxKitPlatform = strings.ToUpper(strings.TrimSpace(envOr("INBOXKIT_DEFAULT_PLATFORM", "GOOGLE")))
-	InboxKitIncludedMBs = envOr("INBOXKIT_INCLUDED_MAILBOXES", "1")
+	InboxKitIncludedMBs = envOr("INBOXKIT_INCLUDED_MAILBOXES", "3")
 	InboxKitRegistrantEmail = strings.TrimSpace(os.Getenv("INBOXKIT_REGISTRANT_EMAIL"))
 	InboxKitRegistrantName = strings.TrimSpace(os.Getenv("INBOXKIT_REGISTRANT_NAME"))
 	InboxKitRegistrantOrg = strings.TrimSpace(os.Getenv("INBOXKIT_REGISTRANT_ORG"))

@@ -6,6 +6,8 @@ func runAlterSchema() {
 	alters := []string{
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_status TEXT NOT NULL DEFAULT 'none'`,
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS wizard_dismissed_at TIMESTAMPTZ`,
+		`UPDATE smtp_accounts SET warmup_started_at = COALESCE(warmup_started_at, created_at, CURRENT_TIMESTAMP)
+		 WHERE warmup_enabled = 1 AND warmup_started_at IS NULL`,
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_tier TEXT NOT NULL DEFAULT 'free'`,
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS whop_membership_id TEXT DEFAULT ''`,
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS whop_member_id TEXT DEFAULT ''`,
