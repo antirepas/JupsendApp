@@ -25,9 +25,14 @@
   </div>
 
   {{if .success}}<div class="alert-success mb-6">{{.success}}</div>{{end}}
-  {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
+  {{if .error}}
+  <div class="alert-error mb-6">
+    <p>{{.error}}</p>
+    {{if .supportEmail}}<p class="text-xs mt-2">Need help? Email <a class="underline font-medium" href="mailto:{{.supportEmail}}">{{.supportEmail}}</a></p>{{end}}
+  </div>
+  {{end}}
   {{if and .isPro (not .inboxkitOK)}}
-  <div class="alert-error mb-6">InboxKit is not configured — domain search and provisioning are unavailable. You can still attach SMTP/IMAP via Add external.</div>
+  <div class="alert-error mb-6">InboxKit is not configured — domain search and provisioning are unavailable. You can still attach SMTP/IMAP via Add external.{{if .supportEmail}} Email <a class="underline font-medium" href="mailto:{{.supportEmail}}">{{.supportEmail}}</a> if you need this fixed.{{end}}</div>
   {{end}}
 
   {{if not .isPro}}

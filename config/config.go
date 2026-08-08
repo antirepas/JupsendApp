@@ -208,3 +208,23 @@ func OAuthTokenKey() string {
 	}
 	return "dev-insecure-token-key"
 }
+
+// SupportEmail is shown on user-facing domain/mailbox errors so people can reach you directly.
+const SupportEmail = "akupstas9@gmail.com"
+
+// SupportContactHint is a short line to append to error messages.
+func SupportContactHint() string {
+	return "If this keeps happening, email " + SupportEmail
+}
+
+// WithSupportContact appends the support email hint unless it is already present.
+func WithSupportContact(msg string) string {
+	msg = strings.TrimSpace(msg)
+	if msg == "" {
+		return SupportContactHint()
+	}
+	if strings.Contains(strings.ToLower(msg), strings.ToLower(SupportEmail)) {
+		return msg
+	}
+	return msg + " — " + SupportContactHint()
+}

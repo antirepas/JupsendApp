@@ -26,8 +26,23 @@
   const EDGE_TYPE_LABELS = {
     default: 'Then → next',
     true: 'If yes',
-    false: 'If no'
+    false: 'If no',
+    hot: 'Hot lead',
+    warm: 'Warm lead',
+    cold: 'Cold lead'
   };
+
+  function isEngagementCondition(type) {
+    return type === 'condition_engagement';
+  }
+
+  function isTemperatureCondition(type) {
+    return type === 'condition_temperature';
+  }
+
+  function isBranchCondition(type) {
+    return isEngagementCondition(type) || isTemperatureCondition(type);
+  }
 
   function uid() {
     return 'n-' + Math.random().toString(36).slice(2, 10);
@@ -44,6 +59,7 @@
     if (type === 'action_send_email') return {};
     if (type === 'action_wait') return { duration_seconds: 259200 };
     if (type === 'condition_engagement') return { predicate: 'has_opened', priority: 50, params: { email_send_scope: 'last_in_workflow' } };
+    if (type === 'condition_temperature') return {};
     return {};
   }
 
@@ -158,7 +174,16 @@
 
   function pickEdgeTypeForSource(sourceKey, preferred) {
     const src = getNode(sourceKey);
-    if (!src || src.node_type !== 'condition_engagement') return 'default';
+    if (!src) return 'default';
+    if (isTemperatureCondition(src.node_type)) {
+      if (preferred && (preferred === 'hot' || preferred === 'warm' || preferred === 'cold')) return preferred;
+      const used = new Set(edges.filter(e => e.source_node_key === sourceKey).map(e => e.edge_type));
+      for (const t of ['hot', 'warm', 'cold']) {
+        if (!used.has(t)) return t;
+      }
+      return 'cold';
+    }
+    if (!isEngagementCondition(src.node_type)) return 'default';
     if (preferred && preferred !== 'default') return preferred;
     const hasTrue = edges.some(e => e.source_node_key === sourceKey && e.edge_type === 'true');
     return hasTrue ? 'false' : 'true';
@@ -394,15 +419,25 @@
       g.appendChild(visPath);
       g.appendChild(deleteBtn);
 
-      if (e.edge_type === 'true' || e.edge_type === 'false') {
+      if (e.edge_type === 'true' || e.edge_type === 'false' || e.edge_type === 'hot' || e.edge_type === 'warm' || e.edge_type === 'cold') {
         const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        label.setAttribute('x', (from.x + to.x) / 2 + (e.edge_type === 'true' ? -18 : 18));
-        label.setAttribute('y', (from.y + to.y) / 2);
-        label.setAttribute('fill', e.edge_type === 'true' ? '#16a34a' : '#dc2626');
+        const midX = (from.x + to.x) / 2;
+        const midY = (from.y + to.y) / 2;
+        let dx = 0;
+        let color = '#64748b';
+        let text = e.edge_type;
+        if (e.edge_type === 'true') { dx = -18; color = '#16a34a'; text = 'yes'; }
+        else if (e.edge_type === 'false') { dx = 18; color = '#dc2626'; text = 'no'; }
+        else if (e.edge_type === 'hot') { dx = -24; color = '#dc2626'; text = 'hot'; }
+        else if (e.edge_type === 'warm') { dx = 0; color = '#d97706'; text = 'warm'; }
+        else if (e.edge_type === 'cold') { dx = 24; color = '#2563eb'; text = 'cold'; }
+        label.setAttribute('x', midX + dx);
+        label.setAttribute('y', midY);
+        label.setAttribute('fill', color);
         label.setAttribute('font-size', '11');
         label.setAttribute('font-weight', '600');
         label.style.pointerEvents = 'none';
-        label.textContent = e.edge_type === 'true' ? 'yes' : 'no';
+        label.textContent = text;
         g.appendChild(label);
       }
 
@@ -530,9 +565,21 @@
       return false;
     }
     const src = getNode(from);
-    if (src && src.node_type !== 'condition_engagement' && type !== 'default') {
-      showMsg('Yes/No branches are only used after a Condition node', false);
-      return false;
+    if (src) {
+      if (isTemperatureCondition(src.node_type)) {
+        if (type !== 'hot' && type !== 'warm' && type !== 'cold') {
+          showMsg('Temperature branches must be Hot, Warm, or Cold', false);
+          return false;
+        }
+      } else if (isEngagementCondition(src.node_type)) {
+        if (type !== 'true' && type !== 'false' && type !== 'default') {
+          showMsg('Yes/No branches are only used after a Condition node', false);
+          return false;
+        }
+      } else if (type !== 'default') {
+        showMsg('Yes/No and temperature branches are only used after condition nodes', false);
+        return false;
+      }
     }
     const dup = edges.findIndex(e =>
       e.source_node_key === from && e.target_node_key === to && e.edge_type === type
@@ -638,6 +685,9 @@
       } else if (n.node_type === 'condition_engagement') {
         subtitle = `<p class="text-xs text-amber-700 mt-0.5 font-medium">re: ${escapeHtml(conditionEmailRefLabel(n))}</p>
           <p class="text-xs text-slate-400">${escapeHtml(conditionPredicateSummary(n))}</p>`;
+      } else if (n.node_type === 'condition_temperature') {
+        subtitle = `<p class="text-xs text-amber-700 mt-0.5 font-medium">Campaign lead temperature</p>
+          <p class="text-xs text-slate-400">Hot / warm / cold</p>`;
       }
       el.innerHTML = `
         <div class="wf-port wf-port-in" title="Connect here (input)"></div>
@@ -890,6 +940,11 @@
         render();
       };
     }
+    if (n.node_type === 'condition_temperature') {
+      fields.innerHTML += `
+        <p class="text-sm text-slate-600 mt-3">Uses this campaign’s lead temperature rules (hot / warm / cold). Connect three outgoing edges: Hot, Warm, and Cold.</p>
+        <p class="text-xs text-slate-500 mt-2">Edit thresholds on the campaign page under Lead temperature. Counts only engagement from this campaign.</p>`;
+    }
     document.getElementById('prop-label').onchange = e => { n.label = e.target.value; render(); };
   }
 
@@ -964,7 +1019,12 @@
 
   edgeFrom.addEventListener('change', () => {
     const src = getNode(edgeFrom.value);
-    if (src && src.node_type !== 'condition_engagement' && edgeTypeSel.value !== 'default') {
+    if (!src) return;
+    if (isTemperatureCondition(src.node_type)) {
+      if (edgeTypeSel.value !== 'hot' && edgeTypeSel.value !== 'warm' && edgeTypeSel.value !== 'cold') {
+        edgeTypeSel.value = 'hot';
+      }
+    } else if (!isEngagementCondition(src.node_type) && edgeTypeSel.value !== 'default') {
       edgeTypeSel.value = 'default';
     }
   });

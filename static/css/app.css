@@ -1394,6 +1394,24 @@ g.wf-edge-hovering .wf-edge-delete-btn {
     border-color: #fecaca;
 }
 
+.wf-fork-badge--hot {
+    color: #b91c1c;
+    background: #fef2f2;
+    border-color: #fecaca;
+}
+
+.wf-fork-badge--warm {
+    color: #b45309;
+    background: #fffbeb;
+    border-color: #fde68a;
+}
+
+.wf-fork-badge--cold {
+    color: #1d4ed8;
+    background: #eff6ff;
+    border-color: #bfdbfe;
+}
+
 .wf-graph-template-readonly--ab {
     background: #FAF5FF;
     border: 1px solid #EDE9FE;

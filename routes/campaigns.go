@@ -54,10 +54,10 @@ func NewCampaignPage(ctx *gin.Context) {
 		})
 	}
 	ctx.HTML(http.StatusOK, "campaigns_form.html", gin.H{
-		"title":           "New Campaign",
-		"active":          "campaigns",
-		"templates":       templates,
-		"workflows":       workflowOptions,
+		"title":     "New Campaign",
+		"active":    "campaigns",
+		"templates": templates,
+		"workflows": workflowOptions,
 	})
 }
 
@@ -124,8 +124,45 @@ func CreateCampaign(ctx *gin.Context) {
 	if err := model.SetCampaignOpenTracking(id, userID, openTracking); err != nil {
 		log.Printf("open tracking setting: %v", err)
 	}
+	tempRules := parseTemperatureRulesFromForm(ctx)
+	if err := model.SetCampaignTemperatureRules(id, userID, tempRules); err != nil {
+		log.Printf("temperature rules: %v", err)
+	}
 
 	ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(id, 10)+"?success=Campaign+created")
+}
+
+func parseTemperatureRulesFromForm(ctx *gin.Context) model.LeadTemperatureRules {
+	warmOpens, _ := strconv.Atoi(strings.TrimSpace(ctx.PostForm("temp_warm_opens")))
+	warmClicks, _ := strconv.Atoi(strings.TrimSpace(ctx.PostForm("temp_warm_clicks")))
+	hotOpens, _ := strconv.Atoi(strings.TrimSpace(ctx.PostForm("temp_hot_opens")))
+	hotClicks, _ := strconv.Atoi(strings.TrimSpace(ctx.PostForm("temp_hot_clicks")))
+	replyIsHot := ctx.PostForm("temp_reply_is_hot") == "1"
+	// Empty create form fields: Atoi of "" is 0 — treat all-zero without reply as defaults.
+	if warmOpens == 0 && warmClicks == 0 && hotOpens == 0 && hotClicks == 0 && !replyIsHot &&
+		ctx.PostForm("temp_warm_opens") == "" {
+		return model.DefaultLeadTemperatureRules()
+	}
+	return model.LeadTemperatureRulesFromForm(warmOpens, warmClicks, hotOpens, hotClicks, replyIsHot)
+}
+
+func SaveCampaignTemperatureRules(ctx *gin.Context) {
+	userID := mustUserID(ctx)
+	campaignID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
+	if err != nil {
+		ctx.Redirect(http.StatusFound, "/campaigns?error=Invalid+campaign")
+		return
+	}
+	if _, err := model.GetCampaignForUser(campaignID, userID); err != nil {
+		ctx.Redirect(http.StatusFound, "/campaigns?error=Campaign+not+found")
+		return
+	}
+	rules := parseTemperatureRulesFromForm(ctx)
+	if err := model.SetCampaignTemperatureRules(campaignID, userID, rules); err != nil {
+		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error="+url.QueryEscape(err.Error()))
+		return
+	}
+	ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?success="+url.QueryEscape("Lead temperature rules saved"))
 }
 
 func parseStepTemplatesFromForm(ctx *gin.Context) map[string]int64 {
@@ -258,27 +295,30 @@ func CampaignDetailPage(ctx *gin.Context) {
 
 	pickerPage := pageExtras.PickerPage
 	pageData := gin.H{
-		"title":             detail.Name,
-		"active":            "campaigns",
-		"campaign":          detail,
-		"pickerContacts":    pickerPage.Items,
-		"pickerPage":        pickerPage,
-		"pickerQ":           pickerFilter.Query,
-		"pickerList":        listID,
-		"pickerEngagement":  pickerFilter.Engagement,
-		"pickerSort":        pickerFilter.Sort,
-		"pickerHasPrev":     pickerPage.Page > 1,
-		"pickerHasNext":     pickerPage.Page < pickerPage.TotalPages,
-		"pickerPrevPage":    pickerPage.Page - 1,
-		"pickerNextPage":    pickerPage.Page + 1,
-		"addTab":            addTab,
-		"contactLists":      pageExtras.ContactLists,
-		"linkedListID":      detail.ContactListID,
-		"scheduledAtLocal":  scheduledAtLocal,
-		"success":           ctx.Query("success"),
-		"error":             ctx.Query("error"),
-		"isWorkflow":        isWorkflow,
-		"canStop":           canStop,
+		"title":               detail.Name,
+		"active":              "campaigns",
+		"campaign":            detail,
+		"pickerContacts":      pickerPage.Items,
+		"pickerPage":          pickerPage,
+		"pickerQ":             pickerFilter.Query,
+		"pickerList":          listID,
+		"pickerEngagement":    pickerFilter.Engagement,
+		"pickerSort":          pickerFilter.Sort,
+		"pickerHasPrev":       pickerPage.Page > 1,
+		"pickerHasNext":       pickerPage.Page < pickerPage.TotalPages,
+		"pickerPrevPage":      pickerPage.Page - 1,
+		"pickerNextPage":      pickerPage.Page + 1,
+		"addTab":              addTab,
+		"contactLists":        pageExtras.ContactLists,
+		"linkedListID":        detail.ContactListID,
+		"scheduledAtLocal":    scheduledAtLocal,
+		"success":             ctx.Query("success"),
+		"error":               ctx.Query("error"),
+		"isWorkflow":          isWorkflow,
+		"canStop":             canStop,
+		"temperatureRules":    detail.TemperatureRules,
+		"temperaturePreview":  model.PreviewLeadTemperatureRules(detail.TemperatureRules),
+		"openTrackingEnabled": detail.OpenTrackingEnabled,
 	}
 
 	if isWorkflow {

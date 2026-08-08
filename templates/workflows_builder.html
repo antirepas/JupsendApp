@@ -44,6 +44,7 @@
             <div class="palette-item palette-action" draggable="true" data-type="action_send_email" data-label="Send Email">Action: Send Email</div>
             <div class="palette-item palette-action" draggable="true" data-type="action_wait" data-label="Wait">Action: Wait</div>
             <div class="palette-item palette-condition" draggable="true" data-type="condition_engagement" data-label="Condition">Condition</div>
+            <div class="palette-item palette-condition" draggable="true" data-type="condition_temperature" data-label="Lead temperature">Lead temperature</div>
             <div class="palette-item palette-end" draggable="true" data-type="action_end" data-label="End">End</div>
         </div>
         <div id="node-props" class="mt-6 hidden">
@@ -77,8 +78,11 @@
                     <option value="default">Then → next step</option>
                     <option value="true">If yes (condition met)</option>
                     <option value="false">If no (condition not met)</option>
+                    <option value="hot">Hot lead</option>
+                    <option value="warm">Warm lead</option>
+                    <option value="cold">Cold lead</option>
                 </select>
-                <p class="form-hint">Use yes/no only after a Condition node</p>
+                <p class="form-hint">Yes/no after Condition; hot/warm/cold after Lead temperature</p>
             </div>
             <div>
                 <label class="form-label" for="edge-to">Goes to</label>

@@ -26,6 +26,7 @@ type Campaign struct {
 	ExperimentHypothesis string
 	SuccessMetric        string
 	OpenTrackingEnabled  bool
+	TemperatureRulesJSON string
 }
 
 type CampaignListItem struct {
@@ -64,6 +65,8 @@ type CampaignDetail struct {
 	ContactListID        int64
 	ExperimentVariable   string
 	ExperimentHypothesis string
+	OpenTrackingEnabled  bool
+	TemperatureRules     LeadTemperatureRules
 	VariantA             VariantStats
 	VariantB             VariantStats
 }
@@ -212,7 +215,7 @@ func GetCampaign(id int64) (Campaign, error) {
 			COALESCE(execution_mode, 'bulk'), COALESCE(workflow_version_id, 0), COALESCE(is_sending, 0),
 			COALESCE(contact_list_id, 0),
 			COALESCE(experiment_variable, ''), COALESCE(experiment_hypothesis, ''), COALESCE(success_metric, 'reply'),
-			COALESCE(open_tracking_enabled, TRUE)
+			COALESCE(open_tracking_enabled, TRUE), COALESCE(temperature_rules_json, '')
 		FROM campaigns WHERE id = ?
 	`, id)
 	return scanCampaignRow(row)
@@ -224,7 +227,7 @@ func GetCampaignForUser(id, userID int64) (Campaign, error) {
 			COALESCE(execution_mode, 'bulk'), COALESCE(workflow_version_id, 0), COALESCE(is_sending, 0),
 			COALESCE(contact_list_id, 0),
 			COALESCE(experiment_variable, ''), COALESCE(experiment_hypothesis, ''), COALESCE(success_metric, 'reply'),
-			COALESCE(open_tracking_enabled, TRUE)
+			COALESCE(open_tracking_enabled, TRUE), COALESCE(temperature_rules_json, '')
 		FROM campaigns WHERE id = ? AND user_id = ?
 	`, id, userID)
 	return scanCampaignRow(row)
@@ -238,7 +241,8 @@ func scanCampaignRow(row interface{ Scan(...interface{}) error }) (Campaign, err
 	var listID sql.NullInt64
 	err := row.Scan(&c.ID, &c.UserID, &c.Name, &c.TemplateAID, &bID, &c.Status, &c.CreatedAt, &scheduled,
 		&c.ExecutionMode, &c.WorkflowVersionID, &isSending, &listID,
-		&c.ExperimentVariable, &c.ExperimentHypothesis, &c.SuccessMetric, &c.OpenTrackingEnabled)
+		&c.ExperimentVariable, &c.ExperimentHypothesis, &c.SuccessMetric, &c.OpenTrackingEnabled,
+		&c.TemperatureRulesJSON)
 	if err != nil {
 		return Campaign{}, err
 	}
@@ -341,6 +345,8 @@ func GetCampaignDetail(id, userID int64) (CampaignDetail, error) {
 		ContactListID:        c.ContactListID,
 		ExperimentVariable:   c.ExperimentVariable,
 		ExperimentHypothesis: c.ExperimentHypothesis,
+		OpenTrackingEnabled:  c.OpenTrackingEnabled,
+		TemperatureRules:     ParseLeadTemperatureRulesJSON(c.TemperatureRulesJSON),
 		VariantA:             variantA,
 		VariantB:             variantB,
 	}

@@ -24,6 +24,7 @@ func init() {
 	Register(&WaitExecutor{})
 	Register(&EndExecutor{})
 	Register(&ConditionExecutor{})
+	Register(&TemperatureConditionExecutor{})
 }
 
 type TriggerExecutor struct{}
@@ -151,4 +152,29 @@ func (ConditionExecutor) Execute(ctx ExecutionContext) (NodeResult, error) {
 		return NodeResult{NextEdgeType: "true"}, nil
 	}
 	return NodeResult{NextEdgeType: "false"}, nil
+}
+
+// TemperatureConditionExecutor branches on campaign lead temperature (hot/warm/cold).
+type TemperatureConditionExecutor struct{}
+
+func (TemperatureConditionExecutor) Type() string { return "condition_temperature" }
+
+func (TemperatureConditionExecutor) Execute(ctx ExecutionContext) (NodeResult, error) {
+	campaignID := int64(0)
+	if ctx.Instance.CampaignID != nil {
+		campaignID = *ctx.Instance.CampaignID
+	}
+	if campaignID <= 0 {
+		return NodeResult{NextEdgeType: model.LeadTemperatureCold}, nil
+	}
+	tier, err := model.ResolveLeadTemperature(campaignID, ctx.Instance.ContactID)
+	if err != nil {
+		return NodeResult{Failed: true, ErrorMessage: err.Error()}, nil
+	}
+	switch tier {
+	case model.LeadTemperatureHot, model.LeadTemperatureWarm, model.LeadTemperatureCold:
+		return NodeResult{NextEdgeType: tier}, nil
+	default:
+		return NodeResult{NextEdgeType: model.LeadTemperatureCold}, nil
+	}
 }

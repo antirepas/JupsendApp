@@ -14,11 +14,23 @@
     First and last name become the <strong>From</strong> name recipients see — enter real names.
   </p>
 
-  {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
+  {{if .error}}
+  <div class="alert-error mb-6">
+    <p>{{.error}}</p>
+    {{if .supportEmail}}<p class="text-xs mt-2">Need help? Email <a class="underline font-medium" href="mailto:{{.supportEmail}}">{{.supportEmail}}</a></p>{{end}}
+  </div>
+  {{end}}
   {{if .success}}<div class="alert-success mb-6">{{.success}}</div>{{end}}
 
   {{if not .inboxkitOK}}
-  <div class="alert-error mb-6">{{if .inboxkitHint}}{{.inboxkitHint}}{{else}}InboxKit is not configured on this server. Set INBOXKIT_API_KEY and INBOXKIT_WORKSPACE_ID.{{end}} You can still attach SMTP/IMAP credentials under Mailboxes.</div>
+  <div class="alert-error mb-6">{{if .inboxkitHint}}{{.inboxkitHint}}{{else}}InboxKit is not configured on this server. Set INBOXKIT_API_KEY and INBOXKIT_WORKSPACE_ID.{{end}} You can still attach SMTP/IMAP credentials under Mailboxes.{{if .supportEmail}} Email <a class="underline font-medium" href="mailto:{{.supportEmail}}">{{.supportEmail}}</a> if you need this fixed.{{end}}</div>
+  {{end}}
+
+  {{if and (le .includedLeft 0) (not .pendingDomain)}}
+  <div class="alert-error mb-6">
+    Your included domain slot is already used. Continue setup from Mailboxes, or buy an extra domain there.
+    {{if .supportEmail}} Questions? Email <a class="underline font-medium" href="mailto:{{.supportEmail}}">{{.supportEmail}}</a>.{{end}}
+  </div>
   {{end}}
 
   {{if .pendingDomain}}
@@ -37,7 +49,7 @@
     <p class="text-sm text-gray-600">Enter your domain and the people behind each mailbox. We’ll provision seats; you’ll point nameservers at InboxKit (no domain purchase). Use a dedicated outreach domain with <strong>no existing DNS records</strong> (no website, MX, or other records) — InboxKit will manage DNS after you switch nameservers.</p>
     <div>
       <label class="form-label">Domain</label>
-      <input name="domain" class="form-input" value="{{.connectDomain}}" placeholder="yourcompany.com" required {{if not .inboxkitOK}}disabled{{end}}>
+      <input name="domain" class="form-input" value="{{.connectDomain}}" placeholder="yourcompany.com" required {{if or (not .inboxkitOK) (le .includedLeft 0)}}disabled{{end}}>
     </div>
     <div class="space-y-4">
       {{range $i, $n := .mailboxSlots}}
@@ -46,32 +58,32 @@
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
             <label class="form-label">First name</label>
-            <input name="first_name_{{$n}}" class="form-input" {{if eq $n 1}}required{{end}} placeholder="First" {{if not $.inboxkitOK}}disabled{{end}}>
+            <input name="first_name_{{$n}}" class="form-input" {{if eq $n 1}}required{{end}} placeholder="First" {{if or (not $.inboxkitOK) (le $.includedLeft 0)}}disabled{{end}}>
           </div>
           <div>
             <label class="form-label">Last name</label>
-            <input name="last_name_{{$n}}" class="form-input" {{if eq $n 1}}required{{end}} placeholder="Last" {{if not $.inboxkitOK}}disabled{{end}}>
+            <input name="last_name_{{$n}}" class="form-input" {{if eq $n 1}}required{{end}} placeholder="Last" {{if or (not $.inboxkitOK) (le $.includedLeft 0)}}disabled{{end}}>
           </div>
           <div>
             <label class="form-label">Email local part</label>
-            <input name="local_{{$n}}" class="form-input" {{if eq $n 1}}required{{end}} placeholder="name" {{if not $.inboxkitOK}}disabled{{end}}>
+            <input name="local_{{$n}}" class="form-input" {{if eq $n 1}}required{{end}} placeholder="name" {{if or (not $.inboxkitOK) (le $.includedLeft 0)}}disabled{{end}}>
           </div>
         </div>
         {{if eq $n 1}}<p class="text-xs text-gray-500">Sends as First Last &lt;local@domain&gt;</p>{{end}}
       </div>
       {{end}}
     </div>
-    <button type="submit" class="btn-primary" {{if not .inboxkitOK}}disabled{{end}}>Connect domain</button>
+    <button type="submit" class="btn-primary" {{if or (not .inboxkitOK) (le .includedLeft 0)}}disabled{{end}}>Connect domain</button>
   </form>
 
   <form method="POST" action="/onboarding/domain/search" class="card space-y-4 mb-6">
     <h3 class="card-title">Or find a new domain</h3>
     <div>
       <label class="form-label">Company or keyword</label>
-      <input name="q" class="form-input" value="{{.query}}" placeholder="acme, or acme.com" {{if not .inboxkitOK}}disabled{{end}}>
+      <input name="q" class="form-input" value="{{.query}}" placeholder="acme, or acme.com" {{if or (not .inboxkitOK) (le .includedLeft 0)}}disabled{{end}}>
       <p class="form-hint mt-1">Available endings: .com, .net, .org, .shop</p>
     </div>
-    <button type="submit" class="btn-secondary" {{if not .inboxkitOK}}disabled{{end}}>Search domains</button>
+    <button type="submit" class="btn-secondary" {{if or (not .inboxkitOK) (le .includedLeft 0)}}disabled{{end}}>Search domains</button>
   </form>
 
   {{if .results}}

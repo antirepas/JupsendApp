@@ -22,6 +22,8 @@ func NodeLabelMapForVersion(versionID int64) map[string]string {
 			labels[n.NodeKey] = "Wait"
 		case "condition_engagement":
 			labels[n.NodeKey] = "Condition"
+		case "condition_temperature":
+			labels[n.NodeKey] = "Lead temperature"
 		case "action_end":
 			labels[n.NodeKey] = "End"
 		case "trigger_campaign_started":

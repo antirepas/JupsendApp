@@ -8,16 +8,16 @@ import (
 )
 
 type CampaignWorkflowOverview struct {
-	TotalContacts  int
-	NotStarted     int
-	InProgress     int
-	Completed      int
-	Cancelled      int
-	NotStartedPct  float64
-	InProgressPct  float64
-	CompletedPct   float64
-	CancelledPct   float64
-	Steps          []CampaignWorkflowStepStat
+	TotalContacts int
+	NotStarted    int
+	InProgress    int
+	Completed     int
+	Cancelled     int
+	NotStartedPct float64
+	InProgressPct float64
+	CompletedPct  float64
+	CancelledPct  float64
+	Steps         []CampaignWorkflowStepStat
 }
 
 type CampaignWorkflowStepStat struct {
@@ -131,6 +131,8 @@ func describeWorkflowStep(n WorkflowNode, graph WorkflowGraph) string {
 		return fmt.Sprintf("Pauses for %d days", days)
 	case "condition_engagement":
 		return DescribeConditionEngagement(ParseNodeConfig(n.ConfigJSON), graph)
+	case "condition_temperature":
+		return "Branches by campaign lead temperature (hot / warm / cold)"
 	case "action_end":
 		return "Workflow completes for this contact"
 	default:
@@ -490,6 +492,12 @@ func outgoingDisplayEdges(graph WorkflowGraph, sourceKey, sourceNodeType string)
 			}
 			continue
 		}
+		if nodeType == "condition_temperature" {
+			if e.EdgeType == "hot" || e.EdgeType == "warm" || e.EdgeType == "cold" {
+				edges = append(edges, e)
+			}
+			continue
+		}
 		if e.EdgeType == "default" {
 			edges = append(edges, e)
 		}
@@ -497,12 +505,14 @@ func outgoingDisplayEdges(graph WorkflowGraph, sourceKey, sourceNodeType string)
 	sort.Slice(edges, func(i, j int) bool {
 		order := func(t string) int {
 			switch t {
-			case "true":
+			case "true", "hot":
 				return 0
-			case "false":
+			case "warm":
 				return 1
-			default:
+			case "false", "cold":
 				return 2
+			default:
+				return 3
 			}
 		}
 		if order(edges[i].EdgeType) != order(edges[j].EdgeType) {
@@ -522,6 +532,12 @@ func edgeDisplayLabel(e WorkflowEdge, isFork bool) string {
 		return "If yes"
 	case "false":
 		return "If no"
+	case "hot":
+		return "Hot"
+	case "warm":
+		return "Warm"
+	case "cold":
+		return "Cold"
 	}
 	if isFork && e.Priority > 0 {
 		return fmt.Sprintf("Priority %d", e.Priority)

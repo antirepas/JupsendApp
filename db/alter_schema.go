@@ -171,6 +171,7 @@ func runAlterSchema() {
 		`ALTER TABLE email_events ADD COLUMN IF NOT EXISTS is_bot SMALLINT NOT NULL DEFAULT 0`,
 		`ALTER TABLE email_events ADD COLUMN IF NOT EXISTS bot_reason TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS open_tracking_enabled BOOLEAN NOT NULL DEFAULT TRUE`,
+		`ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS temperature_rules_json TEXT NOT NULL DEFAULT ''`,
 		`CREATE INDEX IF NOT EXISTS idx_email_events_open_human ON email_events(email_send_id) WHERE event_type = 'open' AND COALESCE(is_bot, 0) = 0`,
 	}
 	for _, stmt := range alters {

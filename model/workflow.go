@@ -569,6 +569,22 @@ func ValidateWorkflowGraph(versionID int64) []string {
 				errs = append(errs, msg)
 			}
 		}
+		if n.NodeType == "condition_temperature" {
+			hasHot, hasWarm, hasCold := false, false, false
+			for _, e := range adj[n.NodeKey] {
+				switch e.EdgeType {
+				case "hot":
+					hasHot = true
+				case "warm":
+					hasWarm = true
+				case "cold":
+					hasCold = true
+				}
+			}
+			if !hasHot || !hasWarm || !hasCold {
+				errs = append(errs, fmt.Sprintf("temperature node %s needs hot, warm, and cold edges", n.NodeKey))
+			}
+		}
 	}
 	if !hasEnd {
 		errs = append(errs, "workflow must include at least one action_end node")

@@ -17,7 +17,12 @@
     {{end}}
   </p>
 
-  {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
+  {{if .error}}
+  <div class="alert-error mb-6">
+    <p>{{.error}}</p>
+    {{if .supportEmail}}<p class="text-xs mt-2">Need help? Email <a class="underline font-medium" href="mailto:{{.supportEmail}}">{{.supportEmail}}</a></p>{{end}}
+  </div>
+  {{end}}
 
   <div class="card space-y-4">
     <div class="text-sm text-gray-700">
@@ -61,11 +66,14 @@
     {{end}}
 
     {{if .domain.LastError}}
-    <div class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{{.domain.LastError}}</div>
+    <div class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+      <p>{{.domain.LastError}}</p>
+      {{if .supportEmail}}<p class="text-xs mt-2">Need help? Email <a class="underline font-medium" href="mailto:{{.supportEmail}}">{{.supportEmail}}</a></p>{{end}}
+    </div>
     {{end}}
 
     <a href="/onboarding/domain/status?domain_id={{.domain.ID}}" class="btn-secondary inline-flex w-full justify-center">Refresh status</a>
-    <p class="text-xs text-gray-500">Provisioning usually finishes within a few minutes after nameservers propagate.</p>
+    <p class="text-xs text-gray-500">Provisioning usually finishes within a few minutes after nameservers propagate.{{if .supportEmail}} Stuck? Email <a class="underline" href="mailto:{{.supportEmail}}">{{.supportEmail}}</a>.{{end}}</p>
   </div>
 </div>
 </main>

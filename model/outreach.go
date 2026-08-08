@@ -71,6 +71,36 @@ func UserHasOutreachDomain(userID int64) bool {
 	return n > 0
 }
 
+// CountActiveIncludedDomains counts Pro included domains that are not failed/cancelled.
+// Used to enforce the one included domain quota.
+func CountActiveIncludedDomains(userID int64) (int, error) {
+	var n int
+	err := db.QueryRow(`
+		SELECT COUNT(*) FROM outreach_domains
+		WHERE user_id = ?
+		  AND included = TRUE
+		  AND lower(status) NOT IN ('error', 'cancelled', 'canceled')
+	`, userID).Scan(&n)
+	return n, err
+}
+
+// IncludedDomainQuotaRemaining returns how many included domains the user may still claim.
+func IncludedDomainQuotaRemaining(userID int64) (int, error) {
+	spec, err := PlanSpecForTier(PlanTierPro)
+	if err != nil {
+		return 0, err
+	}
+	n, err := CountActiveIncludedDomains(userID)
+	if err != nil {
+		return 0, err
+	}
+	left := spec.IncludedDomains - n
+	if left < 0 {
+		return 0, nil
+	}
+	return left, nil
+}
+
 func CreateOutreachDomain(userID int64, domain, orderID, redirect string, included bool) (int64, error) {
 	now := time.Now()
 	var id int64
@@ -80,10 +110,18 @@ func CreateOutreachDomain(userID int64, domain, orderID, redirect string, includ
 		ON CONFLICT (user_id, domain) DO UPDATE SET
 			inboxkit_order_id = EXCLUDED.inboxkit_order_id,
 			status = 'ordering',
+			included = EXCLUDED.included,
+			redirect_url = EXCLUDED.redirect_url,
+			last_error = '',
 			updated_at = EXCLUDED.updated_at
 		RETURNING id
 	`, userID, strings.ToLower(domain), orderID, included, redirect, now, now).Scan(&id)
 	return id, err
+}
+
+func DeleteOutreachDomain(id, userID int64) error {
+	_, err := db.Exec(`DELETE FROM outreach_domains WHERE id=? AND user_id=?`, id, userID)
+	return err
 }
 
 func UpdateOutreachDomainStatus(id int64, status, orderID string) error {

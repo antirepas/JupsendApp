@@ -94,15 +94,22 @@ func OnboardingDomainPage(c *gin.Context) {
 			break
 		}
 	}
+	quotaLeft, _ := model.IncludedDomainQuotaRemaining(userID)
+	inboxHint := inboxkit.ConfiguredHint()
+	if inboxHint != "" {
+		inboxHint = config.WithSupportContact(inboxHint)
+	}
 	c.HTML(http.StatusOK, "onboarding_domain.html", gin.H{
 		"title":         "Set up outreach domain",
 		"active":        "mailboxes",
 		"user":          user,
 		"inboxkitOK":    inboxkit.Configured(),
-		"inboxkitHint":  inboxkit.ConfiguredHint(),
+		"inboxkitHint":  inboxHint,
 		"includedCount": config.InboxKitIncludedMailboxCount(),
 		"mailboxSlots":  mailboxSlotNums(config.InboxKitIncludedMailboxCount()),
 		"pendingDomain": pending,
+		"includedLeft":  quotaLeft,
+		"supportEmail":  config.SupportEmail,
 		"error":         humanizeInboxKitError(c.Query("error")),
 		"success":       c.Query("success"),
 		"query":         c.Query("q"),
@@ -124,15 +131,20 @@ func humanizeInboxKitError(raw string) string {
 		return ""
 	}
 	lower := strings.ToLower(raw)
+	var msg string
 	switch {
+	case strings.Contains(lower, "already includes one domain"):
+		msg = raw
 	case strings.Contains(lower, "invalid workspace"):
-		return "InboxKit rejected the workspace ID. In the InboxKit dashboard open Settings → Workspaces, copy the workspace UUID (not the team name), and set INBOXKIT_WORKSPACE_ID to that value, then restart the app."
+		msg = "InboxKit rejected the workspace ID. In the InboxKit dashboard open Settings → Workspaces, copy the workspace UUID (not the team name), and set INBOXKIT_WORKSPACE_ID to that value, then restart the app."
 	case strings.Contains(lower, "unauthorized") || strings.Contains(lower, "401"):
-		return "InboxKit API key was rejected. Check INBOXKIT_API_KEY in your environment and restart the app."
+		msg = "InboxKit API key was rejected. Check INBOXKIT_API_KEY in your environment and restart the app."
 	case strings.Contains(lower, "inboxkit_workspace_id not configured"):
-		return "Set INBOXKIT_WORKSPACE_ID to your InboxKit workspace UUID, then restart the app."
+		msg = "Set INBOXKIT_WORKSPACE_ID to your InboxKit workspace UUID, then restart the app."
 	case strings.Contains(lower, "inboxkit_api_key not configured"):
-		return "Set INBOXKIT_API_KEY, then restart the app."
+		msg = "Set INBOXKIT_API_KEY, then restart the app."
+	case strings.Contains(lower, "registration contact is not configured"):
+		msg = "Domain registration contact is not configured on this server yet."
 	default:
 		// Prefer the API message body when present.
 		if i := strings.Index(raw, "—"); i >= 0 {
@@ -146,12 +158,15 @@ func humanizeInboxKitError(raw string) string {
 					if strings.EqualFold(payload.Message, "Invalid workspace") {
 						return humanizeInboxKitError("Invalid workspace")
 					}
-					return "InboxKit: " + payload.Message
+					msg = "InboxKit: " + payload.Message
 				}
 			}
 		}
-		return raw
+		if msg == "" {
+			msg = raw
+		}
 	}
+	return config.WithSupportContact(msg)
 }
 
 func mailboxSlotNums(n int) []int {
@@ -196,6 +211,7 @@ func OnboardingDomainSearch(c *gin.Context) {
 		return
 	}
 	user, _ := model.GetUserByID(userID)
+	quotaLeft, _ := model.IncludedDomainQuotaRemaining(userID)
 	c.HTML(http.StatusOK, "onboarding_domain.html", gin.H{
 		"title":         "Set up outreach domain",
 		"active":        "mailboxes",
@@ -203,6 +219,8 @@ func OnboardingDomainSearch(c *gin.Context) {
 		"inboxkitOK":    true,
 		"includedCount": config.InboxKitIncludedMailboxCount(),
 		"mailboxSlots":  mailboxSlotNums(config.InboxKitIncludedMailboxCount()),
+		"includedLeft":  quotaLeft,
+		"supportEmail":  config.SupportEmail,
 		"query":         q,
 		"results":       results,
 		"searched":      true,
@@ -247,7 +265,7 @@ func OnboardingDomainPurchase(c *gin.Context) {
 		c.Redirect(http.StatusFound, onboardingDomainErrorURL(err.Error(), domain))
 		return
 	}
-	domainID, orderID, err := model.PlaceStarterDomainOrder(userID, domain, specs)
+	domainID, orderID, err := model.PlaceStarterDomainOrder(userID, domain, specs, true)
 	if err != nil {
 		c.Redirect(http.StatusFound, onboardingDomainErrorURL(err.Error(), domain))
 		return
@@ -328,6 +346,9 @@ func OnboardingDomainStatus(c *gin.Context) {
 	if errMsg == "" && d.LastError != "" {
 		errMsg = d.LastError
 	}
+	if errMsg != "" {
+		errMsg = humanizeInboxKitError(errMsg)
+	}
 	c.HTML(http.StatusOK, "onboarding_domain_status.html", gin.H{
 		"title":        "Setting up domain",
 		"active":       "mailboxes",
@@ -336,6 +357,7 @@ func OnboardingDomainStatus(c *gin.Context) {
 		"nameservers":  nameservers,
 		"nsPropagated": nsPropagated,
 		"needsNS":      needsNS,
+		"supportEmail": config.SupportEmail,
 		"error":        errMsg,
 	})
 }
@@ -601,7 +623,8 @@ func MailboxesPage(c *gin.Context) {
 		"inboxkitOK":      inboxkit.Configured(),
 		"whopAddon":       config.WhopMailboxAddonID != "" && whop.IsConfigured(),
 		"success":         c.Query("success"),
-		"error":           c.Query("error"),
+		"error":           humanizeInboxKitError(c.Query("error")),
+		"supportEmail":    config.SupportEmail,
 		"includedCount":   config.InboxKitIncludedMailboxCount(),
 		"q":               c.Query("q"),
 		"statusFilter":    statusFilter,
@@ -1081,7 +1104,7 @@ func FulfillDomainPurchase(purchaseID int64) error {
 		_ = model.UpdateMailboxPurchase(purchaseID, "needs_support", "", "", "invalid domain purchase payload")
 		return fmt.Errorf("invalid domain purchase payload")
 	}
-	domainID, orderID, err := model.PlaceStarterDomainOrder(p.UserID, payload.Domain, payload.Mailboxes)
+	domainID, orderID, err := model.PlaceStarterDomainOrder(p.UserID, payload.Domain, payload.Mailboxes, false)
 	if err != nil {
 		_ = model.UpdateMailboxPurchase(purchaseID, "needs_support", "", "", err.Error())
 		return err
