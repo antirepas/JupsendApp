@@ -114,6 +114,10 @@ func TestListContactsFilteredOpenedWithin90Days(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	_, err = db.Exec(`UPDATE email_sends SET sent_at = CURRENT_TIMESTAMP - (31 * INTERVAL '1 day') WHERE id = ?`, sendID)
+	if err != nil {
+		t.Fatal(err)
+	}
 	_, err = db.Exec(`
 		INSERT INTO email_events (email_send_id, tracking_id, event_type, is_bot, created_at)
 		VALUES (?, ?, 'open', 0, CURRENT_TIMESTAMP - (30 * INTERVAL '1 day'))
