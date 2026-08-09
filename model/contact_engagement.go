@@ -153,7 +153,7 @@ func engagementFilterSQL(engagement string) (clause string, extraArgs []interfac
 				SELECT 1 FROM email_sends es
 				INNER JOIN email_events ee ON (ee.email_send_id = es.id OR ee.tracking_id = es.tracking_id)
 				WHERE es.contact_id = c.id AND es.user_id = c.user_id AND ee.event_type = 'open' AND COALESCE(ee.is_bot, 0) = 0
-					AND ee.created_at >= CURRENT_TIMESTAMP - (7 * INTERVAL '1 day')
+					AND ee.created_at >= CURRENT_TIMESTAMP - (90 * INTERVAL '1 day')
 			)`, nil
 	case "clicked_no_reply":
 		return `

@@ -243,8 +243,7 @@ func ListContactsFiltered(userID int64, f ContactListFilter) (ContactListPage, e
 
 	listMap := map[int64][]ContactList{}
 	engMap := map[int64]ContactEngagement{}
-	if !f.Lite {
-		listMap, _ = GetListIDsForContacts(userID, contactIDs)
+	if len(contactIDs) > 0 {
 		engMap, _ = EnrichContactsEngagement(userID, contactIDs)
 		for i := range items {
 			if eng, ok := engMap[items[i].ID]; ok {
@@ -253,6 +252,11 @@ func ListContactsFiltered(userID int64, f ContactListFilter) (ContactListPage, e
 				items[i].LastSignal = eng.LastSignal
 				items[i].LastActivity = eng.LastActivity
 			}
+		}
+	}
+	if !f.Lite {
+		listMap, _ = GetListIDsForContacts(userID, contactIDs)
+		for i := range items {
 			for _, l := range listMap[items[i].ID] {
 				items[i].ListNames = append(items[i].ListNames, l.Name)
 			}

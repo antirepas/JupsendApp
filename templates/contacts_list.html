@@ -55,7 +55,7 @@
             <label class="form-label">Engagement</label>
             <select name="engagement" class="form-input">
                 <option value="" {{if eq .filterEngagement ""}}selected{{end}}>Any</option>
-                <option value="opened_no_reply" {{if eq .filterEngagement "opened_no_reply"}}selected{{end}}>Opened, no reply (7d)</option>
+                <option value="opened_no_reply" {{if eq .filterEngagement "opened_no_reply"}}selected{{end}}>Opened, no reply (90d)</option>
                 <option value="clicked_no_reply" {{if eq .filterEngagement "clicked_no_reply"}}selected{{end}}>Clicked, no reply</option>
                 <option value="replied" {{if eq .filterEngagement "replied"}}selected{{end}}>Replied</option>
                 <option value="interested" {{if eq .filterEngagement "interested"}}selected{{end}}>Interested (90d)</option>

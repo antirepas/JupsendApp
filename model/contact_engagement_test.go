@@ -101,6 +101,51 @@ func TestListContactsFilteredEngagementAndCampaign(t *testing.T) {
 	}
 }
 
+func TestListContactsFilteredOpenedWithin90Days(t *testing.T) {
+	db.OpenTestDB(t)
+	userID, _ := CreateUser("eng-open-window@test.com", "hash", "http://localhost")
+	var templateID int64
+	_ = db.QueryRow(`INSERT INTO template (name, subject, body, user_id) VALUES ('t','s','b', ?) RETURNING id`, userID).Scan(&templateID)
+
+	c := Contact{Email: "opened-old@test.com"}
+	cid, _ := c.SaveContact(userID, nil)
+	campaignID, _ := CreateCampaign(userID, "Old Open Camp", templateID, 0, "bulk", 0, "", "")
+	sendID, err := enqueueTestSend(userID, templateID, cid, campaignID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Exec(`
+		INSERT INTO email_events (email_send_id, tracking_id, event_type, is_bot, created_at)
+		VALUES (?, ?, 'open', 0, CURRENT_TIMESTAMP - (30 * INTERVAL '1 day'))
+	`, sendID, fmt.Sprintf("track-old-%d", cid))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	page, err := ListContactsFiltered(userID, ContactListFilter{Engagement: "opened_no_reply", PageSize: 50, Lite: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !contactIDsContain(page.Items, cid) {
+		t.Fatal("expected 30-day-old open to match opened_no_reply (90d window)")
+	}
+	var found bool
+	for _, it := range page.Items {
+		if it.ID == cid {
+			found = true
+			if it.LastSignal != "open" {
+				t.Fatalf("lite picker should still enrich signal, got %q", it.LastSignal)
+			}
+			if it.LastCampaignName != "Old Open Camp" {
+				t.Fatalf("campaign name=%q", it.LastCampaignName)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("contact missing from page items")
+	}
+}
+
 func TestDismissInterestedContacts(t *testing.T) {
 	db.OpenTestDB(t)
 	userID, _ := CreateUser("dismiss@test.com", "hash", "http://localhost")

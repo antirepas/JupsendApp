@@ -193,16 +193,16 @@
                 </div>
             </div>
             <p class="text-xs text-slate-500" id="temp-rules-preview">Warm = ≥2 opens and ≥1 click. Hot = ≥3 opens and ≥2 clicks (or any reply). Otherwise cold.</p>
-            <input type="hidden" name="has_stop_policy" value="1">
-            <div class="border-t border-slate-100 pt-3 space-y-2">
+            <div id="workflow-stop-rules" class="border-t border-slate-100 pt-3 space-y-2 hidden">
+                <input type="hidden" name="has_stop_policy" value="1" disabled>
                 <h3 class="font-medium text-charcoal text-sm">Workflow stop rules</h3>
-                <p class="text-xs text-slate-500">For workflow campaigns: cancel remaining steps for a lead when these fire.</p>
+                <p class="text-xs text-slate-500">Cancel remaining steps for a lead when these fire.</p>
                 <label class="flex items-center gap-2 text-sm text-slate-700">
-                    <input type="checkbox" name="stop_on_reply" value="1" checked>
+                    <input type="checkbox" name="stop_on_reply" value="1" checked disabled>
                     Fully stop sending once the lead has replied
                 </label>
                 <label class="flex items-center gap-2 text-sm text-slate-700">
-                    <input type="checkbox" name="stop_on_hot" value="1">
+                    <input type="checkbox" name="stop_on_hot" value="1" disabled>
                     Fully stop sending once the lead is hot
                 </label>
             </div>
@@ -247,6 +247,12 @@ function setMode(mode) {
     bulkFields.classList.toggle('hidden', isWorkflow);
     wfFields.classList.toggle('hidden', !isWorkflow);
     hybridFields?.classList.toggle('hidden', !isHybrid);
+
+    const stopRules = document.getElementById('workflow-stop-rules');
+    if (stopRules) {
+        stopRules.classList.toggle('hidden', !isWorkflow);
+        stopRules.querySelectorAll('input').forEach(el => { el.disabled = !isWorkflow; });
+    }
 
     bulkTemplateA && (bulkTemplateA.disabled = isWorkflow);
     bulkTemplateB && (bulkTemplateB.disabled = isWorkflow);

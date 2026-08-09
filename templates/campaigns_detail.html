@@ -155,10 +155,11 @@
             </div>
         </div>
         <p class="text-xs text-slate-500">{{.temperaturePreview}}</p>
+        {{if .isWorkflow}}
         <input type="hidden" name="has_stop_policy" value="1">
         <div class="border-t border-slate-100 pt-4 space-y-2">
             <h4 class="text-sm font-semibold text-slate-900">Workflow stop rules</h4>
-            <p class="text-xs text-slate-500">Cancel remaining workflow steps for a lead when these fire. Applies to workflow campaigns only.</p>
+            <p class="text-xs text-slate-500">Cancel remaining workflow steps for a lead when these fire.</p>
             <label class="flex items-center gap-2 text-sm text-slate-700">
                 <input type="checkbox" name="stop_on_reply" value="1" {{if .campaign.StopOnReply}}checked{{end}}>
                 Fully stop sending once the lead has replied
@@ -169,6 +170,9 @@
             </label>
         </div>
         <button type="submit" class="btn-secondary text-sm">Save temperature &amp; stop rules</button>
+        {{else}}
+        <button type="submit" class="btn-secondary text-sm">Save temperature rules</button>
+        {{end}}
     </form>
 </div>
 
@@ -550,10 +554,10 @@
                 <label class="form-label">Engagement</label>
                 <select name="picker_engagement" class="form-input text-sm">
                     <option value="" {{if eq .pickerEngagement ""}}selected{{end}}>Any</option>
-                    <option value="opened_no_reply" {{if eq .pickerEngagement "opened_no_reply"}}selected{{end}}>Opened, no reply</option>
-                    <option value="clicked_no_reply" {{if eq .pickerEngagement "clicked_no_reply"}}selected{{end}}>Clicked, no reply</option>
+                    <option value="opened_no_reply" {{if eq .pickerEngagement "opened_no_reply"}}selected{{end}}>Opened, no reply (90d)</option>
+                    <option value="clicked_no_reply" {{if eq .pickerEngagement "clicked_no_reply"}}selected{{end}}>Clicked, no reply (90d)</option>
                     <option value="replied" {{if eq .pickerEngagement "replied"}}selected{{end}}>Replied</option>
-                    <option value="interested" {{if eq .pickerEngagement "interested"}}selected{{end}}>Interested</option>
+                    <option value="interested" {{if eq .pickerEngagement "interested"}}selected{{end}}>Interested (90d)</option>
                 </select>
             </div>
             <div class="min-w-[130px]">
@@ -565,7 +569,7 @@
             </div>
             <button type="submit" class="btn-secondary text-sm">Filter</button>
         </form>
-        <p class="text-xs text-gray-500 mb-2">Showing contacts not already on this campaign ({{.pickerPage.Total}} match{{if gt .pickerPage.TotalPages 1}}, page {{.pickerPage.Page}} of {{.pickerPage.TotalPages}}{{end}}).</p>
+        <p class="text-xs text-gray-500 mb-2">Showing contacts not already on this campaign ({{.pickerPage.Total}} match{{if gt .pickerPage.TotalPages 1}}, page {{.pickerPage.Page}} of {{.pickerPage.TotalPages}}{{end}}). Engagement is from prior sends across all campaigns.</p>
         <form method="POST" action="/campaigns/{{.campaign.ID}}/contacts" class="space-y-2">
             <div class="flex gap-2 mb-2">
                 <button type="button" id="select-all-visible" class="text-sm text-brand-600 font-medium">Select all on page</button>
@@ -575,7 +579,16 @@
                 {{range .pickerContacts}}
                 <label class="flex items-center gap-2 text-sm p-1 hover:bg-ivory rounded contact-pick" data-email="{{.Email}}">
                     <input type="checkbox" name="contact_ids" value="{{.ID}}">
-                    <span>{{.Email}}</span>
+                    <span class="min-w-0 flex-1">
+                        <span class="font-medium">{{.Email}}</span>
+                        {{if .RepliedAt}}
+                        <span class="badge badge-violet ml-1">replied</span>
+                        {{else if and .LastSignal (ne .LastSignal "none")}}
+                        <span class="text-xs text-slate-500 ml-1">{{.LastSignal}}{{if .LastCampaignName}} · {{.LastCampaignName}}{{end}}{{if .LastActivity}} · {{.LastActivity.Format "Jan 2"}}{{end}}</span>
+                        {{else if .LastCampaignName}}
+                        <span class="text-xs text-slate-400 ml-1">sent · {{.LastCampaignName}}</span>
+                        {{end}}
+                    </span>
                 </label>
                 {{else}}
                 <p class="text-gray-400 text-sm">No contacts match these filters (or all matching contacts are already on the campaign).</p>
