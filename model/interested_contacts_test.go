@@ -51,7 +51,7 @@ func enqueueTestSend(userID, templateID, contactID, campaignID int64) (int64, er
 	row := db.QueryRow(`
 		INSERT INTO email_sends (user_id, contact_id, template_id, campaign_id, tracking_id, sent_at, variant, delivery_status)
 		VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 'A', 'sent') RETURNING id
-	`, userID, contactID, templateID, campaignID, fmt.Sprintf("track-test-%d", contactID))
+	`, userID, contactID, templateID, campaignID, fmt.Sprintf("track-test-%d-%d", contactID, campaignID))
 	var id int64
 	err := row.Scan(&id)
 	return id, err
