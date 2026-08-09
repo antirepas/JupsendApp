@@ -94,6 +94,56 @@ func (c *Client) do(method, path string, body any, out any) error {
 	return nil
 }
 
+// doAllowStatuses is like do, but treats listed HTTP statuses as success and still unmarshals the body.
+func (c *Client) doAllowStatuses(method, path string, body any, out any, allow ...int) (status int, err error) {
+	if c.APIKey == "" {
+		return 0, fmt.Errorf("INBOXKIT_API_KEY not configured")
+	}
+	if c.WorkspaceID == "" {
+		return 0, fmt.Errorf("INBOXKIT_WORKSPACE_ID not configured")
+	}
+	var rdr io.Reader
+	if body != nil {
+		b, err := json.Marshal(body)
+		if err != nil {
+			return 0, err
+		}
+		rdr = bytes.NewReader(b)
+	}
+	req, err := http.NewRequest(method, c.BaseURL+path, rdr)
+	if err != nil {
+		return 0, err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.APIKey)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("X-Workspace-Id", c.WorkspaceID)
+	res, err := c.HTTP.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	defer res.Body.Close()
+	raw, _ := io.ReadAll(res.Body)
+	status = res.StatusCode
+	allowed := status < 400
+	for _, a := range allow {
+		if status == a {
+			allowed = true
+			break
+		}
+	}
+	if !allowed {
+		return status, fmt.Errorf("inboxkit %s %s: %s — %s", method, path, res.Status, truncate(string(raw), 400))
+	}
+	if out == nil || len(raw) == 0 {
+		return status, nil
+	}
+	if err := json.Unmarshal(raw, out); err != nil {
+		return status, fmt.Errorf("inboxkit decode: %w (body=%s)", err, truncate(string(raw), 200))
+	}
+	return status, nil
+}
+
 func truncate(s string, n int) string {
 	if len(s) <= n {
 		return s
@@ -510,16 +560,17 @@ type nameserverCreateResponse struct {
 }
 
 // ConnectDomainNameservers registers an existing domain for connection and returns InboxKit nameservers.
+// HTTP 409 (already connected to this workspace) is treated as success when the body includes nameservers/uid.
 func (c *Client) ConnectDomainNameservers(domain string) (NameserverResult, error) {
 	domain = strings.ToLower(strings.TrimSpace(domain))
 	var resp nameserverCreateResponse
-	err := c.do("POST", "/api/domains/nameservers", map[string]any{
+	status, err := c.doAllowStatuses("POST", "/api/domains/nameservers", map[string]any{
 		"domains": []string{domain},
-	}, &resp)
+	}, &resp, http.StatusConflict)
 	if err != nil {
 		return NameserverResult{}, err
 	}
-	if resp.Error {
+	if resp.Error && status != http.StatusConflict {
 		msg := strings.TrimSpace(resp.Message)
 		if msg == "" {
 			msg = "failed to create domain nameservers"
@@ -533,6 +584,8 @@ func (c *Client) ConnectDomainNameservers(domain string) (NameserverResult, erro
 				Domain:      domain,
 				UID:         item.UID,
 				Nameservers: item.Nameservers,
+				Ready:       status == http.StatusConflict,
+				Propagated:  status == http.StatusConflict,
 			}, nil
 		}
 	}
@@ -542,7 +595,12 @@ func (c *Client) ConnectDomainNameservers(domain string) (NameserverResult, erro
 			Domain:      domain,
 			UID:         item.UID,
 			Nameservers: item.Nameservers,
+			Ready:       status == http.StatusConflict,
+			Propagated:  status == http.StatusConflict,
 		}, nil
+	}
+	if status == http.StatusConflict {
+		return NameserverResult{}, fmt.Errorf("domain already connected but InboxKit returned no nameserver details")
 	}
 	return NameserverResult{}, fmt.Errorf("no nameservers returned for %s", domain)
 }

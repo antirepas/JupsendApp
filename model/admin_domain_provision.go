@@ -9,8 +9,8 @@ import (
 	"emailtracker.com/inboxkit"
 )
 
-// AdminConnectDomainWithMailboxes is an ops repair path: connect a customer's domain
-// to InboxKit (if needed) and buy/sync up to the included mailbox seats.
+// AdminConnectDomainWithMailboxes is an ops repair path: link a customer's domain
+// that may already exist in InboxKit, then buy/sync the requested mailbox seats.
 // It always talks to InboxKit immediately (does not queue for manual fulfillment).
 func AdminConnectDomainWithMailboxes(userID int64, domain string, specs []StarterMailboxSpec) (domainID int64, detail string, err error) {
 	domain = strings.ToLower(strings.TrimSpace(domain))
@@ -58,60 +58,48 @@ func AdminConnectDomainWithMailboxes(userID int64, domain string, specs []Starte
 		return domainID, "", fmt.Errorf("save mailbox rows: %w", mbErr)
 	}
 
-	oid := ""
-	if gErr == nil {
-		oid = strings.TrimSpace(existing.InboxkitOrderID)
+	// Always reconcile with InboxKit connect endpoint (409 = already in workspace is OK).
+	ns, cErr := connectInboxKitNameservers(domain)
+	if cErr != nil {
+		_ = SetOutreachDomainError(domainID, "error", cErr.Error())
+		return domainID, "", fmt.Errorf("connect domain nameservers: %w", cErr)
 	}
-	needsConnect := oid == "" || isManualOrderID(oid) || isPendingOrderID(oid)
-	if !needsConnect {
-		st := ""
-		if gErr == nil {
-			st = strings.ToLower(existing.Status)
-		}
-		if st == "error" || st == "cancelled" || st == "canceled" {
-			needsConnect = true
-		}
+	orderID := inboxkit.ConnectOrderID(ns.UID, domain)
+	if orderID == "" || ns.UID == "" {
+		orderID = inboxkit.ConnectOrderID("linked", domain)
 	}
-
-	var nameservers []string
-	if needsConnect {
-		ns, cErr := connectInboxKitNameservers(domain)
-		if cErr != nil {
-			_ = SetOutreachDomainError(domainID, "error", cErr.Error())
-			return domainID, "", fmt.Errorf("connect domain nameservers: %w", cErr)
-		}
-		nameservers = ns.Nameservers
-		orderID := inboxkit.ConnectOrderID(ns.UID, domain)
-		_ = UpdateOutreachDomainStatus(domainID, "connecting", orderID)
-		if len(nameservers) > 0 {
-			_ = SetOutreachDomainNameservers(domainID, nameservers)
-		}
-		oid = orderID
-	} else if gErr == nil {
-		nameservers = existing.Nameservers()
+	status := "connecting"
+	if ns.Ready || ns.Propagated {
+		status = "ready"
+	}
+	_ = UpdateOutreachDomainStatus(domainID, status, orderID)
+	if len(ns.Nameservers) > 0 {
+		_ = SetOutreachDomainNameservers(domainID, ns.Nameservers)
 	}
 
-	// Prefer importing seats already present in InboxKit.
+	// Import any seats already on InboxKit for this domain.
 	if syncErr := syncMailboxCredentials(userID, domainID, domain); syncErr != nil {
 		log.Printf("admin provision sync %s: %v", domain, syncErr)
 	}
-	ready, _ := countDomainReadyMailboxes(userID, domainID)
-	if ready >= len(specs) {
-		_ = UpdateOutreachDomainStatus(domainID, "ready", oid)
-		return domainID, fmt.Sprintf("Synced %d mailbox(es) already on InboxKit for %s", ready, domain), nil
+
+	pending := countPendingBuyMailboxes(userID, domainID)
+	if pending == 0 {
+		ready, _ := countDomainReadyMailboxes(userID, domainID)
+		_ = UpdateOutreachDomainStatus(domainID, "ready", orderID)
+		return domainID, fmt.Sprintf("Linked %s — %d mailbox(es) ready (requested seats already present)", domain, ready), nil
 	}
 
 	check, checkErr := checkInboxKitNameservers(domain)
-	nsReady := checkErr == nil && (check.Propagated || check.Ready)
+	nsReady := ns.Ready || ns.Propagated || (checkErr == nil && (check.Propagated || check.Ready))
 	if !nsReady {
-		nsHint := strings.Join(nameservers, ", ")
+		nsHint := strings.Join(ns.Nameservers, ", ")
 		if nsHint == "" {
-			nsHint = "(see InboxKit / domain status page)"
+			nsHint = "(see InboxKit)"
 		}
-		_ = UpdateOutreachDomainStatus(domainID, "connecting", oid)
+		_ = UpdateOutreachDomainStatus(domainID, "connecting", orderID)
 		return domainID, fmt.Sprintf(
-			"Domain %s is connecting. Point nameservers to: %s — then re-run this form or open Mailboxes to finish buying seats.",
-			domain, nsHint,
+			"Linked %s in jupsend. Nameservers not ready yet (%s). Re-run after DNS propagates to buy the %d pending seat(s).",
+			domain, nsHint, pending,
 		), nil
 	}
 
@@ -122,9 +110,9 @@ func AdminConnectDomainWithMailboxes(userID int64, domain string, specs []Starte
 	if syncErr := syncMailboxCredentials(userID, domainID, domain); syncErr != nil {
 		log.Printf("admin provision sync after buy %s: %v", domain, syncErr)
 	}
-	ready, _ = countDomainReadyMailboxes(userID, domainID)
-	_ = UpdateOutreachDomainStatus(domainID, "ready", oid)
-	return domainID, fmt.Sprintf("Provisioned %s — %d mailbox(es) linked (InboxKit wallet charged for any new seats)", domain, ready), nil
+	ready, _ := countDomainReadyMailboxes(userID, domainID)
+	_ = UpdateOutreachDomainStatus(domainID, "ready", orderID)
+	return domainID, fmt.Sprintf("Linked %s — %d mailbox(es) linked (InboxKit wallet charged for new seats)", domain, ready), nil
 }
 
 func countDomainReadyMailboxes(userID, domainID int64) (int, error) {
@@ -142,4 +130,28 @@ func countDomainReadyMailboxes(userID, domainID int64) (int, error) {
 		}
 	}
 	return n, nil
+}
+
+func countPendingBuyMailboxes(userID, domainID int64) int {
+	mailboxes, err := ListOutreachMailboxes(userID)
+	if err != nil {
+		return 0
+	}
+	n := 0
+	for _, m := range mailboxes {
+		if m.DomainID != domainID {
+			continue
+		}
+		if m.Status == "ready" {
+			continue
+		}
+		if m.InboxkitMailboxID != "" && !isPendingBuyMailboxID(m.InboxkitMailboxID) {
+			continue
+		}
+		if isPendingBuyMailboxID(m.InboxkitMailboxID) {
+			continue
+		}
+		n++
+	}
+	return n
 }

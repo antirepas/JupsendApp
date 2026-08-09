@@ -19,7 +19,7 @@
   <div class="card mb-8">
     <h3 class="card-title">Connect domain + mailboxes (repair)</h3>
     <p class="text-sm text-gray-500 mb-4">
-      For a customer whose domain is missing seats: connect the domain to InboxKit (if needed), sync existing mailboxes, or buy up to {{.includedSeats}} included seats from the InboxKit wallet. Runs immediately — does not wait in the queue.
+      Link a domain that already exists in InboxKit (409 “already connected” is OK), sync seats, and buy any new mailbox rows you enter below (up to {{.includedSeats}}). Charges the InboxKit wallet for new seats only.
     </p>
     <form method="POST" action="/ops/provisioning/connect-domain" class="space-y-4">
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">

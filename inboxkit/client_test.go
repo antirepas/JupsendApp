@@ -135,6 +135,36 @@ func TestConnectDomainNameserversParsesResultArray(t *testing.T) {
 	}
 }
 
+func TestConnectDomainNameserversAlreadyConnected409(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusConflict)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"error":   false,
+			"message": "Domain(s) already connected to your workspace: tryjupsend.com",
+			"result": []map[string]any{
+				{
+					"domain":      "tryjupsend.com",
+					"uid":         "28d04a84-92db-43a8-9d40-d7039c0e5c08",
+					"nameservers": []string{"art.ns.cloudflare.com", "blakely.ns.cloudflare.com"},
+				},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	client := &Client{APIKey: "test", WorkspaceID: "ws", BaseURL: srv.URL, HTTP: srv.Client()}
+	ns, err := client.ConnectDomainNameservers("tryjupsend.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ns.UID != "28d04a84-92db-43a8-9d40-d7039c0e5c08" {
+		t.Fatalf("uid=%q", ns.UID)
+	}
+	if !ns.Ready || len(ns.Nameservers) != 2 {
+		t.Fatalf("%+v", ns)
+	}
+}
+
 func TestCheckNameserversUsesPropagationPath(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/domains/nameservers/check-propagation" {
