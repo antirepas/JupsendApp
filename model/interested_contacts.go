@@ -19,6 +19,10 @@ type InterestedContact struct {
 }
 
 func ListInterestedContacts(userID int64, limit int) ([]InterestedContact, error) {
+	return ListInterestedContactsFiltered(userID, 0, limit)
+}
+
+func ListInterestedContactsFiltered(userID, campaignID int64, limit int) ([]InterestedContact, error) {
 	if limit < 1 {
 		limit = 100
 	}
@@ -37,39 +41,46 @@ func ListInterestedContacts(userID int64, limit int) ([]InterestedContact, error
 
 	byContact := map[int64]*agg{}
 
+	campSQL := ""
+	args := []interface{}{userID}
+	if campaignID > 0 {
+		campSQL = " AND es.campaign_id = ?"
+		args = append(args, campaignID)
+	}
+
 	rows, err := db.Query(`
 		SELECT es.contact_id, c.email, es.campaign_id, COALESCE(camp.name, ''),
 			ee.event_type, ee.created_at
 		FROM email_sends es
 		INNER JOIN contact c ON c.id = es.contact_id
 		LEFT JOIN campaigns camp ON camp.id = es.campaign_id
-		LEFT JOIN email_events ee ON (ee.email_send_id = es.id OR ee.tracking_id = es.tracking_id)
+		INNER JOIN email_events ee ON (ee.email_send_id = es.id OR ee.tracking_id = es.tracking_id)
 			AND (ee.event_type = 'click' OR (ee.event_type = 'open' AND COALESCE(ee.is_bot, 0) = 0))
-		WHERE es.user_id = ? AND es.sent_at >= CURRENT_TIMESTAMP - (90 * INTERVAL '1 day')
-	`, userID)
+		WHERE es.user_id = ? AND ee.created_at >= CURRENT_TIMESTAMP - (90 * INTERVAL '1 day')`+campSQL+`
+	`, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
 	for rows.Next() {
-		var contactID, campaignID int64
+		var contactID, campID int64
 		var email, campaignName, eventType string
-		var createdAt *time.Time
-		if err := rows.Scan(&contactID, &email, &campaignID, &campaignName, &eventType, &createdAt); err != nil {
+		var createdAt time.Time
+		if err := rows.Scan(&contactID, &email, &campID, &campaignName, &eventType, &createdAt); err != nil {
 			continue
 		}
 		a := byContact[contactID]
 		if a == nil {
-			a = &agg{email: email, campaignName: campaignName, campaignID: campaignID}
+			a = &agg{email: email, campaignName: campaignName, campaignID: campID}
 			byContact[contactID] = a
 		}
-		if createdAt != nil && createdAt.After(a.lastActivity) {
-			a.lastActivity = *createdAt
+		if createdAt.After(a.lastActivity) {
+			a.lastActivity = createdAt
 			a.lastSignal = eventType
 			if campaignName != "" {
 				a.campaignName = campaignName
-				a.campaignID = campaignID
+				a.campaignID = campID
 			}
 		}
 		switch eventType {
@@ -80,6 +91,12 @@ func ListInterestedContacts(userID int64, limit int) ([]InterestedContact, error
 		}
 	}
 
+	replyArgs := []interface{}{userID}
+	replyCamp := ""
+	if campaignID > 0 {
+		replyCamp = " AND es.campaign_id = ?"
+		replyArgs = append(replyArgs, campaignID)
+	}
 	replyRows, err := db.Query(`
 		SELECT es.contact_id, c.email, es.campaign_id, COALESCE(camp.name, ''), ce.created_at
 		FROM contact_events ce
@@ -87,15 +104,15 @@ func ListInterestedContacts(userID int64, limit int) ([]InterestedContact, error
 		INNER JOIN contact c ON c.id = es.contact_id
 		LEFT JOIN campaigns camp ON camp.id = es.campaign_id
 		WHERE es.user_id = ? AND ce.event_type = 'REPLY'
-			AND ce.created_at >= CURRENT_TIMESTAMP - (90 * INTERVAL '1 day')
-	`, userID)
+			AND ce.created_at >= CURRENT_TIMESTAMP - (90 * INTERVAL '1 day')`+replyCamp+`
+	`, replyArgs...)
 	if err == nil {
 		defer replyRows.Close()
 		for replyRows.Next() {
-			var contactID, campaignID int64
+			var contactID, campID int64
 			var email, campaignName string
 			var createdAt time.Time
-			if replyRows.Scan(&contactID, &email, &campaignID, &campaignName, &createdAt) != nil {
+			if replyRows.Scan(&contactID, &email, &campID, &campaignName, &createdAt) != nil {
 				continue
 			}
 			a := byContact[contactID]
@@ -108,7 +125,7 @@ func ListInterestedContacts(userID int64, limit int) ([]InterestedContact, error
 				a.lastActivity = createdAt
 				a.lastSignal = "replied"
 				a.campaignName = campaignName
-				a.campaignID = campaignID
+				a.campaignID = campID
 			}
 		}
 	}

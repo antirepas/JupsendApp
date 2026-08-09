@@ -56,8 +56,8 @@
             <select name="engagement" class="form-input">
                 <option value="" {{if eq .filterEngagement ""}}selected{{end}}>Any</option>
                 <option value="opened_no_reply" {{if eq .filterEngagement "opened_no_reply"}}selected{{end}}>Opened, no reply (90d)</option>
-                <option value="clicked_no_reply" {{if eq .filterEngagement "clicked_no_reply"}}selected{{end}}>Clicked, no reply</option>
-                <option value="replied" {{if eq .filterEngagement "replied"}}selected{{end}}>Replied</option>
+                <option value="clicked_no_reply" {{if eq .filterEngagement "clicked_no_reply"}}selected{{end}}>Clicked, no reply (90d)</option>
+                <option value="replied" {{if eq .filterEngagement "replied"}}selected{{end}}>Replied (90d)</option>
                 <option value="interested" {{if eq .filterEngagement "interested"}}selected{{end}}>Interested (90d)</option>
             </select>
         </div>
@@ -73,11 +73,12 @@
         </div>
         <button type="submit" class="btn-secondary">Filter</button>
     </form>
+    <p class="text-xs text-gray-500 mt-2">Pick a <strong>campaign</strong> plus engagement (e.g. Opened / Interested) to find who engaged with that campaign in the last 90 days — then add them to a list below.</p>
     <div class="flex flex-wrap gap-2 mt-3 text-xs">
         <span class="text-gray-400 self-center">Presets:</span>
         <a class="badge badge-gray" href="/contacts?tab=all&engagement=opened_no_reply">Opened, no reply</a>
         <a class="badge badge-gray" href="/contacts?tab=all&engagement=clicked_no_reply">Clicked, no reply</a>
-        <a class="badge badge-gray" href="/contacts?tab=all&engagement=replied">Replied</a>
+        <a class="badge badge-gray" href="/contacts?tab=all&engagement=replied">Replied (90d)</a>
         <a class="badge badge-gray" href="/contacts?tab=all&engagement=interested">Interested</a>
     </div>
     <form method="POST" action="/contacts/validate" class="mt-3">
@@ -86,12 +87,29 @@
 </div>
 
 <form method="POST" action="/contacts/bulk-delete" id="bulk-form">
+<input type="hidden" name="q" value="{{.filterQ}}">
+<input type="hidden" name="list" value="{{.filterList}}">
+<input type="hidden" name="campaign" value="{{.filterCampaign}}">
+<input type="hidden" name="engagement" value="{{.filterEngagement}}">
+<input type="hidden" name="sort" value="{{.filterSort}}">
+{{if .filterReplied}}<input type="hidden" name="replied" value="1">{{end}}
 <div class="card overflow-hidden">
     {{if .contacts}}
-    <div class="bulk-action-bar px-4 py-2 border-b border-gray-100 flex items-center gap-3 text-sm">
-        <label class="flex items-center gap-2"><input type="checkbox" id="select-all-page"> Select page</label>
-        <button type="submit" class="text-red-600 font-medium" onclick="return confirm('Delete selected contacts?');">Delete selected</button>
-        <span class="text-gray-400">{{.contactPage.Total}} total</span>
+    <div class="bulk-action-bar px-4 py-3 border-b border-gray-100 flex flex-wrap items-end gap-3 text-sm">
+        <label class="flex items-center gap-2 pb-2"><input type="checkbox" id="select-all-page"> Select page</label>
+        <div class="min-w-[180px]">
+            <label class="form-label">Add to list</label>
+            <select name="list_id" id="bulk-list-id" class="form-input text-sm">
+                <option value="">Choose list…</option>
+                {{range .lists}}
+                <option value="{{.ID}}">{{.Name}}</option>
+                {{end}}
+            </select>
+        </div>
+        <button type="submit" formaction="/contacts/bulk-add-list" class="btn-secondary text-sm">Add selected</button>
+        <button type="submit" formaction="/contacts/bulk-add-matching-list" class="btn-secondary text-sm" onclick="return confirm('Add all {{.contactPage.Total}} contacts matching the current filters to the chosen list?');">Add all matching ({{.contactPage.Total}})</button>
+        <button type="submit" class="text-red-600 font-medium pb-2" onclick="return confirm('Delete selected contacts?');">Delete selected</button>
+        <span class="text-gray-400 pb-2">{{.contactPage.Total}} total</span>
     </div>
     <table class="data-table">
         <thead>
@@ -112,7 +130,7 @@
                 <td class="font-medium">
                     <a href="/contacts/{{.ID}}" class="text-brand-600 hover:underline">{{.Email}}</a>
                     {{if .Suppressed}}<span class="badge badge-red ml-1">suppressed</span>{{end}}
-                    {{if .RepliedAt}}<span class="badge badge-green ml-1">replied</span>{{end}}
+                    {{if and .LastSignal (eq .LastSignal "reply")}}<span class="badge badge-green ml-1">replied</span>{{end}}
                 </td>
                 <td class="text-sm">
                     {{if .LastCampaignID}}<a href="/campaigns/{{.LastCampaignID}}" class="text-brand-600 hover:underline">{{.LastCampaignName}}</a>

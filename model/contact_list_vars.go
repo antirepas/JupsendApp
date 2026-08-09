@@ -284,10 +284,11 @@ func ListContactsInListPage(listID, userID int64, f ListMembersFilter) (ListMemb
 		where = append(where, "LOWER(c.email) LIKE ?")
 		args = append(args, "%"+strings.ToLower(q)+"%")
 	}
-	if f.Engagement == "replied" {
-		where = append(where, "c.replied_at IS NOT NULL")
-	} else if clause, _ := engagementFilterSQL(f.Engagement); clause != "" {
-		where = append(where, "("+clause+")")
+	if f.Engagement == "replied" || f.Engagement == "opened_no_reply" || f.Engagement == "clicked_no_reply" || f.Engagement == "interested" {
+		if clause, extra := engagementFilterSQL(f.Engagement, 0); clause != "" {
+			where = append(where, "("+clause+")")
+			args = append(args, extra...)
+		}
 	}
 	whereSQL := strings.Join(where, " AND ")
 

@@ -205,6 +205,8 @@ func RegisterRoutes(server *gin.Engine) {
 		authd.POST("/contacts/interested/bulk-suppress", InterestedBulkSuppress)
 		authd.POST("/contacts/interested/bulk-dismiss", InterestedBulkDismiss)
 		authd.POST("/contacts/bulk-delete", BulkDeleteContacts)
+		authd.POST("/contacts/bulk-add-list", BulkAddContactsToList)
+		authd.POST("/contacts/bulk-add-matching-list", BulkAddMatchingContactsToList)
 		authd.POST("/contacts/validate", ValidateContactsWeb)
 		authd.POST("/contacts/paste", PasteContactsQuick)
 		authd.POST("/contacts/paste/preview", PreviewContactsPaste)

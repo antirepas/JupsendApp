@@ -43,23 +43,6 @@ func SendManualReply(in ManualReplyInput) (int64, error) {
 		sourceBody = "<p>" + html.EscapeString(bodyText) + "</p>"
 	}
 
-	renderedSubj, renderedBody, missing, err := util.RenderEmail(subject, sourceBody, contactVars, util.RenderOptions{
-		UserID: in.UserID,
-		Ctx:    context.Background(),
-	})
-	if err != nil {
-		return 0, fmt.Errorf("render reply: %w", err)
-	}
-	if len(missing) > 0 {
-		return 0, fmt.Errorf("missing required variable: %s", strings.Join(missing, ", "))
-	}
-	subject = renderedSubj
-	bodyHTML = util.WrapHTMLBody(renderedBody)
-	bodyText = util.StripHTML(bodyHTML)
-	if strings.TrimSpace(bodyText) == "" {
-		return 0, fmt.Errorf("message body is required")
-	}
-
 	accountID, _ := model.LatestSMTPAccountForContact(in.UserID, in.ContactID)
 	var account model.SMTPAccount
 	if accountID > 0 {
@@ -76,6 +59,24 @@ func SendManualReply(in ManualReplyInput) (int64, error) {
 	model.ResetAccountDailyIfNeeded(&account)
 	if !AccountCanSendNow(account) {
 		return 0, fmt.Errorf("mailbox daily or rate limit reached — try again later")
+	}
+
+	renderedSubj, renderedBody, missing, err := util.RenderEmail(subject, sourceBody, contactVars, util.RenderOptions{
+		UserID:      in.UserID,
+		Ctx:         context.Background(),
+		MailboxVars: util.MailboxVarsFromSender(account.FromName, account.SenderEmail()),
+	})
+	if err != nil {
+		return 0, fmt.Errorf("render reply: %w", err)
+	}
+	if len(missing) > 0 {
+		return 0, fmt.Errorf("missing required variable: %s", strings.Join(missing, ", "))
+	}
+	subject = renderedSubj
+	bodyHTML = util.WrapHTMLBody(renderedBody)
+	bodyText = util.StripHTML(bodyHTML)
+	if strings.TrimSpace(bodyText) == "" {
+		return 0, fmt.Errorf("message body is required")
 	}
 
 	inbound, inboundErr := model.LatestInboundMessage(in.UserID, in.ContactID)

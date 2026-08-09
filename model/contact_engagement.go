@@ -142,43 +142,78 @@ func int64Placeholders(ids []int64, userID int64) (string, []interface{}) {
 	return strings.Join(parts, ","), args
 }
 
-func engagementFilterSQL(engagement string) (clause string, extraArgs []interface{}) {
+func engagementFilterSQL(engagement string, campaignID int64) (clause string, extraArgs []interface{}) {
+	campClause := ""
+	if campaignID > 0 {
+		campClause = " AND es.campaign_id = ?"
+		extraArgs = append(extraArgs, campaignID)
+	}
 	switch strings.TrimSpace(engagement) {
 	case "replied":
-		return "c.replied_at IS NOT NULL", nil
+		// Recent replies only — replied_at alone is permanent and too sticky for filters.
+		clause = `
+			EXISTS (
+				SELECT 1 FROM contact_events ce
+				INNER JOIN email_sends es ON es.id = ce.email_send_id
+				WHERE es.contact_id = c.id AND es.user_id = c.user_id AND ce.event_type = 'REPLY'
+					AND ce.created_at >= CURRENT_TIMESTAMP - (90 * INTERVAL '1 day')` + campClause + `
+			)`
+		return clause, extraArgs
 	case "opened_no_reply":
-		return `
-			c.replied_at IS NULL
+		clause = `
+			NOT EXISTS (
+				SELECT 1 FROM contact_events ce
+				INNER JOIN email_sends es ON es.id = ce.email_send_id
+				WHERE es.contact_id = c.id AND es.user_id = c.user_id AND ce.event_type = 'REPLY'
+					AND ce.created_at >= CURRENT_TIMESTAMP - (90 * INTERVAL '1 day')` + campClause + `
+			)
 			AND EXISTS (
 				SELECT 1 FROM email_sends es
 				INNER JOIN email_events ee ON (ee.email_send_id = es.id OR ee.tracking_id = es.tracking_id)
 				WHERE es.contact_id = c.id AND es.user_id = c.user_id AND ee.event_type = 'open' AND COALESCE(ee.is_bot, 0) = 0
-					AND ee.created_at >= CURRENT_TIMESTAMP - (90 * INTERVAL '1 day')
-			)`, nil
+					AND ee.created_at >= CURRENT_TIMESTAMP - (90 * INTERVAL '1 day')` + campClause + `
+			)`
+		if campaignID > 0 {
+			extraArgs = []interface{}{campaignID, campaignID}
+		}
+		return clause, extraArgs
 	case "clicked_no_reply":
-		return `
-			c.replied_at IS NULL
+		clause = `
+			NOT EXISTS (
+				SELECT 1 FROM contact_events ce
+				INNER JOIN email_sends es ON es.id = ce.email_send_id
+				WHERE es.contact_id = c.id AND es.user_id = c.user_id AND ce.event_type = 'REPLY'
+					AND ce.created_at >= CURRENT_TIMESTAMP - (90 * INTERVAL '1 day')` + campClause + `
+			)
 			AND EXISTS (
 				SELECT 1 FROM email_sends es
 				INNER JOIN email_events ee ON (ee.email_send_id = es.id OR ee.tracking_id = es.tracking_id)
 				WHERE es.contact_id = c.id AND es.user_id = c.user_id AND ee.event_type = 'click'
-					AND ee.created_at >= CURRENT_TIMESTAMP - (90 * INTERVAL '1 day')
-			)`, nil
+					AND ee.created_at >= CURRENT_TIMESTAMP - (90 * INTERVAL '1 day')` + campClause + `
+			)`
+		if campaignID > 0 {
+			extraArgs = []interface{}{campaignID, campaignID}
+		}
+		return clause, extraArgs
 	case "interested":
-		return `
+		clause = `
 			EXISTS (
 				SELECT 1 FROM email_sends es
 				INNER JOIN email_events ee ON (ee.email_send_id = es.id OR ee.tracking_id = es.tracking_id)
 				WHERE es.contact_id = c.id AND es.user_id = c.user_id
 					AND (ee.event_type = 'click' OR (ee.event_type = 'open' AND COALESCE(ee.is_bot, 0) = 0))
-					AND ee.created_at >= CURRENT_TIMESTAMP - (90 * INTERVAL '1 day')
+					AND ee.created_at >= CURRENT_TIMESTAMP - (90 * INTERVAL '1 day')` + campClause + `
 			)
 			OR EXISTS (
 				SELECT 1 FROM contact_events ce
 				INNER JOIN email_sends es ON es.id = ce.email_send_id
 				WHERE es.contact_id = c.id AND es.user_id = c.user_id AND ce.event_type = 'REPLY'
-					AND ce.created_at >= CURRENT_TIMESTAMP - (90 * INTERVAL '1 day')
-			)`, nil
+					AND ce.created_at >= CURRENT_TIMESTAMP - (90 * INTERVAL '1 day')` + campClause + `
+			)`
+		if campaignID > 0 {
+			extraArgs = []interface{}{campaignID, campaignID}
+		}
+		return clause, extraArgs
 	default:
 		return "", nil
 	}

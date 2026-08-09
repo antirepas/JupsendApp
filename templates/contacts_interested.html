@@ -10,14 +10,29 @@
 <div class="mb-8">
     <a href="/contacts" class="text-sm text-brand-600 font-medium">← Contacts</a>
     <h2 class="text-2xl font-bold text-charcoal mt-2">Interested contacts</h2>
-    <p class="text-gray-500 mt-1 text-sm">Work queue: who replied, clicked, or opened — act in bulk (last 90 days)</p>
+    <p class="text-gray-500 mt-1 text-sm">Work queue: who replied, clicked, or opened in the last 90 days — filter by campaign, then add to a list</p>
 </div>
 
 {{if .success}}<div class="alert-success mb-6">{{.success}}</div>{{end}}
 {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
 
+<form method="GET" action="/contacts/interested" class="card mb-4 flex flex-wrap gap-3 items-end p-4">
+    <div class="min-w-[220px]">
+        <label class="form-label">Campaign</label>
+        <select name="campaign" class="form-input">
+            <option value="">All campaigns (90d)</option>
+            {{range .campaigns}}
+            <option value="{{.ID}}" {{if eq $.filterCampaign .ID}}selected{{end}}>{{.Name}}</option>
+            {{end}}
+        </select>
+    </div>
+    <button type="submit" class="btn-secondary">Filter</button>
+    {{if .filterCampaign}}<a href="/contacts/interested" class="text-sm text-gray-500 pb-2">Clear</a>{{end}}
+</form>
+
 {{if .contacts}}
 <form method="POST" id="interested-form">
+{{if .filterCampaign}}<input type="hidden" name="campaign" value="{{.filterCampaign}}">{{end}}
 <div class="card mb-4">
     <div class="flex flex-wrap gap-3 items-end p-1">
         <div class="min-w-[200px]">

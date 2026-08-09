@@ -63,8 +63,9 @@ func executeJob(job model.SendJob, account model.SMTPAccount) error {
 	baseURL := model.UserBaseURL(job.UserID)
 
 	renderOpts := util.RenderOptions{
-		UserID: job.UserID,
-		Ctx:    context.Background(),
+		UserID:      job.UserID,
+		Ctx:         context.Background(),
+		MailboxVars: util.MailboxVarsFromSender(account.FromName, account.SenderEmail()),
 	}
 	newSubject, newBody, missingRequired, err := util.RenderEmail(template.Subject, template.Body, contactVars, renderOpts)
 	if err != nil {

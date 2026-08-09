@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 
 	"emailtracker.com/model"
 	"github.com/gin-gonic/gin"
@@ -13,15 +14,27 @@ func InterestedBulkAddList(c *gin.Context) {
 	userID := mustUserID(c)
 	listID, _ := strconv.ParseInt(c.PostForm("list_id"), 10, 64)
 	ids := parseContactIDs(c)
+	campaign := c.Query("campaign")
+	if campaign == "" {
+		campaign = c.PostForm("campaign")
+	}
+	base := "/contacts/interested"
+	if campaign != "" {
+		base += "?campaign=" + url.QueryEscape(campaign)
+	}
+	sep := "?"
+	if strings.Contains(base, "?") {
+		sep = "&"
+	}
 	if listID <= 0 || len(ids) == 0 {
-		c.Redirect(http.StatusFound, "/contacts/interested?error="+url.QueryEscape("Select contacts and a list"))
+		c.Redirect(http.StatusFound, base+sep+"error="+url.QueryEscape("Select contacts and a list"))
 		return
 	}
 	if err := model.AddContactsToList(listID, userID, ids); err != nil {
-		c.Redirect(http.StatusFound, "/contacts/interested?error="+url.QueryEscape(err.Error()))
+		c.Redirect(http.StatusFound, base+sep+"error="+url.QueryEscape(err.Error()))
 		return
 	}
-	c.Redirect(http.StatusFound, "/contacts/interested?success="+url.QueryEscape("Added "+strconv.Itoa(len(ids))+" contacts to list"))
+	c.Redirect(http.StatusFound, base+sep+"success="+url.QueryEscape("Added "+strconv.Itoa(len(ids))+" contacts to list"))
 }
 
 func InterestedBulkSuppress(c *gin.Context) {

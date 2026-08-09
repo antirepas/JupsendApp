@@ -177,7 +177,12 @@ func ListContactsFiltered(userID int64, f ContactListFilter) (ContactListPage, e
 		where = append(where, `c.id IN (SELECT contact_id FROM contact_list_members WHERE list_id = ?)`)
 		args = append(args, f.ListID)
 	}
-	if f.CampaignID > 0 {
+	engagement := strings.TrimSpace(f.Engagement)
+	if f.RepliedOnly {
+		engagement = "replied"
+	}
+	// Campaign alone = membership. Campaign + engagement = engagement on that campaign's sends.
+	if f.CampaignID > 0 && engagement == "" {
 		where = append(where, campaignMembershipFilterSQL())
 		args = append(args, f.CampaignID, f.CampaignID)
 	}
@@ -189,10 +194,9 @@ func ListContactsFiltered(userID int64, f ContactListFilter) (ContactListPage, e
 		where = append(where, "LOWER(c.email) LIKE ?")
 		args = append(args, "%"+strings.ToLower(q)+"%")
 	}
-	if f.RepliedOnly || f.Engagement == "replied" {
-		where = append(where, "c.replied_at IS NOT NULL")
-	} else if clause, _ := engagementFilterSQL(f.Engagement); clause != "" {
+	if clause, extra := engagementFilterSQL(engagement, f.CampaignID); clause != "" {
 		where = append(where, "("+clause+")")
+		args = append(args, extra...)
 	}
 
 	whereSQL := strings.Join(where, " AND ")
@@ -300,6 +304,36 @@ func ListContactsFiltered(userID int64, f ContactListFilter) (ContactListPage, e
 		PageSize:   f.PageSize,
 		TotalPages: totalPages,
 	}, nil
+}
+
+// ListContactIDsMatching returns all contact IDs matching the filter (capped).
+func ListContactIDsMatching(userID int64, f ContactListFilter, max int) ([]int64, error) {
+	if max < 1 {
+		max = 2000
+	}
+	if max > 10000 {
+		max = 10000
+	}
+	f.Lite = true
+	f.PageSize = 200
+	ids := make([]int64, 0, 256)
+	for page := 1; len(ids) < max; page++ {
+		f.Page = page
+		result, err := ListContactsFiltered(userID, f)
+		if err != nil {
+			return nil, err
+		}
+		for _, it := range result.Items {
+			ids = append(ids, it.ID)
+			if len(ids) >= max {
+				return ids, nil
+			}
+		}
+		if page >= result.TotalPages || len(result.Items) == 0 {
+			break
+		}
+	}
+	return ids, nil
 }
 
 func BulkDeleteContacts(userID int64, ids []int64) (int, error) {

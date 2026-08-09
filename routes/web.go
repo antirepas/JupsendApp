@@ -323,19 +323,23 @@ func UpdateTemplate(ctx *gin.Context) {
 
 func InterestedContactsPage(ctx *gin.Context) {
 	userID := mustUserID(ctx)
-	contacts, err := model.ListInterestedContacts(userID, 100)
+	campaignID, _ := strconv.ParseInt(ctx.Query("campaign"), 10, 64)
+	contacts, err := model.ListInterestedContactsFiltered(userID, campaignID, 200)
 	if err != nil {
 		log.Print(err)
 		ctx.HTML(http.StatusInternalServerError, "error.html", gin.H{"title": "Error", "active": "contacts", "error": "Failed to load interested contacts"})
 		return
 	}
 	lists, _ := model.ListContactLists(userID)
+	campaigns, _ := model.ListCampaigns(userID)
 	ctx.HTML(http.StatusOK, "contacts_interested.html", gin.H{
 		"title":           "Interested contacts",
 		"active":          "interested",
 		"contacts":        contacts,
 		"interestedCount": len(contacts),
 		"lists":           lists,
+		"campaigns":       campaigns,
+		"filterCampaign":  campaignID,
 		"playbook":        playbookInterested(),
 		"success":         ctx.Query("success"),
 		"error":           ctx.Query("error"),
@@ -494,6 +498,108 @@ func BulkDeleteContacts(ctx *gin.Context) {
 	ctx.Redirect(http.StatusFound, "/contacts?success="+url.QueryEscape(msg))
 }
 
+func BulkAddContactsToList(ctx *gin.Context) {
+	userID := mustUserID(ctx)
+	listID, _ := strconv.ParseInt(ctx.PostForm("list_id"), 10, 64)
+	ids := parseContactIDs(ctx)
+	redir := contactsFilterRedirect(ctx, "")
+	if listID <= 0 || len(ids) == 0 {
+		ctx.Redirect(http.StatusFound, redir+"&error="+url.QueryEscape("Select contacts and a list"))
+		return
+	}
+	if err := model.AddContactsToList(listID, userID, ids); err != nil {
+		ctx.Redirect(http.StatusFound, redir+"&error="+url.QueryEscape(err.Error()))
+		return
+	}
+	ctx.Redirect(http.StatusFound, redir+"&success="+url.QueryEscape("Added "+strconv.Itoa(len(ids))+" contacts to list"))
+}
+
+func BulkAddMatchingContactsToList(ctx *gin.Context) {
+	userID := mustUserID(ctx)
+	listID, _ := strconv.ParseInt(ctx.PostForm("list_id"), 10, 64)
+	filter := model.ContactListFilter{
+		Query:       ctx.PostForm("q"),
+		ListID:      parseInt64Form(ctx, "list"),
+		CampaignID:  parseInt64Form(ctx, "campaign"),
+		Engagement:  ctx.PostForm("engagement"),
+		Sort:        ctx.DefaultPostForm("sort", "newest"),
+		RepliedOnly: ctx.PostForm("replied") == "1",
+	}
+	redir := contactsFilterRedirectFromFilter(filter, "")
+	if listID <= 0 {
+		ctx.Redirect(http.StatusFound, redir+"&error="+url.QueryEscape("Choose a list"))
+		return
+	}
+	ids, err := model.ListContactIDsMatching(userID, filter, 2000)
+	if err != nil {
+		ctx.Redirect(http.StatusFound, redir+"&error="+url.QueryEscape(err.Error()))
+		return
+	}
+	if len(ids) == 0 {
+		ctx.Redirect(http.StatusFound, redir+"&error="+url.QueryEscape("No contacts match these filters"))
+		return
+	}
+	if err := model.AddContactsToList(listID, userID, ids); err != nil {
+		ctx.Redirect(http.StatusFound, redir+"&error="+url.QueryEscape(err.Error()))
+		return
+	}
+	msg := "Added " + strconv.Itoa(len(ids)) + " matching contacts to list"
+	ctx.Redirect(http.StatusFound, redir+"&success="+url.QueryEscape(msg))
+}
+
+func parseInt64Form(ctx *gin.Context, key string) int64 {
+	v, _ := strconv.ParseInt(ctx.PostForm(key), 10, 64)
+	return v
+}
+
+func contactsFilterRedirect(ctx *gin.Context, _ string) string {
+	q := url.Values{}
+	q.Set("tab", "all")
+	if v := ctx.PostForm("q"); v != "" {
+		q.Set("q", v)
+	}
+	if v := ctx.PostForm("list"); v != "" {
+		q.Set("list", v)
+	}
+	if v := ctx.PostForm("campaign"); v != "" {
+		q.Set("campaign", v)
+	}
+	if v := ctx.PostForm("engagement"); v != "" {
+		q.Set("engagement", v)
+	}
+	if v := ctx.PostForm("sort"); v != "" {
+		q.Set("sort", v)
+	}
+	if ctx.PostForm("replied") == "1" {
+		q.Set("replied", "1")
+	}
+	return "/contacts?" + q.Encode()
+}
+
+func contactsFilterRedirectFromFilter(f model.ContactListFilter, _ string) string {
+	q := url.Values{}
+	q.Set("tab", "all")
+	if f.Query != "" {
+		q.Set("q", f.Query)
+	}
+	if f.ListID > 0 {
+		q.Set("list", strconv.FormatInt(f.ListID, 10))
+	}
+	if f.CampaignID > 0 {
+		q.Set("campaign", strconv.FormatInt(f.CampaignID, 10))
+	}
+	if f.Engagement != "" {
+		q.Set("engagement", f.Engagement)
+	}
+	if f.Sort != "" {
+		q.Set("sort", f.Sort)
+	}
+	if f.RepliedOnly {
+		q.Set("replied", "1")
+	}
+	return "/contacts?" + q.Encode()
+}
+
 func ContactDetailPage(ctx *gin.Context) {
 	userID := mustUserID(ctx)
 	id, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
@@ -588,8 +694,9 @@ func enrichLegacyConversationBodies(userID, contactID int64, msgs []model.Conver
 			continue
 		}
 		subj, body, _, err := util.RenderEmail(tmpl.Subject, tmpl.Body, vars, util.RenderOptions{
-			UserID:     userID,
-			ForPreview: true,
+			UserID:      userID,
+			ForPreview:  true,
+			MailboxVars: mailboxVarsForPreview(userID),
 		})
 		if err != nil {
 			continue
@@ -913,8 +1020,9 @@ func SendDetailPage(ctx *gin.Context) {
 		if tmpl, err := model.GetTemplate(detail.TemplateID); err == nil {
 			_, vars, _ := model.GetContactForUser(detail.ContactID, mustUserID(ctx))
 			_, body, _, err := util.RenderEmail(tmpl.Subject, tmpl.Body, vars, util.RenderOptions{
-				UserID:     mustUserID(ctx),
-				ForPreview: true,
+				UserID:      mustUserID(ctx),
+				ForPreview:  true,
+				MailboxVars: mailboxVarsForPreview(mustUserID(ctx)),
 			})
 			if err == nil {
 				safe := util.SanitizeHTMLForDisplay(util.WrapHTMLBody(body))

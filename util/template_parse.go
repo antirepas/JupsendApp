@@ -12,12 +12,13 @@ type Filter struct {
 	Arg  string
 }
 
-// VarRef is a parsed {{variable|filter}} or {{~variable}} token.
+// VarRef is a parsed {{variable|filter}}, {{@mailbox}}, or {{~variable}} token.
 type VarRef struct {
 	Raw      string // exact text as it appears in template
 	Name     string
 	Filters  []Filter
 	AIFit    bool // {{~name}} or |fit
+	Mailbox  bool // {{@name}} — filled from the sending mailbox, not the contact
 	TokenPos int  // byte offset in source text
 }
 
@@ -30,8 +31,8 @@ type IfBlock struct {
 }
 
 var (
-	// Variable names may contain letters, digits, underscores, and spaces.
-	varRefRe  = regexp.MustCompile(`\{\{\s*~?\s*([a-zA-Z_][a-zA-Z0-9_ ]*)\s*(\|[^}]*)?\s*\}\}`)
+	// Optional ~ (AI) and/or @ (mailbox), then variable name, then optional filters.
+	varRefRe  = regexp.MustCompile(`\{\{\s*(~)?\s*(@)?\s*([a-zA-Z_][a-zA-Z0-9_ ]*)\s*(\|[^}]*)?\s*\}\}`)
 	ifBlockRe = regexp.MustCompile(`(?s)\{%\s*if\s+([a-zA-Z_][a-zA-Z0-9_ ]*)\s*%\}(.*?)\{%\s*endif\s*%\}`)
 )
 
@@ -40,17 +41,16 @@ func ParseVarRefs(text string) []VarRef {
 	var refs []VarRef
 	for _, loc := range varRefRe.FindAllStringSubmatchIndex(text, -1) {
 		raw := text[loc[0]:loc[1]]
-		name := strings.TrimSpace(text[loc[2]:loc[3]])
+		name := strings.TrimSpace(text[loc[6]:loc[7]])
 		ref := VarRef{
 			Raw:      raw,
 			Name:     name,
 			TokenPos: loc[0],
+			AIFit:    loc[2] >= 0 && loc[3] > loc[2],
+			Mailbox:  loc[4] >= 0 && loc[5] > loc[4],
 		}
-		if strings.Contains(raw, "~") {
-			ref.AIFit = true
-		}
-		if loc[4] >= 0 && loc[5] > loc[4] {
-			filterPart := strings.TrimPrefix(text[loc[4]:loc[5]], "|")
+		if loc[8] >= 0 && loc[9] > loc[8] {
+			filterPart := strings.TrimPrefix(text[loc[8]:loc[9]], "|")
 			ref.Filters = parseFilters(filterPart)
 			for _, f := range ref.Filters {
 				if f.Name == "fit" {
@@ -97,26 +97,52 @@ func ParseIfBlocks(text string) []IfBlock {
 	return blocks
 }
 
-// ExtractTemplateVariables returns sorted unique base variable keys from text parts.
+// ExtractTemplateVariables returns sorted unique contact variable keys (excludes {{@…}} mailbox vars).
 func ExtractTemplateVariables(parts ...string) []string {
 	seen := map[string]bool{}
 	var keys []string
 	for _, part := range parts {
 		for _, ref := range ParseVarRefs(part) {
-			if ref.Name != "" && !seen[ref.Name] {
-				seen[ref.Name] = true
-				keys = append(keys, ref.Name)
+			if ref.Mailbox || ref.Name == "" || seen[ref.Name] {
+				continue
 			}
+			seen[ref.Name] = true
+			keys = append(keys, ref.Name)
 		}
 		for _, block := range ParseIfBlocks(part) {
-			if block.VarName != "" && !seen[block.VarName] {
-				seen[block.VarName] = true
-				keys = append(keys, block.VarName)
+			if block.VarName == "" || seen[block.VarName] {
+				continue
 			}
+			seen[block.VarName] = true
+			keys = append(keys, block.VarName)
 		}
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+// ExtractMailboxVariables returns sorted unique mailbox variable keys used as {{@key}}.
+func ExtractMailboxVariables(parts ...string) []string {
+	seen := map[string]bool{}
+	var keys []string
+	for _, part := range parts {
+		for _, ref := range ParseVarRefs(part) {
+			if !ref.Mailbox || ref.Name == "" || seen[ref.Name] {
+				continue
+			}
+			seen[ref.Name] = true
+			keys = append(keys, ref.Name)
+		}
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// KnownMailboxVariableKeys are filled from the sending mailbox at send time.
+var KnownMailboxVariableKeys = map[string]bool{
+	"name":       true,
+	"first_name": true,
+	"email":      true,
 }
 
 // KnownFilters is the set of supported filter names for linting.

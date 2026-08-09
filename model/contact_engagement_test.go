@@ -101,6 +101,43 @@ func TestListContactsFilteredEngagementAndCampaign(t *testing.T) {
 	}
 }
 
+func TestListContactsFilteredCampaignScopedOpen(t *testing.T) {
+	db.OpenTestDB(t)
+	userID, _ := CreateUser("eng-camp-scope@test.com", "hash", "http://localhost")
+	var templateID int64
+	_ = db.QueryRow(`INSERT INTO template (name, subject, body, user_id) VALUES ('t','s','b', ?) RETURNING id`, userID).Scan(&templateID)
+
+	c := Contact{Email: "scoped@test.com"}
+	cid, _ := c.SaveContact(userID, nil)
+	campA, _ := CreateCampaign(userID, "Camp A", templateID, 0, "bulk", 0, "", "")
+	campB, _ := CreateCampaign(userID, "Camp B", templateID, 0, "bulk", 0, "", "")
+	sendA, err := enqueueTestSend(userID, templateID, cid, campA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sendB, err := enqueueTestSend(userID, templateID, cid, campB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = db.Exec(`INSERT INTO email_events (email_send_id, tracking_id, event_type, is_bot, created_at) VALUES (?, ?, 'open', 0, CURRENT_TIMESTAMP)`, sendB, fmt.Sprintf("track-b-%d", cid))
+	_ = sendA
+
+	pageB, err := ListContactsFiltered(userID, ContactListFilter{CampaignID: campB, Engagement: "opened_no_reply", PageSize: 50})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !contactIDsContain(pageB.Items, cid) {
+		t.Fatal("expected open on campaign B to match")
+	}
+	pageA, err := ListContactsFiltered(userID, ContactListFilter{CampaignID: campA, Engagement: "opened_no_reply", PageSize: 50})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if contactIDsContain(pageA.Items, cid) {
+		t.Fatal("open on B must not match campaign A filter")
+	}
+}
+
 func TestListContactsFilteredOpenedWithin90Days(t *testing.T) {
 	db.OpenTestDB(t)
 	userID, _ := CreateUser("eng-open-window@test.com", "hash", "http://localhost")

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"emailtracker.com/db"
 	"emailtracker.com/model"
 	"emailtracker.com/util"
 	"github.com/gin-gonic/gin"
@@ -31,10 +32,11 @@ func PreviewTemplate(ctx *gin.Context) {
 	userID := mustUserID(ctx)
 	var aiWarnings []string
 	opts := util.RenderOptions{
-		ForPreview: true,
-		UseAI:      req.UseAI,
-		UserID:     userID,
-		Ctx:        ctx.Request.Context(),
+		ForPreview:  true,
+		UseAI:       req.UseAI,
+		UserID:      userID,
+		Ctx:         ctx.Request.Context(),
+		MailboxVars: mailboxVarsForPreview(userID),
 	}
 	if req.UseAI {
 		opts.AIWarnings = &aiWarnings
@@ -73,4 +75,13 @@ func templateBuilderContext(userID int64) (senderEmail string, defaultSampleJSON
 	}
 	b, _ := json.Marshal(sample)
 	return senderEmail, string(b)
+}
+
+func mailboxVarsForPreview(userID int64) map[string]string {
+	if userID > 0 && db.DB != nil {
+		if acc, err := model.GetActiveSMTPAccountForUser(userID); err == nil {
+			return util.MailboxVarsFromSender(acc.FromName, acc.SenderEmail())
+		}
+	}
+	return util.MailboxVarsFromSender("Your Name", "you@example.com")
 }

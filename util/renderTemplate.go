@@ -33,6 +33,7 @@ type RenderOptions struct {
 	ConsumeAI      AICreditConsumer
 	AICreditsCheck func(userID int64) bool // optional override (tests)
 	AIWarnings     *[]string               // optional collector for preview UI
+	MailboxVars    map[string]string       // {{@name}}, {{@first_name}}, {{@email}} from sending mailbox
 }
 
 // RenderResult holds rendered text and any missing required variables.
@@ -104,15 +105,24 @@ func RenderTemplate(tBody string, contactVars []model.ContactVariables, opts Ren
 	// Replace each var ref from end to start to preserve positions
 	for i := len(refs) - 1; i >= 0; i-- {
 		ref := refs[i]
-		raw := lookupContactVar(varMap, ref.Name)
+		var raw string
+		if ref.Mailbox {
+			raw = lookupMailboxVar(opts.MailboxVars, ref.Name)
+		} else {
+			raw = lookupContactVar(varMap, ref.Name)
+		}
 		value, required, rawHTML := ApplyFilters(raw, ref.Filters, opts.BodyMode)
 
 		if required && isEmptyValue(value) {
-			missing = append(missing, ref.Name)
+			label := ref.Name
+			if ref.Mailbox {
+				label = "@" + ref.Name
+			}
+			missing = append(missing, label)
 			value = ""
 		}
 
-		if runAI && (ref.AIFit || hasFilter(ref.Filters, "summarize")) {
+		if runAI && !ref.Mailbox && (ref.AIFit || hasFilter(ref.Filters, "summarize")) {
 			value = ApplyAIFilters(opts.Ctx, value, ref, text, ref.TokenPos, opts.UserID, opts.ConsumeAI, opts.AICreditsCheck, opts.AIWarnings)
 		}
 

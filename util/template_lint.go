@@ -98,16 +98,28 @@ func LintTemplate(subject, bodyHTML string) []TemplateLintIssue {
 func lintFilters(text string, issues *[]TemplateLintIssue) {
 	seenRequired := map[string]bool{}
 	for _, ref := range ParseVarRefs(text) {
+		displayName := ref.Name
+		if ref.Mailbox {
+			displayName = "@" + ref.Name
+			if !KnownMailboxVariableKeys[ref.Name] {
+				*issues = append(*issues, TemplateLintIssue{
+					Level:   "warn",
+					Code:    "unknown_mailbox_var",
+					Message: fmt.Sprintf("Unknown mailbox variable {{@%s}} — use @name, @first_name, or @email", ref.Name),
+					Source:  "rule",
+				})
+			}
+		}
 		for _, f := range ref.Filters {
 			if !KnownFilters[f.Name] {
 				*issues = append(*issues, TemplateLintIssue{
 					Level:   "warn",
 					Code:    "unknown_filter",
-					Message: fmt.Sprintf("Unknown filter %q on {{%s}}", f.Name, ref.Name),
+					Message: fmt.Sprintf("Unknown filter %q on {{%s}}", f.Name, displayName),
 					Source:  "rule",
 				})
 			}
-			if f.Name == "required" && !seenRequired[ref.Name] {
+			if f.Name == "required" && !ref.Mailbox && !seenRequired[ref.Name] {
 				seenRequired[ref.Name] = true
 				*issues = append(*issues, TemplateLintIssue{
 					Level:   "info",
@@ -120,7 +132,7 @@ func lintFilters(text string, issues *[]TemplateLintIssue) {
 				*issues = append(*issues, TemplateLintIssue{
 					Level:   "warn",
 					Code:    "raw_html",
-					Message: fmt.Sprintf("{{%s|raw}} inserts unescaped HTML — only use with trusted content", ref.Name),
+					Message: fmt.Sprintf("{{%s|raw}} inserts unescaped HTML — only use with trusted content", displayName),
 					Source:  "rule",
 				})
 			}

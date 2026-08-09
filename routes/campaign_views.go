@@ -218,6 +218,7 @@ func buildCampaignContactRows(
 	sendMap, _ := model.GetCampaignContactEngagementLite(campaign.ID)
 	contactData, _ := model.GetCampaignContactDataMap(campaign.ID)
 	replied := model.CampaignRepliedContactSet(campaign.ID)
+	mailboxVars := mailboxVarsForPreview(userID)
 
 	var rows []CampaignContactRowView
 	for i, cid := range contactIDs {
@@ -255,7 +256,11 @@ func buildCampaignContactRows(
 			cells = append(cells, ContactVariableCell{Key: key, Value: val, Missing: missingVal})
 		}
 
-		subject, body, _, _ := util.RenderEmail(tpl.Subject, tpl.Body, data.Variables, util.RenderOptions{ForPreview: true, BodyMode: true})
+		subject, body, _, _ := util.RenderEmail(tpl.Subject, tpl.Body, data.Variables, util.RenderOptions{
+			ForPreview:  true,
+			BodyMode:    true,
+			MailboxVars: mailboxVars,
+		})
 		body = truncatePreview(body, 500)
 
 		row := CampaignContactRowView{
