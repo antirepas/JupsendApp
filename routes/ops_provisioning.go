@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"net/url"
@@ -85,10 +86,52 @@ func OpsProvisioningPage(c *gin.Context) {
 		"domains":       domainRows,
 		"purchases":     purchaseRows,
 		"manualEnabled": config.ManualInboxKitFulfillment,
+		"includedSeats": config.InboxKitIncludedMailboxCount(),
+		"mailboxSlots":  mailboxSlotNums(config.InboxKitIncludedMailboxCount()),
 		"supportEmail":  config.SupportEmail,
 		"success":       c.Query("success"),
 		"error":         c.Query("error"),
 	})
+}
+
+func OpsAdminConnectDomain(c *gin.Context) {
+	userEmail := strings.TrimSpace(c.PostForm("user_email"))
+	domain := strings.TrimSpace(c.PostForm("domain"))
+	if userEmail == "" || domain == "" {
+		c.Redirect(http.StatusFound, "/ops/provisioning?error="+url.QueryEscape("User email and domain are required"))
+		return
+	}
+	u, err := model.GetUserByEmail(userEmail)
+	if err != nil {
+		c.Redirect(http.StatusFound, "/ops/provisioning?error="+url.QueryEscape("User not found: "+userEmail))
+		return
+	}
+	n := config.InboxKitIncludedMailboxCount()
+	var specs []model.StarterMailboxSpec
+	for i := 1; i <= n; i++ {
+		fn := strings.TrimSpace(c.PostForm(fmt.Sprintf("first_name_%d", i)))
+		ln := strings.TrimSpace(c.PostForm(fmt.Sprintf("last_name_%d", i)))
+		local := strings.TrimSpace(c.PostForm(fmt.Sprintf("local_%d", i)))
+		if fn == "" && ln == "" && local == "" {
+			continue
+		}
+		if fn == "" || ln == "" || local == "" {
+			c.Redirect(http.StatusFound, "/ops/provisioning?error="+url.QueryEscape(fmt.Sprintf("Mailbox %d needs first name, last name, and local part", i)))
+			return
+		}
+		specs = append(specs, model.StarterMailboxSpec{FirstName: fn, LastName: ln, LocalPart: local})
+	}
+	if len(specs) == 0 {
+		c.Redirect(http.StatusFound, "/ops/provisioning?error="+url.QueryEscape("Add at least one mailbox"))
+		return
+	}
+	_, detail, err := model.AdminConnectDomainWithMailboxes(u.ID, domain, specs)
+	if err != nil {
+		log.Printf("ops admin connect %s for %s: %v", domain, userEmail, err)
+		c.Redirect(http.StatusFound, "/ops/provisioning?error="+url.QueryEscape(err.Error()))
+		return
+	}
+	c.Redirect(http.StatusFound, "/ops/provisioning?success="+url.QueryEscape(detail))
 }
 
 func OpsFulfillDomain(c *gin.Context) {

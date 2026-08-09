@@ -17,6 +17,36 @@
   {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
 
   <div class="card mb-8">
+    <h3 class="card-title">Connect domain + mailboxes (repair)</h3>
+    <p class="text-sm text-gray-500 mb-4">
+      For a customer whose domain is missing seats: connect the domain to InboxKit (if needed), sync existing mailboxes, or buy up to {{.includedSeats}} included seats from the InboxKit wallet. Runs immediately — does not wait in the queue.
+    </p>
+    <form method="POST" action="/ops/provisioning/connect-domain" class="space-y-4">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label class="form-label">Customer email (jupsend login)</label>
+          <input name="user_email" type="email" class="form-input" required placeholder="customer@company.com">
+        </div>
+        <div>
+          <label class="form-label">Domain</label>
+          <input name="domain" class="form-input" required placeholder="outreach.example.com">
+        </div>
+      </div>
+      <div class="space-y-3">
+        <p class="text-xs font-semibold text-slate-600 uppercase tracking-wide">Mailboxes ({{.includedSeats}} max)</p>
+        {{range $i, $n := .mailboxSlots}}
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <input name="first_name_{{$n}}" class="form-input text-sm" placeholder="First" {{if eq $n 1}}required{{end}}>
+          <input name="last_name_{{$n}}" class="form-input text-sm" placeholder="Last" {{if eq $n 1}}required{{end}}>
+          <input name="local_{{$n}}" class="form-input text-sm" placeholder="local part" {{if eq $n 1}}required{{end}}>
+        </div>
+        {{end}}
+      </div>
+      <button type="submit" class="btn-primary" onclick="return confirm('Connect domain and provision mailboxes via InboxKit now? Wallet may be charged.');">Connect &amp; provision</button>
+    </form>
+  </div>
+
+  <div class="card mb-8">
     <h3 class="card-title">Queued domains</h3>
     {{if .domains}}
     <ul class="divide-y divide-gray-100">
