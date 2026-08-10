@@ -45,6 +45,9 @@ var (
 	InboxKitRegistrantName  string
 	InboxKitRegistrantOrg   string
 	AdminEmails           map[string]struct{}
+	// AdminOutreachDomain is an InboxKit domain already in the workspace that
+	// admin users auto-link on the Mailboxes page (e.g. tryjupsend.com). Empty = disabled.
+	AdminOutreachDomain string
 	TrustedProxies        []string
 	OpenAIAPIKey          string
 	OpenAIModel           string
@@ -104,6 +107,7 @@ func reloadFromEnv() {
 	InboxKitRegistrantName = strings.TrimSpace(os.Getenv("INBOXKIT_REGISTRANT_NAME"))
 	InboxKitRegistrantOrg = strings.TrimSpace(os.Getenv("INBOXKIT_REGISTRANT_ORG"))
 	AdminEmails = parseEmailList(os.Getenv("ADMIN_EMAILS"))
+	AdminOutreachDomain = strings.ToLower(strings.TrimSpace(os.Getenv("ADMIN_OUTREACH_DOMAIN")))
 	TrustedProxies = parseTrustedProxies(os.Getenv("TRUSTED_PROXIES"))
 	OpenAIAPIKey = strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
 	OpenAIModel = envOr("OPENAI_MODEL", "gpt-5-nano")

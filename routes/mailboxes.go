@@ -381,6 +381,9 @@ func MailboxesPage(c *gin.Context) {
 			}
 		}
 	}
+	if err := model.EnsureAdminOutreachDomain(userID); err != nil {
+		log.Printf("admin outreach domain: %v", err)
+	}
 	model.SyncPendingOutreachDomains(userID)
 
 	domains, _ := model.ListOutreachDomains(userID)

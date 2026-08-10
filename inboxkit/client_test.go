@@ -193,7 +193,7 @@ func TestBuyItemsFromOrderMailboxes(t *testing.T) {
 	items := BuyItemsFromOrderMailboxes("Acme.COM", []OrderMailbox{
 		{FirstName: "A", LastName: "B", Email: "alex@acme.com", Platform: "GOOGLE"},
 	})
-	if len(items) != 1 || items[0].Username != "alex" || items[0].DomainName != "acme.com" || items[0].Email != "alex@acme.com" {
+	if len(items) != 1 || items[0].Username != "alex" || items[0].DomainName != "acme.com" {
 		t.Fatalf("%+v", items)
 	}
 }
@@ -224,11 +224,22 @@ func TestBuyMailboxesSendsDomainAndWallet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if gotBody["domain"] != "acme.com" {
-		t.Fatalf("domain=%v body=%v", gotBody["domain"], gotBody)
+	if _, ok := gotBody["domain"]; ok {
+		t.Fatalf("top-level domain must not be sent: %v", gotBody)
 	}
 	if gotBody["use_wallet_balance"] != true {
 		t.Fatalf("wallet=%v", gotBody["use_wallet_balance"])
+	}
+	mboxes, _ := gotBody["mailboxes"].([]any)
+	if len(mboxes) != 1 {
+		t.Fatalf("mailboxes=%v", gotBody["mailboxes"])
+	}
+	item, _ := mboxes[0].(map[string]any)
+	if item["username"] != "alex" || item["domain_name"] != "acme.com" {
+		t.Fatalf("item=%v", item)
+	}
+	if _, hasEmail := item["email"]; hasEmail {
+		t.Fatalf("email field must not be sent: %v", item)
 	}
 	if resp.OrderID != "ord-1" || len(resp.Mailboxes) != 1 || resp.Mailboxes[0].UID != "mb-9" {
 		t.Fatalf("%+v", resp)

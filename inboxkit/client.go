@@ -323,18 +323,19 @@ func (o OrderStatus) IsError() bool {
 }
 
 // BuyMailboxItem matches POST /api/mailboxes/buy.
+// InboxKit rejects unknown fields (e.g. "email"); use username + domain_name only.
 type BuyMailboxItem struct {
 	FirstName      string `json:"first_name"`
 	LastName       string `json:"last_name"`
-	Email          string `json:"email,omitempty"`
-	Username       string `json:"username,omitempty"`
+	Username       string `json:"username"`
 	Platform       string `json:"platform"`
-	DomainName     string `json:"domain_name,omitempty"`
+	DomainName     string `json:"domain_name"`
 	ProfilePicture string `json:"profile_picture,omitempty"`
 }
 
 type BuyMailboxesRequest struct {
-	Domain           string           `json:"domain,omitempty"`
+	// Domain is derived locally only — not sent to InboxKit (each item has domain_name).
+	Domain           string           `json:"-"`
 	Mailboxes        []BuyMailboxItem `json:"mailboxes"`
 	UseWalletBalance bool             `json:"use_wallet_balance,omitempty"`
 }
@@ -367,17 +368,16 @@ func BuyItemsFromOrderMailboxes(domain string, mailboxes []OrderMailbox) []BuyMa
 		if platform == "" {
 			platform = "GOOGLE"
 		}
-		email := strings.ToLower(strings.TrimSpace(m.Email))
-		if email == "" {
-			email = user + "@" + domain
+		itemDomain := domain
+		if itemDomain == "" && strings.Contains(m.Email, "@") {
+			itemDomain = strings.ToLower(m.Email[strings.Index(m.Email, "@")+1:])
 		}
 		out = append(out, BuyMailboxItem{
 			FirstName:  m.FirstName,
 			LastName:   m.LastName,
-			Email:      email,
 			Username:   user,
 			Platform:   platform,
-			DomainName: domain,
+			DomainName: itemDomain,
 		})
 	}
 	return out
@@ -386,11 +386,13 @@ func BuyItemsFromOrderMailboxes(domain string, mailboxes []OrderMailbox) []BuyMa
 func (c *Client) BuyMailboxes(req BuyMailboxesRequest) (BuyMailboxesResponse, error) {
 	if strings.TrimSpace(req.Domain) == "" && len(req.Mailboxes) > 0 {
 		req.Domain = strings.ToLower(strings.TrimSpace(req.Mailboxes[0].DomainName))
-		if req.Domain == "" {
-			if email := req.Mailboxes[0].Email; strings.Contains(email, "@") {
-				req.Domain = strings.ToLower(email[strings.Index(email, "@")+1:])
-			}
+	}
+	for i := range req.Mailboxes {
+		if req.Mailboxes[i].DomainName == "" && req.Domain != "" {
+			req.Mailboxes[i].DomainName = req.Domain
 		}
+		req.Mailboxes[i].Username = strings.ToLower(strings.TrimSpace(req.Mailboxes[i].Username))
+		req.Mailboxes[i].DomainName = strings.ToLower(strings.TrimSpace(req.Mailboxes[i].DomainName))
 	}
 	// Charge InboxKit workspace wallet when buying seats outside a Whop checkout.
 	req.UseWalletBalance = true
