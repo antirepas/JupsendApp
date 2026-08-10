@@ -7,6 +7,7 @@
 {{template "sidebar" .}}
 <main class="flex-1 overflow-y-auto">
 <div class="max-w-7xl mx-auto p-6">
+{{if .success}}<div class="alert-success mb-4">{{.success}}</div>{{end}}
 {{if eq .workflow.Status "archived"}}
 <div class="alert-error mb-4">This workflow is archived. In-flight contacts still run, but you cannot edit or use it for new campaigns.</div>
 {{else if .hasLivePublished}}

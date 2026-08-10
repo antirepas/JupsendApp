@@ -737,6 +737,77 @@
 .guide-mistake {
     border-left: 3px solid #F59E0B;
     background: #FFFBEB;
+}
+
+.guide-hero-cta {
+    border-left: 3px solid #16A34A;
+    background: linear-gradient(135deg, #F0FDF4 0%, #FFFFFF 55%);
+}
+
+.guide-copy {
+    margin: 0;
+    padding: 0.85rem 1rem;
+    font-size: 0.8rem;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-break: break-word;
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-radius: 0.5rem;
+    color: #334155;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.outreach-flow {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    gap: 0.85rem;
+}
+
+.outreach-flow li {
+    display: flex;
+    gap: 0.75rem;
+    align-items: flex-start;
+}
+
+.outreach-flow-step {
+    flex-shrink: 0;
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: 9999px;
+    background: #166534;
+    color: #fff;
+    font-size: 0.7rem;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 0.1rem;
+}
+
+.playbook-banner {
+    border-radius: 0.75rem;
+    border: 1px solid #BBF7D0;
+    background: linear-gradient(120deg, #F0FDF4 0%, #ECFDF5 40%, #FFFFFF 100%);
+    padding: 1.25rem 1.5rem;
+}
+
+.playbook-banner-title {
+    font-size: 1.125rem;
+    font-weight: 700;
+    color: #14532D;
+    margin-top: 0.35rem;
+}
+
+.playbook-banner-text {
+    margin-top: 0.5rem;
+    font-size: 0.875rem;
+    color: #3F6212;
+    line-height: 1.55;
+    max-width: 42rem;
+}
     padding: 0.85rem 1rem;
     border-radius: 0 0.75rem 0.75rem 0;
 }

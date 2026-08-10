@@ -1,0 +1,119 @@
+{{define "guide_outreach.html"}}
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>{{template "head" .}}</head>
+<body class="h-full bg-ivory text-charcoal">
+<div class="flex h-full">
+{{template "sidebar" .}}
+<main class="flex-1 overflow-y-auto">
+<div class="max-w-3xl mx-auto p-8 guide-prose">
+<a href="/guides" class="text-sm text-brand-600 font-medium">← All guides</a>
+<h2 class="text-2xl font-bold text-charcoal mt-2 mb-1">{{.pageTitle}}</h2>
+<p class="text-gray-500 text-sm mb-8">{{.subtitle}}</p>
+
+<div class="card guide-section guide-hero-cta">
+  <p class="help-card-label">Clone into your account</p>
+  <h3 class="!mb-2">Recommended outreach workflow</h3>
+  <p class="mb-4">One click loads this sequence as a draft. Publish it, attach a workflow A/B campaign, map templates, and launch.</p>
+  <form method="POST" action="/workflows/from-playbook">
+    <button type="submit" class="btn-primary">Use recommended workflow</button>
+  </form>
+</div>
+
+<div class="card guide-section">
+  <h3>The idea</h3>
+  <p>jupsend isn’t just a mailer — it’s a system for running outbound the correct way. Automate qualification; close the best leads yourself.</p>
+  <ul>
+    <li><strong>A/B a cold intro</strong> so you learn which opener works.</li>
+    <li><strong>Temperature</strong> splits hot / warm / cold from opens, clicks, and replies (campaign rules).</li>
+    <li><strong>Warm + hot</strong> get a value prop. Still engaged → you send a personalized Loom + Calendly.</li>
+    <li><strong>Cold</strong> get a no-engagement nudge, then a polite breakup — then stop.</li>
+  </ul>
+</div>
+
+<div class="card guide-section">
+  <h3>How the sequence flows</h3>
+  <ol class="outreach-flow">
+    <li><span class="outreach-flow-step">1</span><div><strong>Cold intro (A/B)</strong> — short, one ask. Campaign mode: workflow A/B maps template A and B to this first send.</div></li>
+    <li><span class="outreach-flow-step">2</span><div><strong>Wait 3 days</strong> — give humans time; don’t branch on “not opened” in hours.</div></li>
+    <li><span class="outreach-flow-step">3</span><div><strong>Temperature #1</strong> — hot/warm → value prop; cold → no-engagement nudge.</div></li>
+    <li><span class="outreach-flow-step">4</span><div><strong>Value prop</strong> (engaged path) — proof, outcome, or insight. Wait 3 days → temperature again.</div></li>
+    <li><span class="outreach-flow-step">5</span><div><strong>Temperature #2</strong> — still hot/warm → <em>End — send Loom + Calendly</em> (manual). Cooled off → join the nudge path.</div></li>
+    <li><span class="outreach-flow-step">6</span><div><strong>No-engagement → wait → breakup → end</strong> — clear, respectful exit. Don’t keep pinging forever.</div></li>
+  </ol>
+</div>
+
+<div class="card guide-section">
+  <h3>What you automate vs what you do yourself</h3>
+  <ul>
+    <li><strong>Automated:</strong> cold A/B, waits, temperature branches, value prop, nudge, breakup.</li>
+    <li><strong>Manual (on purpose):</strong> when a contact stays hot/warm through the sequence, record a short Loom tailored to them and include your Calendly link. That’s the close — not another template blast.</li>
+    <li><strong>Replies:</strong> stop-on-reply should stay on. A reply is success — continue in Interested, not in the sequence.</li>
+  </ul>
+</div>
+
+<div class="card guide-section">
+  <h3>Copy skeletons (paste into Templates)</h3>
+  <p class="text-sm text-gray-500 mb-3">Keep each email to one idea and one ask. Swap in your ICP language.</p>
+  <h4 class="text-sm font-semibold text-charcoal mt-4 mb-2">1. Cold intro (variants A &amp; B)</h4>
+  <pre class="guide-copy">Subject A: quick question about {{"{{company}}"}}
+Subject B: {{"{{first_name}}"}} — worth a look?
+
+{{"{{first_name}}"}}, noticed {{"{{company}}"}} is [specific observation].
+We help teams like yours [one outcome in plain language].
+Worth a 2-sentence reply if this is on your plate?</pre>
+  <h4 class="text-sm font-semibold text-charcoal mt-4 mb-2">2. Value prop (warm / hot)</h4>
+  <pre class="guide-copy">Subject: why teams like {{"{{company}}"}} use this
+
+Quick follow-up with the concrete piece:
+• [proof / metric / customer story]
+• [how it maps to their situation]
+If useful, happy to show a 2‑min walkthrough — otherwise ignore.</pre>
+  <h4 class="text-sm font-semibold text-charcoal mt-4 mb-2">3. No-engagement nudge (cold)</h4>
+  <pre class="guide-copy">Subject: still relevant?
+
+Totally fine if timing is off. Should I close the loop, or is [problem] still something you’re solving this quarter?</pre>
+  <h4 class="text-sm font-semibold text-charcoal mt-4 mb-2">4. Breakup</h4>
+  <pre class="guide-copy">Subject: closing the loop
+
+I’ll assume this isn’t a priority and stop emailing.
+If that changes, reply anytime — happy to pick it back up.</pre>
+</div>
+
+<div class="card guide-section">
+  <h3>Campaign setup checklist</h3>
+  <ol>
+    <li>Clone the workflow → review graph → <strong>Publish</strong>.</li>
+    <li>Create a <strong>workflow A/B</strong> campaign; select the published version.</li>
+    <li>Map templates to send steps 1–4 (A/B only on the cold intro).</li>
+    <li>Set <strong>lead temperature</strong> (defaults work: warm ≈ 2 opens + 1 click; hot ≈ 3 opens + 2 clicks; reply = hot).</li>
+    <li>Keep <strong>stop on reply</strong> on. Optional: stop on hot if you want zero automation after strong interest.</li>
+    <li>Launch, then work <a href="/contacts/interested" class="text-brand-600 font-medium">Interested</a> daily for replies and Loom-ready hot/warm leads.</li>
+  </ol>
+</div>
+
+<div class="card guide-section guide-mistake">
+  <h3 class="!mb-2">Failure modes</h3>
+  <ul>
+    <li><strong>Everything stays cold</strong> — rewrite the A/B intro (subject + first line) before adding more touches.</li>
+    <li><strong>Opens but no replies</strong> — soften the ask; check deliverability and bot opens on Sends.</li>
+    <li><strong>Reply rate spikes</strong> — pause volume, answer everyone, then scale the winning variant.</li>
+    <li><strong>Skipping the Loom</strong> — automation warmed them; a generic fifth email wastes the win.</li>
+  </ul>
+</div>
+
+<div class="card guide-section">
+  <h3>Next</h3>
+  <p>
+    <a href="/guides/workflows" class="text-brand-600 font-medium">Workflow builder details</a> ·
+    <a href="/guides/campaigns" class="text-brand-600 font-medium">Campaigns</a> ·
+    <a href="/guides/interested" class="text-brand-600 font-medium">Interested / Loom close</a> ·
+    <a href="/templates/new" class="text-brand-600 font-medium">New template</a>
+  </p>
+</div>
+</div>
+</main>
+</div>
+</body>
+</html>
+{{end}}

@@ -3,6 +3,7 @@ package routes
 import (
 	"log"
 	"net/http"
+	"net/url"
 	"strconv"
 
 	"emailtracker.com/model"
@@ -44,6 +45,17 @@ func CreateWorkflowWeb(ctx *gin.Context) {
 	ctx.Redirect(http.StatusFound, "/workflows/"+strconv.FormatInt(id, 10)+"/edit")
 }
 
+// CreateWorkflowFromPlaybookWeb clones the recommended outreach sequence into a new draft workflow.
+func CreateWorkflowFromPlaybookWeb(ctx *gin.Context) {
+	id, err := model.CreateRecommendedOutreachWorkflow(mustUserID(ctx))
+	if err != nil {
+		log.Printf("create recommended workflow: %v", err)
+		ctx.Redirect(http.StatusFound, "/workflows?error="+url.QueryEscape("Could not create recommended workflow: "+err.Error()))
+		return
+	}
+	ctx.Redirect(http.StatusFound, "/workflows/"+strconv.FormatInt(id, 10)+"/edit?success="+url.QueryEscape("Recommended outreach sequence loaded — review, publish, then attach to a campaign."))
+}
+
 func WorkflowBuilderPage(ctx *gin.Context) {
 	id, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
 	if err != nil {
@@ -71,13 +83,14 @@ func WorkflowBuilderPage(ctx *gin.Context) {
 	}
 	templates, _ := model.ListTemplates(mustUserID(ctx))
 	ctx.HTML(http.StatusOK, "workflows_builder.html", gin.H{
-		"title":             w.Name,
-		"active":            "workflows",
-		"workflow":          w,
-		"versionID":         versionID,
-		"hasLivePublished":  hasLivePublished,
-		"editingDraft":      true,
-		"templates":         templates,
+		"title":            w.Name,
+		"active":           "workflows",
+		"workflow":         w,
+		"versionID":        versionID,
+		"hasLivePublished": hasLivePublished,
+		"editingDraft":     true,
+		"templates":        templates,
+		"success":          ctx.Query("success"),
 	})
 }
 

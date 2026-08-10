@@ -53,13 +53,13 @@ func playbookCampaigns() PagePlaybook {
 func playbookWorkflows() PagePlaybook {
 	return PagePlaybook{
 		Title:     "Workflows that react to interest",
-		Intro:     "Waits, branches, and lead temperature so warm leads get different copy.",
-		GuideHref: "/guides/workflows",
+		Intro:     "Start from the recommended outreach sequence, then publish and attach.",
+		GuideHref: "/guides/outreach",
 		Bullets: []string{
-			"Build Send → Wait → branch → End on every path.",
-			"Use Lead temperature (hot/warm/cold) with campaign rules — connect all three edges.",
-			"Publish before attaching to a campaign.",
-			"Replies stop remaining steps — follow up personally from Interested.",
+			"Clone Recommended outreach: A/B cold → temperature → value prop or breakup.",
+			"Hot/warm at the end = manual Loom + Calendly — automation stops on purpose.",
+			"Publish before attaching; map a template to every send step.",
+			"Replies stop remaining steps — follow up from Interested.",
 		},
 	}
 }

@@ -66,6 +66,7 @@ func RegisterRoutes(server *gin.Engine) {
 		"templates/guide_templates.html",
 		"templates/guide_campaigns.html",
 		"templates/guide_workflows.html",
+		"templates/guide_outreach.html",
 		"templates/guide_mailboxes.html",
 		"templates/guide_sends.html",
 		"templates/guide_interested.html",
@@ -158,6 +159,7 @@ func RegisterRoutes(server *gin.Engine) {
 		settings.GET("/guides/templates", GuideTemplates)
 		settings.GET("/guides/campaigns", GuideCampaigns)
 		settings.GET("/guides/workflows", GuideWorkflows)
+		settings.GET("/guides/outreach", GuideOutreach)
 		settings.GET("/guides/mailboxes", GuideMailboxes)
 		settings.GET("/guides/sends", GuideSends)
 		settings.GET("/guides/interested", GuideInterested)
@@ -232,6 +234,7 @@ func RegisterRoutes(server *gin.Engine) {
 		authd.GET("/workflows", ListWorkflowsPage)
 		authd.GET("/workflows/new", NewWorkflowPage)
 		authd.POST("/workflows", CreateWorkflowWeb)
+		authd.POST("/workflows/from-playbook", CreateWorkflowFromPlaybookWeb)
 		authd.GET("/workflows/:id/archive-preview", WorkflowArchivePreviewJSON)
 		authd.POST("/workflows/:id/archive", ArchiveWorkflowWeb)
 		authd.POST("/workflows/:id/delete", ArchiveWorkflowWeb)

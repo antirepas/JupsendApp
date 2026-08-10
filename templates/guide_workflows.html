@@ -11,9 +11,16 @@
 <h2 class="text-2xl font-bold text-charcoal mt-2 mb-1">{{.pageTitle}}</h2>
 <p class="text-gray-500 text-sm mb-8">{{.subtitle}}</p>
 
-<div class="card guide-section">
-  <h3>Why workflows</h3>
-  <p>Workflows turn “send and hope” into a sequence that reacts to behavior. Perfect outreach uses short waits, clear branches, and different copy for cold vs warm vs hot leads — then stops when someone replies.</p>
+<div class="card guide-section guide-hero-cta">
+  <p class="help-card-label">Recommended system</p>
+  <h3 class="!mb-2">Don’t start from a blank canvas</h3>
+  <p class="mb-4">Use the jupsend outreach playbook — A/B cold → temperature → value prop or breakup → manual Loom close. Full copy skeletons and campaign checklist included.</p>
+  <div class="flex flex-wrap gap-2">
+    <a href="/guides/outreach" class="btn-primary">Read outreach playbook</a>
+    <form method="POST" action="/workflows/from-playbook">
+      <button type="submit" class="btn-secondary">Clone workflow</button>
+    </form>
+  </div>
 </div>
 
 <div class="card guide-section">
@@ -24,27 +31,16 @@
     <li><strong>Wait</strong> — pause days before the next check or send.</li>
     <li><strong>Condition</strong> — yes/no on opened, clicked, replied (optionally after a wait).</li>
     <li><strong>Lead temperature</strong> — three-way branch: hot / warm / cold using <em>this campaign’s</em> temperature rules.</li>
-    <li><strong>End</strong> — sequence complete for that contact.</li>
+    <li><strong>End</strong> — sequence complete for that contact (use one path for “manual Loom”).</li>
   </ul>
-</div>
-
-<div class="card guide-section">
-  <h3>Perfect sequence recipe</h3>
-  <ol>
-    <li>Send a short intro with one clear CTA.</li>
-    <li>Wait 2–3 days (not hours — give humans time).</li>
-    <li>Branch: Lead temperature → hot path (direct ask) / warm path (value bump) / cold path (lighter bump or end).</li>
-    <li>Alternatively nest open/click/reply conditions when you need finer control on one email.</li>
-    <li>Always connect End on every path. Publish when the graph validates.</li>
-  </ol>
 </div>
 
 <div class="card guide-section">
   <h3>Build → publish → attach</h3>
   <ol>
-    <li>Create workflow in the builder; auto-links help, then fix yes/no or hot/warm/cold edges.</li>
+    <li>Clone the playbook or build in the canvas; connect yes/no or hot/warm/cold edges.</li>
     <li><strong>Publish</strong> a version (drafts aren’t launchable).</li>
-    <li>Create a workflow campaign and select that published version.</li>
+    <li>Create a workflow (or workflow A/B) campaign and select that published version.</li>
     <li>Map a template to every send step on the campaign page.</li>
     <li>Add contacts and launch — each contact gets a workflow instance.</li>
   </ol>
@@ -66,7 +62,7 @@
 
 <div class="card guide-section">
   <h3>Next</h3>
-  <p><a href="/guides/campaigns" class="text-brand-600 font-medium">Campaigns playbook</a> · <a href="/workflows/new" class="text-brand-600 font-medium">New workflow</a></p>
+  <p><a href="/guides/outreach" class="text-brand-600 font-medium">Outreach playbook</a> · <a href="/guides/campaigns" class="text-brand-600 font-medium">Campaigns</a> · <a href="/workflows/new" class="text-brand-600 font-medium">Blank workflow</a></p>
 </div>
 </div>
 </main>

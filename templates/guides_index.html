@@ -12,12 +12,26 @@
 
   <div class="card mb-8 flex flex-wrap items-center justify-between gap-4">
     <div>
+      <p class="help-card-label">Recommended system</p>
+      <h3 class="font-semibold text-charcoal mt-2">Outreach playbook</h3>
+      <p class="text-sm text-gray-600 mt-1">A/B cold → temperature → value prop or breakup → manual Loom close. Clone the workflow in one click.</p>
+    </div>
+    <div class="flex flex-wrap gap-2">
+      <a href="/guides/outreach" class="btn-primary">Open playbook</a>
+      <form method="POST" action="/workflows/from-playbook">
+        <button type="submit" class="btn-secondary">Clone workflow</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card mb-8 flex flex-wrap items-center justify-between gap-4">
+    <div>
       <p class="help-card-label">Start here</p>
       <h3 class="font-semibold text-charcoal mt-2">Getting started</h3>
       <p class="text-sm text-gray-600 mt-1">Mailbox → contacts → templates → workflows → campaigns → replies.</p>
     </div>
     <div class="flex flex-wrap gap-2">
-      <a href="/guides/getting-started" class="btn-primary">Open wizard</a>
+      <a href="/guides/getting-started" class="btn-secondary">Open wizard</a>
       <form method="POST" action="/guides/wizard/restart">
         <button type="submit" class="btn-secondary">Restart &amp; show banner</button>
       </form>
@@ -25,6 +39,13 @@
   </div>
 
   <div class="guides-grid">
+    <a class="help-card" href="/guides/outreach">
+      <div>
+        <span class="help-card-label">Playbook</span>
+        <p class="font-semibold text-charcoal mt-2">Recommended outreach</p>
+        <p class="text-sm text-gray-600 mt-1">The full system: sequence, copy skeletons, campaign checklist.</p>
+      </div>
+    </a>
     <a class="help-card" href="/guides/mailboxes">
       <div>
         <span class="help-card-label">Setup</span>

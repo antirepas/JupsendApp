@@ -44,6 +44,15 @@ func GuideWorkflows(c *gin.Context) {
 	renderGuide(c, "guide_workflows.html", "Workflows", "Workflows playbook", "Design follow-up sequences with waits, engagement branches, and lead temperature so warm leads get the right email.")
 }
 
+func GuideOutreach(c *gin.Context) {
+	c.HTML(http.StatusOK, "guide_outreach.html", gin.H{
+		"title":     "Outreach playbook",
+		"pageTitle": "Recommended outreach playbook",
+		"subtitle":  "The jupsend default system: A/B cold → temperature → value prop or nudge → breakup → manual Loom close for hot/warm leads.",
+		"active":    "outreach",
+	})
+}
+
 func GuideMailboxes(c *gin.Context) {
 	renderGuide(c, "guide_mailboxes.html", "Mailboxes", "Mailboxes playbook", "Set up Free shared sending or Pro domains and seats, then protect deliverability.")
 }

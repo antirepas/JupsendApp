@@ -16,6 +16,21 @@
 </div>
 {{if .success}}<div class="alert-success mb-6">{{.success}}</div>{{end}}
 {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
+
+<section class="playbook-banner mb-8" aria-labelledby="recommended-workflow-title">
+  <div class="playbook-banner-body">
+    <span class="help-card-label">Recommended</span>
+    <h3 id="recommended-workflow-title" class="playbook-banner-title">Outreach the correct way</h3>
+    <p class="playbook-banner-text">A/B cold intro → temperature → value prop for warm/hot → no-engagement + breakup for cold → stop for a manual Loom + Calendly when they stay engaged.</p>
+    <div class="flex flex-wrap gap-2 mt-4">
+      <form method="POST" action="/workflows/from-playbook">
+        <button type="submit" class="btn-primary">Use recommended workflow</button>
+      </form>
+      <a href="/guides/outreach" class="btn-secondary">Read playbook</a>
+    </div>
+  </div>
+</section>
+
 <div class="card overflow-hidden">
     {{if .workflows}}
     <table class="data-table">
@@ -46,7 +61,10 @@
         </tbody>
     </table>
     {{else}}
-    <div class="empty-state"><p>No workflows yet.</p><a href="/workflows/new" class="btn-primary mt-4">Create workflow</a></div>
+    <div class="empty-state">
+      <p>No workflows yet — start from the recommended sequence above, or create a blank one.</p>
+      <a href="/workflows/new" class="btn-secondary mt-4">Blank workflow</a>
+    </div>
     {{end}}
 </div>
 {{template "page_playbook" .}}
