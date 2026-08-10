@@ -159,9 +159,10 @@ For **local development without Whop**, either set admin emails (recommended):
 ```env
 ADMIN_EMAILS=you@example.com
 ADMIN_OUTREACH_DOMAIN=tryjupsend.com
+ADMIN_OUTREACH_MAILBOXES=hello,sales,info
 ```
 
-`ADMIN_OUTREACH_DOMAIN` (optional) is an InboxKit domain already in your workspace. When an admin opens **Mailboxes**, jupsend links that domain and syncs existing seats; buy more seats from the same page.
+`ADMIN_OUTREACH_DOMAIN` links an InboxKit domain already in your workspace. `ADMIN_OUTREACH_MAILBOXES` (optional) is a comma-separated list of seats for that domain — local parts (`hello,sales`) or `First:Last:local`. When an admin opens **Mailboxes**, jupsend links the domain, syncs existing seats, and creates any missing ones using InboxKit **included** seats (not wallet balance).
 
 Or activate a test user manually:
 
@@ -400,6 +401,7 @@ go test ./...
 | `WHOP_PRODUCT_ID` | Whop product ID (`prod_...`) alternative to plan ID | — |
 | `ADMIN_EMAILS` | Comma-separated emails with full app access (no subscription) | — |
 | `ADMIN_OUTREACH_DOMAIN` | InboxKit domain auto-linked for admins on Mailboxes (e.g. `tryjupsend.com`) | — |
+| `ADMIN_OUTREACH_MAILBOXES` | Admin seats on that domain: `hello,sales` or `Alex:Smith:hello` | — |
 | `TEST_DATABASE_URL` | Postgres URL for integration tests | same as local compose test DB |
 | `OUTBOUND_WORKER_INTERVAL` | Outbound worker seconds | `8` |
 | `IMAP_POLL_INTERVAL` | IMAP bounce poll seconds | `180` |

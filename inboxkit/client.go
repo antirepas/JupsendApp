@@ -337,7 +337,9 @@ type BuyMailboxesRequest struct {
 	// Domain is derived locally only — not sent to InboxKit (each item has domain_name).
 	Domain           string           `json:"-"`
 	Mailboxes        []BuyMailboxItem `json:"mailboxes"`
-	UseWalletBalance bool             `json:"use_wallet_balance,omitempty"`
+	UseWalletBalance bool `json:"use_wallet_balance"`
+	// PreferIncludedSeats skips charging the InboxKit wallet (use plan-included seats).
+	PreferIncludedSeats bool `json:"-"`
 }
 
 type BuyMailboxesResponse struct {
@@ -394,8 +396,12 @@ func (c *Client) BuyMailboxes(req BuyMailboxesRequest) (BuyMailboxesResponse, er
 		req.Mailboxes[i].Username = strings.ToLower(strings.TrimSpace(req.Mailboxes[i].Username))
 		req.Mailboxes[i].DomainName = strings.ToLower(strings.TrimSpace(req.Mailboxes[i].DomainName))
 	}
-	// Charge InboxKit workspace wallet when buying seats outside a Whop checkout.
-	req.UseWalletBalance = true
+	// Charge wallet by default; admin/included-seat buys set PreferIncludedSeats.
+	if req.PreferIncludedSeats {
+		req.UseWalletBalance = false
+	} else {
+		req.UseWalletBalance = true
+	}
 	if len(req.Mailboxes) == 0 {
 		return BuyMailboxesResponse{}, fmt.Errorf("at least one mailbox is required")
 	}

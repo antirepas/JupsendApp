@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"unicode"
 
 	"emailtracker.com/config"
 	"emailtracker.com/inboxkit"
@@ -11,7 +12,8 @@ import (
 
 // EnsureAdminOutreachDomain links config.AdminOutreachDomain to an admin user
 // when the domain is already (or can be) connected in the InboxKit workspace.
-// It syncs existing seats into Mailboxes; it does not buy new ones.
+// If ADMIN_OUTREACH_MAILBOXES is set, it ensures those seats (sync existing,
+// or buy using included plan seats — not wallet balance).
 func EnsureAdminOutreachDomain(userID int64) error {
 	domain := strings.ToLower(strings.TrimSpace(config.AdminOutreachDomain))
 	if domain == "" || !strings.Contains(domain, ".") {
@@ -39,10 +41,10 @@ func EnsureAdminOutreachDomain(userID int64) error {
 	ns, cErr := connectInboxKitNameservers(domain)
 	if cErr != nil {
 		if domainID > 0 {
-			// Still try syncing seats if the domain row already exists.
 			if syncErr := syncMailboxCredentials(userID, domainID, domain); syncErr != nil {
 				log.Printf("admin domain sync %s: %v", domain, syncErr)
 			}
+			_ = ensureAdminOutreachMailboxes(userID, domainID, domain)
 		}
 		return fmt.Errorf("link admin domain %s: %w", domain, cErr)
 	}
@@ -75,5 +77,176 @@ func EnsureAdminOutreachDomain(userID int64) error {
 	if syncErr := syncMailboxCredentials(userID, domainID, domain); syncErr != nil {
 		log.Printf("admin domain sync %s: %v", domain, syncErr)
 	}
+	if mbErr := ensureAdminOutreachMailboxes(userID, domainID, domain); mbErr != nil {
+		log.Printf("admin outreach mailboxes %s: %v", domain, mbErr)
+		return mbErr
+	}
 	return nil
+}
+
+func ensureAdminOutreachMailboxes(userID, domainID int64, domain string) error {
+	specs := ParseAdminOutreachMailboxSpecs(config.AdminOutreachMailboxes, domain)
+	if len(specs) == 0 {
+		return nil
+	}
+	platform := config.InboxKitPlatform
+	if platform == "" {
+		platform = "GOOGLE"
+	}
+	mboxes := buildOrderMailboxes(domain, specs, platform)
+	if err := ensureStarterMailboxRows(userID, domainID, mboxes, platform, true); err != nil {
+		return fmt.Errorf("save admin mailbox rows: %w", err)
+	}
+	// Import seats that already exist in InboxKit.
+	if syncErr := syncMailboxCredentials(userID, domainID, domain); syncErr != nil {
+		log.Printf("admin mailbox sync before buy %s: %v", domain, syncErr)
+	}
+	pending := adminPendingMailboxLocals(userID, domainID, mboxes)
+	if len(pending) == 0 {
+		return nil
+	}
+	resp, err := buyInboxKitMailboxes(inboxkit.BuyMailboxesRequest{
+		Domain:              domain,
+		Mailboxes:           inboxkit.BuyItemsFromOrderMailboxes(domain, pending),
+		PreferIncludedSeats: true,
+	})
+	if err != nil {
+		return fmt.Errorf("buy admin mailboxes (included seats): %w", err)
+	}
+	buyOrder := strings.TrimSpace(resp.OrderID)
+	if buyOrder == "" {
+		buyOrder = strings.TrimSpace(resp.ID)
+	}
+	existing, _ := ListOutreachMailboxes(userID)
+	byEmail := map[string]OutreachMailbox{}
+	for _, m := range existing {
+		if m.DomainID == domainID {
+			byEmail[strings.ToLower(m.Email)] = m
+		}
+	}
+	for _, bought := range resp.Mailboxes {
+		email := strings.ToLower(strings.TrimSpace(bought.Email))
+		if email == "" && bought.Username != "" {
+			email = strings.ToLower(bought.Username) + "@" + domain
+		}
+		local, ok := byEmail[email]
+		if !ok {
+			continue
+		}
+		uid := strings.TrimSpace(bought.UID)
+		if uid == "" {
+			uid = strings.TrimSpace(bought.ID)
+		}
+		if uid == "" && buyOrder != "" {
+			uid = pendingBuyIDPrefix + buyOrder + ":" + email
+		}
+		if uid != "" {
+			_ = UpdateOutreachMailboxReady(local.ID, uid, local.SMTPAccountID, "provisioning")
+		}
+	}
+	if syncErr := syncMailboxCredentials(userID, domainID, domain); syncErr != nil {
+		log.Printf("admin mailbox sync after buy %s: %v", domain, syncErr)
+	}
+	return nil
+}
+
+func adminPendingMailboxLocals(userID, domainID int64, wanted []inboxkit.OrderMailbox) []inboxkit.OrderMailbox {
+	existing, _ := ListOutreachMailboxes(userID)
+	ready := map[string]bool{}
+	for _, m := range existing {
+		if m.DomainID != domainID {
+			continue
+		}
+		email := strings.ToLower(m.Email)
+		if m.Status == "ready" && m.SMTPAccountID > 0 {
+			ready[email] = true
+			continue
+		}
+		if m.InboxkitMailboxID != "" && !isPendingBuyMailboxID(m.InboxkitMailboxID) {
+			ready[email] = true
+		}
+	}
+	var pending []inboxkit.OrderMailbox
+	for _, w := range wanted {
+		email := strings.ToLower(strings.TrimSpace(w.Email))
+		if email == "" || ready[email] {
+			continue
+		}
+		pending = append(pending, w)
+	}
+	return pending
+}
+
+// ParseAdminOutreachMailboxSpecs parses ADMIN_OUTREACH_MAILBOXES.
+// Supported entries (comma-separated):
+//   - localpart
+//   - localpart@domain
+//   - First:Last:localpart
+func ParseAdminOutreachMailboxSpecs(raw, domain string) []StarterMailboxSpec {
+	raw = strings.TrimSpace(raw)
+	domain = strings.ToLower(strings.TrimSpace(domain))
+	if raw == "" {
+		return nil
+	}
+	var out []StarterMailboxSpec
+	for _, part := range strings.Split(raw, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		if strings.Count(part, ":") >= 2 {
+			bits := strings.SplitN(part, ":", 3)
+			fn := strings.TrimSpace(bits[0])
+			ln := strings.TrimSpace(bits[1])
+			local := sanitizeLocalPart(bits[2])
+			if local == "" {
+				continue
+			}
+			if fn == "" {
+				fn = titleLocal(local)
+			}
+			if ln == "" {
+				ln = "Admin"
+			}
+			out = append(out, StarterMailboxSpec{FirstName: fn, LastName: ln, LocalPart: local})
+			continue
+		}
+		local := part
+		if at := strings.Index(part, "@"); at > 0 {
+			local = part[:at]
+			host := strings.ToLower(strings.TrimSpace(part[at+1:]))
+			if domain != "" && host != "" && host != domain {
+				log.Printf("admin mailbox %s skipped: domain must be %s", part, domain)
+				continue
+			}
+		}
+		local = sanitizeLocalPart(local)
+		if local == "" {
+			continue
+		}
+		out = append(out, StarterMailboxSpec{
+			FirstName: titleLocal(local),
+			LastName:  "Admin",
+			LocalPart: local,
+		})
+	}
+	return out
+}
+
+func titleLocal(local string) string {
+	local = strings.TrimSpace(local)
+	if local == "" {
+		return "Admin"
+	}
+	// first segment before . or _
+	seg := local
+	for _, sep := range []string{".", "_", "-"} {
+		if i := strings.Index(seg, sep); i > 0 {
+			seg = seg[:i]
+			break
+		}
+	}
+	runes := []rune(strings.ToLower(seg))
+	runes[0] = unicode.ToUpper(runes[0])
+	return string(runes)
 }
