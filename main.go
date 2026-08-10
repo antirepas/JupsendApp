@@ -53,6 +53,7 @@ func main() {
 	server.Use(sessions.Sessions("emailtracker_session", store))
 
 	db.Prepare()
+	log.Println("schema ready")
 	model.MigrateLegacyStandardUsersToPro()
 	model.MigrateAllUsersToPlanLimits()
 	model.MigrateLegacyCampaignWorkflowStepTemplates()
@@ -67,5 +68,9 @@ func main() {
 	outbound.StartImportWorker()
 	routes.RegisterRoutes(server)
 
-	server.Run(":" + config.Port)
+	addr := ":" + config.Port
+	log.Printf("listening on http://127.0.0.1%s (healthz ready)", addr)
+	if err := server.Run(addr); err != nil {
+		log.Fatalf("http server: %v", err)
+	}
 }

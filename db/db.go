@@ -68,8 +68,27 @@ func CreateTables() {
 	}
 	defer func() { _ = conn.Close() }()
 
-	if _, err := conn.ExecContext(ctx, `SELECT pg_advisory_lock($1)`, schemaAdvisoryLockKey); err != nil {
-		log.Fatalf("schema lock: %v", err)
+	locked := false
+	for attempt := 0; attempt < 60; attempt++ {
+		var got bool
+		if err := conn.QueryRowContext(ctx, `SELECT pg_try_advisory_lock($1)`, schemaAdvisoryLockKey).Scan(&got); err != nil {
+			log.Fatalf("schema lock: %v", err)
+		}
+		if got {
+			locked = true
+			break
+		}
+		if attempt == 0 || attempt%5 == 4 {
+			log.Printf("waiting for schema advisory lock (another instance migrating?) attempt=%d", attempt+1)
+		}
+		select {
+		case <-ctx.Done():
+			log.Fatalf("schema lock: %v", ctx.Err())
+		case <-time.After(2 * time.Second):
+		}
+	}
+	if !locked {
+		log.Fatal("schema lock: could not acquire advisory lock")
 	}
 	defer func() {
 		if _, err := conn.ExecContext(context.Background(), `SELECT pg_advisory_unlock($1)`, schemaAdvisoryLockKey); err != nil {
