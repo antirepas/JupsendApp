@@ -560,7 +560,7 @@ func syncMailboxCredentials(userID, domainID int64, domain string) error {
 
 	var lastCredErr error
 	for i, item := range list {
-		email := strings.ToLower(strings.TrimSpace(item.Email))
+		email := item.ResolvedEmail()
 		if email == "" {
 			continue
 		}
@@ -572,6 +572,8 @@ func syncMailboxCredentials(userID, domainID int64, domain string) error {
 		statusHint := item.Status
 		if item.IsScheduledCancel() {
 			statusHint = "scheduled_cancel"
+		} else if strings.EqualFold(statusHint, "active") {
+			statusHint = "ready"
 		}
 		local, ok := byEmail[email]
 		if !ok {
@@ -597,7 +599,11 @@ func syncMailboxCredentials(userID, domainID int64, domain string) error {
 			local, _ = GetOutreachMailbox(id, userID)
 			byEmail[email] = local
 		} else {
-			_ = SetOutreachMailboxMeta(local.ID, item.ResolvedIsAdmin(), role, fwd, statusHint)
+			metaStatus := statusHint
+			if local.Status == "ready" && local.SMTPAccountID > 0 {
+				metaStatus = "ready"
+			}
+			_ = SetOutreachMailboxMeta(local.ID, item.ResolvedIsAdmin(), role, fwd, metaStatus)
 		}
 		mbID := item.ResolvedID()
 		if mbID != "" && (local.InboxkitMailboxID == "" || isPendingBuyMailboxID(local.InboxkitMailboxID)) {
@@ -616,6 +622,12 @@ func syncMailboxCredentials(userID, domainID int64, domain string) error {
 			continue
 		}
 		creds, cErr := client.GetMailboxCredentials(local.InboxkitMailboxID)
+		if cErr != nil {
+			if byEmail, eErr := client.GetMailboxCredentialsByEmail(email); eErr == nil {
+				creds = byEmail
+				cErr = nil
+			}
+		}
 		if cErr != nil {
 			_ = SetOutreachMailboxError(local.ID, "Credentials not ready: "+cErr.Error())
 			lastCredErr = cErr
@@ -829,7 +841,7 @@ func RelinkMailboxFromInboxKit(userID, mailboxID int64) error {
 	}
 	var mbID string
 	for _, item := range list {
-		if strings.EqualFold(strings.TrimSpace(item.Email), email) {
+		if strings.EqualFold(item.ResolvedEmail(), email) {
 			mbID = item.ResolvedID()
 			break
 		}
@@ -878,7 +890,7 @@ func AttachMailboxSmart(userID int64, email, fromName, smtpHost, smtpPort, imapH
 		client := inboxkit.NewClient()
 		if list, err := client.ListMailboxes(domain); err == nil {
 			for _, item := range list {
-				if !strings.EqualFold(strings.TrimSpace(item.Email), email) {
+				if !strings.EqualFold(item.ResolvedEmail(), email) {
 					continue
 				}
 				mbID := item.ResolvedID()

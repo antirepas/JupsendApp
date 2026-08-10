@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -450,8 +451,32 @@ func (m MailboxCredentials) ResolvedSMTPUser() string {
 }
 
 func (c *Client) GetMailboxCredentials(mailboxID string) (MailboxCredentials, error) {
+	mailboxID = strings.TrimSpace(mailboxID)
+	if mailboxID == "" {
+		return MailboxCredentials{}, fmt.Errorf("mailbox id required")
+	}
 	var resp MailboxCredentials
-	err := c.do("GET", "/api/mailboxes/"+mailboxID+"/credentials", nil, &resp)
+	// Current InboxKit API: GET /api/mailboxes/show-credentials?uid=...
+	err := c.do("GET", "/api/mailboxes/show-credentials?uid="+url.QueryEscape(mailboxID), nil, &resp)
+	if err == nil {
+		return resp, nil
+	}
+	// Legacy path fallback (some docs still mention /mailboxes/:id/credentials).
+	var legacy MailboxCredentials
+	if err2 := c.do("GET", "/api/mailboxes/"+url.PathEscape(mailboxID)+"/credentials", nil, &legacy); err2 == nil {
+		return legacy, nil
+	}
+	return resp, err
+}
+
+// GetMailboxCredentialsByEmail fetches SMTP/IMAP secrets by email address.
+func (c *Client) GetMailboxCredentialsByEmail(email string) (MailboxCredentials, error) {
+	email = strings.ToLower(strings.TrimSpace(email))
+	if email == "" {
+		return MailboxCredentials{}, fmt.Errorf("email required")
+	}
+	var resp MailboxCredentials
+	err := c.do("GET", "/api/mailboxes/show-credentials?email="+url.QueryEscape(email), nil, &resp)
 	return resp, err
 }
 
@@ -459,7 +484,9 @@ type MailboxListItem struct {
 	ID               string `json:"id"`
 	UID              string `json:"uid"`
 	UUID             string `json:"uuid"`
+	MongoID          string `json:"_id"`
 	Email            string `json:"email"`
+	Username         string `json:"username"`
 	Status           string `json:"status"`
 	Domain           string `json:"domain"`
 	DomainName       string `json:"domain_name"`
@@ -485,14 +512,30 @@ func (m MailboxListItem) ResolvedID() string {
 	if m.UID != "" {
 		return m.UID
 	}
-	return m.UUID
+	if m.UUID != "" {
+		return m.UUID
+	}
+	return m.MongoID
 }
 
 func (m MailboxListItem) ResolvedDomain() string {
-	if m.Domain != "" {
-		return m.Domain
+	if m.DomainName != "" {
+		return m.DomainName
 	}
-	return m.DomainName
+	return m.Domain
+}
+
+// ResolvedEmail prefers explicit email; otherwise username@domain_name (list API often omits email).
+func (m MailboxListItem) ResolvedEmail() string {
+	if e := strings.ToLower(strings.TrimSpace(m.Email)); e != "" {
+		return e
+	}
+	user := strings.ToLower(strings.TrimSpace(m.Username))
+	host := strings.ToLower(strings.TrimSpace(m.ResolvedDomain()))
+	if user == "" || host == "" {
+		return ""
+	}
+	return user + "@" + host
 }
 
 func (m MailboxListItem) ResolvedForwarding() string {
@@ -527,9 +570,10 @@ func (c *Client) ListMailboxes(domain string) ([]MailboxListItem, error) {
 		"page":  1,
 		"limit": 100,
 	}
+	domain = strings.ToLower(strings.TrimSpace(domain))
 	if domain != "" {
+		// InboxKit rejects unknown fields (e.g. domain_name) on this endpoint.
 		body["domain"] = domain
-		body["domain_name"] = domain
 	}
 	var resp mailboxListResponse
 	err := c.do("POST", "/api/mailboxes/list", body, &resp)
@@ -545,7 +589,29 @@ func (c *Client) ListMailboxes(domain string) ([]MailboxListItem, error) {
 			list[i].ID = list[i].ResolvedID()
 		}
 	}
-	return list, nil
+	if domain == "" {
+		return list, nil
+	}
+	// Some workspaces ignore the domain filter — keep only matching seats.
+	filtered := make([]MailboxListItem, 0, len(list))
+	suffix := "@" + domain
+	for _, item := range list {
+		email := item.ResolvedEmail()
+		host := strings.ToLower(strings.TrimSpace(item.ResolvedDomain()))
+		if host == domain || strings.HasSuffix(email, suffix) {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered, nil
+}
+
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 type NameserverResult struct {
