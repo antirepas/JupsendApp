@@ -138,6 +138,24 @@ func GetSMTPAccount(id int64) (SMTPAccount, error) {
 	return scanSMTPAccount(row)
 }
 
+// MapSMTPAccountsByID loads all SMTP accounts for a user keyed by id (avoids N+1 on Mailboxes).
+func MapSMTPAccountsByID(userID int64) (map[int64]SMTPAccount, error) {
+	rows, err := db.Query(`SELECT `+smtpAccountCols+` FROM smtp_accounts WHERE user_id = ?`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make(map[int64]SMTPAccount)
+	for rows.Next() {
+		a, err := scanSMTPAccount(rows)
+		if err != nil {
+			return out, err
+		}
+		out[a.ID] = a
+	}
+	return out, rows.Err()
+}
+
 func ListActiveSMTPAccounts() ([]SMTPAccount, error) {
 	rows, err := db.Query(`SELECT ` + smtpAccountCols + ` FROM smtp_accounts WHERE status = 'active' ORDER BY id ASC`)
 	if err != nil {

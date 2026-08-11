@@ -162,7 +162,7 @@ ADMIN_OUTREACH_DOMAIN=tryjupsend.com
 ADMIN_OUTREACH_MAILBOXES=hello,sales,info
 ```
 
-`ADMIN_OUTREACH_DOMAIN` links an InboxKit domain already in your workspace. `ADMIN_OUTREACH_MAILBOXES` (optional) is a comma-separated list of seats for that domain — local parts (`hello,sales`) or `First:Last:local`. When an admin opens **Mailboxes**, jupsend links the domain, syncs existing seats, and creates any missing ones using InboxKit **included** seats (not wallet balance).
+`ADMIN_OUTREACH_DOMAIN` links an InboxKit domain already in your workspace. `ADMIN_OUTREACH_MAILBOXES` (optional) is a comma-separated list of seats for that domain — local parts (`hello,sales`) or `First:Last:local`. When an admin opens **Mailboxes**, jupsend links the domain and syncs **only** those seats (other InboxKit seats on that domain are not imported). Once they are ready, page loads skip further InboxKit calls.
 
 Or activate a test user manually:
 

@@ -12,8 +12,8 @@ import (
 
 // EnsureAdminOutreachDomain links config.AdminOutreachDomain to an admin user
 // when the domain is already (or can be) connected in the InboxKit workspace.
-// If ADMIN_OUTREACH_MAILBOXES is set, it ensures those seats (sync existing,
-// or buy using included plan seats — not wallet balance).
+// If ADMIN_OUTREACH_MAILBOXES is set, only those seats are imported/kept (others on
+// that domain are removed). Skips InboxKit entirely when already linked and ready.
 func EnsureAdminOutreachDomain(userID int64) error {
 	domain := strings.ToLower(strings.TrimSpace(config.AdminOutreachDomain))
 	if domain == "" || !strings.Contains(domain, ".") {
@@ -27,10 +27,8 @@ func EnsureAdminOutreachDomain(userID int64) error {
 		return fmt.Errorf("%s", inboxkit.ConfiguredHint())
 	}
 
-	redirect := config.InboxKitRedirectURL
-	if redirect == "" {
-		redirect = config.BaseURL
-	}
+	specs := ParseAdminOutreachMailboxSpecs(config.AdminOutreachMailboxes, domain)
+	allow := adminMailboxAllowset(specs, domain)
 
 	existing, gErr := GetOutreachDomainByName(userID, domain)
 	var domainID int64
@@ -38,13 +36,27 @@ func EnsureAdminOutreachDomain(userID int64) error {
 		domainID = existing.ID
 	}
 
+	// Fast path: domain linked and allowlisted seats already send-ready — no InboxKit round-trips.
+	if domainID > 0 && existing.Status == "ready" && existing.LastError == "" {
+		_ = pruneAdminDomainMailboxes(userID, domainID, domain, allow)
+		if adminAllowlistReady(userID, domainID, allow) {
+			return nil
+		}
+	}
+
+	redirect := config.InboxKitRedirectURL
+	if redirect == "" {
+		redirect = config.BaseURL
+	}
+
 	ns, cErr := connectInboxKitNameservers(domain)
 	if cErr != nil {
 		if domainID > 0 {
-			if syncErr := syncMailboxCredentials(userID, domainID, domain); syncErr != nil {
+			_ = pruneAdminDomainMailboxes(userID, domainID, domain, allow)
+			if syncErr := syncMailboxCredentialsFiltered(userID, domainID, domain, allow, false); syncErr != nil {
 				log.Printf("admin domain sync %s: %v", domain, syncErr)
 			}
-			_ = ensureAdminOutreachMailboxes(userID, domainID, domain)
+			_ = ensureAdminOutreachMailboxes(userID, domainID, domain, specs, allow)
 		}
 		return fmt.Errorf("link admin domain %s: %w", domain, cErr)
 	}
@@ -74,20 +86,107 @@ func EnsureAdminOutreachDomain(userID int64) error {
 	}
 	_ = ClearOutreachDomainError(domainID)
 
-	if syncErr := syncMailboxCredentials(userID, domainID, domain); syncErr != nil {
-		log.Printf("admin domain sync %s: %v", domain, syncErr)
-	}
-	if mbErr := ensureAdminOutreachMailboxes(userID, domainID, domain); mbErr != nil {
-		log.Printf("admin outreach mailboxes %s: %v", domain, mbErr)
-		return mbErr
+	_ = pruneAdminDomainMailboxes(userID, domainID, domain, allow)
+	if err := ensureAdminOutreachMailboxes(userID, domainID, domain, specs, allow); err != nil {
+		log.Printf("admin outreach mailboxes %s: %v", domain, err)
+		return err
 	}
 	return nil
 }
 
-func ensureAdminOutreachMailboxes(userID, domainID int64, domain string) error {
-	specs := ParseAdminOutreachMailboxSpecs(config.AdminOutreachMailboxes, domain)
-	if len(specs) == 0 {
+// PruneAdminOutreachExtras deletes seats on ADMIN_OUTREACH_DOMAIN that are not in
+// ADMIN_OUTREACH_MAILBOXES. Local DB only — safe to call on every page load.
+func PruneAdminOutreachExtras(userID int64) error {
+	domain := strings.ToLower(strings.TrimSpace(config.AdminOutreachDomain))
+	if domain == "" || !strings.Contains(domain, ".") {
 		return nil
+	}
+	u, err := GetUserByID(userID)
+	if err != nil || !UserIsAdmin(u) {
+		return nil
+	}
+	specs := ParseAdminOutreachMailboxSpecs(config.AdminOutreachMailboxes, domain)
+	allow := adminMailboxAllowset(specs, domain)
+	if len(allow) == 0 {
+		return nil
+	}
+	existing, gErr := GetOutreachDomainByName(userID, domain)
+	if gErr != nil {
+		return nil
+	}
+	return pruneAdminDomainMailboxes(userID, existing.ID, domain, allow)
+}
+
+func adminMailboxAllowset(specs []StarterMailboxSpec, domain string) map[string]bool {
+	domain = strings.ToLower(strings.TrimSpace(domain))
+	if len(specs) == 0 {
+		return nil // nil = no allowlist (legacy: sync whatever exists locally needing creds only)
+	}
+	out := make(map[string]bool, len(specs))
+	for _, s := range specs {
+		local := sanitizeLocalPart(s.LocalPart)
+		if local == "" || domain == "" {
+			continue
+		}
+		out[local+"@"+domain] = true
+	}
+	return out
+}
+
+func adminAllowlistReady(userID, domainID int64, allow map[string]bool) bool {
+	if len(allow) == 0 {
+		return true
+	}
+	existing, _ := ListOutreachMailboxes(userID)
+	ready := map[string]bool{}
+	for _, m := range existing {
+		if m.DomainID != domainID {
+			continue
+		}
+		email := strings.ToLower(m.Email)
+		if (m.Status == "ready" || m.Status == "active") && m.SMTPAccountID > 0 {
+			ready[email] = true
+		}
+	}
+	for email := range allow {
+		if !ready[email] {
+			return false
+		}
+	}
+	return true
+}
+
+// pruneAdminDomainMailboxes deletes seats on the admin domain that are not in the allowlist.
+func pruneAdminDomainMailboxes(userID, domainID int64, domain string, allow map[string]bool) error {
+	if len(allow) == 0 {
+		return nil
+	}
+	existing, err := ListOutreachMailboxes(userID)
+	if err != nil {
+		return err
+	}
+	suffix := "@" + strings.ToLower(domain)
+	for _, m := range existing {
+		if m.DomainID != domainID && !strings.HasSuffix(strings.ToLower(m.Email), suffix) {
+			continue
+		}
+		email := strings.ToLower(m.Email)
+		if allow[email] {
+			continue
+		}
+		if delErr := DeleteOutreachMailbox(userID, m.ID); delErr != nil {
+			log.Printf("prune admin mailbox %s: %v", email, delErr)
+		} else {
+			log.Printf("pruned admin mailbox not in ADMIN_OUTREACH_MAILBOXES: %s", email)
+		}
+	}
+	return nil
+}
+
+func ensureAdminOutreachMailboxes(userID, domainID int64, domain string, specs []StarterMailboxSpec, allow map[string]bool) error {
+	if len(specs) == 0 {
+		// No explicit list: only refresh credentials for rows already on this domain (do not import new seats).
+		return syncMailboxCredentialsFiltered(userID, domainID, domain, allow, false)
 	}
 	platform := config.InboxKitPlatform
 	if platform == "" {
@@ -97,8 +196,7 @@ func ensureAdminOutreachMailboxes(userID, domainID int64, domain string) error {
 	if err := ensureStarterMailboxRows(userID, domainID, mboxes, platform, true); err != nil {
 		return fmt.Errorf("save admin mailbox rows: %w", err)
 	}
-	// Import seats that already exist in InboxKit.
-	if syncErr := syncMailboxCredentials(userID, domainID, domain); syncErr != nil {
+	if syncErr := syncMailboxCredentialsFiltered(userID, domainID, domain, allow, false); syncErr != nil {
 		log.Printf("admin mailbox sync before buy %s: %v", domain, syncErr)
 	}
 	pending := adminPendingMailboxLocals(userID, domainID, mboxes)
@@ -144,10 +242,7 @@ func ensureAdminOutreachMailboxes(userID, domainID int64, domain string) error {
 			_ = UpdateOutreachMailboxReady(local.ID, uid, local.SMTPAccountID, "provisioning")
 		}
 	}
-	if syncErr := syncMailboxCredentials(userID, domainID, domain); syncErr != nil {
-		log.Printf("admin mailbox sync after buy %s: %v", domain, syncErr)
-	}
-	return nil
+	return syncMailboxCredentialsFiltered(userID, domainID, domain, allow, false)
 }
 
 func adminPendingMailboxLocals(userID, domainID int64, wanted []inboxkit.OrderMailbox) []inboxkit.OrderMailbox {
@@ -238,7 +333,6 @@ func titleLocal(local string) string {
 	if local == "" {
 		return "Admin"
 	}
-	// first segment before . or _
 	seg := local
 	for _, sep := range []string{".", "_", "-"} {
 		if i := strings.Index(seg, sep); i > 0 {

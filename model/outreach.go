@@ -363,6 +363,30 @@ func CountCampaignsUsingSMTP(smtpAccountID int64) int {
 	return n
 }
 
+// MapCampaignCountsBySMTP returns campaign counts keyed by smtp_account_id for a user.
+func MapCampaignCountsBySMTP(userID int64) map[int64]int {
+	out := map[int64]int{}
+	rows, err := db.Query(`
+		SELECT sj.smtp_account_id, COUNT(DISTINCT sj.campaign_id)
+		FROM send_jobs sj
+		INNER JOIN smtp_accounts sa ON sa.id = sj.smtp_account_id
+		WHERE sa.user_id = ? AND COALESCE(sj.campaign_id,0) > 0 AND sj.smtp_account_id > 0
+		GROUP BY sj.smtp_account_id
+	`, userID)
+	if err != nil {
+		return out
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int64
+		var n int
+		if rows.Scan(&id, &n) == nil {
+			out[id] = n
+		}
+	}
+	return out
+}
+
 // UpdateMailboxWarmupSettings toggles local jupsend warmup on the linked SMTP account.
 func UpdateMailboxWarmupSettings(userID, mailboxID int64, enabled bool, dailyLimit int) error {
 	m, err := GetOutreachMailbox(mailboxID, userID)

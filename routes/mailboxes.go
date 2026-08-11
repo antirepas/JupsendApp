@@ -381,13 +381,14 @@ func MailboxesPage(c *gin.Context) {
 			}
 		}
 	}
-	if err := model.EnsureAdminOutreachDomain(userID); err != nil {
-		log.Printf("admin outreach domain: %v", err)
-	}
-	model.SyncPendingOutreachDomains(userID)
+	// Fast local prune (no InboxKit). Heavy ensure/sync runs in the background.
+	_ = model.PruneAdminOutreachExtras(userID)
+	model.ScheduleAdminOutreachEnsure(userID)
+	model.SchedulePendingOutreachSync(userID)
 
 	domains, _ := model.ListOutreachDomains(userID)
 	mailboxes, _ := model.ListOutreachMailboxes(userID)
+	smtpByID, _ := model.MapSMTPAccountsByID(userID)
 	user, _ := model.GetUserByID(userID)
 	isPro := model.UserIsPro(userID)
 	sharedReady := false
@@ -511,7 +512,7 @@ func MailboxesPage(c *gin.Context) {
 			CampaignsLabel: "—", RenewalLabel: renewalLabel, WarmupLabel: "—",
 		}
 		if m.SMTPAccountID > 0 {
-			if acc, err := model.GetSMTPAccount(m.SMTPAccountID); err == nil {
+			if acc, ok := smtpByID[m.SMTPAccountID]; ok {
 				if strings.TrimSpace(acc.FromName) != "" {
 					row.FromName = acc.FromName
 					row.Initial = strings.ToUpper(string([]rune(acc.FromName)[0]))
@@ -539,10 +540,7 @@ func MailboxesPage(c *gin.Context) {
 				if hint.Adjusted {
 					row.InsightsHint = hint.Reason
 				}
-				n := model.CountCampaignsUsingSMTP(acc.ID)
-				if n > 0 {
-					row.CampaignsLabel = strconv.Itoa(n)
-				}
+				row.CampaignsLabel = "—"
 			}
 		} else if st == "ready" || st == "active" {
 			row.WarmupLabel = "Add"
@@ -591,7 +589,7 @@ func MailboxesPage(c *gin.Context) {
 					IsInboxKit: m.InboxkitMailboxID != "",
 				}
 				if m.SMTPAccountID > 0 {
-					if acc, err := model.GetSMTPAccount(m.SMTPAccountID); err == nil {
+					if acc, ok := smtpByID[m.SMTPAccountID]; ok {
 						r.FromName = firstNonEmptyStr(acc.FromName, r.FromName)
 						r.SMTPHost, r.SMTPPort = acc.SMTPHost, acc.SMTPPort
 						r.IMAPHost, r.IMAPPort = acc.IMAPHost, acc.IMAPPort

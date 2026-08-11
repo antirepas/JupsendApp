@@ -538,6 +538,14 @@ func SyncPendingOutreachDomains(userID int64) {
 }
 
 func syncMailboxCredentials(userID, domainID int64, domain string) error {
+	return syncMailboxCredentialsFiltered(userID, domainID, domain, nil, true)
+}
+
+// syncMailboxCredentialsFiltered pulls InboxKit seats for domain and stores SMTP secrets.
+// If allow is non-nil, only those emails are imported/updated (no surprise seats like starter@).
+// When importNew is false, existing local rows are refreshed but brand-new InboxKit seats are not created
+// unless they appear in allow.
+func syncMailboxCredentialsFiltered(userID, domainID int64, domain string, allow map[string]bool, importNew bool) error {
 	client := inboxkit.NewClient()
 	list, err := client.ListMailboxes(domain)
 	if err != nil {
@@ -559,9 +567,12 @@ func syncMailboxCredentials(userID, domainID int64, domain string) error {
 	}
 
 	var lastCredErr error
-	for i, item := range list {
+	for _, item := range list {
 		email := item.ResolvedEmail()
 		if email == "" {
+			continue
+		}
+		if allow != nil && !allow[email] {
 			continue
 		}
 		fwd := item.ResolvedForwarding()
@@ -577,6 +588,13 @@ func syncMailboxCredentials(userID, domainID int64, domain string) error {
 		}
 		local, ok := byEmail[email]
 		if !ok {
+			if allow != nil {
+				if !allow[email] {
+					continue
+				}
+			} else if !importNew {
+				continue
+			}
 			id, cErr := UpsertOutreachMailbox(OutreachMailbox{
 				UserID:            userID,
 				DomainID:          domainID,
@@ -586,7 +604,7 @@ func syncMailboxCredentials(userID, domainID int64, domain string) error {
 				LastName:          item.LastName,
 				Platform:          firstNonEmpty(item.Platform, config.InboxKitPlatform, "GOOGLE"),
 				Status:            "provisioning",
-				IsDefault:         i == 0 && len(byEmail) == 0,
+				IsDefault:         len(byEmail) == 0,
 				IsAdmin:           item.ResolvedIsAdmin(),
 				Role:              role,
 				ForwardingEmail:   fwd,
@@ -615,16 +633,13 @@ func syncMailboxCredentials(userID, domainID int64, domain string) error {
 			continue
 		}
 		if local.Status == "ready" && local.SMTPAccountID > 0 {
-			// Still refresh meta / insights; credentials already stored.
-			if insights, iErr := client.MailboxInsights(local.InboxkitMailboxID); iErr == nil {
-				_ = SetMailboxAnalytics(local.ID, "{}", string(insights))
-			}
+			// Already send-ready — skip insights/credentials on list refresh (page-load hot path).
 			continue
 		}
 		creds, cErr := client.GetMailboxCredentials(local.InboxkitMailboxID)
 		if cErr != nil {
-			if byEmail, eErr := client.GetMailboxCredentialsByEmail(email); eErr == nil {
-				creds = byEmail
+			if byEmailCreds, eErr := client.GetMailboxCredentialsByEmail(email); eErr == nil {
+				creds = byEmailCreds
 				cErr = nil
 			}
 		}
@@ -646,9 +661,6 @@ func syncMailboxCredentials(userID, domainID int64, domain string) error {
 			return sErr
 		}
 		_ = UpdateOutreachMailboxReady(local.ID, local.InboxkitMailboxID, smtpID, "ready")
-		if insights, iErr := client.MailboxInsights(local.InboxkitMailboxID); iErr == nil {
-			_ = SetMailboxAnalytics(local.ID, "{}", string(insights))
-		}
 	}
 	if lastCredErr != nil && !UserHasReadyMailbox(userID) {
 		return lastCredErr
