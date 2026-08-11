@@ -194,6 +194,9 @@ func SaveCampaignTemperatureRules(ctx *gin.Context) {
 
 func parseStepTemplatesFromForm(ctx *gin.Context) map[string]int64 {
 	out := make(map[string]int64)
+	// Must parse before ranging Request.PostForm — Gin only fills it when PostForm/GetPostForm is used.
+	_ = ctx.Request.ParseMultipartForm(32 << 20)
+	_ = ctx.Request.ParseForm()
 	for key, values := range ctx.Request.PostForm {
 		if !strings.HasPrefix(key, "step_template[") || !strings.HasSuffix(key, "]") || len(values) == 0 {
 			continue
