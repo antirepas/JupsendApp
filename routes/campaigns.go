@@ -73,8 +73,8 @@ func CreateCampaign(ctx *gin.Context) {
 
 	templateAID, _ := strconv.ParseInt(ctx.PostForm("template_a_id"), 10, 64)
 	templateBID, _ := strconv.ParseInt(ctx.PostForm("template_b_id"), 10, 64)
-	experimentVariable := strings.TrimSpace(ctx.PostForm("experiment_variable"))
-	experimentHypothesis := strings.TrimSpace(ctx.PostForm("experiment_hypothesis"))
+	experimentVariable := firstNonEmptyForm(ctx, "experiment_variable")
+	experimentHypothesis := firstNonEmptyForm(ctx, "experiment_hypothesis")
 
 	switch executionMode {
 	case "bulk":
@@ -140,6 +140,15 @@ func CreateCampaign(ctx *gin.Context) {
 	}
 
 	ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(id, 10)+"?success=Campaign+created")
+}
+
+func firstNonEmptyForm(ctx *gin.Context, key string) string {
+	for _, v := range ctx.PostFormArray(key) {
+		if s := strings.TrimSpace(v); s != "" {
+			return s
+		}
+	}
+	return strings.TrimSpace(ctx.PostForm(key))
 }
 
 func parseTemperatureRulesFromForm(ctx *gin.Context) model.LeadTemperatureRules {

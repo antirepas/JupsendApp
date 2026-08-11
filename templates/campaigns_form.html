@@ -259,6 +259,11 @@ function setMode(mode) {
     wfTemplateA && (wfTemplateA.disabled = !isHybrid);
     wfTemplateB && (wfTemplateB.disabled = !isHybrid);
     document.querySelectorAll('.wf-experiment-field').forEach(el => { el.disabled = !isHybrid; });
+    // Bulk experiment fields stay in the DOM — disable when hidden so they don't
+    // override the workflow A/B hypothesis (PostForm takes the first value).
+    const showBulkExp = mode === 'bulk' && !!(bulkTemplateB && bulkTemplateB.value);
+    experimentFields?.classList.toggle('hidden', !showBulkExp);
+    experimentFields?.querySelectorAll('select, textarea, input').forEach(el => { el.disabled = !showBulkExp; });
 
     document.querySelectorAll('.wf-radio').forEach(r => {
         r.disabled = !isWorkflow;
@@ -272,13 +277,11 @@ wfCard?.addEventListener('click', () => { document.querySelector('input[value="w
 wfAbCard?.addEventListener('click', () => { document.querySelector('input[value="workflow_ab"]').checked = true; setMode('workflow_ab'); });
 
 function toggleExperiment() {
-    if (!bulkTemplateB || !experimentFields) return;
     const mode = document.querySelector('input[name=execution_mode]:checked')?.value || 'bulk';
-    experimentFields.classList.toggle('hidden', !bulkTemplateB.value || mode !== 'bulk');
+    setMode(mode);
 }
 if (bulkTemplateB) {
     bulkTemplateB.addEventListener('change', toggleExperiment);
-    toggleExperiment();
 }
 
 setMode('bulk');
