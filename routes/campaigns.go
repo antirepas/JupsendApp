@@ -370,6 +370,10 @@ func CampaignDetailPage(ctx *gin.Context) {
 		pageData["experimentVariable"] = detail.ExperimentVariable
 		pageData["experimentHypothesis"] = detail.ExperimentHypothesis
 		pageData["experimentVariableLabel"] = experimentVariableLabel(detail.ExperimentVariable)
+		pageData["workflowTestReady"] = false
+		if camp, cErr := model.GetCampaignForUser(detail.ID, userID); cErr == nil {
+			pageData["workflowTestReady"] = model.ValidateCampaignWorkflowReady(camp) == nil
+		}
 		wfRows := filterWorkflowCampaignContactRows(pageExtras.WorkflowContactRows, memberQ, memberFilter)
 		pagedWf, memberPage := pageWorkflowCampaignContactRows(wfRows, memberPageNum, memberPageSize)
 		pageData["workflowContactRows"] = pagedWf
@@ -664,6 +668,119 @@ func SendCampaign(ctx *gin.Context) {
 		}
 	}
 	ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?success="+url.QueryEscape(msg))
+}
+
+// TestCampaignWorkflowWeb queues every mapped workflow email to the signed-in user's address (no waits).
+func TestCampaignWorkflowWeb(ctx *gin.Context) {
+	userID := mustUserID(ctx)
+	campaignID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
+	if err != nil {
+		ctx.Redirect(http.StatusFound, "/campaigns?error=Invalid+campaign")
+		return
+	}
+	redirect := func(success, errMsg string) {
+		q := url.Values{}
+		if success != "" {
+			q.Set("success", success)
+		}
+		if errMsg != "" {
+			q.Set("error", errMsg)
+		}
+		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?"+q.Encode())
+	}
+
+	campaign, err := model.GetCampaignForUser(campaignID, userID)
+	if err != nil {
+		redirect("", "Campaign not found")
+		return
+	}
+	mode := strings.TrimSpace(campaign.ExecutionMode)
+	if mode != "workflow" && mode != "workflow_ab" {
+		redirect("", "Test send is only available for workflow campaigns")
+		return
+	}
+	if err := model.ValidateCampaignWorkflowReady(campaign); err != nil {
+		redirect("", "Map all send-step templates first: "+err.Error())
+		return
+	}
+
+	user, err := model.GetUserByID(userID)
+	if err != nil || strings.TrimSpace(user.Email) == "" {
+		redirect("", "Could not load your account email")
+		return
+	}
+	contactID, err := model.FindOrCreateContact(userID, user.Email, nil)
+	if err != nil {
+		redirect("", "Could not create contact for your email: "+err.Error())
+		return
+	}
+
+	steps, err := model.ListSendEmailSteps(campaign.WorkflowVersionID)
+	if err != nil {
+		redirect("", err.Error())
+		return
+	}
+	firstKey, _ := model.GetFirstSendNodeKey(campaign.WorkflowVersionID)
+
+	type jobSpec struct {
+		templateID int64
+		variant    string
+		label      string
+	}
+	var jobs []jobSpec
+	for _, step := range steps {
+		if mode == "workflow_ab" && step.NodeKey == firstKey {
+			if campaign.TemplateAID > 0 {
+				jobs = append(jobs, jobSpec{templateID: campaign.TemplateAID, variant: "A", label: step.Label + " (A)"})
+			}
+			if campaign.TemplateBID > 0 {
+				jobs = append(jobs, jobSpec{templateID: campaign.TemplateBID, variant: "B", label: step.Label + " (B)"})
+			}
+			continue
+		}
+		tid, resolveErr := model.ResolveCampaignSendTemplate(campaignID, step.NodeKey, "A", campaign.WorkflowVersionID)
+		if resolveErr != nil || tid <= 0 {
+			redirect("", fmt.Sprintf("Could not resolve template for %s: %v", step.Label, resolveErr))
+			return
+		}
+		jobs = append(jobs, jobSpec{templateID: tid, variant: "", label: step.Label})
+	}
+	if len(jobs) == 0 {
+		redirect("", "No workflow emails to send")
+		return
+	}
+
+	queued := 0
+	var failNotes []string
+	for _, j := range jobs {
+		_, _, enqErr := outbound.EnqueueSend(outbound.EnqueueInput{
+			UserID:        userID,
+			ContactID:     contactID,
+			TemplateID:    j.templateID,
+			CampaignID:    0,
+			Variant:       j.variant,
+			SubjectPrefix: "[Test]",
+		})
+		if enqErr != nil {
+			failNotes = append(failNotes, j.label+": "+enqErr.Error())
+			continue
+		}
+		queued++
+	}
+
+	if queued == 0 {
+		msg := "Could not queue test emails"
+		if len(failNotes) > 0 {
+			msg += ": " + strings.Join(failNotes, "; ")
+		}
+		redirect("", msg)
+		return
+	}
+	msg := fmt.Sprintf("Queued %d test email(s) to %s", queued, user.Email)
+	if len(failNotes) > 0 {
+		msg += fmt.Sprintf(" (%d failed: %s)", len(failNotes), strings.Join(failNotes, "; "))
+	}
+	redirect(msg, "")
 }
 
 func StopCampaign(ctx *gin.Context) {

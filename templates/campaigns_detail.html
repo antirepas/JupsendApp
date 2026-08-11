@@ -20,6 +20,11 @@
     </div>
     <div class="flex gap-3 items-center flex-wrap justify-end">
         <a href="/campaigns/{{.campaign.ID}}/analytics" class="btn-secondary">{{if .isWorkflowAB}}Analytics{{else if .isWorkflow}}Workflow analytics{{else}}Campaign analytics{{end}}</a>
+        {{if and .isWorkflow .workflowTestReady}}
+        <form method="POST" action="/campaigns/{{.campaign.ID}}/test-workflow" onsubmit="return confirm('Send all workflow emails to your account email now? Waits are skipped.');">
+            <button type="submit" class="btn-secondary">Send test to my email</button>
+        </form>
+        {{end}}
         {{if .canStop}}
         <form method="POST" action="/campaigns/{{.campaign.ID}}/stop" onsubmit="return confirm('Stop this campaign? Queued emails will not be sent.');">
             <button type="submit" class="btn-secondary text-red-600">Stop campaign</button>

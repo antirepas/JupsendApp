@@ -22,7 +22,12 @@ type EnqueueInput struct {
 	CampaignID         int64
 	Variant            string
 	WorkflowInstanceID int64
+	// SubjectPrefix is prepended to the rendered subject at send time (e.g. "[Test]").
+	// Encoded on the send job only so email_sends keeps a clean variant label.
+	SubjectPrefix string
 }
+
+const testSubjectJobVariantPrefix = "test|"
 
 func EnqueueSend(input EnqueueInput) (int64, int64, error) {
 	if _, err := model.GetSendReadyAccountForUser(input.UserID); err != nil {
@@ -54,12 +59,17 @@ func EnqueueSend(input EnqueueInput) (int64, int64, error) {
 		return 0, 0, err
 	}
 
+	jobVariant := input.Variant
+	if prefix := strings.TrimSpace(input.SubjectPrefix); prefix != "" {
+		jobVariant = testSubjectJobVariantPrefix + input.Variant
+	}
+
 	jobID, err := model.CreateSendJob(model.SendJob{
 		UserID:             input.UserID,
 		ContactID:          input.ContactID,
 		TemplateID:         input.TemplateID,
 		CampaignID:         input.CampaignID,
-		Variant:            input.Variant,
+		Variant:            jobVariant,
 		WorkflowInstanceID: input.WorkflowInstanceID,
 		EmailSendID:        emailSendID,
 		Priority:           sendPriority(input),

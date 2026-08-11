@@ -77,6 +77,11 @@ func executeJob(job model.SendJob, account model.SMTPAccount) error {
 		_ = model.FailSendJob(job.ID, reason, "failed")
 		return fmt.Errorf("%s", reason)
 	}
+	if strings.HasPrefix(job.Variant, testSubjectJobVariantPrefix) {
+		if !strings.HasPrefix(strings.TrimSpace(newSubject), "[Test]") {
+			newSubject = "[Test] " + newSubject
+		}
+	}
 
 	newBody = util.WrapHTMLBody(newBody)
 	if model.CampaignOpenTrackingEnabled(detail.CampaignID) {
