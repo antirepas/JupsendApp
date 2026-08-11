@@ -48,6 +48,46 @@ func OpsSMTPCheck(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gin.H{"ok": true, "from": from, "version": config.BuildVersion})
 }
 
+// runAllUserSMTPChecks probes every send-ready mailbox for the user.
+func runAllUserSMTPChecks(userID int64) (okFrom []string, failMsgs []string, err error) {
+	ready, err := model.ListSendReadyAccountsForUser(userID)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, acc := range ready {
+		from, probeErr := runUserSMTPCheck(userID, acc.ID)
+		label := from
+		if label == "" {
+			label = acc.SenderEmail()
+		}
+		if probeErr != nil {
+			failMsgs = append(failMsgs, probeErr.Error())
+			continue
+		}
+		okFrom = append(okFrom, label)
+	}
+	return okFrom, failMsgs, nil
+}
+
+func summarizeSMTPChecks(okFrom, failMsgs []string) (successMsg, errorMsg string) {
+	total := len(okFrom) + len(failMsgs)
+	if total == 0 {
+		return "", "No ready mailboxes to test — finish setup under Mailboxes"
+	}
+	if len(failMsgs) == 0 {
+		if len(okFrom) == 1 {
+			return "SMTP OK for " + okFrom[0] + " — ready to send.", ""
+		}
+		return fmt.Sprintf("SMTP OK for all %d mailboxes (%s)", len(okFrom), strings.Join(okFrom, ", ")), ""
+	}
+	parts := []string{fmt.Sprintf("%d/%d mailboxes failed SMTP", len(failMsgs), total)}
+	parts = append(parts, failMsgs...)
+	if len(okFrom) > 0 {
+		parts = append(parts, "OK: "+strings.Join(okFrom, ", "))
+	}
+	return "", strings.Join(parts, " · ")
+}
+
 func runUserSMTPCheck(userID, smtpAccountID int64) (from string, err error) {
 	if userID == 0 {
 		return "", fmt.Errorf("not logged in")

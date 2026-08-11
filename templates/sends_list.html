@@ -122,12 +122,10 @@
                     <span class="badge badge-gray" title="{{.DeliveryError}}">Cancelled</span>
                     {{else if eq .DeliveryStatus "queued"}}
                     <span class="badge badge-amber" title="{{.DeliveryError}}">Queued</span>
-                    {{if .DeliveryError}}<p class="sends-status-error sends-status-error--amber" title="{{.DeliveryError}}">{{.DeliveryError}}</p>{{end}}
                     {{else if eq .DeliveryStatus "sending"}}
                     <span class="badge badge-amber">Sending</span>
                     {{else if eq .DeliveryStatus "failed"}}
                     <span class="badge badge-red" title="{{.DeliveryError}}">Failed</span>
-                    {{if .DeliveryError}}<p class="sends-status-error" title="{{.DeliveryError}}">{{.DeliveryError}}</p>{{end}}
                     {{else if gt .ClickCount 0}}
                     <span class="badge badge-amber">Clicked</span>
                     {{else if gt .OpenCount 0}}

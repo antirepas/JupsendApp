@@ -609,12 +609,7 @@ func MailboxesPage(c *gin.Context) {
 
 	showAttach := c.Query("attach") == "1"
 
-	var readySMTP []model.SMTPAccount
-	for _, acc := range smtpByID {
-		if acc.IsSendReady() {
-			readySMTP = append(readySMTP, acc)
-		}
-	}
+	readySMTP, _ := model.ListSendReadyAccountsForUser(userID)
 	combinedWarmup := outbound.ComputeCombinedWarmupProgress(readySMTP)
 
 	c.HTML(http.StatusOK, "mailboxes.html", gin.H{

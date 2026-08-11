@@ -243,30 +243,17 @@
     border-top: 1px solid #F3F4F6;
 }
 
-/* Keep status errors from shoving Actions off-screen (table auto-layout ignores max-width alone). */
+/* Keep Actions visible; status errors live on the send detail page (badge title still has a hint). */
 .sends-status-cell {
-    max-width: 11rem;
-    width: 11rem;
-    vertical-align: top;
-}
-.sends-status-error {
-    display: block;
-    margin: 0.25rem 0 0;
-    max-width: 10rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    max-width: 7rem;
+    width: 7rem;
+    vertical-align: middle;
     white-space: nowrap;
-    font-size: 0.75rem;
-    line-height: 1.25;
-    color: #DC2626;
-}
-.sends-status-error--amber {
-    color: #B45309;
 }
 .sends-actions-cell {
     width: 1%;
     white-space: nowrap;
-    vertical-align: top;
+    vertical-align: middle;
 }
 
 .badge {

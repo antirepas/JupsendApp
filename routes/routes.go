@@ -104,6 +104,7 @@ func RegisterRoutes(server *gin.Engine) {
 		mailboxOnboarding.POST("/onboarding/domain/connect", OnboardingDomainConnect)
 		mailboxOnboarding.GET("/onboarding/domain/status", OnboardingDomainStatus)
 		mailboxOnboarding.GET("/mailboxes", MailboxesPage)
+		mailboxOnboarding.GET("/mailboxes/smtp-check-all", MailboxesSMTPCheckAll)
 		mailboxOnboarding.POST("/mailboxes/attach", MailboxesAttachManual)
 		mailboxOnboarding.GET("/mailboxes/buy", MailboxesBuyPage)
 		mailboxOnboarding.POST("/mailboxes/buy/checkout", MailboxesBuyCheckout)

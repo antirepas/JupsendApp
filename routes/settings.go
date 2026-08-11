@@ -80,12 +80,32 @@ func UpdateSettings(c *gin.Context) {
 }
 
 func SettingsSMTPCheck(c *gin.Context) {
-	from, err := runUserSMTPCheck(mustUserID(c), 0)
+	okFrom, failMsgs, err := runAllUserSMTPChecks(mustUserID(c))
 	if err != nil {
 		c.Redirect(http.StatusFound, "/settings?error="+url.QueryEscape("SMTP test failed: "+err.Error()))
 		return
 	}
-	c.Redirect(http.StatusFound, "/settings?success="+url.QueryEscape("SMTP OK for "+from+" — ready to send."))
+	successMsg, errorMsg := summarizeSMTPChecks(okFrom, failMsgs)
+	if errorMsg != "" {
+		c.Redirect(http.StatusFound, "/settings?error="+url.QueryEscape(errorMsg))
+		return
+	}
+	c.Redirect(http.StatusFound, "/settings?success="+url.QueryEscape(successMsg))
+}
+
+// MailboxesSMTPCheckAll probes every send-ready mailbox and returns to /mailboxes.
+func MailboxesSMTPCheckAll(c *gin.Context) {
+	okFrom, failMsgs, err := runAllUserSMTPChecks(mustUserID(c))
+	if err != nil {
+		c.Redirect(http.StatusFound, "/mailboxes?error="+url.QueryEscape(err.Error()))
+		return
+	}
+	successMsg, errorMsg := summarizeSMTPChecks(okFrom, failMsgs)
+	if errorMsg != "" {
+		c.Redirect(http.StatusFound, "/mailboxes?error="+url.QueryEscape(errorMsg))
+		return
+	}
+	c.Redirect(http.StatusFound, "/mailboxes?success="+url.QueryEscape(successMsg))
 }
 
 func parseSendingSettingsForm(c *gin.Context) model.SMTPAccount {
