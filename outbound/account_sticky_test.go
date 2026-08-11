@@ -75,10 +75,10 @@ func TestResolveSendAccountForContactSkipsOverCap(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Exhaust A's daily limit.
-	if _, err := db.Exec(`UPDATE smtp_accounts SET sends_today = 5, daily_limit = 5, warmup_enabled = false WHERE id = ?`, idA); err != nil {
+	if _, err := db.Exec(`UPDATE smtp_accounts SET sends_today = 5, daily_limit = 5, warmup_enabled = 0 WHERE id = ?`, idA); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(`UPDATE smtp_accounts SET warmup_enabled = false WHERE id = ?`, idB); err != nil {
+	if _, err := db.Exec(`UPDATE smtp_accounts SET warmup_enabled = 0 WHERE id = ?`, idB); err != nil {
 		t.Fatal(err)
 	}
 
