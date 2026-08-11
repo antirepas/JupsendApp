@@ -115,58 +115,48 @@ func buildWorkflowCampaignContactRows(
 	campaign model.Campaign,
 	userID int64,
 	contactIDs []int64,
+	indexBase int, // 0-based offset of first ID in the full filtered list
 ) []WorkflowCampaignContactRowView {
-	instances, _ := model.ListInstancesForCampaign(campaign.ID)
-	sendMap, _ := model.GetCampaignContactEngagementLite(campaign.ID)
-	emailMap, _ := model.GetCampaignContactEmailMap(campaign.ID)
-	replied := model.CampaignRepliedContactSet(campaign.ID)
-	labels := model.NodeLabelMapForVersion(campaign.WorkflowVersionID)
-
-	if len(instances) > 0 {
-		var rows []WorkflowCampaignContactRowView
-		for i, inst := range instances {
-			email := emailMap[inst.ContactID]
-			row := WorkflowCampaignContactRowView{
-				Index:          i + 1,
-				ID:             inst.ContactID,
-				Email:          email,
-				HasStarted:     true,
-				InstanceStatus: inst.Status,
-				NodeKey:        inst.CurrentNodeKey,
-				CurrentStep:    model.LabelFromMap(labels, inst.CurrentNodeKey),
-				BranchLabel:    workflowBranchLabel(inst),
-				Replied:        replied[inst.ContactID],
-			}
-			if sent, ok := sendMap[inst.ContactID]; ok {
-				row.OpenCount = sent.OpenCount
-				row.ClickCount = sent.ClickCount
-				if sent.SendID > 0 {
-					row.SendID = sent.SendID
-					row.Sent = true
-				}
-			}
-			rows = append(rows, row)
-		}
-		return rows
+	if len(contactIDs) == 0 {
+		return nil
 	}
+	instances, _ := model.ListInstancesForContactIDs(campaign.ID, contactIDs)
+	instByContact := make(map[int64]model.WorkflowInstance, len(instances))
+	for _, inst := range instances {
+		if _, exists := instByContact[inst.ContactID]; !exists {
+			instByContact[inst.ContactID] = inst
+		}
+	}
+	sendMap, _ := model.GetCampaignContactEngagementLiteForContacts(campaign.ID, contactIDs)
+	emailMap, _ := model.GetContactEmailsByIDs(userID, contactIDs)
+	replied := model.CampaignRepliedContactSetForIDs(campaign.ID, contactIDs)
+	labels := model.NodeLabelMapForVersion(campaign.WorkflowVersionID)
 
 	var rows []WorkflowCampaignContactRowView
 	for i, cid := range contactIDs {
 		row := WorkflowCampaignContactRowView{
-			Index:   i + 1,
+			Index:   indexBase + i + 1,
 			ID:      cid,
 			Email:   emailMap[cid],
 			Replied: replied[cid],
 		}
-		row.InstanceStatus = "not started"
-		row.CurrentStep = "—"
+		if inst, ok := instByContact[cid]; ok {
+			row.HasStarted = true
+			row.InstanceStatus = inst.Status
+			row.NodeKey = inst.CurrentNodeKey
+			row.CurrentStep = model.LabelFromMap(labels, inst.CurrentNodeKey)
+			row.BranchLabel = workflowBranchLabel(inst)
+		} else {
+			row.InstanceStatus = "not started"
+			row.CurrentStep = "—"
+		}
 		if sent, ok := sendMap[cid]; ok {
 			row.OpenCount = sent.OpenCount
 			row.ClickCount = sent.ClickCount
 			if sent.SendID > 0 {
 				row.SendID = sent.SendID
-				row.HasStarted = true
 				row.Sent = true
+				row.HasStarted = true
 			}
 		}
 		rows = append(rows, row)
@@ -205,6 +195,7 @@ func buildCampaignContactRows(
 	campaign model.Campaign,
 	userID int64,
 	contactIDs []int64,
+	globalIndex map[int64]int, // contact_id → 0-based index in full campaign (for A/B)
 	templateAName, templateBName string,
 ) []CampaignContactRowView {
 	hasB := campaign.TemplateBID > 0
@@ -215,9 +206,9 @@ func buildCampaignContactRows(
 		templateB, bVars, _ = model.GetTemplateByID(campaign.TemplateBID, userID)
 	}
 
-	sendMap, _ := model.GetCampaignContactEngagementLite(campaign.ID)
-	contactData, _ := model.GetCampaignContactDataMap(campaign.ID)
-	replied := model.CampaignRepliedContactSet(campaign.ID)
+	sendMap, _ := model.GetCampaignContactEngagementLiteForContacts(campaign.ID, contactIDs)
+	contactData, _ := model.GetCampaignContactDataMapForIDs(contactIDs)
+	replied := model.CampaignRepliedContactSetForIDs(campaign.ID, contactIDs)
 	mailboxVars := mailboxVarsForPreview(userID)
 
 	var rows []CampaignContactRowView
@@ -227,12 +218,19 @@ func buildCampaignContactRows(
 			continue
 		}
 
+		campIdx := i
+		if globalIndex != nil {
+			if gi, ok := globalIndex[cid]; ok {
+				campIdx = gi
+			}
+		}
+
 		variant := "A"
 		templateName := templateAName
 		templateID := campaign.TemplateAID
 		tpl := templateA
 		tplVars := aVars
-		if hasB && i%2 == 1 {
+		if hasB && campIdx%2 == 1 {
 			variant = "B"
 			templateName = templateBName
 			templateID = campaign.TemplateBID
@@ -264,7 +262,7 @@ func buildCampaignContactRows(
 		body = truncatePreview(body, 500)
 
 		row := CampaignContactRowView{
-			Index:           i + 1,
+			Index:           campIdx + 1,
 			ID:              cid,
 			Email:           data.Email,
 			Variant:         variant,

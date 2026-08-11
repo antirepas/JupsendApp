@@ -302,7 +302,12 @@ func CampaignDetailPage(ctx *gin.Context) {
 	memberPageNum, _ := strconv.Atoi(ctx.DefaultQuery("member_page", "1"))
 	const memberPageSize = 50
 
-	pageExtras, err := loadCampaignDetailPageData(userID, detail, pickerFilter)
+	pageExtras, err := loadCampaignDetailPageData(userID, detail, pickerFilter, campaignMemberLoadOpts{
+		Query:      memberQ,
+		Engagement: memberFilter,
+		Page:       memberPageNum,
+		PageSize:   memberPageSize,
+	})
 	if err != nil {
 		log.Print(err)
 		ctx.HTML(http.StatusInternalServerError, "error.html", gin.H{"title": "Error", "active": "campaigns", "error": "Failed to load campaign"})
@@ -377,11 +382,9 @@ func CampaignDetailPage(ctx *gin.Context) {
 		if camp, cErr := model.GetCampaignForUser(detail.ID, userID); cErr == nil {
 			pageData["workflowTestReady"] = model.ValidateCampaignWorkflowReady(camp) == nil
 		}
-		wfRows := filterWorkflowCampaignContactRows(pageExtras.WorkflowContactRows, memberQ, memberFilter)
-		pagedWf, memberPage := pageWorkflowCampaignContactRows(wfRows, memberPageNum, memberPageSize)
-		pageData["workflowContactRows"] = pagedWf
-		pageData["workflowContactTotal"] = len(wfRows)
-		pageData["memberPage"] = memberPage
+		pageData["workflowContactRows"] = pageExtras.WorkflowContactRows
+		pageData["workflowContactTotal"] = pageExtras.MemberTotal
+		pageData["memberPage"] = pageExtras.MemberPage
 		pageData["memberQ"] = memberQ
 		pageData["memberFilter"] = memberFilter
 		pageData["missingVarsCount"] = 0
@@ -395,21 +398,12 @@ func CampaignDetailPage(ctx *gin.Context) {
 		pageData["templateA"] = pageExtras.TemplateA
 		pageData["templateB"] = pageExtras.TemplateB
 		pageData["hasB"] = pageExtras.HasB
-		allRows := pageExtras.ContactRows
-		missingCount := 0
-		for _, r := range allRows {
-			if len(r.MissingVars) > 0 {
-				missingCount++
-			}
-		}
-		rows := filterCampaignContactRows(allRows, memberQ, memberFilter)
-		pagedRows, memberPage := pageCampaignContactRows(rows, memberPageNum, memberPageSize)
-		pageData["contactRows"] = pagedRows
-		pageData["contactRowTotal"] = len(rows)
-		pageData["memberPage"] = memberPage
+		pageData["contactRows"] = pageExtras.ContactRows
+		pageData["contactRowTotal"] = pageExtras.MemberTotal
+		pageData["memberPage"] = pageExtras.MemberPage
 		pageData["memberQ"] = memberQ
 		pageData["memberFilter"] = memberFilter
-		pageData["missingVarsCount"] = missingCount
+		pageData["missingVarsCount"] = pageExtras.MissingVarsCount
 		pageData["mergedVars"] = pageExtras.MergedVars
 	}
 
@@ -562,23 +556,30 @@ func RemoveCampaignContactsMissingVars(ctx *gin.Context) {
 		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error="+url.QueryEscape("Missing-variable cleanup is for A/B template campaigns"))
 		return
 	}
-	detail, err := model.GetCampaignDetail(campaignID, userID)
-	if err != nil {
-		ctx.Redirect(http.StatusFound, "/campaigns?error=Campaign+not+found")
-		return
-	}
 	ids, err := model.GetCampaignContactIDs(campaignID)
 	if err != nil {
 		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error=Could+not+load+contacts")
 		return
 	}
-	rows := buildCampaignContactRows(campaign, userID, ids, detail.TemplateAName, detail.TemplateBName)
-	var removeIDs []int64
-	for _, row := range rows {
-		if len(row.MissingVars) > 0 {
-			removeIDs = append(removeIDs, row.ID)
-		}
+	_, aVars, _ := model.GetTemplateByID(campaign.TemplateAID, userID)
+	var bVars []string
+	hasB := campaign.TemplateBID > 0
+	if hasB {
+		_, bVars, _ = model.GetTemplateByID(campaign.TemplateBID, userID)
 	}
+	missingPage, err := model.ListCampaignMemberPage(campaignID, model.CampaignMemberFilter{
+		Engagement:    "missing_vars",
+		Page:          1,
+		PageSize:      len(ids) + 1,
+		HasB:          hasB,
+		TemplateAVars: aVars,
+		TemplateBVars: bVars,
+	})
+	if err != nil {
+		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error=Could+not+scan+contacts")
+		return
+	}
+	removeIDs := missingPage.ContactIDs
 	if len(removeIDs) == 0 {
 		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?success="+url.QueryEscape("No contacts missing template variables"))
 		return

@@ -148,6 +148,12 @@ func processInboxMessage(acc model.SMTPAccount, ownEmail string, msg inboxMessag
 		}
 		return
 	}
+	if IsAutoReplyMessage(msg.From, msg.Subject, msg.Body) {
+		if dedupeKey != "" {
+			_ = model.MarkGmailMessageProcessed(acc.UserID, dedupeKey)
+		}
+		return
+	}
 	if match, ok := MatchReply(acc.UserID, msg.From, msg.Subject, msg.Body, replyRefs, ownEmail); ok {
 		handleReply(acc.UserID, match, msg, acc.ID, ownEmail)
 	}

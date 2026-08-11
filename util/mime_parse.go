@@ -23,10 +23,16 @@ func ParseMIMEBody(raw string) ParsedMIME {
 	if raw == "" {
 		return ParsedMIME{}
 	}
-	// Ensure we can parse as a mail message even if Body alone was stored.
-	if !strings.Contains(strings.ToLower(raw[:min(200, len(raw))]), "content-type:") &&
-		!strings.HasPrefix(strings.ToLower(raw), "mime-version:") {
-		if strings.Contains(strings.ToLower(raw), "<html") || strings.Contains(raw, "<div") {
+	head := strings.ToLower(raw[:min(800, len(raw))])
+	hasMIMEHeaders := strings.Contains(head, "content-type:") ||
+		strings.HasPrefix(head, "mime-version:") ||
+		strings.Contains(head, "\nmime-version:") ||
+		strings.Contains(head, "delivered-to:") ||
+		strings.Contains(head, "return-path:") ||
+		strings.HasPrefix(head, "received:") ||
+		strings.Contains(head, "\nreceived:")
+	if !hasMIMEHeaders {
+		if strings.Contains(head, "<html") || strings.Contains(raw, "<div") {
 			return ParsedMIME{HTML: raw, Text: StripHTML(raw)}
 		}
 		return ParsedMIME{Text: raw}
@@ -35,22 +41,23 @@ func ParseMIMEBody(raw string) ParsedMIME {
 	if err != nil {
 		// Body-only multipart or plain.
 		if strings.Contains(strings.ToLower(raw), "content-type:") {
-			return parseMIMEEntity(raw, "")
+			return parseMIMEEntity(raw, "", "")
 		}
 		return ParsedMIME{Text: raw}
 	}
 	ct := msg.Header.Get("Content-Type")
+	cte := msg.Header.Get("Content-Transfer-Encoding")
 	body, _ := io.ReadAll(msg.Body)
-	return parseMIMEEntity(string(body), ct)
+	return parseMIMEEntity(string(body), ct, cte)
 }
 
-func parseMIMEEntity(body, contentType string) ParsedMIME {
+func parseMIMEEntity(body, contentType, transferEncoding string) ParsedMIME {
 	if contentType == "" {
 		contentType = "text/plain; charset=utf-8"
 	}
 	mediaType, params, err := mime.ParseMediaType(contentType)
 	if err != nil {
-		return ParsedMIME{Text: body}
+		return ParsedMIME{Text: decodeTransfer(body, transferEncoding)}
 	}
 	if strings.HasPrefix(mediaType, "multipart/") {
 		boundary := params["boundary"]
@@ -59,7 +66,7 @@ func parseMIMEEntity(body, contentType string) ParsedMIME {
 		}
 		return parseMultipart(body, boundary)
 	}
-	decoded := decodeTransfer(body, "")
+	decoded := decodeTransfer(body, transferEncoding)
 	switch {
 	case mediaType == "text/html":
 		return ParsedMIME{HTML: decoded, Text: StripHTML(decoded)}
@@ -177,4 +184,63 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// LooksLikeMangledEmailBody detects raw MIME / undecoded quoted-printable stored as body text.
+func LooksLikeMangledEmailBody(s string) bool {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return false
+	}
+	lower := strings.ToLower(s[:min(400, len(s))])
+	if strings.Contains(lower, "content-transfer-encoding:") ||
+		strings.Contains(lower, "delivered-to:") ||
+		strings.Contains(lower, "return-path:") ||
+		strings.HasPrefix(lower, "received:") {
+		return true
+	}
+	// Common QP artifacts when CTE was not decoded.
+	if strings.Contains(s, "=20") || strings.Contains(s, "=\r\n") || strings.Contains(s, "=\n") {
+		return true
+	}
+	return false
+}
+
+// RepairEmailBody re-parses a mangled stored body into clean text/html when possible.
+func RepairEmailBody(bodyText, bodyHTML string) (text, html string) {
+	raw := bodyHTML
+	if LooksLikeMangledEmailBody(bodyText) && (raw == "" || !LooksLikeMangledEmailBody(raw) || len(bodyText) > len(raw)) {
+		raw = bodyText
+	}
+	if raw == "" {
+		raw = bodyText
+	}
+	if !LooksLikeMangledEmailBody(raw) && !LooksLikeMangledEmailBody(bodyHTML) {
+		return bodyText, bodyHTML
+	}
+	// Prefer the more header-like blob.
+	candidate := raw
+	if LooksLikeMangledEmailBody(bodyHTML) && len(bodyHTML) >= len(candidate) {
+		candidate = bodyHTML
+	}
+	if LooksLikeMangledEmailBody(bodyText) && strings.Contains(strings.ToLower(bodyText), "content-type:") {
+		candidate = bodyText
+	}
+	parsed := ParseMIMEBody(candidate)
+	if parsed.HTML == "" && parsed.Text == "" {
+		// Last resort: decode QP on the blob as-is.
+		decoded := decodeTransfer(candidate, "quoted-printable")
+		if decoded != candidate {
+			if strings.Contains(strings.ToLower(decoded), "<html") || strings.Contains(decoded, "<div") || strings.Contains(decoded, "<p") {
+				return StripHTML(decoded), decoded
+			}
+			return decoded, ""
+		}
+		return bodyText, bodyHTML
+	}
+	text, html = parsed.Text, parsed.HTML
+	if text == "" && html != "" {
+		text = StripHTML(html)
+	}
+	return text, html
 }

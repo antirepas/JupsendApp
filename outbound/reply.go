@@ -30,6 +30,9 @@ func IsReplyMessage(from, subject, body string, inReplyTo []string, userOwnEmail
 	if IsBounceMessage(from, subject, body) {
 		return false
 	}
+	if IsAutoReplyMessage(from, subject, body) {
+		return false
+	}
 	from = strings.TrimSpace(strings.ToLower(from))
 	if from == "" || reMailerDaemon.MatchString(from) {
 		return false
@@ -132,6 +135,9 @@ func resolveSendIDFromMessageIDs(combined string) int64 {
 }
 
 func MatchReply(userID int64, from, subject, body string, inReplyTo []string, userOwnEmail string) (ReplyMatch, bool) {
+	if IsBounceMessage(from, subject, body) || IsAutoReplyMessage(from, subject, body) {
+		return ReplyMatch{}, false
+	}
 	sendID := ExtractSendIDFromReply(body, inReplyTo)
 	contactID := int64(0)
 	trackingID := ""
@@ -143,7 +149,7 @@ func MatchReply(userID int64, from, subject, body string, inReplyTo []string, us
 		// Soft path: known contact From + Re: subject or In-Reply-To present.
 		fromEmail := strings.Trim(strings.ToLower(from), "<>")
 		own := strings.TrimSpace(strings.ToLower(userOwnEmail))
-		if fromEmail == "" || fromEmail == own || IsBounceMessage(from, subject, body) {
+		if fromEmail == "" || fromEmail == own || IsBounceMessage(from, subject, body) || IsAutoReplyMessage(from, subject, body) {
 			return ReplyMatch{}, false
 		}
 		hasThread := len(inReplyTo) > 0 || strings.HasPrefix(strings.ToLower(strings.TrimSpace(subject)), "re:")

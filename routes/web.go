@@ -641,6 +641,7 @@ func ContactDetailPage(ctx *gin.Context) {
 	}
 	conversation, _ := model.ListContactConversation(userID, id, 200)
 	enrichLegacyConversationBodies(userID, id, conversation)
+	repairMangledConversationBodies(conversation)
 	replySubject := "Re: "
 	if inbound, err := model.LatestInboundMessage(userID, id); err == nil {
 		sub := strings.TrimSpace(inbound.Subject)
@@ -735,6 +736,25 @@ func enrichLegacyConversationBodies(userID, contactID int64, msgs []model.Conver
 	}
 }
 
+func repairMangledConversationBodies(msgs []model.ConversationMessage) {
+	for i := range msgs {
+		m := &msgs[i]
+		if m.Direction != model.ConversationInbound {
+			continue
+		}
+		if !util.LooksLikeMangledEmailBody(m.BodyText) && !util.LooksLikeMangledEmailBody(m.BodyHTML) {
+			continue
+		}
+		text, html := util.RepairEmailBody(m.BodyText, m.BodyHTML)
+		if text != "" {
+			m.BodyText = text
+		}
+		if html != "" {
+			m.BodyHTML = html
+		}
+	}
+}
+
 func ReplyContactPage(ctx *gin.Context) {
 	userID := mustUserID(ctx)
 	contactID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
@@ -755,6 +775,7 @@ func ReplyContactPage(ctx *gin.Context) {
 	targets, _ := model.ListReplyTargets(userID, contactID, 100)
 	// Prefer rendered subjects on outbound targets that have a send snapshot.
 	enrichLegacyConversationBodies(userID, contactID, targets)
+	repairMangledConversationBodies(targets)
 
 	var selected *model.ConversationMessage
 	if replyToID, err := strconv.ParseInt(ctx.Query("reply_to"), 10, 64); err == nil && replyToID > 0 {
@@ -776,6 +797,7 @@ func ReplyContactPage(ctx *gin.Context) {
 	if selected != nil {
 		tmp := []model.ConversationMessage{*selected}
 		enrichLegacyConversationBodies(userID, contactID, tmp)
+		repairMangledConversationBodies(tmp)
 		selected = &tmp[0]
 		// Keep list in sync with selected subject's filled vars.
 		for i := range targets {
