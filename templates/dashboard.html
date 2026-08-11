@@ -378,7 +378,8 @@
         <div>
             <h3 class="card-title mb-0">Sending warmup</h3>
             <p class="text-sm text-gray-500 mt-1">
-                {{if .SenderEmail}}{{.SenderEmail}}{{else}}Sending account{{end}}{{if and .Enabled (not .IsFullyWarmed)}} · +{{.IncrementPerDay}}/day until {{.TargetCap}}/day{{else if not .Enabled}} · fixed {{.TodayCap}}/day cap{{end}}
+                {{if .CombinedLabel}}{{.CombinedLabel}}{{else if .SenderEmail}}{{.SenderEmail}}{{else}}Sending account{{end}}{{if and .Enabled (not .IsFullyWarmed)}} · +{{.IncrementPerDay}}/day until {{.TargetCap}}/day{{else if not .Enabled}} · fixed {{.TodayCap}}/day cap{{end}}
+                {{if gt .MailboxCount 1}} · <a href="/mailboxes" class="text-brand-600 font-medium">Manage seats</a>{{end}}
             </p>
         </div>
         <div class="warmup-panel-actions">

@@ -306,6 +306,8 @@ func CampaignDetailPage(ctx *gin.Context) {
 		}
 	}
 
+	mailboxDist, _ := model.GetCampaignMailboxDistribution(userID, detail.ID)
+
 	var scheduledAtLocal string
 	if detail.ScheduledAt != nil {
 		scheduledAtLocal = detail.ScheduledAt.Format("2006-01-02T15:04")
@@ -337,6 +339,7 @@ func CampaignDetailPage(ctx *gin.Context) {
 		"temperatureRules":    detail.TemperatureRules,
 		"temperaturePreview":  model.PreviewLeadTemperatureRules(detail.TemperatureRules),
 		"openTrackingEnabled": detail.OpenTrackingEnabled,
+		"mailboxDist":         mailboxDist,
 	}
 
 	if isWorkflow {

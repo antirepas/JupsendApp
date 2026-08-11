@@ -17,6 +17,12 @@
 
 {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
 
+<div class="card mb-6 border-l-4 border-brand-500 bg-emerald-50/40">
+  <p class="help-card-label mb-1">Replying as</p>
+  <p class="text-base font-semibold text-slate-900">{{if .senderLabel}}{{.senderLabel}}{{else}}{{.senderEmail}}{{end}}</p>
+  <p class="text-sm text-slate-600 mt-1">{{.senderReason}}. This cannot be changed for this reply so the thread stays on the same seat.</p>
+</div>
+
 <div class="card mb-6 conv-reply-inbound">
     {{if .replyTargets}}
     <div class="mb-4">

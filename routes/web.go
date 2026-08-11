@@ -39,6 +39,7 @@ func Dashboard(ctx *gin.Context) {
 		repliesThisMonth  int
 		interestedCount   int
 		acc               model.SMTPAccount
+		readyAccounts     []model.SMTPAccount
 		statsErr          error
 	)
 
@@ -83,13 +84,26 @@ func Dashboard(ctx *gin.Context) {
 	go func() {
 		defer wg.Done()
 		var err error
-		acc, err = model.GetSMTPAccountByUserID(userID)
+		readyAccounts, err = model.ListSendReadyAccountsForUser(userID)
 		_ = err
+		if len(readyAccounts) > 0 {
+			acc = readyAccounts[0]
+			for _, a := range readyAccounts {
+				if a.IsDefault {
+					acc = a
+					break
+				}
+			}
+		} else {
+			acc, _ = model.GetSMTPAccountByUserID(userID)
+		}
 	}()
 	wg.Wait()
 
-	hasSMTPAccount := acc.ID > 0
-	warmupProgress := outbound.ComputeWarmupProgress(acc, hasSMTPAccount)
+	warmupProgress := outbound.ComputeCombinedWarmupProgress(readyAccounts)
+	if !warmupProgress.HasAccount && acc.ID > 0 {
+		warmupProgress = outbound.ComputeWarmupProgress(acc, true)
+	}
 
 	if statsErr != nil {
 		log.Print(statsErr)
@@ -639,6 +653,19 @@ func ContactDetailPage(ctx *gin.Context) {
 		replySubject = "Re: " + summary.RecentSends[0].TemplateSubject
 	}
 	canReply := model.CanReplyInApp(userID, id, summary.RepliedAt)
+	replyFromEmail := ""
+	if canReply {
+		if acctID, err := model.LatestSMTPAccountForContact(userID, id); err == nil && acctID > 0 {
+			if acc, err := model.GetSMTPAccount(acctID); err == nil && acc.UserID == userID {
+				replyFromEmail = acc.SenderEmail()
+			}
+		}
+		if replyFromEmail == "" {
+			if acc, err := model.GetSendReadyAccountForUser(userID); err == nil {
+				replyFromEmail = acc.SenderEmail()
+			}
+		}
+	}
 
 	ctx.HTML(http.StatusOK, "contact_detail.html", gin.H{
 		"title":           summary.Contact.Email,
@@ -647,6 +674,7 @@ func ContactDetailPage(ctx *gin.Context) {
 		"listMemberships": listMemberships,
 		"conversation":    conversation,
 		"canReply":        canReply,
+		"replyFromEmail":  replyFromEmail,
 		"replySubject":    replySubject,
 		"success":         ctx.Query("success"),
 		"error":           ctx.Query("error"),
@@ -777,12 +805,25 @@ func ReplyContactPage(ctx *gin.Context) {
 	}
 
 	senderEmail, _ := templateBuilderContext(userID)
+	senderFromName := ""
+	senderReason := "Default mailbox"
 	if acctID, err := model.LatestSMTPAccountForContact(userID, contactID); err == nil && acctID > 0 {
-		if acc, err := model.GetSMTPAccount(acctID); err == nil && acc.UserID == userID {
+		if acc, err := model.GetSMTPAccount(acctID); err == nil && acc.UserID == userID && acc.IsSendReady() {
 			if e := acc.SenderEmail(); e != "" {
 				senderEmail = e
+				senderFromName = strings.TrimSpace(acc.FromName)
+				senderReason = "Same mailbox as earlier sends to this lead"
 			}
 		}
+	} else if acc, err := model.GetSendReadyAccountForUser(userID); err == nil {
+		if e := acc.SenderEmail(); e != "" {
+			senderEmail = e
+			senderFromName = strings.TrimSpace(acc.FromName)
+		}
+	}
+	senderLabel := senderEmail
+	if senderFromName != "" {
+		senderLabel = senderFromName + " <" + senderEmail + ">"
 	}
 
 	sample, _ := model.ContactVariableSample(userID, contactID)
@@ -799,6 +840,8 @@ func ReplyContactPage(ctx *gin.Context) {
 		"selectedReply":     selected,
 		"replySubject":      replySubject,
 		"senderEmail":       senderEmail,
+		"senderLabel":       senderLabel,
+		"senderReason":      senderReason,
 		"defaultSampleJSON": template.JS(string(sampleJSON)),
 		"aiEnabled":         ai.Enabled(),
 		"error":             ctx.Query("error"),

@@ -69,7 +69,7 @@ func runClaimedJob(item claimedJob) {
 	mu.Lock()
 	defer mu.Unlock()
 
-	account, err := resolveSendAccount(item.job.UserID)
+	account, err := ResolveSendAccountForContact(item.job.UserID, item.job.ContactID)
 	if err != nil {
 		log.Printf("outbound job %d: %v", item.job.ID, err)
 		failJobConfiguration(item.job, err)
@@ -146,7 +146,7 @@ func claimPendingJobs() []claimedJob {
 			continue
 		}
 
-		account, err := resolveSendAccount(job.UserID)
+		account, err := ResolveSendAccountForContact(job.UserID, job.ContactID)
 		if err != nil {
 			log.Printf("outbound job %d: %v", job.ID, err)
 			failJobConfiguration(job, err)
@@ -173,7 +173,7 @@ func claimPendingJobs() []claimedJob {
 			continue
 		}
 
-		account, err = resolveSendAccount(job.UserID)
+		account, err = ResolveSendAccountForContact(job.UserID, job.ContactID)
 		if err != nil {
 			failJobConfiguration(job, err)
 			continue

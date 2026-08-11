@@ -70,6 +70,15 @@
     </div>
   </div>
 
+  {{if and .combinedWarmup .combinedWarmup.HasAccount}}
+  <p class="text-sm text-slate-600 mb-6">
+    Today across ready seats:
+    <strong>{{.combinedWarmup.SendsToday}} / {{.combinedWarmup.TodayCap}}</strong>
+    {{if gt .combinedWarmup.MailboxCount 1}}({{.combinedWarmup.MailboxCount}} mailboxes){{end}}
+    {{if ge .combinedWarmup.TodayRemaining 1}} · {{.combinedWarmup.TodayRemaining}} remaining{{end}}
+  </p>
+  {{end}}
+
   {{if .domains}}
   <div class="mb-4 flex flex-wrap gap-2 text-xs text-gray-600">
     {{range .domains}}

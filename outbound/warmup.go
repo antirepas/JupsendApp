@@ -1,17 +1,20 @@
 package outbound
 
 import (
+	"fmt"
 	"math"
 	"time"
 
 	"emailtracker.com/model"
 )
 
-// WarmupProgress is dashboard-ready warmup state for an SMTP account.
+// WarmupProgress is dashboard-ready warmup state for an SMTP account (or combined seats).
 type WarmupProgress struct {
 	HasAccount      bool
 	Enabled         bool
 	SenderEmail     string
+	MailboxCount    int
+	CombinedLabel   string
 	SendsToday      int
 	TodayCap        int
 	TodayRemaining  int
@@ -144,6 +147,98 @@ func ComputeWarmupProgress(account model.SMTPAccount, hasAccount bool) WarmupPro
 		p.DaysRemaining = 0
 	}
 
+	return p
+}
+
+// ComputeCombinedWarmupProgress aggregates warmup across all send-ready mailboxes.
+func ComputeCombinedWarmupProgress(accounts []model.SMTPAccount) WarmupProgress {
+	if len(accounts) == 0 {
+		return WarmupProgress{HasAccount: false}
+	}
+	if len(accounts) == 1 {
+		p := ComputeWarmupProgress(accounts[0], true)
+		p.MailboxCount = 1
+		return p
+	}
+
+	p := WarmupProgress{
+		HasAccount:    true,
+		MailboxCount:  len(accounts),
+		CombinedLabel: fmt.Sprintf("%d mailboxes combined", len(accounts)),
+		SenderEmail:   fmt.Sprintf("%d mailboxes", len(accounts)),
+	}
+
+	anyWarmup := false
+	allWarmed := true
+	var weightedPct float64
+	var weightSum float64
+	maxDaysRemaining := 0
+	maxRampDays := 0
+	minInc := 0
+
+	for _, acc := range accounts {
+		one := ComputeWarmupProgress(acc, true)
+		p.SendsToday += one.SendsToday
+		p.TodayCap += one.TodayCap
+		p.RampCap += one.RampCap
+		p.TargetCap += one.TargetCap
+		p.StartCap += one.StartCap
+		if one.Enabled {
+			anyWarmup = true
+			if !one.IsFullyWarmed {
+				allWarmed = false
+			}
+			w := float64(one.TargetCap)
+			if w <= 0 {
+				w = 1
+			}
+			weightedPct += one.OverallPct * w
+			weightSum += w
+			if one.DaysRemaining > maxDaysRemaining {
+				maxDaysRemaining = one.DaysRemaining
+			}
+			if one.RampDaysTotal > maxRampDays {
+				maxRampDays = one.RampDaysTotal
+			}
+			if one.DaysElapsed > p.DaysElapsed {
+				p.DaysElapsed = one.DaysElapsed
+			}
+			if minInc == 0 || (one.IncrementPerDay > 0 && one.IncrementPerDay < minInc) {
+				minInc = one.IncrementPerDay
+			}
+		}
+	}
+	p.Enabled = anyWarmup
+	p.IncrementPerDay = minInc
+	if minInc <= 0 {
+		p.IncrementPerDay = model.DefaultWarmupIncrementPerDay
+	}
+	p.TodayRemaining = p.TodayCap - p.SendsToday
+	if p.TodayRemaining < 0 {
+		p.TodayRemaining = 0
+	}
+	if p.TodayCap > 0 {
+		p.TodayUsedPct = float64(p.SendsToday) / float64(p.TodayCap) * 100
+		if p.TodayUsedPct > 100 {
+			p.TodayUsedPct = 100
+		}
+	}
+	if !anyWarmup {
+		p.IsFullyWarmed = true
+		p.OverallPct = 100
+		return p
+	}
+	p.IsFullyWarmed = allWarmed
+	if weightSum > 0 {
+		p.OverallPct = weightedPct / weightSum
+	}
+	if p.IsFullyWarmed {
+		p.OverallPct = 100
+		p.DaysRemaining = 0
+	} else {
+		p.DaysRemaining = maxDaysRemaining
+		p.RampDaysTotal = maxRampDays
+	}
 	return p
 }
 

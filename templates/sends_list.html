@@ -83,6 +83,7 @@
         <thead>
             <tr>
                 <th>Recipient</th>
+                <th>From</th>
                 <th>Campaign</th>
                 <th>Template</th>
                 <th>When</th>
@@ -96,6 +97,7 @@
             {{range .sends}}
             <tr>
                 <td class="font-medium">{{if .ContactEmail}}{{.ContactEmail}}{{else}}<span class="text-slate-400">Unknown</span>{{end}}</td>
+                <td class="text-sm text-slate-600">{{if .SenderEmail}}{{.SenderEmail}}{{else}}<span class="text-slate-400">—</span>{{end}}</td>
                 <td class="text-sm">
                     {{if .CampaignID}}
                     <a href="/campaigns/{{.CampaignID}}" class="text-brand-600 hover:underline">{{if .CampaignName}}{{.CampaignName}}{{else}}Campaign{{end}}</a>
@@ -115,17 +117,17 @@
                 </td>
                 <td>{{.OpenCount}}</td>
                 <td>{{.ClickCount}}</td>
-                <td>
+                <td class="sends-status-cell">
                     {{if .IsCancelled}}
                     <span class="badge badge-gray" title="{{.DeliveryError}}">Cancelled</span>
                     {{else if eq .DeliveryStatus "queued"}}
-                    <span class="badge badge-amber">Queued</span>
-                    {{if .DeliveryError}}<p class="text-xs text-amber-700 mt-1 max-w-xs" title="{{.DeliveryError}}">{{.DeliveryError}}</p>{{end}}
+                    <span class="badge badge-amber" title="{{.DeliveryError}}">Queued</span>
+                    {{if .DeliveryError}}<p class="sends-status-error sends-status-error--amber" title="{{.DeliveryError}}">{{.DeliveryError}}</p>{{end}}
                     {{else if eq .DeliveryStatus "sending"}}
                     <span class="badge badge-amber">Sending</span>
                     {{else if eq .DeliveryStatus "failed"}}
                     <span class="badge badge-red" title="{{.DeliveryError}}">Failed</span>
-                    {{if .DeliveryError}}<p class="text-xs text-red-600 mt-1 max-w-xs truncate" title="{{.DeliveryError}}">{{.DeliveryError}}</p>{{end}}
+                    {{if .DeliveryError}}<p class="sends-status-error" title="{{.DeliveryError}}">{{.DeliveryError}}</p>{{end}}
                     {{else if gt .ClickCount 0}}
                     <span class="badge badge-amber">Clicked</span>
                     {{else if gt .OpenCount 0}}
@@ -136,7 +138,7 @@
                     <span class="badge badge-gray">{{.DeliveryStatus}}</span>
                     {{end}}
                 </td>
-                <td class="text-right whitespace-nowrap">
+                <td class="sends-actions-cell text-right whitespace-nowrap">
                     <a href="/sends/{{.ID}}" class="text-brand-600 hover:text-brand-700 text-sm font-medium">Details</a>
                     {{if .CanDelete}}
                     <form method="POST" action="/sends/{{.ID}}/delete" class="inline ml-2" onsubmit="return confirm('Delete this send record?');">

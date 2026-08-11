@@ -55,6 +55,9 @@
     <div class="border-t border-gray-100 pt-4">
         <a href="/contacts/{{.summary.Contact.ID}}/reply" class="btn-primary text-sm inline-flex">Compose reply</a>
         <p class="text-xs text-gray-500 mt-2">Opens the full editor with variables, live preview, and the message you’re replying to.</p>
+        {{if .replyFromEmail}}
+        <p class="text-xs text-slate-600 mt-2">Next reply will send as <strong>{{.replyFromEmail}}</strong> (same seat as prior sends when available).</p>
+        {{end}}
     </div>
     {{else if .summary.RecentSends}}
     <p class="text-xs text-gray-500 border-t border-gray-100 pt-4">Reply opens here after their first reply is detected (or when a send used a known mailbox).</p>

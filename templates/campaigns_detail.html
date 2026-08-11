@@ -41,6 +41,30 @@
 {{if .success}}<div class="alert-success mb-6">{{.success}}</div>{{end}}
 {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
 
+{{if and .mailboxDist .mailboxDist.HasSeats}}
+<div class="card mb-6">
+  <h3 class="card-title">Sending seats</h3>
+  <p class="text-sm text-slate-600 mb-4">Each contact sticks to one mailbox for this campaign (and later replies). Contacts are split across your ready seats.</p>
+  <ul class="space-y-2">
+    {{range .mailboxDist.Seats}}
+    <li class="flex flex-wrap items-center justify-between gap-2 text-sm">
+      <span class="font-medium text-slate-900">
+        {{if .FromName}}{{.FromName}} · {{end}}{{.Email}}
+      </span>
+      <span class="text-slate-600">
+        {{.PlannedCount}} contact{{if ne .PlannedCount 1}}s{{end}}
+        {{if gt $.mailboxDist.TotalPlan 0}}({{.PlannedPct $.mailboxDist.TotalPlan}}%){{end}}
+        {{if gt .SentCount 0}} · {{.SentCount}} sent{{end}}
+      </span>
+    </li>
+    {{end}}
+  </ul>
+  {{if gt .mailboxDist.SeatCount 1}}
+  <p class="text-xs text-slate-500 mt-3">{{.mailboxDist.SeatCount}} ready mailboxes · <a href="/mailboxes" class="text-brand-600 font-medium">Manage seats</a></p>
+  {{end}}
+</div>
+{{end}}
+
 {{if eq .campaign.DisplayStatus "sending"}}
 {{if not .isWorkflow}}
 <div class="card mb-6 border-l-4 border-blue-500">

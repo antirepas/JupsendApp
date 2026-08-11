@@ -1,6 +1,7 @@
 package outbound
 
 import (
+	"fmt"
 	"time"
 
 	"emailtracker.com/model"
@@ -8,6 +9,75 @@ import (
 
 func resolveSendAccount(userID int64) (model.SMTPAccount, error) {
 	return model.GetSendReadyAccountForUser(userID)
+}
+
+// ResolveSendAccountForContact picks a sticky mailbox for a contact:
+// 1) last SMTP used for that contact if still send-ready and under cap
+// 2) stable hash of contactID across ready accounts that can send now
+// 3) fallback GetSendReadyAccountForUser
+func ResolveSendAccountForContact(userID, contactID int64) (model.SMTPAccount, error) {
+	ready, err := model.ListSendReadyAccountsForUser(userID)
+	if err != nil {
+		return model.SMTPAccount{}, err
+	}
+	if len(ready) == 0 {
+		return model.SMTPAccount{}, fmt.Errorf("no ready sending mailbox — open Mailboxes to finish setup")
+	}
+
+	byID := make(map[int64]model.SMTPAccount, len(ready))
+	for _, acc := range ready {
+		byID[acc.ID] = acc
+	}
+
+	if contactID > 0 {
+		if lastID, lErr := model.LatestSMTPAccountForContact(userID, contactID); lErr == nil && lastID > 0 {
+			if acc, ok := byID[lastID]; ok && AccountCanSendNow(acc) {
+				return acc, nil
+			}
+		}
+		start := int(contactID % int64(len(ready)))
+		if start < 0 {
+			start = 0
+		}
+		for i := 0; i < len(ready); i++ {
+			acc := ready[(start+i)%len(ready)]
+			if AccountCanSendNow(acc) {
+				return acc, nil
+			}
+		}
+	}
+
+	for _, acc := range ready {
+		if AccountCanSendNow(acc) {
+			return acc, nil
+		}
+	}
+	// All rate-limited — still return sticky/default so caller can reschedule.
+	if contactID > 0 {
+		return ready[int(contactID%int64(len(ready)))], nil
+	}
+	return ready[0], nil
+}
+
+// StickyAccountForContact returns the planned mailbox for a contact without rate-limit filtering
+// (for campaign distribution UI). Prefers last-used seat when still in the ready set.
+func StickyAccountForContact(ready []model.SMTPAccount, userID, contactID int64) model.SMTPAccount {
+	if len(ready) == 0 {
+		return model.SMTPAccount{}
+	}
+	byID := make(map[int64]model.SMTPAccount, len(ready))
+	for _, acc := range ready {
+		byID[acc.ID] = acc
+	}
+	if contactID > 0 {
+		if lastID, err := model.LatestSMTPAccountForContact(userID, contactID); err == nil && lastID > 0 {
+			if acc, ok := byID[lastID]; ok {
+				return acc
+			}
+		}
+		return ready[int(contactID%int64(len(ready)))]
+	}
+	return ready[0]
 }
 
 func failJobConfiguration(job model.SendJob, err error) {
