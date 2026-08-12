@@ -38,7 +38,8 @@ func TestComputeWarmupProgressFullyWarmed(t *testing.T) {
 }
 
 func TestComputeWarmupProgressMidRamp(t *testing.T) {
-	start := time.Now().Add(-48 * time.Hour)
+	today := time.Now().UTC()
+	start := time.Date(today.Year(), today.Month(), today.Day(), 12, 0, 0, 0, time.UTC).Add(-48 * time.Hour)
 	acc := model.SMTPAccount{
 		WarmupEnabled:         true,
 		WarmupDailyCap:        5,
@@ -68,7 +69,8 @@ func TestComputeWarmupProgressMidRamp(t *testing.T) {
 }
 
 func TestScheduleDailyCapRampsWithStartedAt(t *testing.T) {
-	start := time.Now().Add(-3 * 24 * time.Hour)
+	today := time.Now().UTC()
+	start := time.Date(today.Year(), today.Month(), today.Day(), 12, 0, 0, 0, time.UTC).Add(-3 * 24 * time.Hour)
 	acc := model.SMTPAccount{
 		WarmupEnabled:         true,
 		WarmupDailyCap:        20,
@@ -94,6 +96,22 @@ func TestScheduleDailyCapNilStartedStaysAtStart(t *testing.T) {
 	cap := scheduleDailyCap(acc)
 	if cap != 20 {
 		t.Fatalf("cap=%d want 20", cap)
+	}
+}
+
+func TestWarmupCalendarDaysElapsedCrossesMidnight(t *testing.T) {
+	// Started yesterday afternoon; "now" is this morning — calendar day 1, not hour-based day 0.
+	started := time.Date(2026, 8, 11, 15, 0, 0, 0, time.UTC)
+	now := time.Date(2026, 8, 12, 9, 0, 0, 0, time.UTC)
+	if got := warmupCalendarDaysElapsed(started, now); got != 1 {
+		t.Fatalf("days=%d want 1 (calendar), Hours/24 would be 0", got)
+	}
+	if got := warmupCalendarDaysElapsed(started, started); got != 0 {
+		t.Fatalf("same day days=%d want 0", got)
+	}
+	twoDaysLater := time.Date(2026, 8, 13, 1, 0, 0, 0, time.UTC)
+	if got := warmupCalendarDaysElapsed(started, twoDaysLater); got != 2 {
+		t.Fatalf("days=%d want 2", got)
 	}
 }
 

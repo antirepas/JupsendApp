@@ -63,10 +63,7 @@ func scheduleDailyCap(account model.SMTPAccount) int {
 		// Defensive: treat as day 0 so we still enforce the start cap (EnsureWarmupStartedAt should stamp).
 		return minInt(target, startCap)
 	}
-	days := int(time.Since(*started).Hours() / 24)
-	if days < 0 {
-		days = 0
-	}
+	days := warmupCalendarDaysElapsed(*started, time.Now())
 	cap := startCap + days*increment
 	if cap > target {
 		cap = target
@@ -75,6 +72,22 @@ func scheduleDailyCap(account model.SMTPAccount) int {
 		cap = account.DailyLimit
 	}
 	return cap
+}
+
+// warmupCalendarDaysElapsed counts whole UTC calendar days since warmup started.
+// Using Hours()/24 kept the same ramp day across midnight until the start-time
+// anniversary (e.g. started Mon 15:00 still "day 0" Tue morning), so daily volume
+// looked stuck for a full calendar day.
+func warmupCalendarDaysElapsed(started, now time.Time) int {
+	s := started.UTC()
+	n := now.UTC()
+	startDay := time.Date(s.Year(), s.Month(), s.Day(), 0, 0, 0, 0, time.UTC)
+	nowDay := time.Date(n.Year(), n.Month(), n.Day(), 0, 0, 0, 0, time.UTC)
+	days := int(nowDay.Sub(startDay) / (24 * time.Hour))
+	if days < 0 {
+		return 0
+	}
+	return days
 }
 
 // ComputeWarmupProgress builds dashboard warmup metrics from an SMTP account.
@@ -137,7 +150,7 @@ func ComputeWarmupProgress(account model.SMTPAccount, hasAccount bool) WarmupPro
 		p.RampDaysTotal = int(math.Ceil(float64(p.TargetCap-p.StartCap) / float64(p.IncrementPerDay)))
 	}
 	if account.WarmupStartedAt != nil {
-		p.DaysElapsed = int(time.Since(*account.WarmupStartedAt).Hours() / 24)
+		p.DaysElapsed = warmupCalendarDaysElapsed(*account.WarmupStartedAt, time.Now())
 	}
 	p.DaysRemaining = p.RampDaysTotal - p.DaysElapsed
 	if p.DaysRemaining < 0 {

@@ -85,21 +85,29 @@ func accountSpacingOK(account model.SMTPAccount) bool {
 }
 
 func AccountCanSendNow(account model.SMTPAccount) bool {
-	return accountCanSend(account, true, true)
+	return accountCanSend(account, true, true, true)
 }
 
-// AccountCanSendNowForJob applies rate limits. Manual one-off sends skip spacing
-// so a queued test email is not stuck behind campaign throttling.
+// AccountCanSendManualNow allows one-off sends and conversation replies even when
+// the warmup / daily campaign cap is exhausted. Status and per-minute limits still apply.
+func AccountCanSendManualNow(account model.SMTPAccount) bool {
+	return accountCanSend(account, false, true, false)
+}
+
+// AccountCanSendNowForJob applies rate limits. Manual one-off sends skip daily warmup
+// caps and spacing so replies / test emails are not blocked behind campaign throttling.
 func AccountCanSendNowForJob(account model.SMTPAccount, job model.SendJob) bool {
-	checkSpacing := job.Priority < PriorityManual
-	return accountCanSend(account, true, checkSpacing)
+	if job.Priority >= PriorityManual {
+		return AccountCanSendManualNow(account)
+	}
+	return accountCanSend(account, true, true, true)
 }
 
-func accountCanSend(account model.SMTPAccount, checkMinute, checkSpacing bool) bool {
+func accountCanSend(account model.SMTPAccount, checkDaily, checkMinute, checkSpacing bool) bool {
 	if account.Status != "active" {
 		return false
 	}
-	if !accountUnderDailyCap(account) {
+	if checkDaily && !accountUnderDailyCap(account) {
 		return false
 	}
 	if checkMinute && !accountUnderMinuteLimit(account) {

@@ -105,11 +105,11 @@ func rateLimitDelay(account model.SMTPAccount) time.Duration {
 }
 
 func rateLimitDelayForJob(account model.SMTPAccount, job model.SendJob) time.Duration {
-	if !accountUnderDailyCap(account) {
-		return nextMidnight()
-	}
 	if job.Priority >= PriorityManual {
 		return nextManualSendDelay(account)
+	}
+	if !accountUnderDailyCap(account) {
+		return nextMidnight()
 	}
 	return NextRateLimitDelay([]model.SMTPAccount{account})
 }

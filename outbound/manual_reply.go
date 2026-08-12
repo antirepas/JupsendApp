@@ -57,8 +57,11 @@ func SendManualReply(in ManualReplyInput) (int64, error) {
 		return 0, fmt.Errorf("no sending mailbox available: %w", err)
 	}
 	model.ResetAccountDailyIfNeeded(&account)
-	if !AccountCanSendNow(account) {
-		return 0, fmt.Errorf("mailbox daily or rate limit reached — try again later")
+	if account.Status != "active" {
+		return 0, fmt.Errorf("mailbox is not active")
+	}
+	if !AccountCanSendManualNow(account) {
+		return 0, fmt.Errorf("mailbox is sending too quickly — wait a moment and try again")
 	}
 
 	renderedSubj, renderedBody, missing, err := util.RenderEmail(subject, sourceBody, contactVars, util.RenderOptions{
