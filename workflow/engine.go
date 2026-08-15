@@ -173,10 +173,9 @@ func (e *Engine) ProcessInstance(instanceID int64) error {
 		_ = model.UpdateInstanceState(inst)
 
 		nextNode := nodeMap[nextKey]
-		if nextNode.NodeType == "action_wait" || nextNode.NodeType == "action_send_email" || nextNode.NodeType == "condition_engagement" || nextNode.NodeType == "trigger_campaign_started" {
-			continue
-		}
-		if nextNode.NodeType == "action_end" {
+		if nextNode.NodeType == "action_wait" || nextNode.NodeType == "action_send_email" ||
+			nextNode.NodeType == "condition_engagement" || nextNode.NodeType == "condition_temperature" ||
+			nextNode.NodeType == "trigger_campaign_started" || nextNode.NodeType == "action_end" {
 			continue
 		}
 	}
@@ -209,6 +208,11 @@ func pickNextNode(adj map[string][]model.WorkflowEdge, from, edgeType string) (s
 }
 
 func (e *Engine) ProcessDueInstances() {
+	if n, err := model.NudgeOverdueWaitInstances(200); err != nil {
+		log.Printf("workflow: nudge overdue waits: %v", err)
+	} else if n > 0 {
+		log.Printf("workflow: nudged %d overdue wait instance(s)", n)
+	}
 	ids, err := model.ClaimDueInstances(50)
 	if err != nil {
 		log.Printf("workflow: claim error: %v", err)

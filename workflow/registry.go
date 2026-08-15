@@ -2,6 +2,8 @@ package workflow
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"emailtracker.com/model"
@@ -96,11 +98,13 @@ type WaitExecutor struct{}
 func (WaitExecutor) Type() string { return "action_wait" }
 
 func (WaitExecutor) Execute(ctx ExecutionContext) (NodeResult, error) {
-	cfg := model.ParseNodeConfig(ctx.Node.ConfigJSON)
-	secs := 0
-	if v, ok := cfg["duration_seconds"].(float64); ok {
-		secs = int(v)
+	// Resume after a due wake: do not schedule another full wait (that used to loop forever).
+	if ctx.Instance.Status == "waiting" {
+		return NodeResult{NextEdgeType: "default"}, nil
 	}
+
+	cfg := model.ParseNodeConfig(ctx.Node.ConfigJSON)
+	secs := configDurationSeconds(cfg)
 	if secs <= 0 {
 		secs = 86400
 	}
@@ -109,6 +113,39 @@ func (WaitExecutor) Execute(ctx ExecutionContext) (NodeResult, error) {
 		WakeAt:       &wake,
 		WaitForEvent: "",
 	}, nil
+}
+
+// configDurationSeconds reads wait length from node config (seconds, or days/hours helpers).
+func configDurationSeconds(cfg map[string]interface{}) int {
+	if cfg == nil {
+		return 0
+	}
+	if n := intFromConfig(cfg["duration_seconds"]); n > 0 {
+		return n
+	}
+	if n := intFromConfig(cfg["duration_hours"]); n > 0 {
+		return n * 3600
+	}
+	if n := intFromConfig(cfg["duration_days"]); n > 0 {
+		return n * 86400
+	}
+	return 0
+}
+
+func intFromConfig(v interface{}) int {
+	switch t := v.(type) {
+	case float64:
+		return int(t)
+	case int:
+		return t
+	case int64:
+		return int(t)
+	case string:
+		n, _ := strconv.Atoi(strings.TrimSpace(t))
+		return n
+	default:
+		return 0
+	}
 }
 
 type EndExecutor struct{}

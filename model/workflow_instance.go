@@ -211,6 +211,98 @@ func ClaimDueInstances(limit int) ([]int64, error) {
 	return ids, nil
 }
 
+// NudgeOverdueWaitInstances forces wake for wait-node instances whose wait duration
+// has already elapsed (e.g. after the wait-rearm bug kept pushing next_wake_at forward).
+func NudgeOverdueWaitInstances(limit int) (int, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	rows, err := db.Query(`
+		SELECT wi.id, wi.fork_root_id, wi.started_at, COALESCE(wn.config_json, '{}')
+		FROM workflow_instances wi
+		INNER JOIN workflow_nodes wn
+			ON wn.workflow_version_id = wi.workflow_version_id
+			AND wn.node_key = wi.current_node_key
+		WHERE wi.status = 'waiting'
+		  AND wi.next_wake_at IS NOT NULL
+		  AND wi.next_wake_at > NOW()
+		  AND wn.node_type = 'action_wait'
+		ORDER BY wi.id ASC
+		LIMIT ?
+	`, limit)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+
+	nudged := 0
+	now := time.Now()
+	for rows.Next() {
+		var id int64
+		var forkRoot sql.NullInt64
+		var startedAt time.Time
+		var configJSON string
+		if err := rows.Scan(&id, &forkRoot, &startedAt, &configJSON); err != nil {
+			continue
+		}
+		secs := waitDurationSecondsFromConfig(configJSON)
+		if secs <= 0 {
+			secs = 86400
+		}
+		anchor := startedAt
+		baseID := id
+		if forkRoot.Valid && forkRoot.Int64 > 0 {
+			baseID = forkRoot.Int64
+		}
+		if sendID, err := GetLastSendIDForInstance(baseID); err == nil && sendID > 0 {
+			if sentAt, err := GetEmailSendSentAt(sendID); err == nil && !sentAt.IsZero() {
+				anchor = sentAt
+			}
+		}
+		if now.Before(anchor.Add(time.Duration(secs) * time.Second)) {
+			continue
+		}
+		res, err := db.Exec(`
+			UPDATE workflow_instances SET next_wake_at = ?
+			WHERE id = ? AND status = 'waiting' AND next_wake_at > ?
+		`, now, id, now)
+		if err != nil {
+			continue
+		}
+		if n, _ := res.RowsAffected(); n > 0 {
+			nudged++
+		}
+	}
+	return nudged, nil
+}
+
+func waitDurationSecondsFromConfig(configJSON string) int {
+	cfg := ParseNodeConfig(configJSON)
+	if n := configInt(cfg["duration_seconds"]); n > 0 {
+		return n
+	}
+	if n := configInt(cfg["duration_hours"]); n > 0 {
+		return n * 3600
+	}
+	if n := configInt(cfg["duration_days"]); n > 0 {
+		return n * 86400
+	}
+	return 0
+}
+
+func configInt(v interface{}) int {
+	switch t := v.(type) {
+	case float64:
+		return int(t)
+	case int:
+		return t
+	case int64:
+		return int(t)
+	default:
+		return 0
+	}
+}
+
 func ClaimInstance(instanceID int64) (bool, error) {
 	token := uuid.New().String()
 	expires := time.Now().Add(2 * time.Minute)
