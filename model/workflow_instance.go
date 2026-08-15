@@ -221,7 +221,7 @@ func NudgeOverdueWaitInstances(limit int) (int, error) {
 		SELECT wi.id, wi.fork_root_id, wi.started_at, COALESCE(wn.config_json, '{}')
 		FROM workflow_instances wi
 		INNER JOIN workflow_nodes wn
-			ON wn.workflow_version_id = wi.workflow_version_id
+			ON wn.version_id = wi.workflow_version_id
 			AND wn.node_key = wi.current_node_key
 		WHERE wi.status = 'waiting'
 		  AND wi.next_wake_at IS NOT NULL
