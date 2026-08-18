@@ -100,6 +100,8 @@ func (WaitExecutor) Type() string { return "action_wait" }
 func (WaitExecutor) Execute(ctx ExecutionContext) (NodeResult, error) {
 	// Resume after a due wake: do not schedule another full wait (that used to loop forever).
 	if ctx.Instance.Status == "waiting" {
+		execKey := fmt.Sprintf("%d:%s:wait-done", ctx.Instance.ID, ctx.Node.NodeKey)
+		_, _ = model.CreateExecution(ctx.Instance.ID, ctx.Node.NodeKey, execKey, "succeeded", `{"wait":"completed"}`, "")
 		return NodeResult{NextEdgeType: "default"}, nil
 	}
 

@@ -157,37 +157,187 @@ func getCampaignBranchEdgeFlow(campaignID int64) map[string]int {
 	return result
 }
 
-// ExpandBranchEdgeFlowThroughSkippedConditions attributes hops that skipped an unrecorded
-// temperature/engagement node (older runs) onto the condition→child edge for analytics badges.
-func ExpandBranchEdgeFlowThroughSkippedConditions(graph WorkflowGraph, flow map[string]int) {
+// ExpandSkippedNodeEdgeFlows attributes hops that skipped unrecorded wait/condition nodes
+// onto intermediate→child edges (older runs before wait/condition executions existed).
+func ExpandSkippedNodeEdgeFlows(graph WorkflowGraph, flow map[string]int) {
 	if len(flow) == 0 {
 		return
 	}
+	type hop struct{ src, dst string }
+	var hops []hop
+	counts := map[string]int{}
+	for key, c := range flow {
+		src, dst, ok := splitEdgeKey(key)
+		if !ok || c <= 0 {
+			continue
+		}
+		hops = append(hops, hop{src, dst})
+		counts[key] = c
+	}
+
+	intermediates := []WorkflowNode{}
 	for _, n := range graph.Nodes {
-		if n.NodeType != "condition_temperature" && n.NodeType != "condition_engagement" {
-			continue
+		switch n.NodeType {
+		case "action_wait", "condition_temperature", "condition_engagement":
+			intermediates = append(intermediates, n)
 		}
-		childSet := map[string]bool{}
-		for _, child := range outgoingDisplayEdges(graph, n.NodeKey, n.NodeType) {
-			childSet[child.TargetNodeKey] = true
-		}
-		if len(childSet) == 0 {
-			continue
-		}
-		for key, c := range flow {
-			src, dst, ok := splitEdgeKey(key)
-			if !ok || c <= 0 || !childSet[dst] || src == n.NodeKey {
+	}
+
+	for _, h := range hops {
+		c := counts[h.src+"|"+h.dst]
+		for _, mid := range intermediates {
+			if mid.NodeKey == h.src || mid.NodeKey == h.dst {
 				continue
 			}
-			if !isGraphAncestor(graph, src, n.NodeKey, 4) {
+			if !isGraphAncestor(graph, h.src, mid.NodeKey, 6) {
 				continue
 			}
-			condKey := n.NodeKey + "|" + dst
-			if flow[condKey] < c {
-				flow[condKey] = c
+			if !isGraphAncestor(graph, mid.NodeKey, h.dst, 6) {
+				continue
+			}
+			for _, child := range outgoingDisplayEdges(graph, mid.NodeKey, mid.NodeType) {
+				if child.TargetNodeKey != h.dst && !isGraphAncestor(graph, child.TargetNodeKey, h.dst, 6) {
+					continue
+				}
+				k := mid.NodeKey + "|" + child.TargetNodeKey
+				if flow[k] < c {
+					flow[k] = c
+				}
 			}
 		}
 	}
+}
+
+// ExpandBranchEdgeFlowThroughSkippedConditions prefers the general expander.
+func ExpandBranchEdgeFlowThroughSkippedConditions(graph WorkflowGraph, flow map[string]int) {
+	ExpandSkippedNodeEdgeFlows(graph, flow)
+}
+
+// InferPassedThroughFromEdgeFlow raises PassedThrough for wait/condition nodes that never
+// wrote executions historically, using inferred outbound hop counts and descendant reach.
+func InferPassedThroughFromEdgeFlow(steps []CampaignWorkflowStepAnalytics, edgeFlow map[string]int) {
+	outbound := map[string]int{}
+	for key, c := range edgeFlow {
+		src, _, ok := splitEdgeKey(key)
+		if !ok || c <= 0 {
+			continue
+		}
+		outbound[src] += c
+	}
+	for i := range steps {
+		nType := steps[i].NodeType
+		if nType != "action_wait" && nType != "condition_temperature" && nType != "condition_engagement" {
+			continue
+		}
+		if out := outbound[steps[i].NodeKey]; out > steps[i].PassedThrough {
+			steps[i].PassedThrough = out
+		}
+	}
+}
+
+// InferPassedThroughFromDescendants sets PassedThrough from how many instances clearly
+// reached a later node (covers historical waits/conditions with no execution rows).
+func InferPassedThroughFromDescendants(campaignID int64, graph WorkflowGraph, steps []CampaignWorkflowStepAnalytics) {
+	if campaignID <= 0 {
+		return
+	}
+	adj := map[string][]string{}
+	for _, e := range graph.Edges {
+		adj[e.SourceNodeKey] = append(adj[e.SourceNodeKey], e.TargetNodeKey)
+	}
+	for i := range steps {
+		nType := steps[i].NodeType
+		if nType != "action_wait" && nType != "condition_temperature" && nType != "condition_engagement" {
+			continue
+		}
+		desc := collectDescendants(adj, steps[i].NodeKey, 12)
+		if len(desc) == 0 {
+			continue
+		}
+		n := countInstancesPastNode(campaignID, steps[i].NodeKey, desc)
+		if n > steps[i].PassedThrough {
+			steps[i].PassedThrough = n
+		}
+	}
+}
+
+func collectDescendants(adj map[string][]string, start string, maxDepth int) []string {
+	seen := map[string]bool{}
+	var out []string
+	type item struct {
+		key   string
+		depth int
+	}
+	queue := []item{{start, 0}}
+	seen[start] = true
+	for len(queue) > 0 {
+		cur := queue[0]
+		queue = queue[1:]
+		if cur.depth >= maxDepth {
+			continue
+		}
+		for _, next := range adj[cur.key] {
+			if seen[next] {
+				continue
+			}
+			seen[next] = true
+			out = append(out, next)
+			queue = append(queue, item{next, cur.depth + 1})
+		}
+	}
+	return out
+}
+
+func countInstancesPastNode(campaignID int64, nodeKey string, descendants []string) int {
+	if len(descendants) == 0 {
+		return 0
+	}
+	ph := make([]string, len(descendants))
+	for i := range descendants {
+		ph[i] = "?"
+	}
+	inList := joinSQLPlaceholders(ph)
+
+	q := `
+		SELECT COUNT(*) FROM (
+			SELECT DISTINCT wi.id
+			FROM workflow_instances wi
+			WHERE wi.campaign_id = ?
+			  AND (
+			    wi.current_node_key IN (` + inList + `)
+			    OR EXISTS (
+			      SELECT 1 FROM workflow_executions we
+			      WHERE we.instance_id = wi.id
+			        AND we.status = 'succeeded'
+			        AND (we.node_key = ? OR we.node_key IN (` + inList + `))
+			    )
+			  )
+		) t`
+
+	args := make([]interface{}, 0, 2+len(descendants)*2)
+	args = append(args, campaignID)
+	for _, d := range descendants {
+		args = append(args, d)
+	}
+	args = append(args, nodeKey)
+	for _, d := range descendants {
+		args = append(args, d)
+	}
+
+	var n int
+	_ = db.QueryRow(q, args...).Scan(&n)
+	return n
+}
+
+func joinSQLPlaceholders(ph []string) string {
+	if len(ph) == 0 {
+		return "?"
+	}
+	out := ph[0]
+	for i := 1; i < len(ph); i++ {
+		out += "," + ph[i]
+	}
+	return out
 }
 
 func splitEdgeKey(key string) (src, dst string, ok bool) {
@@ -233,7 +383,7 @@ func isGraphAncestor(graph WorkflowGraph, from, to string, maxDepth int) bool {
 
 func pathLabelForHop(src, dst string, graph WorkflowGraph, edgeBySrcDst map[string]WorkflowEdge, condSet map[string]bool) string {
 	if e, ok := edgeBySrcDst[src+"|"+dst]; ok {
-		if lab := edgeDisplayLabel(e, true); lab != "" {
+		if lab := edgeBranchLabel(e); lab != "" {
 			return lab
 		}
 	}
@@ -244,11 +394,11 @@ func pathLabelForHop(src, dst string, graph WorkflowGraph, edgeBySrcDst map[stri
 		if !condSet[n.NodeKey] {
 			continue
 		}
-		if !isGraphAncestor(graph, src, n.NodeKey, 4) {
+		if !isGraphAncestor(graph, src, n.NodeKey, 6) {
 			continue
 		}
 		if e, ok := edgeBySrcDst[n.NodeKey+"|"+dst]; ok {
-			if lab := edgeDisplayLabel(e, true); lab != "" {
+			if lab := edgeBranchLabel(e); lab != "" {
 				return lab
 			}
 		}

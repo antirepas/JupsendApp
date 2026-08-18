@@ -373,9 +373,26 @@ func GetCampaignWorkflowAnalyticsFor(c Campaign, userID int64) (CampaignWorkflow
 
 	EnrichBranchPathLabels(campaignID, c.WorkflowVersionID, contacts)
 
-	if graph, gErr := GetWorkflowGraph(c.WorkflowVersionID); gErr == nil {
-		ExpandBranchEdgeFlowThroughSkippedConditions(graph, edgeFlow)
+	graph, gErr := GetWorkflowGraph(c.WorkflowVersionID)
+	if gErr == nil {
+		ExpandSkippedNodeEdgeFlows(graph, edgeFlow)
+		InferPassedThroughFromEdgeFlow(steps, edgeFlow)
+		InferPassedThroughFromDescendants(campaignID, graph, steps)
+		denom := overview.TotalContacts
+		if denom < 1 {
+			denom = 1
+		}
+		for i := range steps {
+			steps[i].PassedPct = float64(steps[i].PassedThrough) / float64(denom) * 100
+			if overviewIdx := stepIndexInOverview(&overview, steps[i].NodeKey); overviewIdx >= 0 {
+				overview.Steps[overviewIdx].PassedThrough = steps[i].PassedThrough
+			}
+		}
 	}
+
+	canvas, canvasErr := BuildCampaignWorkflowAnalyticsCanvas(c.WorkflowVersionID, overview.TotalContacts, steps, edgeFlow)
+	hasCanvas := canvasErr == nil && len(canvas.Nodes) > 0
+
 	pipelineTree, treeErr := BuildCampaignWorkflowAnalyticsTree(c, overview.TotalContacts, steps, edgeFlow)
 	hasPipeline := treeErr == nil && pipelineTree.NodeKey != ""
 
@@ -390,6 +407,8 @@ func GetCampaignWorkflowAnalyticsFor(c Campaign, userID int64) (CampaignWorkflow
 		Steps:        steps,
 		PipelineTree: pipelineTree,
 		HasPipeline:  hasPipeline,
+		Canvas:       canvas,
+		HasCanvas:    hasCanvas,
 		Contacts:     contacts,
 		DailyStats:   daily,
 		HourlyOpens:  hourlyOpen,
@@ -400,6 +419,15 @@ func GetCampaignWorkflowAnalyticsFor(c Campaign, userID int64) (CampaignWorkflow
 		return result.DailyStats[i].Date < result.DailyStats[j].Date
 	})
 	return result, nil
+}
+
+func stepIndexInOverview(overview *CampaignWorkflowOverview, nodeKey string) int {
+	for i := range overview.Steps {
+		if overview.Steps[i].NodeKey == nodeKey {
+			return i
+		}
+	}
+	return -1
 }
 
 func buildCampaignWorkflowContactAnalyticsFast(campaignID, versionID int64, contactIDs []int64) []CampaignWorkflowContactAnalytics {

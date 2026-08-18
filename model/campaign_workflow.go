@@ -335,7 +335,7 @@ func incomingPathMeta(graph WorkflowGraph, nodeKey string) (pathLabel, pathSumma
 			seenSource[e.SourceNodeKey] = true
 			sourceCount++
 		}
-		lab := edgeDisplayLabel(e, true)
+		lab := edgeBranchLabel(e)
 		if lab == "" {
 			continue
 		}
@@ -347,7 +347,7 @@ func incomingPathMeta(graph WorkflowGraph, nodeKey string) (pathLabel, pathSumma
 	isMerge = sourceCount > 1
 	if len(labels) == 0 {
 		if isMerge {
-			return "", "Paths recombine here", true
+			return "", "Paths recombine", true
 		}
 		return "", "", false
 	}
@@ -359,6 +359,24 @@ func incomingPathMeta(graph WorkflowGraph, nodeKey string) (pathLabel, pathSumma
 		pathSummary = pathLabel
 	}
 	return pathLabel, pathSummary, isMerge
+}
+
+// edgeBranchLabel is for analytics path columns (Hot/Cold/If yes) — not fork priority numbers.
+func edgeBranchLabel(e WorkflowEdge) string {
+	switch e.EdgeType {
+	case "true":
+		return "If yes"
+	case "false":
+		return "If no"
+	case "hot":
+		return "Hot"
+	case "warm":
+		return "Warm"
+	case "cold":
+		return "Cold"
+	default:
+		return ""
+	}
 }
 
 func joinPathLabels(labels []string) string {

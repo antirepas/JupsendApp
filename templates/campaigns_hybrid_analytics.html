@@ -55,29 +55,36 @@
 </div>
 {{end}}
 
-<div class="card mb-6">
-    <h3 class="card-title">Step pipeline</h3>
-    <p class="text-sm text-slate-500 mb-4">Same branching layout as the workflow builder — forks, temperature paths, and recombine points stay visible.</p>
+<div class="card mb-6 p-0 overflow-hidden">
+    <div class="px-4 pt-4 pb-2">
+        <h3 class="card-title mb-1">Step pipeline</h3>
+        <p class="text-sm text-slate-500 mb-0">Same layout as the workflow builder. Scroll the canvas to follow branches, merges, and waits.</p>
+    </div>
     {{with $wf.Overview}}
     {{if gt .NotStarted 0}}
-    <div class="workflow-queued-pill mb-4 inline-flex">
-        <div class="workflow-step-count">{{.NotStarted}}</div>
-        <div class="workflow-step-count-label">Queued (not started)</div>
+    <div class="px-4 pb-2">
+        <div class="workflow-queued-pill inline-flex">
+            <div class="workflow-step-count">{{.NotStarted}}</div>
+            <div class="workflow-step-count-label">Queued (not started)</div>
+        </div>
     </div>
     {{end}}
     {{end}}
-    {{if $wf.HasPipeline}}
-    <div class="wf-graph-root wf-graph-root--analytics">
-        {{template "wf_analytics_node" $wf.PipelineTree}}
+    {{if $wf.HasCanvas}}
+    <div id="wf-analytics-canvas-wrap" class="workflow-canvas-wrap wf-analytics-canvas-wrap">
+        <svg id="wf-analytics-edge-svg" class="workflow-edge-svg"></svg>
+        <div id="wf-analytics-canvas" class="workflow-canvas"></div>
     </div>
+    <script>window.__WF_ANALYTICS_CANVAS__ = {{$wf.Canvas.CanvasJSON}};</script>
+    <script src="{{assetURL "/static/js/workflow-analytics-canvas.js"}}"></script>
     {{else}}
-    <p class="text-sm text-slate-500">Pipeline graph unavailable for this campaign.</p>
+    <p class="text-sm text-slate-500 px-4 pb-4">Pipeline canvas unavailable for this campaign.</p>
     {{end}}
 </div>
 
 <div class="card overflow-hidden mb-6">
     <h3 class="card-title">Step performance</h3>
-    <p class="text-sm text-slate-500 px-4 pt-1 pb-3">Flat list of every step. Use the <em>Path</em> column for Hot / Warm / Cold arrival — merge steps combine multiple paths.</p>
+    <p class="text-sm text-slate-500 px-4 pt-1 pb-3">Flat metrics for every step. Path shows Hot / Warm / Cold arrival — merge steps combine multiple paths.</p>
     <table class="data-table">
         <thead>
             <tr>
@@ -101,7 +108,7 @@
             </td>
             <td class="text-sm">
                 {{if .PathSummary}}
-                <span class="{{if .IsMerge}}wf-merge-badge{{else}}wf-fork-badge{{if eq .PathLabel "Hot"}} wf-fork-badge--hot{{else if eq .PathLabel "Warm"}} wf-fork-badge--warm{{else if eq .PathLabel "Cold"}} wf-fork-badge--cold{{else if eq .PathLabel "If yes"}} wf-fork-badge--yes{{else if eq .PathLabel "If no"}} wf-fork-badge--no{{end}}{{end}}">{{.PathSummary}}</span>
+                <span class="wf-path-pill {{if .IsMerge}}wf-path-pill--merge{{else if eq .PathLabel "Hot"}}wf-path-pill--hot{{else if eq .PathLabel "Warm"}}wf-path-pill--warm{{else if eq .PathLabel "Cold"}}wf-path-pill--cold{{else if eq .PathLabel "If yes"}}wf-path-pill--yes{{else if eq .PathLabel "If no"}}wf-path-pill--no{{end}}">{{.PathSummary}}</span>
                 {{else}}—{{end}}
             </td>
             <td class="text-sm text-slate-500">{{if eq .NodeType "action_send_email"}}Send{{else if eq .NodeType "action_wait"}}Wait{{else if eq .NodeType "condition_engagement"}}Branch{{else if eq .NodeType "condition_temperature"}}Temperature{{else}}End{{end}}</td>

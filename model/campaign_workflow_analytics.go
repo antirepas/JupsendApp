@@ -57,6 +57,8 @@ type CampaignWorkflowAnalytics struct {
 	Steps        []CampaignWorkflowStepAnalytics
 	PipelineTree CampaignWorkflowAnalyticsNode
 	HasPipeline  bool
+	Canvas       CampaignWorkflowAnalyticsCanvas
+	HasCanvas    bool
 	Contacts     []CampaignWorkflowContactAnalytics
 	DailyStats   []CampaignDailyStat
 	HourlyOpens  []HourlyStat

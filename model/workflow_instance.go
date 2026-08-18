@@ -373,6 +373,9 @@ func WakeInstancesForContactEvent(contactID int64, eventType string) ([]int64, e
 }
 
 func CreateExecution(instanceID int64, nodeKey, executionKey, status, outputJSON, errMsg string) (int64, error) {
+	if db.DB == nil {
+		return 0, nil
+	}
 	if outputJSON == "" {
 		outputJSON = "{}"
 	}
