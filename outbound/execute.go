@@ -246,31 +246,24 @@ func handleJobFailure(job model.SendJob, account model.SMTPAccount, sendErr erro
 	class := ClassifySMTPError(sendErr)
 	attempts := job.Attempts + 1
 
+	// Capacity / provider daily limits: stay on this mailbox and retry tomorrow.
+	// Do not failover to another seat — recipients should keep seeing one From identity.
 	if IsProviderDailyQuota(sendErr) || isProviderCapacityError(sendErr) {
 		until := time.Now().Add(nextMidnight())
 		if until.Before(time.Now().Add(30 * time.Minute)) {
 			until = time.Now().Add(30 * time.Minute)
 		}
 		MarkAccountProviderBlocked(account.ID, until)
-		delay, reason := failoverOrWaitDelay(job, account.ID, sendErr)
-		_ = model.RetrySendJob(job.ID, attempts, time.Now().Add(delay), reason)
+		delay := nextMidnight()
+		if delay < 30*time.Minute {
+			delay = 30 * time.Minute
+		}
+		_ = model.RetrySendJob(job.ID, attempts, time.Now().Add(delay),
+			"mailbox at provider limit; retry next day: "+sendErr.Error())
 		if emailSendID > 0 {
 			_ = model.ResetEmailSendForRetry(emailSendID)
 		}
 		return
-	}
-
-	// Auth/config failures are per-mailbox — try another seat when available.
-	if class == ErrorPermanent && isAccountLevelError(sendErr) {
-		MarkAccountProviderBlocked(account.ID, time.Now().Add(6*time.Hour))
-		if alt, ok := otherSendableAccount(job.UserID, job.ContactID, account.ID, job); ok {
-			_ = model.RetrySendJob(job.ID, attempts, time.Now().Add(10*time.Second),
-				"failover after mailbox error: "+sendErr.Error()+" → trying "+alt.SenderEmail())
-			if emailSendID > 0 {
-				_ = model.ResetEmailSendForRetry(emailSendID)
-			}
-			return
-		}
 	}
 
 	if class == ErrorPermanent {
@@ -296,45 +289,12 @@ func handleJobFailure(job model.SendJob, account model.SMTPAccount, sendErr erro
 			delay = 30 * time.Minute
 		}
 		reason = "deferred to next day after retries: " + sendErr.Error()
-		attempts = job.MaxAttempts // keep attempts capped in DB
+		attempts = job.MaxAttempts
 	}
 	_ = model.RetrySendJob(job.ID, attempts, time.Now().Add(delay), reason)
 	if emailSendID > 0 {
 		_ = model.ResetEmailSendForRetry(emailSendID)
 	}
-}
-
-func failoverOrWaitDelay(job model.SendJob, failedAccountID int64, sendErr error) (time.Duration, string) {
-	if alt, ok := otherSendableAccount(job.UserID, job.ContactID, failedAccountID, job); ok {
-		return 10 * time.Second, "failover: " + sendErr.Error() + " → trying " + alt.SenderEmail()
-	}
-	delay := nextMidnight()
-	if delay < 30*time.Minute {
-		delay = 30 * time.Minute
-	}
-	return delay, "all mailboxes at capacity; retry next day: " + sendErr.Error()
-}
-
-func otherSendableAccount(userID, contactID, excludeID int64, job model.SendJob) (model.SMTPAccount, bool) {
-	ready, err := model.ListSendReadyAccountsForUser(userID)
-	if err != nil || len(ready) == 0 {
-		return model.SMTPAccount{}, false
-	}
-	// Prefer sticky rotation starting after the failed seat.
-	start := 0
-	if contactID > 0 && len(ready) > 0 {
-		start = int(contactID % int64(len(ready)))
-	}
-	for i := 0; i < len(ready); i++ {
-		acc := ready[(start+i)%len(ready)]
-		if acc.ID == excludeID {
-			continue
-		}
-		if AccountCanSendNowForJob(acc, job) {
-			return acc, true
-		}
-	}
-	return model.SMTPAccount{}, false
 }
 
 func isProviderCapacityError(err error) bool {
@@ -345,25 +305,7 @@ func isProviderCapacityError(err error) bool {
 	patterns := []string{
 		"rate limit", "too many messages", "too many emails",
 		"sending quota", "quota exceeded", "try again later",
-		"4.2.1", // temporary system issue / rate
-	}
-	for _, p := range patterns {
-		if strings.Contains(msg, p) {
-			return true
-		}
-	}
-	return false
-}
-
-func isAccountLevelError(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := strings.ToLower(err.Error())
-	patterns := []string{
-		"535", "authentication", "auth failed", "invalid credentials",
-		"gmail oauth", "gmail token", "gmail api unauthorized",
-		"no sending profile",
+		"4.2.1",
 	}
 	for _, p := range patterns {
 		if strings.Contains(msg, p) {

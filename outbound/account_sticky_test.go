@@ -107,6 +107,51 @@ func TestResolveSendAccountForContactSkipsOverCap(t *testing.T) {
 	}
 }
 
+func TestResolveSendAccountStaysStickyWhenOverCap(t *testing.T) {
+	db.OpenTestDB(t)
+	userID, err := model.CreateUser(fmt.Sprintf("sticky-pin-%d@test.com", time.Now().UnixNano()), "hash", "http://localhost")
+	if err != nil {
+		t.Fatal(err)
+	}
+	idA, err := model.UpsertInboxKitSMTPAccount(userID, "pin-a@example.com", "smtp.gmail.com", "587", "pin-a@example.com", "pass-aaaa-aaaa-aaaa", "A", "ik-pin-a", true, 5, "imap.gmail.com", "993")
+	if err != nil {
+		t.Fatal(err)
+	}
+	idB, err := model.UpsertInboxKitSMTPAccount(userID, "pin-b@example.com", "smtp.gmail.com", "587", "pin-b@example.com", "pass-bbbb-bbbb-bbbb", "B", "ik-pin-b", false, 100, "imap.gmail.com", "993")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = idB
+	today := time.Now().Format("2006-01-02")
+	if _, err := db.Exec(`UPDATE smtp_accounts SET warmup_enabled = 0, sends_today_reset_at = ? WHERE id IN (?, ?)`, today, idA, idB); err != nil {
+		t.Fatal(err)
+	}
+
+	c := model.Contact{Email: "pinned@lead.com"}
+	contactID, err := c.SaveContact(userID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Record a prior send from A so sticky pins this contact.
+	if _, err := db.Exec(`
+		INSERT INTO email_sends (user_id, contact_id, template_id, tracking_id, smtp_account_id, delivery_status, sent_at)
+		VALUES (?, ?, 0, ?, ?, 'sent', NOW())
+	`, userID, contactID, fmt.Sprintf("pin-%d", time.Now().UnixNano()), idA); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`UPDATE smtp_accounts SET sends_today = 5, daily_limit = 5 WHERE id = ?`, idA); err != nil {
+		t.Fatal(err)
+	}
+
+	acc, err := ResolveSendAccountForContact(userID, contactID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if acc.ID != idA {
+		t.Fatalf("expected stay on pinned A (%d) even over cap, got %d", idA, acc.ID)
+	}
+}
+
 func TestComputeCombinedWarmupProgress(t *testing.T) {
 	empty := ComputeCombinedWarmupProgress(nil)
 	if empty.HasAccount {

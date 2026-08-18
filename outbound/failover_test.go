@@ -41,10 +41,13 @@ func TestFailoverOrWaitDelayPrefersOtherMailbox(t *testing.T) {
 }
 
 func TestIsAccountLevelError(t *testing.T) {
-	if !isAccountLevelError(errors.New("535 authentication failed")) {
-		t.Fatal("expected auth to be account-level")
+	// Recipient bounces stay permanent; capacity errors are deferred.
+	if ShouldSuppressFromError(errors.New("550 5.1.1 user unknown")) {
+		// ok expected
+	} else {
+		t.Fatal("expected suppress for unknown user")
 	}
-	if isAccountLevelError(errors.New("550 5.1.1 user unknown")) {
-		t.Fatal("recipient bounce is not account-level failover")
+	if isProviderCapacityError(errors.New("550 5.1.1 user unknown")) {
+		t.Fatal("recipient bounce is not a capacity deferral")
 	}
 }

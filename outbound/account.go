@@ -12,9 +12,10 @@ func resolveSendAccount(userID int64) (model.SMTPAccount, error) {
 }
 
 // ResolveSendAccountForContact picks a sticky mailbox for a contact:
-// 1) last SMTP used for that contact if still send-ready and under cap
-// 2) stable hash of contactID across ready accounts that can send now
-// 3) fallback GetSendReadyAccountForUser
+// 1) last SMTP used for that contact if still in the ready set (even if at cap —
+//    caller reschedules; we never switch From mid-conversation)
+// 2) for first-touch contacts: stable hash across seats that can send now
+// 3) fallback default ready seat
 func ResolveSendAccountForContact(userID, contactID int64) (model.SMTPAccount, error) {
 	ready, err := model.ListSendReadyAccountsForUser(userID)
 	if err != nil {
@@ -31,7 +32,7 @@ func ResolveSendAccountForContact(userID, contactID int64) (model.SMTPAccount, e
 
 	if contactID > 0 {
 		if lastID, lErr := model.LatestSMTPAccountForContact(userID, contactID); lErr == nil && lastID > 0 {
-			if acc, ok := byID[lastID]; ok && AccountCanSendNow(acc) {
+			if acc, ok := byID[lastID]; ok {
 				return acc, nil
 			}
 		}
@@ -108,16 +109,13 @@ func rateLimitDelayForJob(account model.SMTPAccount, job model.SendJob) time.Dur
 	if job.Priority >= PriorityManual {
 		return nextManualSendDelay(account)
 	}
-	// Prefer another mailbox that still has capacity today.
-	if alt, ok := otherSendableAccount(job.UserID, job.ContactID, account.ID, job); ok && alt.ID != account.ID {
-		return 2 * time.Second
-	}
-	ready, err := model.ListSendReadyAccountsForUser(job.UserID)
-	if err == nil && len(ready) > 0 {
-		return NextRateLimitDelay(ready)
-	}
+	// Stay on this mailbox — wait out daily/provider caps rather than switching From.
 	if !accountUnderDailyCap(account) || IsAccountProviderBlocked(account.ID) {
-		return nextMidnight()
+		d := nextMidnight()
+		if d < 30*time.Minute {
+			return 30 * time.Minute
+		}
+		return d
 	}
 	return NextRateLimitDelay([]model.SMTPAccount{account})
 }
