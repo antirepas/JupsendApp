@@ -332,15 +332,32 @@ func HasInboundConversation(userID, contactID int64) bool {
 	return n > 0
 }
 
-// LatestSMTPAccountForContact returns the mailbox used for the most recent sent email.
+// LatestSMTPAccountForContact returns the mailbox used for the most recent outbound
+// to this contact. Prefers successful / in-flight sends and conversation history so
+// follow-ups stay sticky even before MarkEmailSendSent commits.
 func LatestSMTPAccountForContact(userID, contactID int64) (int64, error) {
 	var id int64
 	err := db.QueryRow(`
-		SELECT COALESCE(smtp_account_id, 0) FROM email_sends
-		WHERE user_id = ? AND contact_id = ? AND delivery_status = 'sent' AND COALESCE(smtp_account_id,0) > 0
-		ORDER BY sent_at DESC NULLS LAST, id DESC
+		SELECT smtp_account_id FROM (
+			SELECT COALESCE(smtp_account_id, 0) AS smtp_account_id,
+				COALESCE(sent_at, TIMESTAMPTZ 'epoch') AS ts, id
+			FROM email_sends
+			WHERE user_id = ? AND contact_id = ? AND COALESCE(smtp_account_id, 0) > 0
+			  AND delivery_status IN ('sent', 'sending')
+			UNION ALL
+			SELECT COALESCE(smtp_account_id, 0), occurred_at, id
+			FROM conversation_messages
+			WHERE user_id = ? AND contact_id = ? AND direction = 'outbound'
+			  AND COALESCE(smtp_account_id, 0) > 0
+			UNION ALL
+			SELECT COALESCE(smtp_account_id, 0), COALESCE(updated_at, created_at), id
+			FROM send_jobs
+			WHERE user_id = ? AND contact_id = ? AND status IN ('sent', 'processing', 'pending')
+			  AND COALESCE(smtp_account_id, 0) > 0
+		) t
+		ORDER BY ts DESC NULLS LAST, id DESC
 		LIMIT 1
-	`, userID, contactID).Scan(&id)
+	`, userID, contactID, userID, contactID, userID, contactID).Scan(&id)
 	return id, err
 }
 

@@ -4,15 +4,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
-	"math"
 )
 
 // CampaignWorkflowAnalyticsCanvas is a builder-style scrollable graph for analytics.
 type CampaignWorkflowAnalyticsCanvas struct {
-	Width  float64                       `json:"width"`
-	Height float64                       `json:"height"`
-	Nodes  []CampaignWorkflowCanvasNode  `json:"nodes"`
-	Edges  []CampaignWorkflowCanvasEdge  `json:"edges"`
+	Width  float64                      `json:"width"`
+	Height float64                      `json:"height"`
+	Nodes  []CampaignWorkflowCanvasNode `json:"nodes"`
+	Edges  []CampaignWorkflowCanvasEdge `json:"edges"`
 }
 
 type CampaignWorkflowCanvasNode struct {
@@ -40,7 +39,8 @@ type CampaignWorkflowCanvasEdge struct {
 	Priority int    `json:"priority"`
 }
 
-// BuildCampaignWorkflowAnalyticsCanvas places live metrics on the published workflow layout.
+// BuildCampaignWorkflowAnalyticsCanvas places live metrics on an auto-laid-out canvas
+// (layered columns — not the freeform builder positions, which overlap with taller cards).
 func BuildCampaignWorkflowAnalyticsCanvas(
 	versionID int64,
 	enrolled int,
@@ -62,9 +62,7 @@ func BuildCampaignWorkflowAnalyticsCanvas(
 		byKey[s.NodeKey] = s
 	}
 
-	const nodeW = 188.0
-	const nodeH = 118.0
-	maxX, maxY := 1200.0, 560.0
+	positions, width, height := layoutAnalyticsCanvasPositions(graph)
 
 	for _, n := range graph.Nodes {
 		label := n.Label
@@ -76,13 +74,14 @@ func BuildCampaignWorkflowAnalyticsCanvas(
 		if s.Description != "" {
 			desc = s.Description
 		}
+		pos := positions[n.NodeKey]
 		cn := CampaignWorkflowCanvasNode{
 			NodeKey:       n.NodeKey,
 			Label:         label,
 			NodeType:      n.NodeType,
 			Description:   desc,
-			PositionX:     n.PositionX,
-			PositionY:     n.PositionY,
+			PositionX:     pos[0],
+			PositionY:     pos[1],
 			ContactsHere:  s.ContactsHere,
 			PassedThrough: s.PassedThrough,
 			Opens:         s.Opens,
@@ -91,17 +90,10 @@ func BuildCampaignWorkflowAnalyticsCanvas(
 			IsMerge:       s.IsMerge,
 			PathSummary:   s.PathSummary,
 		}
-		// Steps list skips triggers — still show them on the canvas.
 		if n.NodeType == "trigger_campaign_started" && s.NodeKey == "" {
 			cn.Description = "Campaign starts here"
 		}
 		out.Nodes = append(out.Nodes, cn)
-		if n.PositionX+nodeW+80 > maxX {
-			maxX = n.PositionX + nodeW + 80
-		}
-		if n.PositionY+nodeH+80 > maxY {
-			maxY = n.PositionY + nodeH + 80
-		}
 	}
 
 	for _, e := range graph.Edges {
@@ -110,9 +102,6 @@ func BuildCampaignWorkflowAnalyticsCanvas(
 			et = "default"
 		}
 		lab := edgeBranchLabel(e)
-		if lab == "" && e.Priority > 0 {
-			lab = fmt.Sprintf("P%d", e.Priority)
-		}
 		out.Edges = append(out.Edges, CampaignWorkflowCanvasEdge{
 			Source:   e.SourceNodeKey,
 			Target:   e.TargetNodeKey,
@@ -123,8 +112,8 @@ func BuildCampaignWorkflowAnalyticsCanvas(
 		})
 	}
 
-	out.Width = math.Max(maxX, 1200)
-	out.Height = math.Max(maxY, 560)
+	out.Width = width
+	out.Height = height
 	_ = enrolled
 	return out, nil
 }

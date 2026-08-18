@@ -12,8 +12,8 @@ func resolveSendAccount(userID int64) (model.SMTPAccount, error) {
 }
 
 // ResolveSendAccountForContact picks a sticky mailbox for a contact:
-// 1) last SMTP used for that contact if still in the ready set (even if at cap —
-//    caller reschedules; we never switch From mid-conversation)
+// 1) last SMTP used for that contact — always return that seat when still owned/active
+//    (even if at cap / filtered out of the ready set; caller reschedules — never switch From)
 // 2) for first-touch contacts: stable hash across seats that can send now
 // 3) fallback default ready seat
 func ResolveSendAccountForContact(userID, contactID int64) (model.SMTPAccount, error) {
@@ -33,6 +33,14 @@ func ResolveSendAccountForContact(userID, contactID int64) (model.SMTPAccount, e
 	if contactID > 0 {
 		if lastID, lErr := model.LatestSMTPAccountForContact(userID, contactID); lErr == nil && lastID > 0 {
 			if acc, ok := byID[lastID]; ok {
+				return acc, nil
+			}
+			// Sticky seat may be over-cap / temporarily filtered from ready — still pin it.
+			if acc, gErr := model.GetSMTPAccount(lastID); gErr == nil && acc.UserID == userID && acc.Status == "active" {
+				_ = model.EnsureDailyCounterReset(acc.ID)
+				if fresh, fErr := model.GetSMTPAccount(acc.ID); fErr == nil {
+					return fresh, nil
+				}
 				return acc, nil
 			}
 		}
@@ -60,6 +68,21 @@ func ResolveSendAccountForContact(userID, contactID int64) (model.SMTPAccount, e
 	return ready[0], nil
 }
 
+// ResolveAccountForJob prefers a mailbox already pinned on the job, then sticky contact routing.
+func ResolveAccountForJob(job model.SendJob) (model.SMTPAccount, error) {
+	if job.SMTPAccountID > 0 {
+		acc, err := model.GetSMTPAccount(job.SMTPAccountID)
+		if err == nil && acc.UserID == job.UserID && acc.Status == "active" {
+			_ = model.EnsureDailyCounterReset(acc.ID)
+			if fresh, fErr := model.GetSMTPAccount(acc.ID); fErr == nil {
+				return fresh, nil
+			}
+			return acc, nil
+		}
+	}
+	return ResolveSendAccountForContact(job.UserID, job.ContactID)
+}
+
 // StickyAccountForContact returns the planned mailbox for a contact without rate-limit filtering
 // (for campaign distribution UI). Prefers last-used seat when still in the ready set.
 func StickyAccountForContact(ready []model.SMTPAccount, userID, contactID int64) model.SMTPAccount {
@@ -73,6 +96,9 @@ func StickyAccountForContact(ready []model.SMTPAccount, userID, contactID int64)
 	if contactID > 0 {
 		if lastID, err := model.LatestSMTPAccountForContact(userID, contactID); err == nil && lastID > 0 {
 			if acc, ok := byID[lastID]; ok {
+				return acc
+			}
+			if acc, gErr := model.GetSMTPAccount(lastID); gErr == nil && acc.UserID == userID && acc.Status == "active" {
 				return acc
 			}
 		}

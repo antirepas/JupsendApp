@@ -50,6 +50,13 @@ func EnqueueSend(input EnqueueInput) (int64, int64, error) {
 		return 0, 0, fmt.Errorf("contact has invalid email")
 	}
 
+	// Pin sticky mailbox up front so concurrent / follow-up jobs keep the same From.
+	pinAcc, pinErr := ResolveSendAccountForContact(input.UserID, input.ContactID)
+	pinID := int64(0)
+	if pinErr == nil {
+		pinID = pinAcc.ID
+	}
+
 	trackID := fmt.Sprintf("%d", util.GenerateID())
 	emailSendID, err := model.CreateQueuedEmailSend(
 		input.UserID, input.TemplateID, input.ContactID, trackID,
@@ -57,6 +64,9 @@ func EnqueueSend(input EnqueueInput) (int64, int64, error) {
 	)
 	if err != nil {
 		return 0, 0, err
+	}
+	if pinID > 0 {
+		_ = model.PinEmailSendSMTPAccount(emailSendID, pinID)
 	}
 
 	jobVariant := input.Variant
@@ -66,6 +76,7 @@ func EnqueueSend(input EnqueueInput) (int64, int64, error) {
 
 	jobID, err := model.CreateSendJob(model.SendJob{
 		UserID:             input.UserID,
+		SMTPAccountID:      pinID,
 		ContactID:          input.ContactID,
 		TemplateID:         input.TemplateID,
 		CampaignID:         input.CampaignID,

@@ -52,7 +52,7 @@
 <div class="card mb-6 p-0 overflow-hidden">
     <div class="px-4 pt-4 pb-2">
         <h3 class="card-title mb-1">Step pipeline</h3>
-        <p class="text-sm text-slate-500 mb-0">Same layout as the workflow builder. Scroll the canvas to follow branches, merges, and waits. Edge labels show how many contacts took each path.</p>
+        <p class="text-sm text-slate-500 mb-0">Steps are laid out left to right by flow order — scroll to follow branches and merges. Edge colors match Hot / Warm / Cold / If yes / If no.</p>
     </div>
     {{if .analytics.Overview}}
     {{with .analytics.Overview}}
@@ -240,7 +240,7 @@
         <tr>
             <td class="font-medium"><a href="/contacts/{{.ContactID}}" class="text-brand-600 hover:underline">{{.Email}}</a></td>
             <td class="text-sm">{{.CurrentStep}}</td>
-            <td class="text-sm">{{if .PathLabel}}<span class="wf-fork-badge {{if eq .PathLabel "Hot"}}wf-fork-badge--hot{{else if eq .PathLabel "Warm"}}wf-fork-badge--warm{{else if eq .PathLabel "Cold"}}wf-fork-badge--cold{{else if eq .PathLabel "If yes"}}wf-fork-badge--yes{{else if eq .PathLabel "If no"}}wf-fork-badge--no{{end}}">{{.PathLabel}}</span>{{else}}—{{end}}</td>
+            <td class="text-sm">{{if .PathLabel}}<span class="wf-path-pill {{if eq .PathLabel "Hot"}}wf-path-pill--hot{{else if eq .PathLabel "Warm"}}wf-path-pill--warm{{else if eq .PathLabel "Cold"}}wf-path-pill--cold{{else if eq .PathLabel "If yes"}}wf-path-pill--yes{{else if eq .PathLabel "If no"}}wf-path-pill--no{{end}}">{{.PathLabel}}</span>{{else}}—{{end}}</td>
             <td><span class="badge {{if eq .InstanceStatus "completed"}}badge-green{{else if eq .InstanceStatus "cancelled"}}badge-red{{else if eq .InstanceStatus "active"}}badge-blue{{else if eq .InstanceStatus "waiting"}}badge-amber{{else}}badge-gray{{end}}">{{.InstanceStatus}}</span></td>
             <td class="text-sm">
                 {{if .WaitRemaining}}

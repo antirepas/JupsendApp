@@ -1,6 +1,5 @@
 /**
- * Read-only analytics canvas — same layout/edges as the workflow builder.
- * Expects #wf-analytics-canvas-data (JSON) and #wf-analytics-canvas-wrap.
+ * Read-only analytics canvas — layered left→right layout with live metrics.
  */
 (function () {
   const wrap = document.getElementById('wf-analytics-canvas-wrap');
@@ -11,8 +10,12 @@
   const data = window.__WF_ANALYTICS_CANVAS__;
   if (!data || !data.nodes) return;
 
-  const NODE_W = 188;
-  const NODE_H_FALLBACK = 110;
+  const NODE_W = 200;
+  const NODE_H_FALLBACK = 140;
+  const COL_GAP = 72;
+  const ROW_GAP = 48;
+  const PAD_X = 56;
+  const PAD_Y = 48;
 
   function nodeClass(type) {
     if (!type) return 'wf-node-type-action';
@@ -43,11 +46,71 @@
   }
 
   function measuredSize(n) {
-      const el = canvas.querySelector('.wf-node[data-key="' + n.node_key.replace(/"/g, '') + '"]');
+    const el = canvas.querySelector('.wf-node[data-key="' + n.node_key.replace(/"/g, '') + '"]');
     if (el) {
       return { w: el.offsetWidth || NODE_W, h: el.offsetHeight || NODE_H_FALLBACK };
     }
     return { w: NODE_W, h: NODE_H_FALLBACK };
+  }
+
+  /** Pack columns using measured heights so cards never overlap. */
+  function packColumns() {
+    const nodes = data.nodes || [];
+    if (!nodes.length) return;
+
+    const cols = new Map();
+    nodes.forEach((n) => {
+      const col = Math.round(n.position_x);
+      if (!cols.has(col)) cols.set(col, []);
+      cols.get(col).push(n);
+    });
+
+    const sortedCols = Array.from(cols.keys()).sort((a, b) => a - b);
+    let maxColH = 0;
+    const colHeights = new Map();
+
+    sortedCols.forEach((colX) => {
+      const list = cols.get(colX);
+      list.sort((a, b) => a.position_y - b.position_y);
+      let y = PAD_Y;
+      list.forEach((n) => {
+        n.position_x = colX;
+        n.position_y = y;
+        const el = canvas.querySelector('.wf-node[data-key="' + n.node_key.replace(/"/g, '') + '"]');
+        if (el) {
+          el.style.left = n.position_x + 'px';
+          el.style.top = n.position_y + 'px';
+        }
+        const h = measuredSize(n).h;
+        y += h + ROW_GAP;
+      });
+      const colH = y - ROW_GAP - PAD_Y;
+      colHeights.set(colX, colH);
+      if (colH > maxColH) maxColH = colH;
+    });
+
+    // Vertically center shorter columns against the tallest.
+    sortedCols.forEach((colX) => {
+      const list = cols.get(colX);
+      const colH = colHeights.get(colX) || 0;
+      const shift = Math.max(0, (maxColH - colH) / 2);
+      if (shift < 1) return;
+      list.forEach((n) => {
+        n.position_y += shift;
+        const el = canvas.querySelector('.wf-node[data-key="' + n.node_key.replace(/"/g, '') + '"]');
+        if (el) el.style.top = n.position_y + 'px';
+      });
+    });
+
+    // Re-map columns to even horizontal spacing from left.
+    sortedCols.forEach((colX, i) => {
+      const x = PAD_X + i * (NODE_W + COL_GAP);
+      cols.get(colX).forEach((n) => {
+        n.position_x = x;
+        const el = canvas.querySelector('.wf-node[data-key="' + n.node_key.replace(/"/g, '') + '"]');
+        if (el) el.style.left = x + 'px';
+      });
+    });
   }
 
   function nodeAnchor(n, side) {
@@ -61,12 +124,13 @@
   }
 
   function pickConnectionSides(from, to) {
+    // Prefer left→right for layered analytics layout.
     const dx = to.position_x - from.position_x;
     const dy = to.position_y - from.position_y;
-    if (Math.abs(dy) >= Math.abs(dx)) {
-      return dy >= 0 ? { from: 'bottom', to: 'top' } : { from: 'top', to: 'bottom' };
+    if (Math.abs(dx) >= Math.abs(dy) * 0.35) {
+      return dx >= 0 ? { from: 'right', to: 'left' } : { from: 'left', to: 'right' };
     }
-    return dx >= 0 ? { from: 'right', to: 'left' } : { from: 'left', to: 'right' };
+    return dy >= 0 ? { from: 'bottom', to: 'top' } : { from: 'top', to: 'bottom' };
   }
 
   function edgePath(from, to, fromSide, toSide) {
@@ -76,7 +140,7 @@
     let c1y = from.y;
     let c2x = to.x;
     let c2y = to.y;
-    const pull = Math.max(40, Math.min(120, Math.hypot(dx, dy) * 0.4));
+    const pull = Math.max(48, Math.min(140, Math.hypot(dx, dy) * 0.45));
     if (fromSide === 'bottom') c1y += pull;
     else if (fromSide === 'top') c1y -= pull;
     else if (fromSide === 'right') c1x += pull;
@@ -95,7 +159,7 @@
     let c1y = from.y;
     let c2x = to.x;
     let c2y = to.y;
-    const pull = Math.max(40, Math.min(120, Math.hypot(dx, dy) * 0.4));
+    const pull = Math.max(48, Math.min(140, Math.hypot(dx, dy) * 0.45));
     if (fromSide === 'bottom') c1y += pull;
     else if (fromSide === 'top') c1y -= pull;
     else if (fromSide === 'right') c1x += pull;
@@ -118,16 +182,16 @@
     if (type === 'hot') return { stroke: '#dc2626', marker: 'url(#wf-a-arrow-hot)' };
     if (type === 'warm') return { stroke: '#d97706', marker: 'url(#wf-a-arrow-warm)' };
     if (type === 'cold') return { stroke: '#2563eb', marker: 'url(#wf-a-arrow-cold)' };
-    return { stroke: '#64748b', marker: 'url(#wf-a-arrow)' };
+    return { stroke: '#94a3b8', marker: 'url(#wf-a-arrow)' };
   }
 
   function ensureBounds() {
-    let maxX = data.width || 1200;
-    let maxY = data.height || 560;
+    let maxX = 1200;
+    let maxY = 560;
     (data.nodes || []).forEach((n) => {
       const size = measuredSize(n);
-      maxX = Math.max(maxX, n.position_x + size.w + 80);
-      maxY = Math.max(maxY, n.position_y + size.h + 80);
+      maxX = Math.max(maxX, n.position_x + size.w + PAD_X);
+      maxY = Math.max(maxY, n.position_y + size.h + PAD_Y);
     });
     canvas.style.width = maxX + 'px';
     canvas.style.height = maxY + 'px';
@@ -142,7 +206,8 @@
     canvas.innerHTML = '';
     (data.nodes || []).forEach((n) => {
       const el = document.createElement('div');
-      el.className = 'wf-node wf-analytics-node ' + nodeClass(n.node_type) + (n.is_merge ? ' wf-analytics-node--merge' : '');
+      el.className =
+        'wf-node wf-analytics-node ' + nodeClass(n.node_type) + (n.is_merge ? ' wf-analytics-node--merge' : '');
       el.style.left = n.position_x + 'px';
       el.style.top = n.position_y + 'px';
       el.dataset.key = n.node_key;
@@ -150,33 +215,35 @@
 
       const openLine =
         n.node_type === 'action_send_email'
-          ? `<div class="wf-analytics-node-meta text-blue-600">${n.opens || 0} opens · ${Math.round(n.open_rate || 0)}%</div>`
+          ? `<div class="wf-analytics-node-meta wf-analytics-node-meta--opens">${n.opens || 0} opens · ${Math.round(n.open_rate || 0)}%</div>`
           : '';
       const stopped =
         n.stopped_here > 0
-          ? `<div class="wf-analytics-node-meta text-red-500">${n.stopped_here} stopped</div>`
+          ? `<div class="wf-analytics-node-meta wf-analytics-node-meta--stopped">${n.stopped_here} stopped</div>`
           : '';
-      const path =
-        n.path_summary
-          ? `<span class="wf-analytics-path-chip">${escapeHtml(n.path_summary)}</span>`
-          : '';
+      const path = n.path_summary
+        ? `<span class="wf-analytics-path-chip">${escapeHtml(n.path_summary)}</span>`
+        : '';
 
       el.innerHTML = `
-        <div class="wf-port wf-port-in" aria-hidden="true"></div>
         <div class="wf-port wf-port-left" aria-hidden="true"></div>
         <div class="wf-port wf-port-right" aria-hidden="true"></div>
         <div class="wf-analytics-node-kind">${escapeHtml(kindLabel(n.node_type))}</div>
-        <p class="font-semibold text-sm text-slate-800 leading-snug">${escapeHtml(n.label)}</p>
-        ${n.description ? `<p class="text-xs text-slate-500 mt-0.5 leading-snug">${escapeHtml(n.description)}</p>` : ''}
+        <p class="wf-analytics-node-title">${escapeHtml(n.label)}</p>
+        ${n.description ? `<p class="wf-analytics-node-desc">${escapeHtml(n.description)}</p>` : ''}
         ${path}
-        <div class="wf-analytics-node-metric">
-          <span class="wf-analytics-node-count">${n.contacts_here || 0}</span>
-          <span class="wf-analytics-node-count-label">here now</span>
+        <div class="wf-analytics-node-stats">
+          <div class="wf-analytics-node-stat">
+            <span class="wf-analytics-node-count">${n.contacts_here || 0}</span>
+            <span class="wf-analytics-node-count-label">here</span>
+          </div>
+          <div class="wf-analytics-node-stat wf-analytics-node-stat--passed">
+            <span class="wf-analytics-node-passed">${n.passed_through || 0}</span>
+            <span class="wf-analytics-node-count-label">passed</span>
+          </div>
         </div>
-        <div class="wf-analytics-node-meta">${n.passed_through || 0} passed through</div>
         ${openLine}
-        ${stopped}
-        <div class="wf-port wf-port-out" aria-hidden="true"></div>`;
+        ${stopped}`;
       canvas.appendChild(el);
     });
   }
@@ -186,7 +253,7 @@
     const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
     defs.innerHTML = `
       <marker id="wf-a-arrow" markerWidth="8" markerHeight="8" refX="8" refY="3" orient="auto" markerUnits="userSpaceOnUse">
-        <path d="M0,0 L0,6 L8,3 z" fill="#64748b"/>
+        <path d="M0,0 L0,6 L8,3 z" fill="#94a3b8"/>
       </marker>
       <marker id="wf-a-arrow-true" markerWidth="8" markerHeight="8" refX="8" refY="3" orient="auto" markerUnits="userSpaceOnUse">
         <path d="M0,0 L0,6 L8,3 z" fill="#16a34a"/>
@@ -219,12 +286,10 @@
       let from = nodeAnchor(fromNode, sides.from);
       let to = nodeAnchor(toNode, sides.to);
       if (siblingCount > 1) {
-        const spread = 14;
+        const spread = 16;
         const offset = (siblingIdx - (siblingCount - 1) / 2) * spread;
-        if (sides.from === 'bottom' || sides.from === 'top') from = { x: from.x + offset, y: from.y };
-        else from = { x: from.x, y: from.y + offset };
-        if (sides.to === 'bottom' || sides.to === 'top') to = { x: to.x + offset * 0.4, y: to.y };
-        else to = { x: to.x, y: to.y + offset * 0.4 };
+        from = { x: from.x, y: from.y + offset };
+        to = { x: to.x, y: to.y + offset * 0.5 };
       }
       const path = edgePath(from, to, sides.from, sides.to);
       const style = strokeFor(e.edge_type || 'default');
@@ -241,11 +306,11 @@
       const mid = edgeMidpoint(from, to, sides.from, sides.to);
       const labelParts = [];
       if (e.label) labelParts.push(e.label);
-      if (e.flow > 0) labelParts.push(e.flow + ' took path');
+      if (e.flow > 0) labelParts.push(String(e.flow));
       if (labelParts.length) {
         const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         label.setAttribute('x', String(mid.x));
-        label.setAttribute('y', String(mid.y - 6));
+        label.setAttribute('y', String(mid.y - 8));
         label.setAttribute('text-anchor', 'middle');
         label.setAttribute('class', 'wf-analytics-edge-label');
         label.textContent = labelParts.join(' · ');
@@ -255,7 +320,9 @@
   }
 
   renderNodes();
+  packColumns();
   requestAnimationFrame(() => {
+    packColumns();
     drawEdges();
     requestAnimationFrame(drawEdges);
   });

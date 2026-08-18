@@ -104,6 +104,19 @@ func MarkEmailSendSent(sendID, accountID, jobID int64) error {
 	return err
 }
 
+// PinEmailSendSMTPAccount stamps the sticky mailbox onto a queued/sending row so
+// later jobs for the same contact resolve the same From before delivery finishes.
+func PinEmailSendSMTPAccount(sendID, accountID int64) error {
+	if sendID <= 0 || accountID <= 0 {
+		return nil
+	}
+	_, err := db.Exec(`
+		UPDATE email_sends SET smtp_account_id=?
+		WHERE id=? AND COALESCE(smtp_account_id, 0) = 0
+	`, accountID, sendID)
+	return err
+}
+
 func SaveEmailSendRenderedContent(sendID int64, subject, html, text string) error {
 	if len(html) > MaxConversationBody {
 		html = html[:MaxConversationBody]

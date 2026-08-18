@@ -331,7 +331,7 @@
                 <td class="font-medium">{{.Email}}{{if .Replied}} <span class="badge badge-violet">replied</span>{{end}}</td>
                 <td class="text-sm text-slate-600">
                     {{if .PathLabel}}
-                    <span class="wf-fork-badge {{if eq .PathLabel "Hot"}}wf-fork-badge--hot{{else if eq .PathLabel "Warm"}}wf-fork-badge--warm{{else if eq .PathLabel "Cold"}}wf-fork-badge--cold{{else if eq .PathLabel "If yes"}}wf-fork-badge--yes{{else if eq .PathLabel "If no"}}wf-fork-badge--no{{end}}">{{.PathLabel}}</span>
+                    <span class="wf-path-pill {{if eq .PathLabel "Hot"}}wf-path-pill--hot{{else if eq .PathLabel "Warm"}}wf-path-pill--warm{{else if eq .PathLabel "Cold"}}wf-path-pill--cold{{else if eq .PathLabel "If yes"}}wf-path-pill--yes{{else if eq .PathLabel "If no"}}wf-path-pill--no{{end}}">{{.PathLabel}}</span>
                     {{else if .BranchLabel}}{{.BranchLabel}}{{else}}—{{end}}
                 </td>
                 <td class="text-sm">{{.CurrentStep}}</td>

@@ -152,6 +152,100 @@ func TestResolveSendAccountStaysStickyWhenOverCap(t *testing.T) {
 	}
 }
 
+func TestResolveSendAccountStaysStickyWhenSeatFilteredFromReady(t *testing.T) {
+	db.OpenTestDB(t)
+	userID, err := model.CreateUser(fmt.Sprintf("sticky-filter-%d@test.com", time.Now().UnixNano()), "hash", "http://localhost")
+	if err != nil {
+		t.Fatal(err)
+	}
+	idA, err := model.UpsertInboxKitSMTPAccount(userID, "keep-a@example.com", "smtp.gmail.com", "587", "keep-a@example.com", "pass-aaaa-aaaa-aaaa", "A", "ik-keep-a", true, 100, "imap.gmail.com", "993")
+	if err != nil {
+		t.Fatal(err)
+	}
+	idGmail, err := model.UpsertInboxKitSMTPAccount(userID, "personal@gmail.com", "smtp.gmail.com", "587", "personal@gmail.com", "pass-gggg-gggg-gggg", "Gmail", "ik-gmail", false, 100, "imap.gmail.com", "993")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := model.Contact{Email: "filter-pin@lead.com"}
+	contactID, err := c.SaveContact(userID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`
+		INSERT INTO email_sends (user_id, contact_id, template_id, tracking_id, smtp_account_id, delivery_status, sent_at)
+		VALUES (?, ?, 0, ?, ?, 'sent', NOW())
+	`, userID, contactID, fmt.Sprintf("filt-%d", time.Now().UnixNano()), idA); err != nil {
+		t.Fatal(err)
+	}
+	// Simulate A missing from ready filter by marking it inactive credentials-wise while still active status —
+	// force ListSendReady to exclude A by clearing password, but GetSMTPAccount still returns active row.
+	// Instead: deactivate A in a way IsSendReady fails, then sticky must still return A via GetSMTPAccount.
+	if _, err := db.Exec(`UPDATE smtp_accounts SET smtp_password = '' WHERE id = ?`, idA); err != nil {
+		t.Fatal(err)
+	}
+	ready, err := model.ListSendReadyAccountsForUser(userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range ready {
+		if a.ID == idA {
+			t.Fatal("A should not be in ready set")
+		}
+	}
+	if len(ready) == 0 || ready[0].ID != idGmail && !containsAccount(ready, idGmail) {
+		// gmail should still be ready
+		if !containsAccount(ready, idGmail) {
+			t.Fatalf("expected gmail in ready, got %+v", ready)
+		}
+	}
+
+	acc, err := ResolveSendAccountForContact(userID, contactID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if acc.ID != idA {
+		t.Fatalf("must stay on sticky A (%d), not switch to ready seat (got %d)", idA, acc.ID)
+	}
+}
+
+func containsAccount(ready []model.SMTPAccount, id int64) bool {
+	for _, a := range ready {
+		if a.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+func TestResolveAccountForJobUsesPinnedSMTP(t *testing.T) {
+	db.OpenTestDB(t)
+	userID, err := model.CreateUser(fmt.Sprintf("sticky-job-%d@test.com", time.Now().UnixNano()), "hash", "http://localhost")
+	if err != nil {
+		t.Fatal(err)
+	}
+	idA, err := model.UpsertInboxKitSMTPAccount(userID, "job-a@example.com", "smtp.gmail.com", "587", "job-a@example.com", "pass-aaaa-aaaa-aaaa", "A", "ik-job-a", true, 100, "imap.gmail.com", "993")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = model.UpsertInboxKitSMTPAccount(userID, "job-b@example.com", "smtp.gmail.com", "587", "job-b@example.com", "pass-bbbb-bbbb-bbbb", "B", "ik-job-b", false, 100, "imap.gmail.com", "993")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := model.Contact{Email: "job-pin@lead.com"}
+	contactID, err := c.SaveContact(userID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	job := model.SendJob{UserID: userID, ContactID: contactID, SMTPAccountID: idA}
+	acc, err := ResolveAccountForJob(job)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if acc.ID != idA {
+		t.Fatalf("got %d want %d", acc.ID, idA)
+	}
+}
+
 func TestComputeCombinedWarmupProgress(t *testing.T) {
 	empty := ComputeCombinedWarmupProgress(nil)
 	if empty.HasAccount {

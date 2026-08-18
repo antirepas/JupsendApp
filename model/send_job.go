@@ -112,11 +112,11 @@ func CreateSendJob(j SendJob) (int64, error) {
 	}
 	row := db.QueryRow(`
 		INSERT INTO send_jobs (
-			user_id, contact_id, template_id, campaign_id, variant, workflow_instance_id, email_send_id,
+			user_id, smtp_account_id, contact_id, template_id, campaign_id, variant, workflow_instance_id, email_send_id,
 			status, priority, scheduled_at, max_attempts, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)
 		RETURNING id
-	`, j.UserID, j.ContactID, j.TemplateID, campID, j.Variant, wfID, sendID,
+	`, j.UserID, nullInt64(j.SMTPAccountID), j.ContactID, j.TemplateID, campID, j.Variant, wfID, sendID,
 		j.Priority, scheduled, maxAttempts, now, now)
 	var id int64
 	err := row.Scan(&id)
@@ -130,6 +130,18 @@ func GetSendJob(id int64) (SendJob, error) {
 
 func LinkSendJobEmailSend(jobID, emailSendID int64) error {
 	_, err := db.Exec(`UPDATE send_jobs SET email_send_id=?, updated_at=? WHERE id=?`, emailSendID, time.Now(), jobID)
+	return err
+}
+
+// PinSendJobSMTPAccount locks a job onto a mailbox for sticky From identity.
+func PinSendJobSMTPAccount(jobID, accountID int64) error {
+	if jobID <= 0 || accountID <= 0 {
+		return nil
+	}
+	_, err := db.Exec(`
+		UPDATE send_jobs SET smtp_account_id=?, updated_at=?
+		WHERE id=? AND COALESCE(smtp_account_id, 0) = 0
+	`, accountID, time.Now(), jobID)
 	return err
 }
 

@@ -69,11 +69,17 @@ func runClaimedJob(item claimedJob) {
 	mu.Lock()
 	defer mu.Unlock()
 
-	account, err := ResolveSendAccountForContact(item.job.UserID, item.job.ContactID)
+	account, err := ResolveAccountForJob(item.job)
 	if err != nil {
 		log.Printf("outbound job %d: %v", item.job.ID, err)
 		failJobConfiguration(item.job, err)
 		return
+	}
+	if item.job.SMTPAccountID == 0 && account.ID > 0 {
+		_ = model.PinSendJobSMTPAccount(item.job.ID, account.ID)
+		if item.job.EmailSendID > 0 {
+			_ = model.PinEmailSendSMTPAccount(item.job.EmailSendID, account.ID)
+		}
 	}
 
 	job, err := model.GetSendJob(item.job.ID)
@@ -146,7 +152,7 @@ func claimPendingJobs() []claimedJob {
 			continue
 		}
 
-		account, err := ResolveSendAccountForContact(job.UserID, job.ContactID)
+		account, err := ResolveAccountForJob(job)
 		if err != nil {
 			log.Printf("outbound job %d: %v", job.ID, err)
 			failJobConfiguration(job, err)
@@ -173,10 +179,17 @@ func claimPendingJobs() []claimedJob {
 			continue
 		}
 
-		account, err = ResolveSendAccountForContact(job.UserID, job.ContactID)
+		account, err = ResolveAccountForJob(job)
 		if err != nil {
 			failJobConfiguration(job, err)
 			continue
+		}
+		if job.SMTPAccountID == 0 && account.ID > 0 {
+			_ = model.PinSendJobSMTPAccount(job.ID, account.ID)
+			job.SMTPAccountID = account.ID
+			if job.EmailSendID > 0 {
+				_ = model.PinEmailSendSMTPAccount(job.EmailSendID, account.ID)
+			}
 		}
 
 		seenUsers[job.UserID] = true
