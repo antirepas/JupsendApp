@@ -25,6 +25,21 @@ func ClassifySMTPError(err error) ErrorClass {
 		return ErrorTransient
 	}
 	msg := strings.ToLower(err.Error())
+	// Provider daily/rate quotas are temporary — retry after the window resets.
+	transientQuota := []string{
+		"daily user sending limit",
+		"5.4.5",
+		"sending limit exceeded",
+		"rate limit",
+		"too many messages",
+		"try again later",
+		"421", "450", "451", "452",
+	}
+	for _, p := range transientQuota {
+		if strings.Contains(msg, p) {
+			return ErrorTransient
+		}
+	}
 	permanent := []string{
 		"535", "authentication", "auth failed", "invalid credentials",
 		"550", "551", "552", "553", "554",
@@ -40,6 +55,17 @@ func ClassifySMTPError(err error) ErrorClass {
 		}
 	}
 	return ErrorTransient
+}
+
+// IsProviderDailyQuota reports Gmail/Workspace daily send-cap errors.
+func IsProviderDailyQuota(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "daily user sending limit") ||
+		strings.Contains(msg, "5.4.5") ||
+		(strings.Contains(msg, "sending limit exceeded") && strings.Contains(msg, "550"))
 }
 
 func ShouldSuppressFromError(err error) bool {

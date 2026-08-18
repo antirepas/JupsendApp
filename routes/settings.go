@@ -70,6 +70,7 @@ func UpdateSettings(c *gin.Context) {
 	cooldown, _ := strconv.Atoi(c.PostForm("send_cooldown_days"))
 	_ = model.UpdateUserSendCooldownDays(userID, cooldown)
 	_ = model.UpdateUserIncludeUnsubscribeLink(userID, c.PostForm("include_unsubscribe_link") == "on")
+	_ = model.UpdateUserNotifyOnReply(userID, c.PostForm("notify_on_reply") == "on")
 
 	meetings, _ := strconv.Atoi(c.PostForm("goal_meetings_per_month"))
 	replyPct, _ := strconv.Atoi(c.PostForm("goal_reply_to_meeting_pct"))

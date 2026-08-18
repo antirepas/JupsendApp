@@ -8,6 +8,7 @@ import (
 
 	"emailtracker.com/db"
 	"emailtracker.com/model"
+	"emailtracker.com/notify"
 	"emailtracker.com/util"
 )
 
@@ -290,6 +291,15 @@ func handleReply(userID int64, match ReplyMatch, msg inboxMessage, accountID int
 	if campaignID > 0 {
 		model.MaybeStopWorkflowOnHot(campaignID, match.ContactID)
 	}
+
+	notify.NotifyReplyAlert(notify.ReplyAlertInput{
+		UserID:       userID,
+		ContactID:    match.ContactID,
+		FromEmail:    msg.From,
+		Subject:      msg.Subject,
+		BodySnippet:  parsed.Text,
+		MailboxEmail: toEmail,
+	})
 }
 
 func replyDedupeKey(match ReplyMatch, imapMessageID string) string {

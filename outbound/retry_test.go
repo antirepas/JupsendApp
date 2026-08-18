@@ -18,6 +18,13 @@ func TestClassifySMTPError(t *testing.T) {
 	if ClassifySMTPError(errors.New("connection timeout")) != ErrorTransient {
 		t.Fatal("expected transient")
 	}
+	quota := errors.New(`550 "5.4.5 Daily user sending limit exceeded. For more information on Gmail 5.4.5 sending limits go to 5.4.5 https://support.google.com/a/answer/166852 gsmtp"`)
+	if ClassifySMTPError(quota) != ErrorTransient {
+		t.Fatal("gmail daily quota must be transient")
+	}
+	if !IsProviderDailyQuota(quota) {
+		t.Fatal("expected IsProviderDailyQuota")
+	}
 }
 
 func TestBackoffForAttempt(t *testing.T) {

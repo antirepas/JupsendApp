@@ -107,6 +107,9 @@ func accountCanSend(account model.SMTPAccount, checkDaily, checkMinute, checkSpa
 	if account.Status != "active" {
 		return false
 	}
+	if IsAccountProviderBlocked(account.ID) {
+		return false
+	}
 	if checkDaily && !accountUnderDailyCap(account) {
 		return false
 	}

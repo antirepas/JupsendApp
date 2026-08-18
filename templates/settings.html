@@ -82,8 +82,17 @@
     </label>
 </div>
 
+<div class="card space-y-4">
+    <h3 class="card-title">Reply alerts</h3>
+    <p class="text-sm text-gray-600">Get an email at <strong>{{.user.Email}}</strong> when someone replies to any of your mailboxes.</p>
+    <label class="flex items-center gap-2 text-sm">
+        <input type="checkbox" name="notify_on_reply" {{if .user.NotifyOnReply}}checked{{end}}>
+        Email me when I get a reply
+    </label>
+</div>
+
 <div class="card flex flex-wrap items-center justify-between gap-4">
-    <p class="text-sm text-gray-500 m-0">Save account and send policy changes.</p>
+    <p class="text-sm text-gray-500 m-0">Save account and notification settings.</p>
     <button type="submit" class="btn-primary shrink-0">Save settings</button>
 </div>
 </form>

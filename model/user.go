@@ -24,6 +24,7 @@ type User struct {
 	AIcreditsResetAt        *time.Time
 	SendCooldownDays             int
 	IncludeUnsubscribeLink  bool
+	NotifyOnReply           bool
 	GoalMeetingsPerMonth    int
 	GoalReplyToMeetingPct   int
 	GoalDailySendCap        int
@@ -76,6 +77,7 @@ func GetUserByEmail(email string) (User, error) {
 		SELECT id, email, password_hash, COALESCE(base_url, ''),
 			COALESCE(subscription_status, 'none'), COALESCE(whop_membership_id, ''), COALESCE(whop_member_id, ''),
 			subscription_ends_at, is_admin, COALESCE(send_cooldown_days, 30), COALESCE(include_unsubscribe_link, TRUE),
+			COALESCE(notify_on_reply, TRUE),
 			COALESCE(plan_tier, 'free'),
 			COALESCE(ai_credits_used_today, 0), ai_credits_reset_at,
 			COALESCE(goal_meetings_per_month, 0), COALESCE(goal_reply_to_meeting_pct, 50), COALESCE(goal_daily_send_cap, 0),
@@ -90,6 +92,7 @@ func GetUserByID(id int64) (User, error) {
 		SELECT id, email, password_hash, COALESCE(base_url, ''),
 			COALESCE(subscription_status, 'none'), COALESCE(whop_membership_id, ''), COALESCE(whop_member_id, ''),
 			subscription_ends_at, is_admin, COALESCE(send_cooldown_days, 30), COALESCE(include_unsubscribe_link, TRUE),
+			COALESCE(notify_on_reply, TRUE),
 			COALESCE(plan_tier, 'free'),
 			COALESCE(ai_credits_used_today, 0), ai_credits_reset_at,
 			COALESCE(goal_meetings_per_month, 0), COALESCE(goal_reply_to_meeting_pct, 50), COALESCE(goal_daily_send_cap, 0),
@@ -106,6 +109,7 @@ func scanUser(row interface{ Scan(...interface{}) error }) (User, error) {
 	var wizardDismissed sql.NullTime
 	err := row.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.BaseURL,
 		&u.SubscriptionStatus, &u.WhopMembershipID, &u.WhopMemberID, &ends, &u.IsAdmin, &u.SendCooldownDays, &u.IncludeUnsubscribeLink,
+		&u.NotifyOnReply,
 		&u.PlanTier,
 		&u.AIcreditsUsedToday, &resetAt,
 		&u.GoalMeetingsPerMonth, &u.GoalReplyToMeetingPct, &u.GoalDailySendCap,

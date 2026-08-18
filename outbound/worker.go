@@ -100,7 +100,7 @@ func runClaimedJob(item claimedJob) {
 
 	if err := executeJob(job, account); err != nil {
 		log.Printf("outbound job %d failed: %v", job.ID, err)
-		handleJobFailure(job, err)
+		handleJobFailure(job, account, err)
 	}
 }
 

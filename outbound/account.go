@@ -108,7 +108,15 @@ func rateLimitDelayForJob(account model.SMTPAccount, job model.SendJob) time.Dur
 	if job.Priority >= PriorityManual {
 		return nextManualSendDelay(account)
 	}
-	if !accountUnderDailyCap(account) {
+	// Prefer another mailbox that still has capacity today.
+	if alt, ok := otherSendableAccount(job.UserID, job.ContactID, account.ID, job); ok && alt.ID != account.ID {
+		return 2 * time.Second
+	}
+	ready, err := model.ListSendReadyAccountsForUser(job.UserID)
+	if err == nil && len(ready) > 0 {
+		return NextRateLimitDelay(ready)
+	}
+	if !accountUnderDailyCap(account) || IsAccountProviderBlocked(account.ID) {
 		return nextMidnight()
 	}
 	return NextRateLimitDelay([]model.SMTPAccount{account})

@@ -89,3 +89,19 @@ func UpdateUserIncludeUnsubscribeLink(userID int64, include bool) error {
 	_, err := db.Exec(`UPDATE users SET include_unsubscribe_link = ? WHERE id = ?`, include, userID)
 	return err
 }
+
+func UserNotifyOnReply(userID int64) bool {
+	var on bool
+	err := db.QueryRow(`
+		SELECT COALESCE(notify_on_reply, TRUE) FROM users WHERE id = ?
+	`, userID).Scan(&on)
+	if err != nil {
+		return true
+	}
+	return on
+}
+
+func UpdateUserNotifyOnReply(userID int64, on bool) error {
+	_, err := db.Exec(`UPDATE users SET notify_on_reply = ? WHERE id = ?`, on, userID)
+	return err
+}
