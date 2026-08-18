@@ -57,62 +57,32 @@
 
 <div class="card mb-6">
     <h3 class="card-title">Step pipeline</h3>
-    <p class="text-sm text-slate-500 mb-4">How contacts move through each workflow step (all emails in the sequence).</p>
-    <div class="workflow-pipeline-wrap">
-        <div class="workflow-pipeline">
-            {{with $wf.Overview}}
-            {{if gt .NotStarted 0}}
-            <div class="workflow-queued-pill">
-                <div class="workflow-step-count">{{.NotStarted}}</div>
-                <div class="workflow-step-count-label">Queued</div>
-            </div>
-            <div class="workflow-step-connector">→</div>
-            {{end}}
-            {{end}}
-            {{range $wf.Steps}}
-            <div class="workflow-step workflow-step--{{.NodeType}}">
-                <div class="workflow-step-head">
-                    <div class="workflow-step-icon-ring">
-                        {{if eq .NodeType "action_send_email"}}
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
-                        {{else if eq .NodeType "action_wait"}}
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-                        {{else if eq .NodeType "condition_engagement"}}
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3v12"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
-                        {{else}}
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m22 4-10 10.01-3-3"/></svg>
-                        {{end}}
-                    </div>
-                    <span class="workflow-step-kind">{{if eq .NodeType "action_send_email"}}Email{{else if eq .NodeType "action_wait"}}Wait{{else if eq .NodeType "condition_engagement"}}Branch{{else}}End{{end}}</span>
-                </div>
-                <p class="workflow-step-label">{{.Label}}</p>
-                <div class="workflow-step-metric">
-                    <span class="workflow-step-count">{{.ContactsHere}}</span>
-                    <span class="workflow-step-count-label">here now</span>
-                </div>
-                <div class="workflow-step-bar">
-                    <div class="workflow-step-bar-fill" style="width: {{if gt .BarPercent 0.5}}{{printf "%.1f" .BarPercent}}{{else if gt .ContactsHere 0}}4{{else}}0{{end}}%"></div>
-                </div>
-                <div class="workflow-step-meta">{{.PassedThrough}} passed through</div>
-                {{if eq .NodeType "action_send_email"}}
-                <div class="workflow-step-meta text-blue-600">{{.Opens}} opens · {{printf "%.0f" .OpenRate}}%</div>
-                {{end}}
-                {{if gt .StoppedHere 0}}
-                <div class="workflow-step-meta text-red-500">{{.StoppedHere}} stopped here</div>
-                {{end}}
-            </div>
-            {{if ne .StepIndex (len $wf.Steps)}}<div class="workflow-step-connector">→</div>{{end}}
-            {{end}}
-        </div>
+    <p class="text-sm text-slate-500 mb-4">Same branching layout as the workflow builder — forks, temperature paths, and recombine points stay visible.</p>
+    {{with $wf.Overview}}
+    {{if gt .NotStarted 0}}
+    <div class="workflow-queued-pill mb-4 inline-flex">
+        <div class="workflow-step-count">{{.NotStarted}}</div>
+        <div class="workflow-step-count-label">Queued (not started)</div>
     </div>
+    {{end}}
+    {{end}}
+    {{if $wf.HasPipeline}}
+    <div class="wf-graph-root wf-graph-root--analytics">
+        {{template "wf_analytics_node" $wf.PipelineTree}}
+    </div>
+    {{else}}
+    <p class="text-sm text-slate-500">Pipeline graph unavailable for this campaign.</p>
+    {{end}}
 </div>
 
 <div class="card overflow-hidden mb-6">
     <h3 class="card-title">Step performance</h3>
+    <p class="text-sm text-slate-500 px-4 pt-1 pb-3">Flat list of every step. Use the <em>Path</em> column for Hot / Warm / Cold arrival — merge steps combine multiple paths.</p>
     <table class="data-table">
         <thead>
             <tr>
                 <th>Step</th>
+                <th>Path</th>
                 <th>Type</th>
                 <th>Here now</th>
                 <th>Passed through</th>
@@ -125,8 +95,16 @@
         <tbody>
         {{range $wf.Steps}}
         <tr>
-            <td class="font-medium">{{.Label}}</td>
-            <td class="text-sm text-slate-500">{{if eq .NodeType "action_send_email"}}Send{{else if eq .NodeType "action_wait"}}Wait{{else if eq .NodeType "condition_engagement"}}Branch{{else}}End{{end}}</td>
+            <td class="font-medium">
+                {{.Label}}
+                {{if .Description}}<div class="text-xs text-slate-400 font-normal mt-0.5">{{.Description}}</div>{{end}}
+            </td>
+            <td class="text-sm">
+                {{if .PathSummary}}
+                <span class="{{if .IsMerge}}wf-merge-badge{{else}}wf-fork-badge{{if eq .PathLabel "Hot"}} wf-fork-badge--hot{{else if eq .PathLabel "Warm"}} wf-fork-badge--warm{{else if eq .PathLabel "Cold"}} wf-fork-badge--cold{{else if eq .PathLabel "If yes"}} wf-fork-badge--yes{{else if eq .PathLabel "If no"}} wf-fork-badge--no{{end}}{{end}}">{{.PathSummary}}</span>
+                {{else}}—{{end}}
+            </td>
+            <td class="text-sm text-slate-500">{{if eq .NodeType "action_send_email"}}Send{{else if eq .NodeType "action_wait"}}Wait{{else if eq .NodeType "condition_engagement"}}Branch{{else if eq .NodeType "condition_temperature"}}Temperature{{else}}End{{end}}</td>
             <td>{{.ContactsHere}}</td>
             <td>{{.PassedThrough}}</td>
             <td>{{printf "%.0f" .PassedPct}}%</td>
@@ -219,7 +197,9 @@
             <tr>
                 <th>Email</th>
                 <th>Current step</th>
+                <th>Path</th>
                 <th>Status</th>
+                <th>Wait remaining</th>
                 <th>Emails sent</th>
                 <th>Opens</th>
                 <th>Clicks</th>
@@ -229,16 +209,23 @@
         <tbody>
         {{range $wf.Contacts}}
         <tr>
-            <td class="font-medium">{{.Email}}</td>
+            <td class="font-medium"><a href="/contacts/{{.ContactID}}" class="text-brand-600 hover:underline">{{.Email}}</a></td>
             <td class="text-sm">{{.CurrentStep}}</td>
+            <td class="text-sm">{{if .PathLabel}}<span class="wf-fork-badge {{if eq .PathLabel "Hot"}}wf-fork-badge--hot{{else if eq .PathLabel "Warm"}}wf-fork-badge--warm{{else if eq .PathLabel "Cold"}}wf-fork-badge--cold{{else if eq .PathLabel "If yes"}}wf-fork-badge--yes{{else if eq .PathLabel "If no"}}wf-fork-badge--no{{end}}">{{.PathLabel}}</span>{{else}}—{{end}}</td>
             <td><span class="badge {{if eq .InstanceStatus "completed"}}badge-green{{else if eq .InstanceStatus "cancelled"}}badge-red{{else if eq .InstanceStatus "active"}}badge-blue{{else if eq .InstanceStatus "waiting"}}badge-amber{{else}}badge-gray{{end}}">{{.InstanceStatus}}</span></td>
+            <td class="text-sm">
+                {{if .WaitRemaining}}
+                <span class="wf-wait-remaining" title="Resumes {{.WakeAtLabel}}">{{.WaitRemaining}}</span>
+                <div class="text-xs text-slate-400">{{.WakeAtLabel}}</div>
+                {{else}}—{{end}}
+            </td>
             <td>{{.EmailsSent}}</td>
             <td class="text-blue-600">{{.OpenCount}}</td>
             <td class="text-emerald-600">{{.ClickCount}}</td>
             <td>{{if .HasReplied}}<span class="badge badge-violet">Yes</span>{{else}}—{{end}}</td>
         </tr>
         {{else}}
-        <tr><td colspan="7" class="text-sm text-gray-400 py-6 text-center">No contacts match.</td></tr>
+        <tr><td colspan="9" class="text-sm text-gray-400 py-6 text-center">No contacts match.</td></tr>
         {{end}}
         </tbody>
     </table>

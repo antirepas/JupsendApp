@@ -297,6 +297,7 @@ func GetCampaignWorkflowAnalyticsFor(c Campaign, userID int64) (CampaignWorkflow
 		engagement CampaignWorkflowEngagement
 		stepEng    map[string]stepEngagement
 		stoppedAt  map[string]int
+		edgeFlow   map[string]int
 		contacts   []CampaignWorkflowContactAnalytics
 		daily      []CampaignDailyStat
 		hourlyOpen []HourlyStat
@@ -324,6 +325,10 @@ func GetCampaignWorkflowAnalyticsFor(c Campaign, userID int64) (CampaignWorkflow
 	})
 	g.Go(func() error {
 		stoppedAt = getCampaignStoppedAtNode(campaignID)
+		return nil
+	})
+	g.Go(func() error {
+		edgeFlow = getCampaignBranchEdgeFlow(campaignID)
 		return nil
 	})
 	g.Go(func() error {
@@ -366,6 +371,14 @@ func GetCampaignWorkflowAnalyticsFor(c Campaign, userID int64) (CampaignWorkflow
 		steps = append(steps, sa)
 	}
 
+	EnrichBranchPathLabels(campaignID, c.WorkflowVersionID, contacts)
+
+	if graph, gErr := GetWorkflowGraph(c.WorkflowVersionID); gErr == nil {
+		ExpandBranchEdgeFlowThroughSkippedConditions(graph, edgeFlow)
+	}
+	pipelineTree, treeErr := BuildCampaignWorkflowAnalyticsTree(c, overview.TotalContacts, steps, edgeFlow)
+	hasPipeline := treeErr == nil && pipelineTree.NodeKey != ""
+
 	result := CampaignWorkflowAnalytics{
 		CampaignID:   campaignID,
 		CampaignName: c.Name,
@@ -375,6 +388,8 @@ func GetCampaignWorkflowAnalyticsFor(c Campaign, userID int64) (CampaignWorkflow
 		Overview:     overview,
 		Engagement:   engagement,
 		Steps:        steps,
+		PipelineTree: pipelineTree,
+		HasPipeline:  hasPipeline,
 		Contacts:     contacts,
 		DailyStats:   daily,
 		HourlyOpens:  hourlyOpen,
@@ -435,6 +450,7 @@ func buildCampaignWorkflowContactAnalyticsFast(campaignID, versionID int64, cont
 			row.InstanceStatus = inst.Status
 			row.NodeKey = inst.CurrentNodeKey
 			row.CurrentStep = LabelFromMap(labels, inst.CurrentNodeKey)
+			row.WaitRemaining, row.WakeAtLabel = FormatWaitRemaining(inst.NextWakeAt, inst.Status)
 		} else {
 			row.InstanceStatus = "not started"
 			row.CurrentStep = "—"

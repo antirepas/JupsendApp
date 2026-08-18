@@ -181,6 +181,7 @@ func (ConditionExecutor) Execute(ctx ExecutionContext) (NodeResult, error) {
 		return NodeResult{Failed: true, ErrorMessage: err.Error()}, nil
 	}
 	if earlyEdge != "" {
+		recordConditionExecution(ctx, earlyEdge)
 		return NodeResult{NextEdgeType: earlyEdge}, nil
 	}
 	if wakeAt != nil {
@@ -192,8 +193,10 @@ func (ConditionExecutor) Execute(ctx ExecutionContext) (NodeResult, error) {
 		return NodeResult{Failed: true, ErrorMessage: err.Error()}, nil
 	}
 	if ok {
+		recordConditionExecution(ctx, "true")
 		return NodeResult{NextEdgeType: "true"}, nil
 	}
+	recordConditionExecution(ctx, "false")
 	return NodeResult{NextEdgeType: "false"}, nil
 }
 
@@ -208,6 +211,7 @@ func (TemperatureConditionExecutor) Execute(ctx ExecutionContext) (NodeResult, e
 		campaignID = *ctx.Instance.CampaignID
 	}
 	if campaignID <= 0 {
+		recordConditionExecution(ctx, model.LeadTemperatureCold)
 		return NodeResult{NextEdgeType: model.LeadTemperatureCold}, nil
 	}
 	tier, err := model.ResolveLeadTemperature(campaignID, ctx.Instance.ContactID)
@@ -216,8 +220,16 @@ func (TemperatureConditionExecutor) Execute(ctx ExecutionContext) (NodeResult, e
 	}
 	switch tier {
 	case model.LeadTemperatureHot, model.LeadTemperatureWarm, model.LeadTemperatureCold:
+		recordConditionExecution(ctx, tier)
 		return NodeResult{NextEdgeType: tier}, nil
 	default:
+		recordConditionExecution(ctx, model.LeadTemperatureCold)
 		return NodeResult{NextEdgeType: model.LeadTemperatureCold}, nil
 	}
+}
+
+func recordConditionExecution(ctx ExecutionContext, edgeType string) {
+	execKey := fmt.Sprintf("%d:%s:%s", ctx.Instance.ID, ctx.Node.NodeKey, edgeType)
+	_, _ = model.CreateExecution(ctx.Instance.ID, ctx.Node.NodeKey, execKey, "succeeded",
+		fmt.Sprintf(`{"next_edge":%q}`, edgeType), "")
 }

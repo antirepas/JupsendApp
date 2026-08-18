@@ -315,9 +315,10 @@
                 <th class="w-10"></th>
                 <th>#</th>
                 <th>Email</th>
-                <th>Branch</th>
+                <th>Path</th>
                 <th>Current step</th>
                 <th>Status</th>
+                <th>Wait remaining</th>
                 <th>Engagement</th>
                 <th></th>
             </tr>
@@ -328,10 +329,20 @@
                 <td><input type="checkbox" name="contact_ids" value="{{.ID}}" class="wf-member-cb"></td>
                 <td class="text-slate-500">{{.Index}}</td>
                 <td class="font-medium">{{.Email}}{{if .Replied}} <span class="badge badge-violet">replied</span>{{end}}</td>
-                <td class="text-sm text-slate-600">{{if .BranchLabel}}{{.BranchLabel}}{{else}}—{{end}}</td>
+                <td class="text-sm text-slate-600">
+                    {{if .PathLabel}}
+                    <span class="wf-fork-badge {{if eq .PathLabel "Hot"}}wf-fork-badge--hot{{else if eq .PathLabel "Warm"}}wf-fork-badge--warm{{else if eq .PathLabel "Cold"}}wf-fork-badge--cold{{else if eq .PathLabel "If yes"}}wf-fork-badge--yes{{else if eq .PathLabel "If no"}}wf-fork-badge--no{{end}}">{{.PathLabel}}</span>
+                    {{else if .BranchLabel}}{{.BranchLabel}}{{else}}—{{end}}
+                </td>
                 <td class="text-sm">{{.CurrentStep}}</td>
                 <td>
                     <span class="badge {{if eq .InstanceStatus "completed"}}badge-green{{else if eq .InstanceStatus "cancelled"}}badge-red{{else if eq .InstanceStatus "active"}}badge-blue{{else if eq .InstanceStatus "waiting"}}badge-amber{{else}}badge-gray{{end}}">{{.InstanceStatus}}</span>
+                </td>
+                <td class="text-sm">
+                    {{if .WaitRemaining}}
+                    <span class="wf-wait-remaining" title="Resumes {{.WakeAtLabel}}">{{.WaitRemaining}}</span>
+                    <div class="text-xs text-slate-400">{{.WakeAtLabel}}</div>
+                    {{else}}<span class="text-slate-400">—</span>{{end}}
                 </td>
                 <td class="text-sm text-slate-600">
                     {{if or (gt .OpenCount 0) (gt .ClickCount 0)}}

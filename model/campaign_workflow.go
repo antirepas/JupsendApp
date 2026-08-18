@@ -24,10 +24,16 @@ type CampaignWorkflowStepStat struct {
 	NodeKey       string
 	Label         string
 	NodeType      string
+	Description   string
 	ContactsHere  int
 	PassedThrough int
 	BarPercent    float64
 	StepIndex     int
+	// PathLabel is how contacts arrive (Hot / Cold / If yes). Empty on the first step.
+	PathLabel string
+	// PathSummary lists all incoming branch labels when paths recombine.
+	PathSummary string
+	IsMerge     bool
 }
 
 type CampaignWorkflowStepDisplay struct {
@@ -221,14 +227,19 @@ func GetCampaignWorkflowOverview(campaignID, versionID int64, totalContacts int)
 			label = LabelFromMap(labelMap, n.NodeKey)
 		}
 		here := nodeAtCount[n.NodeKey]
+		pathLabel, pathSummary, isMerge := incomingPathMeta(graph, n.NodeKey)
 		overview.Steps = append(overview.Steps, CampaignWorkflowStepStat{
 			NodeKey:       n.NodeKey,
 			Label:         label,
 			NodeType:      n.NodeType,
+			Description:   describeWorkflowStep(n, graph),
 			ContactsHere:  here,
 			PassedThrough: passedMap[n.NodeKey],
 			BarPercent:    float64(here) / float64(denom) * 100,
 			StepIndex:     i + 1,
+			PathLabel:     pathLabel,
+			PathSummary:   pathSummary,
+			IsMerge:       isMerge,
 		})
 	}
 
@@ -249,6 +260,8 @@ func labelsFromGraph(graph WorkflowGraph) map[string]string {
 			labels[n.NodeKey] = "Wait"
 		case "condition_engagement":
 			labels[n.NodeKey] = "Condition"
+		case "condition_temperature":
+			labels[n.NodeKey] = "Lead temperature"
 		case "action_end":
 			labels[n.NodeKey] = "End"
 		case "trigger_campaign_started":
@@ -296,7 +309,7 @@ func orderedWorkflowDisplayNodes(graph WorkflowGraph) []WorkflowNode {
 			continue
 		}
 		switch n.NodeType {
-		case "action_send_email", "action_wait", "condition_engagement", "action_end":
+		case "action_send_email", "action_wait", "condition_engagement", "condition_temperature", "action_end":
 			ordered = append(ordered, n)
 		}
 		for _, next := range adj[key] {
@@ -306,6 +319,60 @@ func orderedWorkflowDisplayNodes(graph WorkflowGraph) []WorkflowNode {
 		}
 	}
 	return ordered
+}
+
+// incomingPathMeta returns branch labels into a node and whether multiple paths merge there.
+func incomingPathMeta(graph WorkflowGraph, nodeKey string) (pathLabel, pathSummary string, isMerge bool) {
+	var labels []string
+	seenLabel := map[string]bool{}
+	sourceCount := 0
+	seenSource := map[string]bool{}
+	for _, e := range graph.Edges {
+		if e.TargetNodeKey != nodeKey {
+			continue
+		}
+		if !seenSource[e.SourceNodeKey] {
+			seenSource[e.SourceNodeKey] = true
+			sourceCount++
+		}
+		lab := edgeDisplayLabel(e, true)
+		if lab == "" {
+			continue
+		}
+		if !seenLabel[lab] {
+			seenLabel[lab] = true
+			labels = append(labels, lab)
+		}
+	}
+	isMerge = sourceCount > 1
+	if len(labels) == 0 {
+		if isMerge {
+			return "", "Paths recombine here", true
+		}
+		return "", "", false
+	}
+	sort.Strings(labels)
+	pathLabel = labels[0]
+	if isMerge {
+		pathSummary = "Merge · " + joinPathLabels(labels)
+	} else {
+		pathSummary = pathLabel
+	}
+	return pathLabel, pathSummary, isMerge
+}
+
+func joinPathLabels(labels []string) string {
+	if len(labels) == 0 {
+		return ""
+	}
+	if len(labels) == 1 {
+		return labels[0]
+	}
+	out := labels[0]
+	for i := 1; i < len(labels); i++ {
+		out += " + " + labels[i]
+	}
+	return out
 }
 
 type CampaignWorkflowGraphNode struct {
@@ -498,7 +565,7 @@ func outgoingDisplayEdges(graph WorkflowGraph, sourceKey, sourceNodeType string)
 			}
 			continue
 		}
-		if e.EdgeType == "default" {
+		if e.EdgeType == "default" || e.EdgeType == "" {
 			edges = append(edges, e)
 		}
 	}

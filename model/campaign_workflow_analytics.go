@@ -38,6 +38,12 @@ type CampaignWorkflowContactAnalytics struct {
 	OpenCount      int
 	ClickCount     int
 	HasReplied     bool
+	// PathLabel is last Hot/Warm/Cold (or If yes/no) decision for this contact.
+	PathLabel string
+	// WaitRemaining is short remaining wait ("2d 4h"); empty if not waiting.
+	WaitRemaining string
+	// WakeAtLabel is absolute resume time ("Aug 20, 3:15 PM").
+	WakeAtLabel string
 }
 
 type CampaignWorkflowAnalytics struct {
@@ -49,6 +55,8 @@ type CampaignWorkflowAnalytics struct {
 	Overview     CampaignWorkflowOverview
 	Engagement   CampaignWorkflowEngagement
 	Steps        []CampaignWorkflowStepAnalytics
+	PipelineTree CampaignWorkflowAnalyticsNode
+	HasPipeline  bool
 	Contacts     []CampaignWorkflowContactAnalytics
 	DailyStats   []CampaignDailyStat
 	HourlyOpens  []HourlyStat
@@ -214,6 +222,7 @@ func buildCampaignWorkflowContactAnalytics(campaignID, versionID int64, contactI
 			row.InstanceStatus = inst.Status
 			row.NodeKey = inst.CurrentNodeKey
 			row.CurrentStep = NodeLabelForKey(versionID, inst.CurrentNodeKey)
+			row.WaitRemaining, row.WakeAtLabel = FormatWaitRemaining(inst.NextWakeAt, inst.Status)
 		} else {
 			row.InstanceStatus = "not started"
 			row.CurrentStep = "—"

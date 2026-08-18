@@ -49,6 +49,7 @@ func RegisterRoutes(server *gin.Engine) {
 		"templates/campaigns_form.html",
 		"templates/campaigns_detail.html",
 		"templates/campaigns_workflow_graph.html",
+		"templates/campaigns_workflow_analytics_graph.html",
 		"templates/campaigns_analytics.html",
 		"templates/campaigns_workflow_analytics.html",
 		"templates/campaigns_hybrid_analytics.html",

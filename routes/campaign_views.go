@@ -51,6 +51,9 @@ type WorkflowCampaignContactRowView struct {
 	InstanceStatus string
 	CurrentStep    string
 	BranchLabel    string
+	PathLabel      string
+	WaitRemaining  string
+	WakeAtLabel    string
 	OpenCount      int
 	ClickCount     int
 	HasStarted     bool
@@ -131,6 +134,7 @@ func buildWorkflowCampaignContactRows(
 	emailMap, _ := model.GetContactEmailsByIDs(userID, contactIDs)
 	replied := model.CampaignRepliedContactSetForIDs(campaign.ID, contactIDs)
 	labels := model.NodeLabelMapForVersion(campaign.WorkflowVersionID)
+	pathLabels := model.GetCampaignLastPathLabelsForUI(campaign.ID, campaign.WorkflowVersionID)
 
 	var rows []WorkflowCampaignContactRowView
 	for i, cid := range contactIDs {
@@ -146,6 +150,11 @@ func buildWorkflowCampaignContactRows(
 			row.NodeKey = inst.CurrentNodeKey
 			row.CurrentStep = model.LabelFromMap(labels, inst.CurrentNodeKey)
 			row.BranchLabel = workflowBranchLabel(inst)
+			row.WaitRemaining, row.WakeAtLabel = model.FormatWaitRemaining(inst.NextWakeAt, inst.Status)
+			if pl := pathLabels[cid]; pl != "" {
+				row.PathLabel = pl
+				row.BranchLabel = pl
+			}
 		} else {
 			row.InstanceStatus = "not started"
 			row.CurrentStep = "—"

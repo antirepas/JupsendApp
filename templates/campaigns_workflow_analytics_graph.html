@@ -1,0 +1,60 @@
+{{define "wf_analytics_node"}}
+<div class="wf-graph-node wf-graph-node--{{.NodeType}}">
+    <div class="wf-graph-card workflow-step workflow-step--{{.NodeType}}{{if .IsMerge}} workflow-step--merge{{end}}">
+        {{if or .IsForkBranch .EdgeLabel}}
+        <span class="wf-fork-badge {{if eq .EdgeType "true"}}wf-fork-badge--yes{{else if eq .EdgeType "false"}}wf-fork-badge--no{{else if eq .EdgeType "hot"}}wf-fork-badge--hot{{else if eq .EdgeType "warm"}}wf-fork-badge--warm{{else if eq .EdgeType "cold"}}wf-fork-badge--cold{{end}}">
+            {{if .EdgeLabel}}{{.EdgeLabel}}{{else}}Branch · priority {{.EdgePriority}}{{end}}{{if gt .EdgeFlow 0}} · {{.EdgeFlow}} took path{{end}}
+        </span>
+        {{end}}
+        {{if .IsMerge}}
+        <span class="wf-merge-badge">{{if .PathSummary}}{{.PathSummary}}{{else}}Paths recombine here{{end}}</span>
+        {{end}}
+        <div class="workflow-step-head">
+            <div class="workflow-step-icon-ring">
+                {{if eq .NodeType "action_send_email"}}
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+                {{else if eq .NodeType "action_wait"}}
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                {{else if or (eq .NodeType "condition_engagement") (eq .NodeType "condition_temperature")}}
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3v12"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
+                {{else}}
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m22 4-10 10.01-3-3"/></svg>
+                {{end}}
+            </div>
+            <span class="workflow-step-kind">{{if eq .NodeType "action_send_email"}}Email{{else if eq .NodeType "action_wait"}}Wait{{else if eq .NodeType "condition_engagement"}}Branch{{else if eq .NodeType "condition_temperature"}}Temperature{{else}}End{{end}}</span>
+        </div>
+        <p class="workflow-step-label">{{.Label}}</p>
+        {{if .Description}}<p class="workflow-step-desc">{{.Description}}</p>{{end}}
+        <div class="workflow-step-metric">
+            <span class="workflow-step-count">{{.ContactsHere}}</span>
+            <span class="workflow-step-count-label">here now</span>
+        </div>
+        <div class="workflow-step-bar">
+            <div class="workflow-step-bar-fill" style="width: {{if gt .BarPercent 0.5}}{{printf "%.1f" .BarPercent}}{{else if gt .ContactsHere 0}}4{{else}}0{{end}}%"></div>
+        </div>
+        <div class="workflow-step-meta">{{.PassedThrough}} passed through</div>
+        {{if eq .NodeType "action_send_email"}}
+        <div class="workflow-step-meta text-blue-600">{{.Opens}} opens · {{printf "%.0f" .OpenRate}}%</div>
+        {{end}}
+        {{if gt .StoppedHere 0}}
+        <div class="workflow-step-meta text-red-500">{{.StoppedHere}} stopped here</div>
+        {{end}}
+    </div>
+
+    {{if .Children}}
+        {{if gt (len .Children) 1}}
+        <div class="wf-graph-forks-label">Paths split here</div>
+        <div class="wf-graph-forks">
+            {{range .Children}}
+            <div class="wf-graph-fork-col">
+                {{template "wf_analytics_node" .}}
+            </div>
+            {{end}}
+        </div>
+        {{else}}
+        <div class="wf-graph-connector" aria-hidden="true">↓</div>
+        {{template "wf_analytics_node" (index .Children 0)}}
+        {{end}}
+    {{end}}
+</div>
+{{end}}
