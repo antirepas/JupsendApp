@@ -53,7 +53,6 @@ func GetCampaignContactDataMap(campaignID int64) (map[int64]CampaignContactData,
 	defer rows.Close()
 
 	out := make(map[int64]CampaignContactData)
-	var contactIDs []int64
 	for rows.Next() {
 		var id int64
 		var email string
@@ -61,24 +60,20 @@ func GetCampaignContactDataMap(campaignID int64) (map[int64]CampaignContactData,
 			return nil, err
 		}
 		out[id] = CampaignContactData{Email: email}
-		contactIDs = append(contactIDs, id)
 	}
-	if len(contactIDs) == 0 {
+	if len(out) == 0 {
 		return out, nil
 	}
 
-	placeholders := make([]string, len(contactIDs))
-	args := make([]interface{}, len(contactIDs))
-	for i, id := range contactIDs {
-		placeholders[i] = "?"
-		args[i] = id
-	}
-	varRows, err := db.Query(
-		`SELECT contact_id, key, value FROM contact_variables WHERE contact_id IN (`+joinPlaceholders(placeholders)+`)`,
-		args...,
-	)
+	// JOIN instead of giant IN (...) — large lists used to blow up query size / time (502).
+	varRows, err := db.Query(`
+		SELECT cv.contact_id, cv.key, cv.value
+		FROM contact_variables cv
+		INNER JOIN campaign_contacts cc ON cc.contact_id = cv.contact_id
+		WHERE cc.campaign_id = ?
+	`, campaignID)
 	if err != nil {
-		return out, nil
+		return out, err
 	}
 	defer varRows.Close()
 	for varRows.Next() {

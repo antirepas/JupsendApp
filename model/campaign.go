@@ -3,6 +3,7 @@ package model
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"emailtracker.com/db"
@@ -497,10 +498,31 @@ func GetCampaignContactIDs(campaignID int64) ([]int64, error) {
 }
 
 func AddContactsToCampaign(campaignID int64, contactIDs []int64) error {
-	for _, cid := range contactIDs {
+	if campaignID <= 0 || len(contactIDs) == 0 {
+		return nil
+	}
+	const batchSize = 500
+	for i := 0; i < len(contactIDs); i += batchSize {
+		end := i + batchSize
+		if end > len(contactIDs) {
+			end = len(contactIDs)
+		}
+		chunk := contactIDs[i:end]
+		placeholders := make([]string, 0, len(chunk))
+		args := make([]interface{}, 0, len(chunk)*2)
+		for _, cid := range chunk {
+			if cid <= 0 {
+				continue
+			}
+			placeholders = append(placeholders, "(?, ?)")
+			args = append(args, campaignID, cid)
+		}
+		if len(placeholders) == 0 {
+			continue
+		}
 		_, err := db.Exec(
-			`INSERT INTO campaign_contacts (campaign_id, contact_id) VALUES (?, ?) ON CONFLICT DO NOTHING`,
-			campaignID, cid,
+			`INSERT INTO campaign_contacts (campaign_id, contact_id) VALUES `+strings.Join(placeholders, ",")+` ON CONFLICT DO NOTHING`,
+			args...,
 		)
 		if err != nil {
 			return err

@@ -8,8 +8,8 @@ import (
 	"emailtracker.com/model"
 )
 
-// Small chunks so processed_rows / progress % update often enough for the UI poll.
-const importChunkSize = 15
+// Small enough for frequent progress UI updates; large enough to finish big list snapshots quickly.
+const importChunkSize = 200
 
 var importWake = make(chan struct{}, 1)
 

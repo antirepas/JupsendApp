@@ -25,7 +25,7 @@ type CampaignMailboxDistribution struct {
 	HasSeats   bool
 }
 
-// CampaignMailboxDistribution builds planned (sticky) and sent counts per mailbox for a campaign.
+// GetCampaignMailboxDistribution builds planned (sticky) and sent counts per mailbox for a campaign.
 func GetCampaignMailboxDistribution(userID, campaignID int64) (CampaignMailboxDistribution, error) {
 	out := CampaignMailboxDistribution{}
 	ready, err := ListSendReadyAccountsForUser(userID)
@@ -57,8 +57,15 @@ func GetCampaignMailboxDistribution(userID, campaignID int64) (CampaignMailboxDi
 		return out, err
 	}
 	out.TotalPlan = len(contactIDs)
+
+	// One batched sticky lookup — never N× LatestSMTPAccountForContact (that 502s large lists).
+	stickyByContact, _ := latestSMTPAccountsForCampaignContacts(userID, campaignID)
+	readySet := make(map[int64]struct{}, len(ready))
+	for _, acc := range ready {
+		readySet[acc.ID] = struct{}{}
+	}
 	for _, cid := range contactIDs {
-		accID := stickySMTPAccountID(userID, cid, ready)
+		accID := stickySMTPAccountIDCached(cid, ready, readySet, stickyByContact)
 		if seat, ok := byID[accID]; ok {
 			seat.PlannedCount++
 		}
@@ -99,17 +106,82 @@ func GetCampaignMailboxDistribution(userID, campaignID int64) (CampaignMailboxDi
 	return out, nil
 }
 
+// latestSMTPAccountsForCampaignContacts returns contact_id → last sticky smtp_account_id
+// for contacts on this campaign (same sources as LatestSMTPAccountForContact, batched).
+func latestSMTPAccountsForCampaignContacts(userID, campaignID int64) (map[int64]int64, error) {
+	out := make(map[int64]int64)
+	rows, err := db.Query(`
+		SELECT DISTINCT ON (contact_id) contact_id, smtp_account_id
+		FROM (
+			SELECT es.contact_id,
+				COALESCE(es.smtp_account_id, 0) AS smtp_account_id,
+				COALESCE(es.sent_at, TIMESTAMPTZ 'epoch') AS ts,
+				es.id
+			FROM email_sends es
+			INNER JOIN campaign_contacts cc ON cc.contact_id = es.contact_id AND cc.campaign_id = ?
+			WHERE es.user_id = ? AND COALESCE(es.smtp_account_id, 0) > 0
+			  AND es.delivery_status IN ('sent', 'sending')
+			UNION ALL
+			SELECT cm.contact_id,
+				COALESCE(cm.smtp_account_id, 0),
+				cm.occurred_at,
+				cm.id
+			FROM conversation_messages cm
+			INNER JOIN campaign_contacts cc ON cc.contact_id = cm.contact_id AND cc.campaign_id = ?
+			WHERE cm.user_id = ? AND cm.direction = 'outbound'
+			  AND COALESCE(cm.smtp_account_id, 0) > 0
+			UNION ALL
+			SELECT sj.contact_id,
+				COALESCE(sj.smtp_account_id, 0),
+				COALESCE(sj.updated_at, sj.created_at),
+				sj.id
+			FROM send_jobs sj
+			INNER JOIN campaign_contacts cc ON cc.contact_id = sj.contact_id AND cc.campaign_id = ?
+			WHERE sj.user_id = ? AND sj.status IN ('sent', 'processing', 'pending')
+			  AND COALESCE(sj.smtp_account_id, 0) > 0
+		) t
+		ORDER BY contact_id, ts DESC NULLS LAST, id DESC
+	`, campaignID, userID, campaignID, userID, campaignID, userID)
+	if err != nil {
+		return out, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var contactID, smtpID int64
+		if err := rows.Scan(&contactID, &smtpID); err != nil {
+			continue
+		}
+		if smtpID > 0 {
+			out[contactID] = smtpID
+		}
+	}
+	return out, nil
+}
+
 func stickySMTPAccountID(userID, contactID int64, ready []SMTPAccount) int64 {
 	if len(ready) == 0 {
 		return 0
 	}
-	byID := make(map[int64]SMTPAccount, len(ready))
+	readySet := make(map[int64]struct{}, len(ready))
 	for _, acc := range ready {
-		byID[acc.ID] = acc
+		readySet[acc.ID] = struct{}{}
 	}
+	var sticky map[int64]int64
 	if contactID > 0 {
 		if lastID, err := LatestSMTPAccountForContact(userID, contactID); err == nil && lastID > 0 {
-			if _, ok := byID[lastID]; ok {
+			sticky = map[int64]int64{contactID: lastID}
+		}
+	}
+	return stickySMTPAccountIDCached(contactID, ready, readySet, sticky)
+}
+
+func stickySMTPAccountIDCached(contactID int64, ready []SMTPAccount, readySet map[int64]struct{}, stickyByContact map[int64]int64) int64 {
+	if len(ready) == 0 {
+		return 0
+	}
+	if contactID > 0 {
+		if lastID := stickyByContact[contactID]; lastID > 0 {
+			if _, ok := readySet[lastID]; ok {
 				return lastID
 			}
 		}

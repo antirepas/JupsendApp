@@ -264,6 +264,21 @@ func ListActiveImportJobsForUser(userID int64) ([]ImportJob, error) {
 	return out, nil
 }
 
+// HasActiveCampaignListImport reports whether a list→campaign snapshot is still running.
+func HasActiveCampaignListImport(userID, campaignID int64) bool {
+	if userID <= 0 || campaignID <= 0 {
+		return false
+	}
+	var n int
+	_ = db.QueryRow(`
+		SELECT COUNT(*) FROM import_jobs
+		WHERE user_id = ? AND campaign_id = ?
+		  AND kind = ?
+		  AND status IN ('pending', 'processing')
+	`, userID, campaignID, ImportKindCampaignListSnapshot).Scan(&n)
+	return n > 0
+}
+
 func DismissImportJob(id, userID int64) error {
 	_, err := db.Exec(`
 		UPDATE import_jobs SET finished_at = ?, updated_at = ?, message = COALESCE(NULLIF(message,''), 'Dismissed')

@@ -139,8 +139,10 @@ func loadCampaignDetailPageData(userID int64, detail model.CampaignDetail, picke
 		memberFilter.TemplateAVars = aVars
 		memberFilter.TemplateBVars = bVars
 		if memberOpts.Engagement != "missing_vars" {
-			// Count missing vars without building every row/preview.
-			data.MissingVarsCount, _ = model.CountCampaignContactsMissingVars(detail.ID, aVars, bVars, hasB)
+			// Skip full-scan count while a list snapshot is still importing (avoids proxy 502).
+			if !model.HasActiveCampaignListImport(userID, detail.ID) {
+				data.MissingVarsCount, _ = model.CountCampaignContactsMissingVars(detail.ID, aVars, bVars, hasB)
+			}
 		}
 	}
 
