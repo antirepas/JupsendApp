@@ -31,12 +31,18 @@ func TestProviderBlockSkipsAccount(t *testing.T) {
 }
 
 func TestFailoverOrWaitDelayPrefersOtherMailbox(t *testing.T) {
-	// Unit-level: capacity error classification drives wait-until-tomorrow when no alt.
+	// Unit-level: hard quota/capacity errors defer until reset; soft rate-limit phrases do not.
 	if !IsProviderDailyQuota(errors.New(`550 "5.4.5 Daily user sending limit exceeded"`)) {
 		t.Fatal("expected quota detection")
 	}
-	if !isProviderCapacityError(errors.New("rate limit exceeded")) {
+	if !isProviderCapacityError(errors.New("sending quota exceeded")) {
 		t.Fatal("expected capacity detection")
+	}
+	if isProviderCapacityError(errors.New("rate limit exceeded")) {
+		t.Fatal("generic rate limit must not park mailbox until midnight")
+	}
+	if isProviderCapacityError(errors.New("try again later")) {
+		t.Fatal("soft try-again must not park mailbox until midnight")
 	}
 }
 
