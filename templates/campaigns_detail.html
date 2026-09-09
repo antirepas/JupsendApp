@@ -221,7 +221,7 @@
             </div>
             <div>
                 <p class="font-medium text-slate-700">Body</p>
-                <div class="mt-1 p-3 bg-slate-50 rounded text-xs max-h-40 overflow-y-auto">{{.templateA.HighlightedBody}}</div>
+                <div class="mt-1 p-3 bg-slate-50 rounded text-xs max-h-40 overflow-y-auto whitespace-pre-wrap">{{.templateA.HighlightedBody}}</div>
             </div>
         </div>
         {{if gt .campaign.VariantA.Sends 0}}
@@ -245,7 +245,7 @@
             </div>
             <div>
                 <p class="font-medium text-slate-700">Body</p>
-                <div class="mt-1 p-3 bg-slate-50 rounded text-xs max-h-40 overflow-y-auto">{{.templateB.HighlightedBody}}</div>
+                <div class="mt-1 p-3 bg-slate-50 rounded text-xs max-h-40 overflow-y-auto whitespace-pre-wrap">{{.templateB.HighlightedBody}}</div>
             </div>
         </div>
         {{if gt .campaign.VariantB.Sends 0}}
@@ -395,7 +395,7 @@
             </div>
             <div>
                 <p class="font-medium text-slate-700">Body template</p>
-                <div class="mt-1 p-3 bg-slate-50 rounded text-xs max-h-40 overflow-y-auto prose prose-sm">{{.templateA.HighlightedBody}}</div>
+                <div class="mt-1 p-3 bg-slate-50 rounded text-xs max-h-40 overflow-y-auto whitespace-pre-wrap">{{.templateA.HighlightedBody}}</div>
             </div>
         </div>
         <div class="grid grid-cols-3 gap-4 mt-4 text-center border-t pt-4">
@@ -418,7 +418,7 @@
             </div>
             <div>
                 <p class="font-medium text-slate-700">Body template</p>
-                <div class="mt-1 p-3 bg-slate-50 rounded text-xs max-h-40 overflow-y-auto">{{.templateB.HighlightedBody}}</div>
+                <div class="mt-1 p-3 bg-slate-50 rounded text-xs max-h-40 overflow-y-auto whitespace-pre-wrap">{{.templateB.HighlightedBody}}</div>
             </div>
         </div>
         <div class="grid grid-cols-3 gap-4 mt-4 text-center border-t pt-4">

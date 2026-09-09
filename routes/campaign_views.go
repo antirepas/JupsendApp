@@ -3,6 +3,7 @@ package routes
 import (
 	"fmt"
 	"html"
+	htmltemplate "html/template"
 	"strings"
 
 	"emailtracker.com/model"
@@ -15,8 +16,8 @@ type TemplatePreviewView struct {
 	Subject            string
 	Body               string
 	Variables          []string
-	HighlightedSubject string
-	HighlightedBody    string
+	HighlightedSubject htmltemplate.HTML
+	HighlightedBody    htmltemplate.HTML
 }
 
 type ContactVariableCell struct {
@@ -478,16 +479,16 @@ func templatePreviewView(userID, id int64) TemplatePreviewView {
 		Body:               t.Body,
 		Variables:          vars,
 		HighlightedSubject: highlightPlaceholders(t.Subject, vars),
-		HighlightedBody:    highlightPlaceholders(t.Body, vars),
+		HighlightedBody:    highlightPlaceholders(util.HTMLToPlainPreview(t.Body), vars),
 	}
 }
 
-func highlightPlaceholders(text string, vars []string) string {
+func highlightPlaceholders(text string, vars []string) htmltemplate.HTML {
 	out := html.EscapeString(text)
 	for _, v := range vars {
 		placeholder := "{{" + v + "}}"
 		out = strings.ReplaceAll(out, html.EscapeString(placeholder),
 			"<mark class=\"bg-amber-100 text-amber-900 px-1 rounded\">"+html.EscapeString(placeholder)+"</mark>")
 	}
-	return out
+	return htmltemplate.HTML(out)
 }
