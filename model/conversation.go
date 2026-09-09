@@ -333,8 +333,8 @@ func HasInboundConversation(userID, contactID int64) bool {
 }
 
 // LatestSMTPAccountForContact returns the mailbox used for the most recent outbound
-// to this contact. Prefers successful / in-flight sends and conversation history so
-// follow-ups stay sticky even before MarkEmailSendSent commits.
+// to this contact. Only delivered / in-flight sends and conversation history count —
+// pending queue pins must not lock a contact onto a seat before the first real send.
 func LatestSMTPAccountForContact(userID, contactID int64) (int64, error) {
 	var id int64
 	err := db.QueryRow(`
@@ -352,13 +352,40 @@ func LatestSMTPAccountForContact(userID, contactID int64) (int64, error) {
 			UNION ALL
 			SELECT COALESCE(smtp_account_id, 0), COALESCE(updated_at, created_at), id
 			FROM send_jobs
-			WHERE user_id = ? AND contact_id = ? AND status IN ('sent', 'processing', 'pending')
+			WHERE user_id = ? AND contact_id = ? AND status IN ('sent', 'processing')
 			  AND COALESCE(smtp_account_id, 0) > 0
 		) t
 		ORDER BY ts DESC NULLS LAST, id DESC
 		LIMIT 1
 	`, userID, contactID, userID, contactID, userID, contactID).Scan(&id)
 	return id, err
+}
+
+// ContactHasDeliveredOutbound reports whether this contact has already received mail
+// from us (sticky From must be preserved). Queued-only history does not count.
+func ContactHasDeliveredOutbound(userID, contactID int64) bool {
+	if userID <= 0 || contactID <= 0 {
+		return false
+	}
+	var n int
+	_ = db.QueryRow(`
+		SELECT COUNT(*) FROM (
+			SELECT 1 FROM email_sends
+			WHERE user_id = ? AND contact_id = ? AND delivery_status = 'sent'
+			LIMIT 1
+		) s
+	`, userID, contactID).Scan(&n)
+	if n > 0 {
+		return true
+	}
+	_ = db.QueryRow(`
+		SELECT COUNT(*) FROM (
+			SELECT 1 FROM conversation_messages
+			WHERE user_id = ? AND contact_id = ? AND direction = 'outbound'
+			LIMIT 1
+		) m
+	`, userID, contactID).Scan(&n)
+	return n > 0
 }
 
 func (m ConversationMessage) DisplayHTML() htmltemplate.HTML {

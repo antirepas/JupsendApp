@@ -39,6 +39,13 @@ func EffectiveDailyCapWithInsights(account model.SMTPAccount, analyticsJSON stri
 	_ = model.EnsureWarmupStartedAt(&account)
 	schedule := scheduleDailyCap(account)
 	cap, _ := ApplyInsightsToCap(schedule, account, analyticsJSON)
+	if cap < 1 {
+		// Never treat a ready mailbox as 0/day — that parked the queue until midnight forever.
+		if account.DailyLimit > 0 {
+			return account.DailyLimit
+		}
+		return model.DefaultWarmupDailyCap
+	}
 	return cap
 }
 

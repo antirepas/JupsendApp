@@ -122,6 +122,9 @@
                     <span class="badge badge-gray" title="{{.DeliveryError}}">Cancelled</span>
                     {{else if eq .DeliveryStatus "queued"}}
                     <span class="badge badge-amber" title="{{.DeliveryError}}">Queued</span>
+                    {{if .DeliveryError}}
+                    <p class="text-xs text-amber-800 mt-1 max-w-[14rem] leading-snug" title="{{.DeliveryError}}">{{.DeliveryError}}</p>
+                    {{end}}
                     {{else if eq .DeliveryStatus "sending"}}
                     <span class="badge badge-amber">Sending</span>
                     {{else if eq .DeliveryStatus "failed"}}

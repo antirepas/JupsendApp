@@ -45,6 +45,8 @@ func StartWorker() {
 }
 
 func runWorkerBatch() {
+	nudgeDeferredJobsWithCapacity()
+
 	jobs := claimPendingJobs()
 	if len(jobs) == 0 {
 		return
@@ -64,6 +66,29 @@ func runWorkerBatch() {
 	wg.Wait()
 }
 
+// nudgeDeferredJobsWithCapacity pulls jobs scheduled far ahead (e.g. "retry tomorrow")
+// back into the ready queue when their sticky mailbox can send again.
+func nudgeDeferredJobsWithCapacity() {
+	ids, err := model.DeferredPendingSendJobIDs(time.Now().Add(2*time.Minute), 40)
+	if err != nil || len(ids) == 0 {
+		return
+	}
+	for _, jobID := range ids {
+		job, err := model.GetSendJob(jobID)
+		if err != nil || job.Status != "pending" {
+			continue
+		}
+		account, err := ResolveAccountForJob(job)
+		if err != nil {
+			continue
+		}
+		if !AccountCanSendNowForJob(account, job) {
+			continue
+		}
+		_ = model.RescheduleSendJob(job.ID, time.Now(), "mailbox has capacity again")
+	}
+}
+
 func runClaimedJob(item claimedJob) {
 	mu := userMutex(item.job.UserID)
 	mu.Lock()
@@ -75,10 +100,11 @@ func runClaimedJob(item claimedJob) {
 		failJobConfiguration(item.job, err)
 		return
 	}
-	if item.job.SMTPAccountID == 0 && account.ID > 0 {
-		_ = model.PinSendJobSMTPAccount(item.job.ID, account.ID)
+	if account.ID > 0 && account.ID != item.job.SMTPAccountID {
+		_ = model.RepinSendJobSMTPAccount(item.job.ID, account.ID)
+		item.job.SMTPAccountID = account.ID
 		if item.job.EmailSendID > 0 {
-			_ = model.PinEmailSendSMTPAccount(item.job.EmailSendID, account.ID)
+			_ = model.RepinEmailSendSMTPAccount(item.job.EmailSendID, account.ID)
 		}
 	}
 
@@ -92,7 +118,7 @@ func runClaimedJob(item claimedJob) {
 		if delay < time.Second {
 			delay = time.Second
 		}
-		_ = model.RescheduleSendJob(job.ID, time.Now().Add(delay), "rate limited: waiting for account capacity")
+		_ = model.RescheduleSendJob(job.ID, time.Now().Add(delay), rateLimitReason(account, job))
 		return
 	}
 
@@ -164,7 +190,7 @@ func claimPendingJobs() []claimedJob {
 			if delay < time.Second {
 				delay = time.Second
 			}
-			_ = model.RescheduleSendJob(job.ID, time.Now().Add(delay), "rate limited: waiting for account capacity")
+			_ = model.RescheduleSendJob(job.ID, time.Now().Add(delay), rateLimitReason(account, job))
 			continue
 		}
 
@@ -184,11 +210,11 @@ func claimPendingJobs() []claimedJob {
 			failJobConfiguration(job, err)
 			continue
 		}
-		if job.SMTPAccountID == 0 && account.ID > 0 {
-			_ = model.PinSendJobSMTPAccount(job.ID, account.ID)
+		if account.ID > 0 && account.ID != job.SMTPAccountID {
+			_ = model.RepinSendJobSMTPAccount(job.ID, account.ID)
 			job.SMTPAccountID = account.ID
 			if job.EmailSendID > 0 {
-				_ = model.PinEmailSendSMTPAccount(job.EmailSendID, account.ID)
+				_ = model.RepinEmailSendSMTPAccount(job.EmailSendID, account.ID)
 			}
 		}
 

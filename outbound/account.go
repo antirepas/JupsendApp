@@ -12,9 +12,9 @@ func resolveSendAccount(userID int64) (model.SMTPAccount, error) {
 }
 
 // ResolveSendAccountForContact picks a sticky mailbox for a contact:
-// 1) last SMTP used for that contact — always return that seat when still owned/active
-//    (even if at cap / filtered out of the ready set; caller reschedules — never switch From)
-// 2) for first-touch contacts: stable hash across seats that can send now
+// 1) last SMTP actually delivered / in-flight for that contact — keep From identity
+//    (even if at cap; caller reschedules — never switch From after the recipient saw it)
+// 2) for first-touch / unsent contacts: stable hash across seats that can send now
 // 3) fallback default ready seat
 func ResolveSendAccountForContact(userID, contactID int64) (model.SMTPAccount, error) {
 	ready, err := model.ListSendReadyAccountsForUser(userID)
@@ -69,18 +69,58 @@ func ResolveSendAccountForContact(userID, contactID int64) (model.SMTPAccount, e
 }
 
 // ResolveAccountForJob prefers a mailbox already pinned on the job, then sticky contact routing.
+// If the pin cannot send yet and this contact has never received mail from us, rebalance to
+// another seat with capacity (combined daily headroom is real; unsent pins must not waste it).
 func ResolveAccountForJob(job model.SendJob) (model.SMTPAccount, error) {
 	if job.SMTPAccountID > 0 {
 		acc, err := model.GetSMTPAccount(job.SMTPAccountID)
 		if err == nil && acc.UserID == job.UserID && acc.Status == "active" {
 			_ = model.EnsureDailyCounterReset(acc.ID)
 			if fresh, fErr := model.GetSMTPAccount(acc.ID); fErr == nil {
-				return fresh, nil
+				acc = fresh
+			}
+			if AccountCanSendNowForJob(acc, job) {
+				return acc, nil
+			}
+			// Already delivered from this (or any) From — keep sticky and wait.
+			if model.ContactHasDeliveredOutbound(job.UserID, job.ContactID) {
+				return acc, nil
+			}
+			// Unsent: try another seat with capacity.
+			if alt, aErr := pickReadyAccountForContact(job.UserID, job.ContactID, acc.ID); aErr == nil && alt.ID > 0 && alt.ID != acc.ID {
+				return alt, nil
 			}
 			return acc, nil
 		}
 	}
 	return ResolveSendAccountForContact(job.UserID, job.ContactID)
+}
+
+func pickReadyAccountForContact(userID, contactID, excludeID int64) (model.SMTPAccount, error) {
+	ready, err := model.ListSendReadyAccountsForUser(userID)
+	if err != nil {
+		return model.SMTPAccount{}, err
+	}
+	if len(ready) == 0 {
+		return model.SMTPAccount{}, fmt.Errorf("no ready sending mailbox")
+	}
+	start := 0
+	if contactID > 0 {
+		start = int(contactID % int64(len(ready)))
+		if start < 0 {
+			start = 0
+		}
+	}
+	for i := 0; i < len(ready); i++ {
+		acc := ready[(start+i)%len(ready)]
+		if excludeID > 0 && acc.ID == excludeID {
+			continue
+		}
+		if AccountCanSendNow(acc) {
+			return acc, nil
+		}
+	}
+	return model.SMTPAccount{}, fmt.Errorf("no mailbox with capacity")
 }
 
 // StickyAccountForContact returns the planned mailbox for a contact without rate-limit filtering

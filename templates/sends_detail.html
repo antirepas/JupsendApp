@@ -52,6 +52,9 @@
         {{if eq .send.DeliveryStatus "queued"}}
         <span class="badge badge-amber">Queued</span>
         <p class="text-xs text-slate-500 mt-2">Waiting to send. It has not reached the recipient yet.</p>
+        {{if .send.DeliveryError}}
+        <p class="text-xs text-amber-800 mt-2">{{.send.DeliveryError}}</p>
+        {{end}}
         {{else if eq .send.DeliveryStatus "sending"}}
         <span class="badge badge-amber">Sending</span>
         <p class="text-xs text-slate-500 mt-2">Your mail server is accepting this message now.</p>

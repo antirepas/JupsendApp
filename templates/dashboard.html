@@ -53,7 +53,7 @@
         <ul class="dash-plan-value-list">
             <li>
                 <span class="dash-plan-value-num">{{.plan.DailyEmails}}</span>
-                <span class="dash-plan-value-desc">emails / day{{if eq .plan.Tier "pro"}} per mailbox{{end}}</span>
+                <span class="dash-plan-value-desc">emails / day{{if eq .plan.Tier "pro"}} per mailbox when fully warmed{{end}}</span>
             </li>
             {{if eq .plan.Tier "pro"}}
             <li>
@@ -378,9 +378,12 @@
         <div>
             <h3 class="card-title mb-0">Sending warmup</h3>
             <p class="text-sm text-gray-500 mt-1">
-                {{if .CombinedLabel}}{{.CombinedLabel}}{{else if .SenderEmail}}{{.SenderEmail}}{{else}}Sending account{{end}}{{if and .Enabled (not .IsFullyWarmed)}} · +{{.IncrementPerDay}}/day until {{.TargetCap}}/day{{else if not .Enabled}} · fixed {{.TodayCap}}/day cap{{end}}
+                {{if .CombinedLabel}}{{.CombinedLabel}}{{else if .SenderEmail}}{{.SenderEmail}}{{else}}Sending account{{end}}{{if and .Enabled (not .IsFullyWarmed)}} · ramping +{{.IncrementPerDay}}/day toward {{.TargetCap}}/day combined{{else if not .Enabled}} · fixed {{.TodayCap}}/day cap{{end}}
                 {{if gt .MailboxCount 1}} · <a href="/mailboxes" class="text-brand-600 font-medium">Manage seats</a>{{end}}
             </p>
+            {{if and .Enabled (not .IsFullyWarmed)}}
+            <p class="text-xs text-amber-800 mt-2">Today’s real send room is <strong>{{.TodayRemaining}}</strong> across seats (warmup), not the full plan max yet.</p>
+            {{end}}
         </div>
         <div class="warmup-panel-actions">
             {{if .IsFullyWarmed}}

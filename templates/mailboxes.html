@@ -75,7 +75,10 @@
     Today across ready seats:
     <strong>{{.combinedWarmup.SendsToday}} / {{.combinedWarmup.TodayCap}}</strong>
     {{if gt .combinedWarmup.MailboxCount 1}}({{.combinedWarmup.MailboxCount}} mailboxes){{end}}
-    {{if ge .combinedWarmup.TodayRemaining 1}} · {{.combinedWarmup.TodayRemaining}} remaining{{end}}
+    {{if ge .combinedWarmup.TodayRemaining 1}} · {{.combinedWarmup.TodayRemaining}} remaining today{{end}}
+    {{if and .combinedWarmup.Enabled (not .combinedWarmup.IsFullyWarmed)}}
+    <span class="block text-xs text-amber-800 mt-1">Warmup limits today’s volume below the full plan max ({{.combinedWarmup.TargetCap}}/day when fully warmed).</span>
+    {{end}}
   </p>
   {{end}}
 

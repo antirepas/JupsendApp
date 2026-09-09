@@ -117,6 +117,15 @@ func PinEmailSendSMTPAccount(sendID, accountID int64) error {
 	return err
 }
 
+// RepinEmailSendSMTPAccount updates the mailbox pin on a queued send (unsent rebalance).
+func RepinEmailSendSMTPAccount(sendID, accountID int64) error {
+	if sendID <= 0 || accountID <= 0 {
+		return nil
+	}
+	_, err := db.Exec(`UPDATE email_sends SET smtp_account_id=? WHERE id=?`, accountID, sendID)
+	return err
+}
+
 func SaveEmailSendRenderedContent(sendID int64, subject, html, text string) error {
 	if len(html) > MaxConversationBody {
 		html = html[:MaxConversationBody]

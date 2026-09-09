@@ -1,6 +1,7 @@
 package outbound
 
 import (
+	"strconv"
 	"sync"
 	"time"
 
@@ -25,6 +26,32 @@ func accountUnderDailyCap(account model.SMTPAccount) bool {
 	analytics := model.GetMailboxAnalyticsBySMTPAccountID(account.ID)
 	cap := EffectiveDailyCapWithInsights(account, analytics)
 	return account.SendsToday < cap
+}
+
+func rateLimitReason(account model.SMTPAccount, job model.SendJob) string {
+	if job.Priority >= PriorityManual {
+		return "rate limited: waiting for send slot"
+	}
+	if IsAccountProviderBlocked(account.ID) {
+		return "mailbox provider limit; retry after reset"
+	}
+	resetDailyIfNeeded(&account)
+	analytics := model.GetMailboxAnalyticsBySMTPAccountID(account.ID)
+	cap := EffectiveDailyCapWithInsights(account, analytics)
+	if account.SendsToday >= cap {
+		return "mailbox daily/warmup cap reached (" +
+			strconv.Itoa(account.SendsToday) + "/" + strconv.Itoa(cap) + "); resumes after midnight"
+	}
+	if !accountUnderMinuteLimit(account) {
+		return "rate limited: per-minute mailbox limit"
+	}
+	if !accountSpacingOK(account) {
+		return "rate limited: waiting between sends"
+	}
+	if account.Status != "active" {
+		return "mailbox not active"
+	}
+	return "rate limited: waiting for mailbox capacity"
 }
 
 func recordMinuteSend(accountID int64) {

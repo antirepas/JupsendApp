@@ -302,10 +302,16 @@ func isProviderCapacityError(err error) bool {
 		return false
 	}
 	msg := strings.ToLower(err.Error())
+	// Keep this narrow — soft "try again later" / generic "rate limit" must not
+	// park the whole sticky mailbox until midnight.
 	patterns := []string{
-		"rate limit", "too many messages", "too many emails",
-		"sending quota", "quota exceeded", "try again later",
+		"too many messages",
+		"too many emails",
+		"sending quota",
+		"quota exceeded",
 		"4.2.1",
+		"daily sending limit",
+		"daily user sending limit",
 	}
 	for _, p := range patterns {
 		if strings.Contains(msg, p) {

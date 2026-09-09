@@ -137,7 +137,7 @@ func latestSMTPAccountsForCampaignContacts(userID, campaignID int64) (map[int64]
 				sj.id
 			FROM send_jobs sj
 			INNER JOIN campaign_contacts cc ON cc.contact_id = sj.contact_id AND cc.campaign_id = ?
-			WHERE sj.user_id = ? AND sj.status IN ('sent', 'processing', 'pending')
+			WHERE sj.user_id = ? AND sj.status IN ('sent', 'processing')
 			  AND COALESCE(sj.smtp_account_id, 0) > 0
 		) t
 		ORDER BY contact_id, ts DESC NULLS LAST, id DESC

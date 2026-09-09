@@ -246,6 +246,58 @@ func TestResolveAccountForJobUsesPinnedSMTP(t *testing.T) {
 	}
 }
 
+func TestResolveAccountForJobRebalancesUnsentWhenPinnedOverCap(t *testing.T) {
+	db.OpenTestDB(t)
+	userID, err := model.CreateUser(fmt.Sprintf("rebal-%d@test.com", time.Now().UnixNano()), "hash", "http://localhost")
+	if err != nil {
+		t.Fatal(err)
+	}
+	idA, err := model.UpsertInboxKitSMTPAccount(userID, "rebal-a@example.com", "smtp.gmail.com", "587", "rebal-a@example.com", "pass-aaaa-aaaa-aaaa", "A", "ik-rebal-a", true, 5, "imap.gmail.com", "993")
+	if err != nil {
+		t.Fatal(err)
+	}
+	idB, err := model.UpsertInboxKitSMTPAccount(userID, "rebal-b@example.com", "smtp.gmail.com", "587", "rebal-b@example.com", "pass-bbbb-bbbb-bbbb", "B", "ik-rebal-b", false, 100, "imap.gmail.com", "993")
+	if err != nil {
+		t.Fatal(err)
+	}
+	today := time.Now().Format("2006-01-02")
+	if _, err := db.Exec(`UPDATE smtp_accounts SET warmup_enabled = 0, sends_today_reset_at = ? WHERE id IN (?, ?)`, today, idA, idB); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`UPDATE smtp_accounts SET sends_today = 5, daily_limit = 5 WHERE id = ?`, idA); err != nil {
+		t.Fatal(err)
+	}
+	c := model.Contact{Email: "rebal@lead.com"}
+	contactID, err := c.SaveContact(userID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Pinned to A, never delivered — must move to B when A is at cap.
+	job := model.SendJob{UserID: userID, ContactID: contactID, SMTPAccountID: idA}
+	acc, err := ResolveAccountForJob(job)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if acc.ID != idB {
+		t.Fatalf("expected rebalance to B (%d), got %d", idB, acc.ID)
+	}
+
+	// After a real send from A, must stay on A even over cap.
+	if _, err := db.Exec(`
+		INSERT INTO email_sends (user_id, contact_id, template_id, tracking_id, smtp_account_id, delivery_status, sent_at)
+		VALUES (?, ?, 0, ?, ?, 'sent', NOW())
+	`, userID, contactID, fmt.Sprintf("rebal-sent-%d", time.Now().UnixNano()), idA); err != nil {
+		t.Fatal(err)
+	}
+	acc2, err := ResolveAccountForJob(job)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if acc2.ID != idA {
+		t.Fatalf("expected sticky A after delivery (%d), got %d", idA, acc2.ID)
+	}
+}
+
 func TestComputeCombinedWarmupProgress(t *testing.T) {
 	empty := ComputeCombinedWarmupProgress(nil)
 	if empty.HasAccount {

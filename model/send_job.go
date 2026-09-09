@@ -145,6 +145,17 @@ func PinSendJobSMTPAccount(jobID, accountID int64) error {
 	return err
 }
 
+// RepinSendJobSMTPAccount updates the mailbox pin (used when rebalancing unsent jobs).
+func RepinSendJobSMTPAccount(jobID, accountID int64) error {
+	if jobID <= 0 || accountID <= 0 {
+		return nil
+	}
+	_, err := db.Exec(`
+		UPDATE send_jobs SET smtp_account_id=?, updated_at=? WHERE id=?
+	`, accountID, time.Now(), jobID)
+	return err
+}
+
 func ClaimSendJob(jobID int64, lockToken string, lockDuration time.Duration) (bool, error) {
 	now := time.Now()
 	exp := now.Add(lockDuration)
@@ -328,6 +339,32 @@ func PendingSendJobIDs(limit int) ([]int64, error) {
 		ORDER BY priority DESC, scheduled_at ASC
 		LIMIT ?
 	`, time.Now(), limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
+}
+
+// DeferredPendingSendJobIDs returns pending jobs scheduled after `after` (e.g. waiting until midnight).
+func DeferredPendingSendJobIDs(after time.Time, limit int) ([]int64, error) {
+	if limit < 1 {
+		limit = 50
+	}
+	rows, err := db.Query(`
+		SELECT id FROM send_jobs
+		WHERE status='pending' AND scheduled_at > ?
+		ORDER BY scheduled_at ASC
+		LIMIT ?
+	`, after, limit)
 	if err != nil {
 		return nil, err
 	}
