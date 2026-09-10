@@ -145,16 +145,40 @@
         return keys;
     }
 
-    function defaultForKey(key) {
-        if (sampleValues[key] !== undefined) return sampleValues[key];
-        if (defaultSample[key] !== undefined) return defaultSample[key];
-        const lower = key.toLowerCase();
+    function lookupSampleValue(map, key) {
+        if (!map || key == null) return undefined;
+        if (Object.prototype.hasOwnProperty.call(map, key)) return map[key];
+        const lower = String(key).toLowerCase();
+        for (const k of Object.keys(map)) {
+            if (k.toLowerCase() === lower) return map[k];
+        }
+        return undefined;
+    }
+
+    // Demo-only placeholders when no contact is selected. Never invent these for a real contact —
+    // that made AI preview look fine while send used an empty DB value ("is building .").
+    function demoDefaultForKey(key) {
+        const lower = String(key || '').toLowerCase();
         if (lower === 'description') {
             return 'We sell probate leads to real estate investors and agents.';
         }
         if (lower === 'founder') return 'Jane';
         if (lower === 'companyname' || lower === 'company') return 'Acme Corp';
+        if (lower === 'name') return 'Alex';
         return key.charAt(0).toUpperCase() + key.slice(1).replace(/_/g, ' ');
+    }
+
+    function usingRealContact() {
+        return !!(previewContactSelect && previewContactSelect.value);
+    }
+
+    function valueForPreviewKey(key) {
+        const fromSample = lookupSampleValue(sampleValues, key);
+        if (fromSample !== undefined) return fromSample;
+        if (usingRealContact()) return '';
+        const fromDefault = lookupSampleValue(defaultSample, key);
+        if (fromDefault !== undefined) return fromDefault;
+        return demoDefaultForKey(key);
     }
 
     function renderChips(keys) {
@@ -240,8 +264,11 @@
             return;
         }
         allKeys.forEach((key) => {
-            if (sampleValues[key] === undefined) {
-                sampleValues[key] = defaultForKey(key);
+            if (lookupSampleValue(sampleValues, key) === undefined) {
+                sampleValues[key] = usingRealContact() ? '' : valueForPreviewKey(key);
+            } else if (!Object.prototype.hasOwnProperty.call(sampleValues, key)) {
+                // Normalize contact key casing to the template variable name.
+                sampleValues[key] = lookupSampleValue(sampleValues, key);
             }
             const wrap = document.createElement('div');
             wrap.className = 'template-sample-field';
@@ -251,8 +278,12 @@
             const input = document.createElement('input');
             input.type = 'text';
             input.className = 'form-input text-sm';
-            input.value = sampleValues[key];
+            input.value = sampleValues[key] || '';
             input.dataset.varKey = key;
+            if (usingRealContact() && !String(input.value || '').trim()) {
+                input.classList.add('border-amber-400');
+                input.placeholder = 'Missing on this contact — will not send';
+            }
             input.addEventListener('input', () => {
                 sampleValues[key] = input.value;
                 schedulePreview();
@@ -308,11 +339,12 @@
         const keys = extractVariables();
         const sample = {};
         keys.forEach((k) => {
-            sample[k] = sampleValues[k] !== undefined ? sampleValues[k] : defaultForKey(k);
+            sample[k] = valueForPreviewKey(k);
         });
         const useAI = previewUseAI && previewUseAI.checked;
-        if (!useAI) {
-            showPreviewAINotice('');
+        const notices = [];
+        if (!usingRealContact() && keys.length > 0) {
+            notices.push('Using demo sample data — pick a real contact to see what will actually send.');
         }
         try {
             const res = await fetch('/templates/preview', {
@@ -327,28 +359,29 @@
                 }),
             });
             if (!res.ok) {
-                if (useAI) {
-                    let detail = 'Preview request failed (' + res.status + ').';
-                    try {
-                        const errData = await res.json();
-                        if (errData.error) detail = errData.error;
-                    } catch (_) { /* ignore */ }
-                    showPreviewAINotice(detail);
-                }
+                let detail = 'Preview request failed (' + res.status + ').';
+                try {
+                    const errData = await res.json();
+                    if (errData.error) detail = errData.error;
+                } catch (_) { /* ignore */ }
+                showPreviewAINotice(detail);
                 return;
             }
             const data = await res.json();
             if (previewSubject) previewSubject.textContent = data.subject || '(no subject)';
             if (previewFrame) previewFrame.srcdoc = data.body_html || '';
+            if (Array.isArray(data.missing_required) && data.missing_required.length > 0) {
+                notices.push(
+                    'Missing required data for: ' + data.missing_required.join(', ') +
+                    ' — this email would not send as written.'
+                );
+            }
             if (useAI && Array.isArray(data.ai_warnings) && data.ai_warnings.length > 0) {
-                showPreviewAINotice(data.ai_warnings.join(' '));
-            } else if (useAI) {
-                showPreviewAINotice('');
+                notices.push(data.ai_warnings.join(' '));
             }
+            showPreviewAINotice(notices.join(' '));
         } catch (_) {
-            if (useAI) {
-                showPreviewAINotice('Could not reach the preview service.');
-            }
+            showPreviewAINotice('Could not reach the preview service.');
         }
     }
 
@@ -768,8 +801,14 @@
     function applyPreviewContactSample() {
         const usedKeys = extractVariables();
         if (previewContactSample) {
+            // Rebuild from the contact only — do not keep prior demo placeholders.
+            Object.keys(sampleValues).forEach((k) => delete sampleValues[k]);
+            usedKeys.forEach((key) => {
+                const v = lookupSampleValue(previewContactSample, key);
+                sampleValues[key] = v !== undefined ? v : '';
+            });
             Object.keys(previewContactSample).forEach((k) => {
-                if (isValidVarKey(k)) {
+                if (isValidVarKey(k) && lookupSampleValue(sampleValues, k) === undefined) {
                     sampleValues[k] = previewContactSample[k];
                 }
             });

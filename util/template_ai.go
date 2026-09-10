@@ -34,20 +34,23 @@ func chargeAICredit(userID int64, consume AICreditConsumer) {
 // ApplyAIFilters runs fit and summarize filters. Falls back on error or no credits.
 func ApplyAIFilters(ctx context.Context, value string, ref VarRef, fullText string, tokenPos int, userID int64, consume AICreditConsumer, creditsCheck func(userID int64) bool, warnings *[]string) string {
 	if userID <= 0 || !ai.Enabled() {
-		if warnings != nil && ref.AIFit {
+		if warnings != nil && wantsAIFit(ref) {
 			*warnings = append(*warnings, "AI is not configured on the server.")
 		}
-		return value
+		return deterministicAIFallback(value, ref)
 	}
 	if strings.TrimSpace(value) == "" {
 		return value
 	}
 	result := value
+	ranSummarize := false
 	for _, f := range ref.Filters {
 		if f.Name == "summarize" {
+			ranSummarize = true
 			if !aiCreditsAvailable(userID, creditsCheck) {
 				log.Printf("template ai: credits exhausted for user %d", userID)
 				appendAIWarning(warnings, "AI credits exhausted — summarize skipped for "+ref.Name+".")
+				result = filterTruncate(result, f.Arg)
 				continue
 			}
 			maxWords := SummarizeWordCount(f.Arg)
@@ -55,18 +58,21 @@ func ApplyAIFilters(ctx context.Context, value string, ref VarRef, fullText stri
 			if err != nil {
 				log.Printf("template ai summarize user=%d: %v", userID, err)
 				appendAIWarning(warnings, fmt.Sprintf("Summarize failed for %s: %v", ref.Name, err))
+				result = filterTruncate(result, f.Arg)
 				continue
 			}
 			out = strings.TrimSpace(out)
 			if out == "" {
 				appendAIWarning(warnings, fmt.Sprintf("Summarize returned empty text for %s.", ref.Name))
+				result = filterTruncate(result, f.Arg)
 				continue
 			}
 			chargeAICredit(userID, consume)
 			result = out
 		}
 	}
-	if ref.AIFit {
+	// {{~name|summarize}} means summarize only. Fit runs for {{~name}} or explicit |fit.
+	if wantsAIFit(ref) && !(ranSummarize && !hasFilterNamed(ref.Filters, "fit")) {
 		if !aiCreditsAvailable(userID, creditsCheck) {
 			log.Printf("template ai: credits exhausted for user %d", userID)
 			appendAIWarning(warnings, "AI credits exhausted — could not fit "+ref.Name+".")
@@ -88,6 +94,33 @@ func ApplyAIFilters(ctx context.Context, value string, ref VarRef, fullText stri
 		}
 		chargeAICredit(userID, consume)
 		result = out
+	}
+	return result
+}
+
+// wantsAIFit is true for {{~name}} or |fit. Summarize-only tokens do not imply fit.
+func wantsAIFit(ref VarRef) bool {
+	if hasFilterNamed(ref.Filters, "fit") {
+		return true
+	}
+	return ref.AIFit && !hasFilterNamed(ref.Filters, "summarize")
+}
+
+func hasFilterNamed(filters []Filter, name string) bool {
+	for _, f := range filters {
+		if f.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func deterministicAIFallback(value string, ref VarRef) string {
+	result := value
+	for _, f := range ref.Filters {
+		if f.Name == "summarize" {
+			result = filterTruncate(result, f.Arg)
+		}
 	}
 	return result
 }

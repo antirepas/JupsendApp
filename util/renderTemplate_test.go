@@ -174,3 +174,110 @@ type mockAI struct{ out string }
 func (m *mockAI) Complete(ctx context.Context, system, user string) (string, error) {
 	return m.out, nil
 }
+
+type spyAI struct {
+	out        string
+	lastSystem string
+	calls      int
+}
+
+func (m *spyAI) Complete(ctx context.Context, system, user string) (string, error) {
+	m.calls++
+	m.lastSystem = system
+	return m.out, nil
+}
+
+func TestRenderTemplateTildeSummarizeDoesNotFit(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "test-key")
+	config.Reload()
+
+	spy := &spyAI{out: "digital marketing for local brands"}
+	ai.SetDefaultCompleter(spy)
+	oldConsume := DefaultAICreditConsumer
+	DefaultAICreditConsumer = func(userID int64) bool { return true }
+	defer func() {
+		ai.SetDefaultCompleter(ai.DefaultCompleter)
+		DefaultAICreditConsumer = oldConsume
+	}()
+
+	// ~ alone used to also trigger fit after summarize, which often emptied "is building ___".
+	tpl := `Saw {{company}} is building {{~description|summarize:10}}.`
+	res, err := RenderTemplate(tpl, vars(map[string]string{
+		"company":     "Heyday Marketing",
+		"description": "Heyday Marketing is a full-service digital agency helping local brands grow with SEO, paid ads, and creative campaigns across the southeast.",
+	}), RenderOptions{
+		UserID:         1,
+		BodyMode:       true,
+		Ctx:            context.Background(),
+		AICreditsCheck: func(userID int64) bool { return true },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if spy.calls != 1 {
+		t.Fatalf("expected 1 AI call (summarize only), got %d", spy.calls)
+	}
+	if !strings.Contains(spy.lastSystem, "Summarize") {
+		t.Fatalf("expected summarize system prompt, got %q", spy.lastSystem)
+	}
+	if strings.Contains(spy.lastSystem, "Fit the contact") {
+		t.Fatalf("must not run fit after summarize: %q", spy.lastSystem)
+	}
+	if !strings.Contains(res.Text, "digital marketing for local brands") {
+		t.Fatalf("got %q", res.Text)
+	}
+	if strings.Contains(res.Text, "is building .") {
+		t.Fatalf("blank AI slot: %q", res.Text)
+	}
+	if len(res.MissingRequired) != 0 {
+		t.Fatalf("unexpected missing: %v", res.MissingRequired)
+	}
+}
+
+func TestRenderTemplateEmptyAIVarIsMissing(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "test-key")
+	config.Reload()
+
+	tpl := `Saw {{company}} is building {{~description|summarize:10}}.`
+	res, err := RenderTemplate(tpl, vars(map[string]string{
+		"company": "Heyday Marketing",
+		// description absent → blank "is building ." must not send
+	}), RenderOptions{
+		UserID:         1,
+		BodyMode:       true,
+		Ctx:            context.Background(),
+		AICreditsCheck: func(userID int64) bool { return true },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.MissingRequired) == 0 {
+		t.Fatalf("expected missing AI/description var, text=%q", res.Text)
+	}
+}
+
+func TestRenderTemplateSummarizeFallbackTruncates(t *testing.T) {
+	// No API key → AI disabled; summarize should still truncate, not leave raw novel-length text empty-fitted.
+	t.Setenv("OPENAI_API_KEY", "")
+	config.Reload()
+
+	long := "Heyday Marketing is a full-service digital agency helping local brands grow with SEO paid ads and creative campaigns across the southeast United States every day."
+	tpl := `Saw {{company}} is building {{description|summarize:8}}.`
+	res, err := RenderTemplate(tpl, vars(map[string]string{
+		"company":     "Heyday Marketing",
+		"description": long,
+	}), RenderOptions{BodyMode: true, Ctx: context.Background()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(res.Text, "is building .") {
+		t.Fatalf("blank slot: %q", res.Text)
+	}
+	if !strings.Contains(res.Text, "is building") {
+		t.Fatalf("got %q", res.Text)
+	}
+	// Truncated to ~8 words, not the full description.
+	if strings.Contains(res.Text, "United States every day") {
+		t.Fatalf("expected truncate fallback, got full text: %q", res.Text)
+	}
+}

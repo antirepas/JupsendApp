@@ -124,6 +124,14 @@ func RenderTemplate(tBody string, contactVars []model.ContactVariables, opts Ren
 
 		if runAI && !ref.Mailbox && (ref.AIFit || hasFilter(ref.Filters, "summarize")) {
 			value = ApplyAIFilters(opts.Ctx, value, ref, text, ref.TokenPos, opts.UserID, opts.ConsumeAI, opts.AICreditsCheck, opts.AIWarnings)
+		} else if !runAI && !ref.Mailbox && hasFilter(ref.Filters, "summarize") {
+			// No AI at send/preview — still shorten long descriptions so copy isn't blank or huge.
+			value = deterministicAIFallback(value, ref)
+		}
+
+		// AI/summarize slots must not send blank ("is building .") — treat as required.
+		if !ref.Mailbox && (ref.AIFit || hasFilter(ref.Filters, "summarize")) && isEmptyValue(value) {
+			missing = append(missing, ref.Name)
 		}
 
 		if !opts.BodyMode {
