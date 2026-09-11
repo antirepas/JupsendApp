@@ -70,7 +70,7 @@ func playbookMailboxes() PagePlaybook {
 		Intro:     "Your sender reputation is the foundation of outreach.",
 		GuideHref: "/guides/mailboxes",
 		Bullets: []string{
-			"Free uses a shared seat; Pro uses your domain and included mailboxes.",
+			"Free uses a shared seat; Pro uses your own domain and mailboxes (bought as add-ons).",
 			"Use real From names on seats; warm new domains slowly.",
 			"Stay on domain status until seats are ready, then test SMTP.",
 			"Google sign-in is for account login — sending is configured here.",

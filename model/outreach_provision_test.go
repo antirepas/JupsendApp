@@ -18,9 +18,13 @@ func TestCountActiveIncludedDomainsQuota(t *testing.T) {
 		t.Fatal(err)
 	}
 	left, err := IncludedDomainQuotaRemaining(userID)
-	if err != nil || left != 1 {
-		t.Fatalf("left=%d err=%v", left, err)
+	if err != nil || left != 0 {
+		t.Fatalf("left=%d err=%v (Pro includes no free domains)", left, err)
 	}
+	if err := assertIncludedDomainQuota(userID); err == nil {
+		t.Fatal("expected quota error when no included domains")
+	}
+	// Legacy included rows still count toward the (zero) quota.
 	if _, err := CreateOutreachDomain(userID, "one.example", "ord-1", "http://localhost", true); err != nil {
 		t.Fatal(err)
 	}
@@ -30,10 +34,7 @@ func TestCountActiveIncludedDomainsQuota(t *testing.T) {
 	}
 	left, err = IncludedDomainQuotaRemaining(userID)
 	if err != nil || left != 0 {
-		t.Fatalf("left after claim=%d err=%v", left, err)
-	}
-	if err := assertIncludedDomainQuota(userID); err == nil {
-		t.Fatal("expected quota error")
+		t.Fatalf("left after legacy claim=%d err=%v", left, err)
 	}
 }
 
@@ -68,7 +69,16 @@ func TestPlaceStarterDomainOrderIdempotentAndQuota(t *testing.T) {
 	}
 	specs := []StarterMailboxSpec{{FirstName: "Ada", LastName: "Lovelace", LocalPart: "ada"}}
 
-	id1, oid1, err := PlaceStarterDomainOrder(userID, "acme-test.com", specs, true)
+	// Included path is no longer offered on Pro (quota is 0).
+	_, _, err = PlaceStarterDomainOrder(userID, "acme-test.com", specs, true)
+	if err == nil || !strings.Contains(err.Error(), "does not include a free domain") {
+		t.Fatalf("expected included quota error, got %v", err)
+	}
+	if calls != 0 {
+		t.Fatalf("included path must not CreateOrder, calls=%d", calls)
+	}
+
+	id1, oid1, err := PlaceStarterDomainOrder(userID, "acme-test.com", specs, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +89,7 @@ func TestPlaceStarterDomainOrderIdempotentAndQuota(t *testing.T) {
 		t.Fatalf("calls=%d", calls)
 	}
 
-	id2, oid2, err := PlaceStarterDomainOrder(userID, "acme-test.com", specs, true)
+	id2, oid2, err := PlaceStarterDomainOrder(userID, "acme-test.com", specs, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,15 +100,7 @@ func TestPlaceStarterDomainOrderIdempotentAndQuota(t *testing.T) {
 		t.Fatalf("second call should not CreateOrder, calls=%d", calls)
 	}
 
-	_, _, err = PlaceStarterDomainOrder(userID, "other-test.com", specs, true)
-	if err == nil || !strings.Contains(err.Error(), "already includes one domain") {
-		t.Fatalf("expected quota error, got %v", err)
-	}
-	if calls != 1 {
-		t.Fatalf("quota path must not CreateOrder, calls=%d", calls)
-	}
-
-	// Paid add-on path (included=false) is allowed.
+	// Another paid domain is allowed.
 	createInboxKitOrder = func(req inboxkit.CreateOrderRequest) (inboxkit.CreateOrderResponse, error) {
 		calls++
 		return inboxkit.CreateOrderResponse{OrderID: "order-paid", Status: "processing"}, nil
@@ -194,7 +196,7 @@ func TestPlaceStarterDomainOrderRequiresRegistrant(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, _, err = PlaceStarterDomainOrder(userID, "noreg.com", []StarterMailboxSpec{{FirstName: "A", LastName: "B", LocalPart: "a"}}, true)
+	_, _, err = PlaceStarterDomainOrder(userID, "noreg.com", []StarterMailboxSpec{{FirstName: "A", LastName: "B", LocalPart: "a"}}, false)
 	if err == nil || !strings.Contains(err.Error(), "registration contact") {
 		t.Fatalf("expected registrant error, got %v", err)
 	}

@@ -9,8 +9,8 @@
 <div class="max-w-3xl mx-auto p-8">
   <h2 class="text-2xl font-bold text-charcoal mb-2">Set up your outreach domain</h2>
   <p class="text-gray-500 text-sm mb-6">
-    Connect a domain you already own, or search for a new one. Your plan includes
-    {{.includedCount}} starter mailbox{{if ne .includedCount 1}}es{{end}}.
+    Connect a domain you already own, or buy a new one with starter mailboxes.
+    Domains and seats are paid add-ons (not included with Pro).
     First and last name become the <strong>From</strong> name recipients see — enter real names.
   </p>
 
@@ -24,13 +24,6 @@
 
   {{if not .inboxkitOK}}
   <div class="alert-error mb-6">{{if .inboxkitHint}}{{.inboxkitHint}}{{else}}InboxKit is not configured on this server. Set INBOXKIT_API_KEY and INBOXKIT_WORKSPACE_ID.{{end}} You can still attach SMTP/IMAP credentials under Mailboxes.{{if .supportEmail}} Email <a class="underline font-medium" href="mailto:{{.supportEmail}}">{{.supportEmail}}</a> if you need this fixed.{{end}}</div>
-  {{end}}
-
-  {{if and (le .includedLeft 0) (not .pendingDomain)}}
-  <div class="alert-error mb-6">
-    Your included domain slot is already used. Continue setup from Mailboxes, or buy an extra domain there.
-    {{if .supportEmail}} Questions? Email <a class="underline font-medium" href="mailto:{{.supportEmail}}">{{.supportEmail}}</a>.{{end}}
-  </div>
   {{end}}
 
   {{if .pendingDomain}}
@@ -49,7 +42,7 @@
     <p class="text-sm text-gray-600">Enter your domain and the people behind each mailbox. We’ll provision seats; you’ll point nameservers at InboxKit (no domain purchase). Use a dedicated outreach domain with <strong>no existing DNS records</strong> (no website, MX, or other records) — InboxKit will manage DNS after you switch nameservers.</p>
     <div>
       <label class="form-label">Domain</label>
-      <input name="domain" class="form-input" value="{{.connectDomain}}" placeholder="yourcompany.com" required {{if or (not .inboxkitOK) (le .includedLeft 0)}}disabled{{end}}>
+      <input name="domain" class="form-input" value="{{.connectDomain}}" placeholder="yourcompany.com" required {{if not .inboxkitOK}}disabled{{end}}>
     </div>
     <div class="space-y-4">
       {{range $i, $n := .mailboxSlots}}
@@ -58,39 +51,39 @@
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
             <label class="form-label">First name</label>
-            <input name="first_name_{{$n}}" class="form-input" {{if eq $n 1}}required{{end}} placeholder="First" {{if or (not $.inboxkitOK) (le $.includedLeft 0)}}disabled{{end}}>
+            <input name="first_name_{{$n}}" class="form-input" {{if eq $n 1}}required{{end}} placeholder="First" {{if not $.inboxkitOK}}disabled{{end}}>
           </div>
           <div>
             <label class="form-label">Last name</label>
-            <input name="last_name_{{$n}}" class="form-input" {{if eq $n 1}}required{{end}} placeholder="Last" {{if or (not $.inboxkitOK) (le $.includedLeft 0)}}disabled{{end}}>
+            <input name="last_name_{{$n}}" class="form-input" {{if eq $n 1}}required{{end}} placeholder="Last" {{if not $.inboxkitOK}}disabled{{end}}>
           </div>
           <div>
             <label class="form-label">Email local part</label>
-            <input name="local_{{$n}}" class="form-input" {{if eq $n 1}}required{{end}} placeholder="name" {{if or (not $.inboxkitOK) (le $.includedLeft 0)}}disabled{{end}}>
+            <input name="local_{{$n}}" class="form-input" {{if eq $n 1}}required{{end}} placeholder="name" {{if not $.inboxkitOK}}disabled{{end}}>
           </div>
         </div>
         {{if eq $n 1}}<p class="text-xs text-gray-500">Sends as First Last &lt;local@domain&gt;</p>{{end}}
       </div>
       {{end}}
     </div>
-    <button type="submit" class="btn-primary" {{if or (not .inboxkitOK) (le .includedLeft 0)}}disabled{{end}}>Connect domain</button>
+    <button type="submit" class="btn-primary" {{if not .inboxkitOK}}disabled{{end}}>Connect domain</button>
   </form>
 
   <form method="POST" action="/onboarding/domain/search" class="card space-y-4 mb-6">
-    <h3 class="card-title">Or find a new domain</h3>
+    <h3 class="card-title">Or buy a new domain</h3>
     <div>
       <label class="form-label">Company or keyword</label>
-      <input name="q" class="form-input" value="{{.query}}" placeholder="acme, or acme.com" {{if or (not .inboxkitOK) (le .includedLeft 0)}}disabled{{end}}>
+      <input name="q" class="form-input" value="{{.query}}" placeholder="acme, or acme.com" {{if not .inboxkitOK}}disabled{{end}}>
       <p class="form-hint mt-1">Available endings: .com, .net, .org, .shop</p>
     </div>
-    <button type="submit" class="btn-secondary" {{if or (not .inboxkitOK) (le .includedLeft 0)}}disabled{{end}}>Search domains</button>
+    <button type="submit" class="btn-secondary" {{if not .inboxkitOK}}disabled{{end}}>Search domains</button>
   </form>
 
   {{if .results}}
   <form method="POST" action="/onboarding/domain/purchase" class="space-y-6">
     <div class="card space-y-4">
       <h3 class="card-title">Available domains</h3>
-      <p class="text-sm text-gray-600">Select a domain, then name the people behind each mailbox.</p>
+      <p class="text-sm text-gray-600">Select a domain, then name the people behind each mailbox.{{if .whopOK}} You’ll complete payment via Whop.{{end}}</p>
       <div class="space-y-2">
         {{range .results}}
         <label class="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:bg-ivory cursor-pointer">
@@ -105,7 +98,7 @@
 
     <div class="card space-y-4">
       <h3 class="card-title">Mailbox people</h3>
-      <p class="text-sm text-gray-600">First + last name are the From display name. Local part is the address before @. Up to {{.includedCount}} included.</p>
+      <p class="text-sm text-gray-600">First + last name are the From display name. Local part is the address before @. Up to {{.seatSlots}} seats in this order.</p>
       {{range $i, $n := .mailboxSlots}}
       <div class="rounded-lg border border-gray-200 p-4 space-y-3">
         <p class="text-sm font-medium">Mailbox {{$n}}{{if gt $n 1}} <span class="text-gray-400 font-normal">(optional)</span>{{end}}</p>
@@ -116,7 +109,7 @@
         </div>
       </div>
       {{end}}
-      <button type="submit" class="btn-primary">Buy &amp; set up (included)</button>
+      <button type="submit" class="btn-primary">{{if .whopOK}}Buy &amp; set up{{else}}Order domain{{end}}</button>
     </div>
   </form>
   {{else if .searched}}

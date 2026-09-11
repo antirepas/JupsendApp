@@ -166,7 +166,7 @@ func Dashboard(ctx *gin.Context) {
 		steps[0].Hint = "Domain & mailboxes set up"
 		if !mailboxReady {
 			steps[0].Href = "/onboarding/domain"
-			steps[0].Hint = "Set up your domain & included mailboxes"
+			steps[0].Hint = "Buy or connect your domain & mailboxes"
 		}
 	}
 	stepsLeft := 0

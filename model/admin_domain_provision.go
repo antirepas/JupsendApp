@@ -45,16 +45,13 @@ func AdminConnectDomainWithMailboxes(userID int64, domain string, specs []Starte
 	if gErr == nil {
 		domainID = existing.ID
 	} else {
-		if qErr := assertIncludedDomainQuota(userID); qErr != nil {
-			return 0, "", qErr
-		}
-		domainID, err = CreateOutreachDomain(userID, domain, "", redirect, true)
+		domainID, err = CreateOutreachDomain(userID, domain, "", redirect, false)
 		if err != nil {
 			return 0, "", err
 		}
 	}
 
-	if mbErr := ensureStarterMailboxRows(userID, domainID, mboxes, platform, true); mbErr != nil {
+	if mbErr := ensureStarterMailboxRows(userID, domainID, mboxes, platform, false); mbErr != nil {
 		return domainID, "", fmt.Errorf("save mailbox rows: %w", mbErr)
 	}
 

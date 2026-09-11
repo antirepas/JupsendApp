@@ -193,7 +193,7 @@ func queueStarterDomainOrder(userID int64, domain string, specs []StarterMailbox
 				`, userID, domainID).Scan(&older)
 				if older > 0 {
 					_ = DeleteOutreachDomain(domainID, userID)
-					return 0, "", fmt.Errorf("your plan already includes one domain — buy an extra domain from Mailboxes, or continue setup for your existing domain")
+					return 0, "", fmt.Errorf("Pro does not include a free domain — buy a domain from Mailboxes")
 				}
 			}
 		}
@@ -209,7 +209,7 @@ func queueStarterDomainOrder(userID int64, domain string, specs []StarterMailbox
 	}
 	kind := "domain + mailboxes (buy)"
 	if included {
-		kind = "included Pro domain + mailboxes"
+		kind = "legacy included domain + mailboxes"
 	}
 	fireProvisionQueued(userID, kind, domain, emails)
 	return domainID, orderID, nil
@@ -235,34 +235,14 @@ func queueConnectDomainOrder(userID int64, domain string, specs []StarterMailbox
 			return existing.ID, oid, existing.Nameservers(), nil
 		}
 	}
-	if qErr := assertIncludedDomainQuota(userID); qErr != nil {
-		return 0, "", nil, qErr
-	}
 
 	orderID = manualConnectOrderPrefix + fmt.Sprintf("%d-%d", userID, time.Now().UnixNano())
-	domainID, err = CreateOutreachDomain(userID, domain, orderID, redirect, true)
+	domainID, err = CreateOutreachDomain(userID, domain, orderID, redirect, false)
 	if err != nil {
 		return 0, "", nil, err
 	}
-	if nActive, cErr := CountActiveIncludedDomains(userID); cErr == nil {
-		spec, _ := PlanSpecForTier(PlanTierPro)
-		if nActive > spec.IncludedDomains {
-			var older int64
-			_ = db.QueryRow(`
-				SELECT id FROM outreach_domains
-				WHERE user_id=? AND included=TRUE
-				  AND lower(status) NOT IN ('error','cancelled','canceled')
-				  AND id < ?
-				ORDER BY id ASC LIMIT 1
-			`, userID, domainID).Scan(&older)
-			if older > 0 {
-				_ = DeleteOutreachDomain(domainID, userID)
-				return 0, "", nil, fmt.Errorf("your plan already includes one domain — buy an extra domain from Mailboxes, or continue setup for your existing domain")
-			}
-		}
-	}
 	_ = UpdateOutreachDomainStatus(domainID, "pending_manual", orderID)
-	if mbErr := ensureStarterMailboxRows(userID, domainID, mboxes, platform, true); mbErr != nil {
+	if mbErr := ensureStarterMailboxRows(userID, domainID, mboxes, platform, false); mbErr != nil {
 		_ = SetOutreachDomainError(domainID, "pending_manual", "Mailbox rows failed to save: "+mbErr.Error())
 		return domainID, orderID, nil, fmt.Errorf("queued but mailbox setup incomplete: %w", mbErr)
 	}

@@ -56,8 +56,9 @@ func PlanSpecForTier(tier PlanTier) (planSpec, error) {
 			WarmupIncrementPerDay:  DefaultWarmupIncrementPerDay,
 			PerMinuteLimit:         2,
 			MinSecondsBetweenSends: 30,
-			IncludedDomains:        1,
-			IncludedMailboxes:      config.InboxKitIncludedMailboxCount(),
+			// Domains and mailboxes are paid add-ons — not included with Pro.
+			IncludedDomains:   0,
+			IncludedMailboxes: 0,
 		}, nil
 	default:
 		return planSpec{}, fmt.Errorf("unknown plan tier %q", tier)

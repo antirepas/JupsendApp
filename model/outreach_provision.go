@@ -51,7 +51,7 @@ func assertIncludedDomainQuota(userID int64) error {
 		return err
 	}
 	if left <= 0 {
-		return fmt.Errorf("your plan already includes one domain — buy an extra domain from Mailboxes, or continue setup for your existing domain")
+		return fmt.Errorf("Pro does not include a free domain — buy a domain from Mailboxes, or connect your own domain and purchase mailboxes")
 	}
 	return nil
 }
@@ -187,7 +187,7 @@ func PlaceStarterDomainOrder(userID int64, domain string, specs []StarterMailbox
 				`, userID, domainID).Scan(&older)
 				if older > 0 {
 					_ = DeleteOutreachDomain(domainID, userID)
-					return 0, "", fmt.Errorf("your plan already includes one domain — buy an extra domain from Mailboxes, or continue setup for your existing domain")
+					return 0, "", fmt.Errorf("Pro does not include a free domain — buy a domain from Mailboxes")
 				}
 			}
 		}
@@ -272,12 +272,6 @@ func PlaceConnectExistingDomainOrder(userID int64, domain string, specs []Starte
 		}
 	}
 
-	if _, gErr := GetOutreachDomainByName(userID, domain); gErr != nil {
-		if qErr := assertIncludedDomainQuota(userID); qErr != nil {
-			return 0, "", nil, qErr
-		}
-	}
-
 	ns, err := connectInboxKitNameservers(domain)
 	if err != nil {
 		return 0, "", nil, fmt.Errorf("connect domain: %w", err)
@@ -285,32 +279,16 @@ func PlaceConnectExistingDomainOrder(userID int64, domain string, specs []Starte
 	nameservers = ns.Nameservers
 	orderID = inboxkit.ConnectOrderID(ns.UID, domain)
 
-	domainID, err = CreateOutreachDomain(userID, domain, orderID, redirect, true)
+	// Connect is never an included Pro perk — seats are paid when provisioned.
+	domainID, err = CreateOutreachDomain(userID, domain, orderID, redirect, false)
 	if err != nil {
 		return 0, orderID, nameservers, err
-	}
-	if nActive, cErr := CountActiveIncludedDomains(userID); cErr == nil {
-		spec, _ := PlanSpecForTier(PlanTierPro)
-		if nActive > spec.IncludedDomains {
-			var older int64
-			_ = db.QueryRow(`
-				SELECT id FROM outreach_domains
-				WHERE user_id=? AND included=TRUE
-				  AND lower(status) NOT IN ('error','cancelled','canceled')
-				  AND id < ?
-				ORDER BY id ASC LIMIT 1
-			`, userID, domainID).Scan(&older)
-			if older > 0 {
-				_ = DeleteOutreachDomain(domainID, userID)
-				return 0, "", nameservers, fmt.Errorf("your plan already includes one domain — buy an extra domain from Mailboxes, or continue setup for your existing domain")
-			}
-		}
 	}
 	_ = UpdateOutreachDomainStatus(domainID, "connecting", orderID)
 	if len(nameservers) > 0 {
 		_ = SetOutreachDomainNameservers(domainID, nameservers)
 	}
-	if mbErr := ensureStarterMailboxRows(userID, domainID, mboxes, platform, true); mbErr != nil {
+	if mbErr := ensureStarterMailboxRows(userID, domainID, mboxes, platform, false); mbErr != nil {
 		_ = SetOutreachDomainError(domainID, "connecting", "Mailbox rows failed to save: "+mbErr.Error())
 		return domainID, orderID, nameservers, fmt.Errorf("domain connected but mailbox setup incomplete: %w", mbErr)
 	}

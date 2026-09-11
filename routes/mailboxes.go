@@ -106,10 +106,11 @@ func OnboardingDomainPage(c *gin.Context) {
 		"user":          user,
 		"inboxkitOK":    inboxkit.Configured(),
 		"inboxkitHint":  inboxHint,
-		"includedCount": config.InboxKitIncludedMailboxCount(),
+		"seatSlots":     config.InboxKitIncludedMailboxCount(),
 		"mailboxSlots":  mailboxSlotNums(config.InboxKitIncludedMailboxCount()),
 		"pendingDomain": pending,
 		"includedLeft":  quotaLeft,
+		"whopOK":        config.WhopDomainAddonID != "" && whop.IsConfigured(),
 		"supportEmail":  config.SupportEmail,
 		"error":         humanizeInboxKitError(c.Query("error")),
 		"success":       c.Query("success"),
@@ -134,7 +135,7 @@ func humanizeInboxKitError(raw string) string {
 	lower := strings.ToLower(raw)
 	var msg string
 	switch {
-	case strings.Contains(lower, "already includes one domain"):
+	case strings.Contains(lower, "does not include a free domain") || strings.Contains(lower, "already includes one domain"):
 		msg = raw
 	case strings.Contains(lower, "invalid workspace"):
 		msg = "InboxKit rejected the workspace ID. In the InboxKit dashboard open Settings → Workspaces, copy the workspace UUID (not the team name), and set INBOXKIT_WORKSPACE_ID to that value, then restart the app."
@@ -212,19 +213,18 @@ func OnboardingDomainSearch(c *gin.Context) {
 		return
 	}
 	user, _ := model.GetUserByID(userID)
-	quotaLeft, _ := model.IncludedDomainQuotaRemaining(userID)
 	c.HTML(http.StatusOK, "onboarding_domain.html", gin.H{
-		"title":         "Set up outreach domain",
-		"active":        "mailboxes",
-		"user":          user,
-		"inboxkitOK":    true,
-		"includedCount": config.InboxKitIncludedMailboxCount(),
-		"mailboxSlots":  mailboxSlotNums(config.InboxKitIncludedMailboxCount()),
-		"includedLeft":  quotaLeft,
-		"supportEmail":  config.SupportEmail,
-		"query":         q,
-		"results":       results,
-		"searched":      true,
+		"title":        "Set up outreach domain",
+		"active":       "mailboxes",
+		"user":         user,
+		"inboxkitOK":   true,
+		"seatSlots":    config.InboxKitIncludedMailboxCount(),
+		"mailboxSlots": mailboxSlotNums(config.InboxKitIncludedMailboxCount()),
+		"whopOK":       config.WhopDomainAddonID != "" && whop.IsConfigured(),
+		"supportEmail": config.SupportEmail,
+		"query":        q,
+		"results":      results,
+		"searched":     true,
 	})
 }
 
@@ -266,13 +266,37 @@ func OnboardingDomainPurchase(c *gin.Context) {
 		c.Redirect(http.StatusFound, onboardingDomainErrorURL(err.Error(), domain))
 		return
 	}
-	domainID, orderID, err := model.PlaceStarterDomainOrder(userID, domain, specs, true)
+	// Domains are paid add-ons — same checkout path as Mailboxes → Buy domain.
+	payload, _ := json.Marshal(model.DomainPurchasePayload{Kind: "domain", Domain: domain, Mailboxes: specs})
+	purchaseID, err := model.CreateMailboxPurchase(userID, 0, len(specs), string(payload))
 	if err != nil {
 		c.Redirect(http.StatusFound, onboardingDomainErrorURL(err.Error(), domain))
 		return
 	}
-	_ = orderID
-	c.Redirect(http.StatusFound, "/onboarding/domain/status?domain_id="+strconv.FormatInt(domainID, 10))
+	if config.WhopDomainAddonID == "" || !whop.IsConfigured() {
+		if err := FulfillDomainPurchase(purchaseID); err != nil {
+			c.Redirect(http.StatusFound, onboardingDomainErrorURL(err.Error(), domain))
+			return
+		}
+		if d, dErr := model.GetOutreachDomainByName(userID, domain); dErr == nil {
+			c.Redirect(http.StatusFound, "/onboarding/domain/status?domain_id="+strconv.FormatInt(d.ID, 10))
+			return
+		}
+		c.Redirect(http.StatusFound, "/mailboxes?success="+url.QueryEscape("Domain ordered"))
+		return
+	}
+	returnURL := strings.TrimRight(config.BaseURL, "/") + "/mailboxes?domain_purchase_id=" + strconv.FormatInt(purchaseID, 10)
+	checkoutURL, err := whop.CreateCheckoutWithPlanID(userID, config.WhopDomainAddonID, returnURL, map[string]string{
+		"user_id":            strconv.FormatInt(userID, 10),
+		"domain_purchase_id": strconv.FormatInt(purchaseID, 10),
+		"purpose":            "domain_addon",
+	})
+	if err != nil {
+		c.Redirect(http.StatusFound, onboardingDomainErrorURL(err.Error(), domain))
+		return
+	}
+	_ = model.UpdateMailboxPurchase(purchaseID, "pending_payment", checkoutURL, "", "")
+	c.Redirect(http.StatusFound, checkoutURL)
 }
 
 func OnboardingDomainConnect(c *gin.Context) {
