@@ -10,18 +10,17 @@
   <div class="flex flex-wrap items-start justify-between gap-4 mb-6">
     <div>
       <h2 class="text-2xl font-bold text-charcoal mb-1">Mailboxes</h2>
-      <p class="text-gray-500 text-sm">{{if .isPro}}Manage your email mailboxes and sender reputation.{{else}}Free plan uses a shared sending address. Upgrade to Pro for your own domain and mailboxes.{{end}}</p>
+      <p class="text-gray-500 text-sm">{{if .isPro}}Buy seats from jupsend, or add domains and credentials you already own.{{else}}Free plan uses a shared sending address. Upgrade to Pro for your own domain and mailboxes.{{end}}</p>
     </div>
+    {{if .isPro}}
     <div class="flex flex-wrap gap-2">
-      {{if .isPro}}
-        <a href="/mailboxes/buy" class="btn-primary">+ Buy Mailboxes</a>
-        <a href="/onboarding/domain?new=1" class="btn-secondary">Connect domain</a>
-        <a href="/mailboxes/domains/buy" class="btn-secondary">Buy domain</a>
-        <a href="/mailboxes?attach=1" class="btn-secondary">Add external</a>
-      {{else}}
-        <a href="/settings/billing" class="btn-primary">Upgrade to Pro</a>
-      {{end}}
+      <a href="/onboarding/domain?new=1" class="btn-primary">Buy or add</a>
+      <a href="/mailboxes/buy" class="btn-secondary">Buy mailboxes</a>
+      <a href="/mailboxes?attach=1" class="btn-secondary">Add external</a>
     </div>
+    {{else}}
+    <a href="/settings/billing" class="btn-primary">Upgrade to Pro</a>
+    {{end}}
   </div>
 
   {{if .success}}<div class="alert-success mb-6">{{.success}}</div>{{end}}
@@ -177,13 +176,51 @@
       </table>
     </div>
     {{else}}
-    <div class="px-6 py-12 text-center text-sm text-gray-600">
-      No mailboxes yet.
-      <a href="/onboarding/domain?new=1" class="text-brand-600 font-medium">Set up a domain</a>
-      or
-      <a href="/mailboxes/domains/buy" class="text-brand-600 font-medium">buy a domain</a>,
-      or
-      <a href="/mailboxes?attach=1" class="text-brand-600 font-medium">attach SMTP/IMAP</a>.
+    <div class="px-6 py-10">
+      <div class="setup-empty border-0 bg-transparent p-0">
+        <div class="setup-empty-title">Nothing to send from yet</div>
+        <p class="setup-empty-copy">Buy from jupsend, or add what you already own.</p>
+        <div class="setup-split max-w-3xl mx-auto text-left mt-4">
+          <div class="setup-split-col">
+            <h2>Buy</h2>
+            <a class="setup-choice" href="/mailboxes/domains/buy">
+              <span class="setup-choice-icon is-buy" aria-hidden="true">+</span>
+              <span>
+                <strong>Buy a domain</strong>
+                <p>Register a new outreach domain and starter seats.</p>
+                <span class="setup-choice-tag is-buy">Paid</span>
+              </span>
+            </a>
+            <a class="setup-choice" href="/mailboxes/buy">
+              <span class="setup-choice-icon is-buy" aria-hidden="true">+</span>
+              <span>
+                <strong>Buy mailboxes</strong>
+                <p>Extra seats on a domain that’s already ready.</p>
+                <span class="setup-choice-tag is-buy">Paid</span>
+              </span>
+            </a>
+          </div>
+          <div class="setup-split-col">
+            <h2>Add</h2>
+            <a class="setup-choice" href="/onboarding/domain?path=add-domain&amp;new=1">
+              <span class="setup-choice-icon" aria-hidden="true">↗</span>
+              <span>
+                <strong>Add a domain</strong>
+                <p>Link a domain you own with DNS records.</p>
+                <span class="setup-choice-tag">DNS</span>
+              </span>
+            </a>
+            <a class="setup-choice" href="/mailboxes?attach=1">
+              <span class="setup-choice-icon" aria-hidden="true">↗</span>
+              <span>
+                <strong>Add external mailbox</strong>
+                <p>SMTP/IMAP credentials you already have.</p>
+                <span class="setup-choice-tag">Your credentials</span>
+              </span>
+            </a>
+          </div>
+        </div>
+      </div>
     </div>
     {{end}}
   </div>
@@ -192,8 +229,8 @@
   <form method="POST" action="/mailboxes/attach" class="card space-y-4 mt-6" id="attach-external">
     <div class="flex items-start justify-between gap-3">
       <div>
-        <h3 class="card-title">Add external mailbox (SMTP / IMAP)</h3>
-        <p class="text-sm text-gray-600 mt-1">Use credentials from Google Workspace, Microsoft 365, or another provider. IMAP enables bounce and reply tracking.</p>
+        <h3 class="card-title mb-1">Add external mailbox</h3>
+        <p class="text-sm text-gray-600 mt-1">Not a jupsend purchase — paste SMTP/IMAP from Google Workspace, Microsoft 365, or another provider.</p>
       </div>
       <a href="/mailboxes" class="text-sm text-gray-500 hover:text-charcoal">Close</a>
     </div>

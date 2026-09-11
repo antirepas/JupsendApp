@@ -6,76 +6,105 @@
 <div class="flex h-full">
 {{template "sidebar" .}}
 <main class="flex-1 overflow-y-auto">
-<div class="max-w-xl mx-auto p-8">
-  <h2 class="text-2xl font-bold text-charcoal mb-2">Buy more mailboxes</h2>
-  <p class="text-gray-500 text-sm mb-6">Add seats on a ready outreach domain. First and last name become the From name recipients see.{{if .whopOK}} You’ll complete payment via Whop.{{else}} Seats are provisioned on your InboxKit wallet immediately.{{end}}</p>
+<div class="setup-shell p-6 sm:p-8">
+  <div class="setup-hero">
+    <div class="setup-kicker">Buy · paid add-on</div>
+    <h1 class="setup-title">Buy mailboxes</h1>
+    <p class="setup-lead">Purchase extra seats on a ready jupsend domain. To use credentials you already have, <a class="text-brand-600 font-medium" href="/mailboxes?attach=1">add an external mailbox</a> instead.{{if .whopOK}} Checkout is via Whop.{{end}}</p>
+  </div>
 
   {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
 
   {{if .domains}}
-  <form method="POST" action="/mailboxes/buy/checkout" class="card space-y-4" id="buy-mailboxes-form">
-    <div>
-      <label class="form-label">Domain</label>
-      <select name="domain_id" class="form-input" required>
-        {{range .domains}}
-        <option value="{{.ID}}">{{.Domain}}</option>
-        {{end}}
-      </select>
-    </div>
-    <div>
-      <label class="form-label">Quantity</label>
-      <input name="quantity" id="buy-qty" type="number" class="form-input" min="1" max="5" value="1" required>
-    </div>
-    <div class="space-y-4" id="buy-slots">
-      <div class="buy-slot rounded-lg border border-gray-200 p-3 space-y-2" data-slot="1">
-        <p class="text-sm font-medium">Mailbox 1</p>
-        <div class="grid grid-cols-1 gap-2">
-          <input name="first_name_1" class="form-input" required placeholder="First name">
-          <input name="last_name_1" class="form-input" required placeholder="Last name">
-          <input name="local_1" class="form-input" required placeholder="local part (e.g. sales)">
-        </div>
+  <form method="POST" action="/mailboxes/buy/checkout" class="setup-card" id="buy-mailboxes-form">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
+      <div>
+        <label class="form-label">Domain</label>
+        <select name="domain_id" id="buy-domain" class="form-input" required>
+          {{range .domains}}
+          <option value="{{.ID}}" data-domain="{{.Domain}}">{{.Domain}}</option>
+          {{end}}
+        </select>
       </div>
-      <div class="buy-slot rounded-lg border border-gray-200 p-3 space-y-2 hidden" data-slot="2">
-        <p class="text-sm font-medium">Mailbox 2</p>
-        <div class="grid grid-cols-1 gap-2">
-          <input name="first_name_2" class="form-input" placeholder="First name">
-          <input name="last_name_2" class="form-input" placeholder="Last name">
-          <input name="local_2" class="form-input" placeholder="local part">
-        </div>
-      </div>
-      <div class="buy-slot rounded-lg border border-gray-200 p-3 space-y-2 hidden" data-slot="3">
-        <p class="text-sm font-medium">Mailbox 3</p>
-        <div class="grid grid-cols-1 gap-2">
-          <input name="first_name_3" class="form-input" placeholder="First name">
-          <input name="last_name_3" class="form-input" placeholder="Last name">
-          <input name="local_3" class="form-input" placeholder="local part">
-        </div>
-      </div>
-      <div class="buy-slot rounded-lg border border-gray-200 p-3 space-y-2 hidden" data-slot="4">
-        <p class="text-sm font-medium">Mailbox 4</p>
-        <div class="grid grid-cols-1 gap-2">
-          <input name="first_name_4" class="form-input" placeholder="First name">
-          <input name="last_name_4" class="form-input" placeholder="Last name">
-          <input name="local_4" class="form-input" placeholder="local part">
-        </div>
-      </div>
-      <div class="buy-slot rounded-lg border border-gray-200 p-3 space-y-2 hidden" data-slot="5">
-        <p class="text-sm font-medium">Mailbox 5</p>
-        <div class="grid grid-cols-1 gap-2">
-          <input name="first_name_5" class="form-input" placeholder="First name">
-          <input name="last_name_5" class="form-input" placeholder="Last name">
-          <input name="local_5" class="form-input" placeholder="local part">
-        </div>
+      <div>
+        <label class="form-label">How many seats?</label>
+        <input name="quantity" id="buy-qty" type="number" class="form-input" min="1" max="5" value="1" required>
       </div>
     </div>
-    <button type="submit" class="btn-primary w-full justify-center" id="buy-submit">{{if .whopOK}}Continue to checkout{{else}}Provision mailboxes{{end}}</button>
-    <a href="/mailboxes" class="btn-secondary inline-flex w-full justify-center">Cancel</a>
+
+    <div class="space-y-1" id="buy-slots">
+      <div class="buy-slot setup-seat" data-slot="1">
+        <div class="setup-seat-top"><span class="setup-seat-label">Mailbox 1</span></div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <input name="first_name_1" class="form-input seat-first" required placeholder="First name">
+          <input name="last_name_1" class="form-input seat-last" required placeholder="Last name">
+          <input name="local_1" class="form-input seat-local" required placeholder="local part">
+        </div>
+        <div class="setup-preview"><span class="setup-preview-label">Sends as</span><span class="setup-preview-value seat-preview">First Last &lt;local@domain&gt;</span></div>
+      </div>
+      <div class="buy-slot setup-seat hidden" data-slot="2">
+        <div class="setup-seat-top"><span class="setup-seat-label">Mailbox 2</span></div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <input name="first_name_2" class="form-input seat-first" placeholder="First name">
+          <input name="last_name_2" class="form-input seat-last" placeholder="Last name">
+          <input name="local_2" class="form-input seat-local" placeholder="local part">
+        </div>
+        <div class="setup-preview"><span class="setup-preview-label">Sends as</span><span class="setup-preview-value seat-preview">First Last &lt;local@domain&gt;</span></div>
+      </div>
+      <div class="buy-slot setup-seat hidden" data-slot="3">
+        <div class="setup-seat-top"><span class="setup-seat-label">Mailbox 3</span></div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <input name="first_name_3" class="form-input seat-first" placeholder="First name">
+          <input name="last_name_3" class="form-input seat-last" placeholder="Last name">
+          <input name="local_3" class="form-input seat-local" placeholder="local part">
+        </div>
+        <div class="setup-preview"><span class="setup-preview-label">Sends as</span><span class="setup-preview-value seat-preview">First Last &lt;local@domain&gt;</span></div>
+      </div>
+      <div class="buy-slot setup-seat hidden" data-slot="4">
+        <div class="setup-seat-top"><span class="setup-seat-label">Mailbox 4</span></div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <input name="first_name_4" class="form-input seat-first" placeholder="First name">
+          <input name="last_name_4" class="form-input seat-last" placeholder="Last name">
+          <input name="local_4" class="form-input seat-local" placeholder="local part">
+        </div>
+        <div class="setup-preview"><span class="setup-preview-label">Sends as</span><span class="setup-preview-value seat-preview">First Last &lt;local@domain&gt;</span></div>
+      </div>
+      <div class="buy-slot setup-seat hidden" data-slot="5">
+        <div class="setup-seat-top"><span class="setup-seat-label">Mailbox 5</span></div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <input name="first_name_5" class="form-input seat-first" placeholder="First name">
+          <input name="last_name_5" class="form-input seat-last" placeholder="Last name">
+          <input name="local_5" class="form-input seat-local" placeholder="local part">
+        </div>
+        <div class="setup-preview"><span class="setup-preview-label">Sends as</span><span class="setup-preview-value seat-preview">First Last &lt;local@domain&gt;</span></div>
+      </div>
+    </div>
+
+    <div class="setup-actions">
+      <button type="submit" class="btn-primary" id="buy-submit">{{if .whopOK}}Continue to checkout{{else}}Provision mailboxes{{end}}</button>
+      <a href="/mailboxes" class="btn-secondary">Cancel</a>
+    </div>
   </form>
   <script>
   (function () {
     var qty = document.getElementById('buy-qty');
     var form = document.getElementById('buy-mailboxes-form');
     var submit = document.getElementById('buy-submit');
+    var domainSelect = document.getElementById('buy-domain');
+    function domainName() {
+      var opt = domainSelect && domainSelect.options[domainSelect.selectedIndex];
+      return (opt && opt.getAttribute('data-domain')) || 'domain.com';
+    }
+    function refreshPreviews() {
+      var domain = domainName();
+      document.querySelectorAll('.buy-slot').forEach(function (slot) {
+        var first = (slot.querySelector('.seat-first') || {}).value || 'First';
+        var last = (slot.querySelector('.seat-last') || {}).value || 'Last';
+        var local = (slot.querySelector('.seat-local') || {}).value || 'local';
+        var preview = slot.querySelector('.seat-preview');
+        if (preview) preview.textContent = first.trim() + ' ' + last.trim() + ' <' + local.trim().toLowerCase() + '@' + domain + '>';
+      });
+    }
     function syncSlots() {
       var n = parseInt(qty.value, 10) || 1;
       if (n < 1) n = 1;
@@ -90,22 +119,31 @@
           if (!on) inp.value = '';
         });
       });
+      refreshPreviews();
     }
     qty.addEventListener('input', syncSlots);
     qty.addEventListener('change', syncSlots);
+    domainSelect.addEventListener('change', refreshPreviews);
+    form.addEventListener('input', function (e) {
+      if (e.target.matches('.seat-first, .seat-last, .seat-local')) refreshPreviews();
+    });
     syncSlots();
     form.addEventListener('submit', function () {
       if (submit) {
         submit.disabled = true;
-        submit.textContent = 'Provisioning…';
+        submit.textContent = 'Continuing…';
       }
     });
   })();
   </script>
   {{else}}
-  <div class="card space-y-3">
-    <p class="text-sm text-gray-600">No ready domains yet. Connect or buy a domain first.</p>
-    <a href="/onboarding/domain?new=1" class="btn-primary inline-flex">Set up domain</a>
+  <div class="setup-empty">
+    <div class="setup-empty-title">No ready domain yet</div>
+    <p class="setup-empty-copy">Connect or buy a domain first, then add more seats here.</p>
+    <div class="setup-actions justify-center">
+      <a href="/onboarding/domain?new=1" class="btn-primary">Set up domain</a>
+      <a href="/mailboxes/domains/buy" class="btn-secondary">Buy domain</a>
+    </div>
   </div>
   {{end}}
 </div>

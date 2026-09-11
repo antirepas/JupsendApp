@@ -101,7 +101,7 @@ func OnboardingDomainPage(c *gin.Context) {
 		inboxHint = config.WithSupportContact(inboxHint)
 	}
 	c.HTML(http.StatusOK, "onboarding_domain.html", gin.H{
-		"title":         "Set up outreach domain",
+		"title":         "Domains & mailboxes",
 		"active":        "mailboxes",
 		"user":          user,
 		"inboxkitOK":    inboxkit.Configured(),
@@ -116,6 +116,7 @@ func OnboardingDomainPage(c *gin.Context) {
 		"success":       c.Query("success"),
 		"query":         c.Query("q"),
 		"connectDomain": c.Query("domain"),
+		"path":          c.Query("path"),
 	})
 }
 
@@ -214,7 +215,7 @@ func OnboardingDomainSearch(c *gin.Context) {
 	}
 	user, _ := model.GetUserByID(userID)
 	c.HTML(http.StatusOK, "onboarding_domain.html", gin.H{
-		"title":        "Set up outreach domain",
+		"title":        "Buy a domain",
 		"active":       "mailboxes",
 		"user":         user,
 		"inboxkitOK":   true,
@@ -225,6 +226,7 @@ func OnboardingDomainSearch(c *gin.Context) {
 		"query":        q,
 		"results":      results,
 		"searched":     true,
+		"path":         "buy-domain",
 	})
 }
 

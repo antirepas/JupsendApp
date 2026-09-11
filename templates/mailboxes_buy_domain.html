@@ -6,51 +6,110 @@
 <div class="flex h-full">
 {{template "sidebar" .}}
 <main class="flex-1 overflow-y-auto">
-<div class="max-w-3xl mx-auto p-8">
-  <h2 class="text-2xl font-bold text-charcoal mb-2">Buy another domain</h2>
-  <p class="text-gray-500 text-sm mb-6">Pro add-on: register an outreach domain{{if .includedCount}} with up to {{.includedCount}} starter mailboxes{{end}}. First and last name become the From name recipients see.</p>
-  {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
-  {{if not .inboxkitOK}}<div class="alert-error mb-6">InboxKit is not configured.</div>{{end}}
+<div class="setup-shell p-6 sm:p-8">
+  <div class="setup-hero">
+    <div class="setup-kicker">Buy · paid add-on</div>
+    <h1 class="setup-title">Buy an outreach domain</h1>
+    <p class="setup-lead">Register a <strong>new</strong> domain through jupsend. To link a domain you already own, <a class="text-brand-600 font-medium" href="/onboarding/domain?path=add-domain&amp;new=1">add a domain</a> instead.</p>
+    <div class="setup-steps">
+      <span class="setup-step {{if not .results}}is-active{{else}}is-done{{end}}"><span class="setup-step-num">1</span> Search</span>
+      <span class="setup-step {{if .results}}is-active{{end}}"><span class="setup-step-num">2</span> Seats</span>
+      <span class="setup-step"><span class="setup-step-num">3</span> Checkout</span>
+    </div>
+  </div>
 
-  <form method="POST" action="/mailboxes/domains/buy/search" class="card space-y-4 mb-6">
-    <label class="form-label">Company or keyword</label>
-    <input name="q" class="form-input" value="{{.query}}" required placeholder="acme, or acme.com" {{if not .inboxkitOK}}disabled{{end}}>
-    <p class="form-hint">Available endings: .com, .net, .org, .shop</p>
-    <button type="submit" class="btn-primary" {{if not .inboxkitOK}}disabled{{end}}>Search domains</button>
+  {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
+  {{if not .inboxkitOK}}<div class="alert-error mb-6">InboxKit is not configured — domain search is unavailable.</div>{{end}}
+
+  <form method="POST" action="/mailboxes/domains/buy/search" class="setup-card">
+    <h2 class="setup-card-title">Find a domain</h2>
+    <p class="setup-card-sub mb-4">Available endings: .com, .net, .org, .shop</p>
+    <div class="setup-search-row">
+      <input name="q" class="form-input" value="{{.query}}" required placeholder="acme, or outreach" {{if not .inboxkitOK}}disabled{{end}}>
+      <button type="submit" class="btn-primary" {{if not .inboxkitOK}}disabled{{end}}>Search</button>
+    </div>
   </form>
 
   {{if .results}}
-  <form method="POST" action="/mailboxes/domains/buy/checkout" class="space-y-6">
-    <div class="card space-y-3">
-      <h3 class="card-title">Pick a domain</h3>
+  <form method="POST" action="/mailboxes/domains/buy/checkout" id="buy-domain-checkout">
+    <div class="setup-card">
+      <h2 class="setup-card-title">Pick a domain</h2>
+      <p class="setup-card-sub mb-4">{{if .whopOK}}Payment is completed on Whop after this step.{{end}}</p>
       {{range .results}}
-      <label class="flex items-center gap-3 p-3 rounded-lg border border-gray-200">
+      <label class="setup-domain-option">
         <input type="radio" name="domain" value="{{.Domain}}" required>
-        <span class="font-medium">{{.Domain}}</span>
+        <span class="setup-domain-name">{{.Domain}}</span>
       </label>
       {{end}}
     </div>
-    <div class="card space-y-4">
-      <h3 class="card-title">Starter mailboxes</h3>
-      <p class="text-sm text-gray-600">Enter real first and last names for each seat you want. Up to {{.includedCount}} seats in this order.</p>
+    <div class="setup-card">
+      <h2 class="setup-card-title">Starter mailboxes</h2>
+      <p class="setup-card-sub mb-4">Up to {{.includedCount}} seats in this order.</p>
       {{range $i, $n := .mailboxSlots}}
-      <div class="rounded-lg border border-gray-200 p-4 space-y-3">
-        <p class="text-sm font-medium">Mailbox {{$n}}{{if gt $n 1}} <span class="text-gray-400 font-normal">(optional)</span>{{end}}</p>
+      <div class="setup-seat" data-seat="{{$n}}">
+        <div class="setup-seat-top">
+          <span class="setup-seat-label">Mailbox {{$n}}</span>
+          {{if gt $n 1}}<span class="setup-seat-optional">Optional</span>{{end}}
+        </div>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <input name="first_name_{{$n}}" class="form-input" {{if eq $n 1}}required{{end}} placeholder="First name">
-          <input name="last_name_{{$n}}" class="form-input" {{if eq $n 1}}required{{end}} placeholder="Last name">
-          <input name="local_{{$n}}" class="form-input" {{if eq $n 1}}required{{end}} placeholder="local part">
+          <div>
+            <label class="form-label">First name</label>
+            <input name="first_name_{{$n}}" class="form-input seat-first" {{if eq $n 1}}required{{end}} placeholder="Alex" data-seat="{{$n}}">
+          </div>
+          <div>
+            <label class="form-label">Last name</label>
+            <input name="last_name_{{$n}}" class="form-input seat-last" {{if eq $n 1}}required{{end}} placeholder="Rivera" data-seat="{{$n}}">
+          </div>
+          <div>
+            <label class="form-label">Local part</label>
+            <input name="local_{{$n}}" class="form-input seat-local" {{if eq $n 1}}required{{end}} placeholder="alex" data-seat="{{$n}}">
+          </div>
+        </div>
+        <div class="setup-preview">
+          <span class="setup-preview-label">Sends as</span>
+          <span class="setup-preview-value seat-preview" data-seat="{{$n}}">First Last &lt;local@domain&gt;</span>
         </div>
       </div>
       {{end}}
-      <button type="submit" class="btn-primary">{{if .whopOK}}Continue to checkout{{else}}Order domain{{end}}</button>
+      <div class="setup-actions">
+        <button type="submit" class="btn-primary">{{if .whopOK}}Continue to checkout{{else}}Order domain{{end}}</button>
+        <a href="/mailboxes" class="btn-secondary">Cancel</a>
+      </div>
     </div>
   </form>
   {{end}}
-  <a href="/mailboxes" class="btn-secondary inline-flex mt-4">Back</a>
+
+  {{if not .results}}
+  <p class="setup-footnote"><a href="/mailboxes">← Back to mailboxes</a> · or <a href="/onboarding/domain?new=1">connect a domain you own</a></p>
+  {{end}}
 </div>
 </main>
 </div>
+<script>
+(function () {
+  function domainValue() {
+    var selected = document.querySelector('input[name="domain"]:checked');
+    return selected ? selected.value : 'domain.com';
+  }
+  function refreshPreviews() {
+    var domain = domainValue();
+    document.querySelectorAll('.setup-seat').forEach(function (seat) {
+      var first = (seat.querySelector('.seat-first') || {}).value || 'First';
+      var last = (seat.querySelector('.seat-last') || {}).value || 'Last';
+      var local = (seat.querySelector('.seat-local') || {}).value || 'local';
+      var preview = seat.querySelector('.seat-preview');
+      if (preview) preview.textContent = first.trim() + ' ' + last.trim() + ' <' + local.trim().toLowerCase() + '@' + domain + '>';
+    });
+  }
+  document.addEventListener('input', function (e) {
+    if (e.target.matches('.seat-first, .seat-last, .seat-local')) refreshPreviews();
+  });
+  document.addEventListener('change', function (e) {
+    if (e.target.matches('input[name="domain"]')) refreshPreviews();
+  });
+  refreshPreviews();
+})();
+</script>
 </body>
 </html>
 {{end}}

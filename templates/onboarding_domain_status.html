@@ -6,19 +6,31 @@
 <div class="flex h-full">
 {{template "sidebar" .}}
 <main class="flex-1 overflow-y-auto">
-<div class="max-w-xl mx-auto p-8">
-  <h2 class="text-2xl font-bold text-charcoal mb-2">Setting up {{.domain.Domain}}</h2>
-  <p class="text-gray-500 text-sm mb-6">
-    {{if .manualPending}}
-    We’ve received your request and are provisioning domain and mailboxes. This usually takes about <strong>2 hours</strong>.
-    We’ll email you when everything is ready to send.
-    {{else if .needsNS}}
-    Point this domain’s nameservers at InboxKit (no domain purchase). Provisioning continues after DNS propagates.
-    Use a domain with <strong>no existing DNS records</strong> — switching nameservers replaces your current DNS zone.
-    {{else}}
-    We’re registering the domain and provisioning mailboxes. This page refreshes automatically.
-    {{end}}
-  </p>
+<div class="setup-shell p-6 sm:p-8">
+  <div class="setup-hero">
+    <div class="setup-kicker">{{if .needsNS}}Add domain · DNS{{else}}Provisioning{{end}}</div>
+    <h1 class="setup-title">{{.domain.Domain}}</h1>
+    <p class="setup-lead">
+      {{if .manualPending}}
+      We’ve queued your domain and mailboxes (~2 hours). We’ll email you when they’re ready.
+      {{else if .needsNS}}
+      Publish the DNS records below at your domain registrar, then wait for them to propagate. Mailboxes finish after DNS is verified.
+      {{else}}
+      Registering the domain and preparing mailboxes. This page refreshes automatically.
+      {{end}}
+    </p>
+    <div class="setup-steps" aria-label="Setup progress">
+      <span class="setup-step is-done"><span class="setup-step-num">1</span> Domain</span>
+      {{if .needsNS}}
+      <span class="setup-step {{if .nsPropagated}}is-done{{else}}is-active{{end}}"><span class="setup-step-num">2</span> DNS</span>
+      <span class="setup-step {{if .nsPropagated}}is-active{{end}}"><span class="setup-step-num">3</span> Mailboxes</span>
+      {{else}}
+      <span class="setup-step is-done"><span class="setup-step-num">2</span> DNS</span>
+      <span class="setup-step is-active"><span class="setup-step-num">3</span> Mailboxes</span>
+      {{end}}
+      <span class="setup-step"><span class="setup-step-num">4</span> Send</span>
+    </div>
+  </div>
 
   {{if .error}}
   <div class="alert-error mb-6">
@@ -27,69 +39,115 @@
   </div>
   {{end}}
 
-  <div class="card space-y-4">
-    <div class="text-sm text-gray-700">
-      <div>Status: <span class="font-semibold">{{.domain.Status}}</span></div>
-      {{if .domain.InboxkitOrderID}}<div class="text-xs text-gray-500 mt-1">Order {{.domain.InboxkitOrderID}}</div>{{end}}
+  {{$status := .domain.Status}}
+  <div class="setup-status-banner">
+    <span class="setup-status-dot {{if or (eq $status "error") (eq $status "failed")}}is-bad{{else if eq $status "ready"}}is-ok{{else}}is-busy{{end}}" aria-hidden="true"></span>
+    <div>
+      <div class="setup-status-label">Current status</div>
+      <div class="setup-status-value">{{.domain.Status}}</div>
+      {{if .domain.InboxkitOrderID}}<div class="setup-status-meta">Order {{.domain.InboxkitOrderID}}</div>{{end}}
     </div>
+  </div>
 
-    {{if .nameservers}}
-    <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 space-y-2">
-      <h3 class="font-semibold text-sm text-charcoal">Update nameservers at your registrar</h3>
-      <ol class="text-xs text-gray-700 space-y-1.5 list-decimal list-inside">
-        <li>This domain must <strong>not</strong> have any DNS records you still need (website A/CNAME, MX, TXT, etc.). Changing nameservers replaces the whole DNS zone.</li>
-        <li>At your registrar, set nameservers to <strong>custom / use the following</strong> and replace every current NS with the values below (usually two).</li>
-        <li>Save, then wait for propagation — often a few minutes, sometimes up to 48 hours.</li>
-      </ol>
-      <ul class="font-mono text-sm space-y-1 mt-2">
+  {{if .nameservers}}
+  <div class="setup-ns">
+    <h3>DNS records to add</h3>
+    <ol>
+      <li>Open DNS settings for <strong>{{.domain.Domain}}</strong> at your registrar (GoDaddy, Namecheap, Cloudflare, etc.).</li>
+      <li>Set nameservers to <strong>custom</strong> and replace every existing NS with the records below (usually two).</li>
+      <li>Save, then wait — often minutes, sometimes a few hours.</li>
+    </ol>
+    <p class="text-xs text-amber-900/80 mb-2">These are <strong>NS</strong> records (not CNAME/A). InboxKit needs nameserver control to provision Google mailboxes and mail DNS (MX, SPF, DKIM) automatically.</p>
+    <table class="setup-dns-table">
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Host / name</th>
+          <th>Value</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
         {{range .nameservers}}
-        <li class="bg-white/80 px-2 py-1 rounded border border-amber-100">{{.}}</li>
+        <tr>
+          <td><span class="setup-dns-type">NS</span></td>
+          <td><code>@</code></td>
+          <td><code>{{.}}</code></td>
+          <td><button type="button" class="setup-copy-btn" data-copy="{{.}}">Copy</button></td>
+        </tr>
         {{end}}
-      </ul>
-      {{if .nsPropagated}}
-      <p class="text-xs text-green-700 font-medium">Nameservers look propagated — waiting for mailboxes…</p>
-      {{else}}
-      <p class="text-xs text-amber-800">Not detected yet — save NS changes, then refresh.</p>
-      {{end}}
-    </div>
+      </tbody>
+    </table>
+    {{if .nsPropagated}}
+    <p class="setup-ns-state is-ok">DNS looks propagated — finishing mailboxes…</p>
+    {{else}}
+    <p class="setup-ns-state is-wait">Not detected yet — save the records, then refresh.</p>
     {{end}}
+  </div>
+  {{end}}
 
-    {{if .mailboxes}}
-    <ul class="space-y-2 text-sm">
+  {{if .mailboxes}}
+  <div class="setup-card">
+    <h2 class="setup-card-title">Mailboxes</h2>
+    <ul class="setup-mb-list">
       {{range .mailboxes}}
-      <li class="border-b border-gray-100 pb-2">
-        <div class="flex justify-between gap-3">
-          <span>{{.Email}}</span>
-          <span class="text-gray-500">{{.Status}}</span>
+      <li class="setup-mb-item">
+        <div>
+          <div class="setup-mb-email">{{.Email}}</div>
+          {{if .LastError}}<p class="text-xs text-red-600 mt-1">{{.LastError}}</p>{{end}}
         </div>
-        {{if .LastError}}<p class="text-xs text-red-600 mt-1">{{.LastError}}</p>{{end}}
+        <span class="setup-pill {{if eq .Status "ready"}}is-ready{{else if or (eq .Status "error") (eq .Status "failed")}}is-bad{{else}}is-busy{{end}}">{{.Status}}</span>
       </li>
       {{end}}
     </ul>
-    {{end}}
-
-    {{if .domain.LastError}}
-    <div class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
-      <p>{{.domain.LastError}}</p>
-      {{if .supportEmail}}<p class="text-xs mt-2">Need help? Email <a class="underline font-medium" href="mailto:{{.supportEmail}}">{{.supportEmail}}</a></p>{{end}}
-    </div>
-    {{end}}
-
-    <a href="/onboarding/domain/status?domain_id={{.domain.ID}}" class="btn-secondary inline-flex w-full justify-center">Refresh status</a>
-    {{if .manualPending}}
-    <p class="text-xs text-gray-500">Typical wait ~2 hours.{{if .supportEmail}} Questions? Email <a class="underline" href="mailto:{{.supportEmail}}">{{.supportEmail}}</a>.{{end}}</p>
-    {{else}}
-    <p class="text-xs text-gray-500">Provisioning usually finishes within a few minutes after nameservers propagate.{{if .supportEmail}} Stuck? Email <a class="underline" href="mailto:{{.supportEmail}}">{{.supportEmail}}</a>.{{end}}</p>
-    {{end}}
   </div>
+  {{end}}
+
+  {{if .domain.LastError}}
+  <div class="alert-error mb-6">
+    <p>{{.domain.LastError}}</p>
+    {{if .supportEmail}}<p class="text-xs mt-2">Need help? Email <a class="underline font-medium" href="mailto:{{.supportEmail}}">{{.supportEmail}}</a></p>{{end}}
+  </div>
+  {{end}}
+
+  <div class="setup-actions">
+    <a href="/onboarding/domain/status?domain_id={{.domain.ID}}" class="btn-primary">Refresh status</a>
+    <a href="/mailboxes" class="btn-secondary">Back to mailboxes</a>
+  </div>
+  <p class="setup-footnote">
+    {{if .manualPending}}
+    Typical wait ~2 hours.{{if .supportEmail}} Questions? Email <a href="mailto:{{.supportEmail}}">{{.supportEmail}}</a>.{{end}}
+    {{else}}
+    DNS usually verifies within a few minutes after you save.{{if .supportEmail}} Stuck? Email <a href="mailto:{{.supportEmail}}">{{.supportEmail}}</a>.{{end}}
+    {{end}}
+  </p>
 </div>
 </main>
 </div>
+<script>
+(function () {
+  document.querySelectorAll('[data-copy]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var text = btn.getAttribute('data-copy') || '';
+      function done() {
+        var prev = btn.textContent;
+        btn.textContent = 'Copied';
+        setTimeout(function () { btn.textContent = prev; }, 1200);
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done).catch(function () {
+          window.prompt('Copy DNS value', text);
+        });
+      } else {
+        window.prompt('Copy DNS value', text);
+      }
+    });
+  });
+})();
+</script>
 {{if not .manualPending}}
 <script>
-  setTimeout(function () {
-    window.location.reload();
-  }, 8000);
+  setTimeout(function () { window.location.reload(); }, 8000);
 </script>
 {{end}}
 </body>
