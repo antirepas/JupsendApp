@@ -268,8 +268,8 @@ func TestListContactsInListFilteredAndSchema(t *testing.T) {
 	if len(cols) != 2 {
 		t.Fatalf("cols=%v", cols)
 	}
-	if rows[0].Variables != nil && len(rows[0].Variables) > 0 {
-		t.Fatalf("list detail should not load variables, got %+v", rows[0].Variables)
+	if rows[0].Variables["first_name"] != "Alice" {
+		t.Fatalf("expected schema variable loaded, got %+v", rows[0].Variables)
 	}
 
 	page, err := ListContactsInListPage(listID, userID, ListMembersFilter{Page: 1, PageSize: 1, Sort: "email"})
