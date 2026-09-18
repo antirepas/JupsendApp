@@ -155,10 +155,23 @@
             </div>
             <div class="workflow-analytics-pill">
                 <span class="workflow-analytics-pill-value text-violet-600">{{$wf.Engagement.Replies}}</span>
-                <span class="workflow-analytics-pill-label">Replies</span>
+                <span class="workflow-analytics-pill-label">Replies ({{printf "%.1f" $wf.Engagement.ReplyRate}}%)</span>
+            </div>
+            <div class="workflow-analytics-pill">
+                <span class="workflow-analytics-pill-value text-emerald-700">{{$wf.Engagement.PositiveReplies}}</span>
+                <span class="workflow-analytics-pill-label">Positive ({{printf "%.1f" $wf.Engagement.PositiveReplyRate}}%)</span>
+            </div>
+            <div class="workflow-analytics-pill">
+                <span class="workflow-analytics-pill-value text-red-600">{{$wf.Engagement.NegativeReplies}}</span>
+                <span class="workflow-analytics-pill-label">Negative ({{printf "%.1f" $wf.Engagement.NegativeReplyRate}}%)</span>
+            </div>
+            <div class="workflow-analytics-pill">
+                <span class="workflow-analytics-pill-value text-slate-600">{{$wf.Engagement.NeutralReplies}} / {{$wf.Engagement.PendingReplies}}</span>
+                <span class="workflow-analytics-pill-label">Neutral / pending</span>
             </div>
         </div>
         {{template "reply_pro_note" $}}
+        <p class="text-xs text-slate-500 mt-3">Of replies: {{printf "%.0f" $wf.Engagement.PositivePctOfReplies}}% positive · {{printf "%.0f" $wf.Engagement.NegativePctOfReplies}}% negative</p>
     </div>
 </div>
 
@@ -307,6 +320,7 @@
             <div><span class="text-slate-500">Opens (unique)</span><p class="font-bold text-lg text-blue-600">{{$ab.VariantA.UniqueOpens}} <span class="text-xs font-normal">({{printf "%.1f" $ab.VariantA.OpenRate}}%)</span></p></div>
             <div><span class="text-slate-500">Clicks (unique)</span><p class="font-bold text-lg text-emerald-600">{{$ab.VariantA.UniqueClicks}} <span class="text-xs font-normal">({{printf "%.1f" $ab.VariantA.ClickRate}}%)</span></p></div>
             <div><span class="text-slate-500">Replies (unique)</span><p class="font-bold text-lg text-violet-600">{{$ab.VariantA.UniqueReplies}} <span class="text-xs font-normal">({{printf "%.1f" $ab.VariantA.ReplyRate}}%)</span></p>{{template "reply_pro_note" $}}</div>
+            <div><span class="text-slate-500">Positive / negative</span><p class="font-bold text-lg"><span class="text-emerald-700">{{$ab.VariantA.PositiveReplies}}</span> / <span class="text-red-600">{{$ab.VariantA.NegativeReplies}}</span></p></div>
             <div><span class="text-slate-500">Click-to-open</span><p class="font-bold">{{printf "%.1f" $ab.VariantA.ClickToOpenRate}}%</p></div>
         </div>
     </div>
@@ -325,6 +339,7 @@
             <div><span class="text-slate-500">Opens (unique)</span><p class="font-bold text-lg text-blue-600">{{$ab.VariantB.UniqueOpens}} <span class="text-xs font-normal">({{printf "%.1f" $ab.VariantB.OpenRate}}%)</span></p></div>
             <div><span class="text-slate-500">Clicks (unique)</span><p class="font-bold text-lg text-emerald-600">{{$ab.VariantB.UniqueClicks}} <span class="text-xs font-normal">({{printf "%.1f" $ab.VariantB.ClickRate}}%)</span></p></div>
             <div><span class="text-slate-500">Replies (unique)</span><p class="font-bold text-lg text-violet-600">{{$ab.VariantB.UniqueReplies}} <span class="text-xs font-normal">({{printf "%.1f" $ab.VariantB.ReplyRate}}%)</span></p>{{template "reply_pro_note" $}}</div>
+            <div><span class="text-slate-500">Positive / negative</span><p class="font-bold text-lg"><span class="text-emerald-700">{{$ab.VariantB.PositiveReplies}}</span> / <span class="text-red-600">{{$ab.VariantB.NegativeReplies}}</span></p></div>
             <div><span class="text-slate-500">Click-to-open</span><p class="font-bold">{{printf "%.1f" $ab.VariantB.ClickToOpenRate}}%</p></div>
         </div>
     </div>

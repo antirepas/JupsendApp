@@ -214,6 +214,32 @@ func engagementFilterSQL(engagement string, campaignID int64) (clause string, ex
 			extraArgs = []interface{}{campaignID, campaignID}
 		}
 		return clause, extraArgs
+	case "not_interested":
+		interested, args := engagementFilterSQL("interested", campaignID)
+		if interested == "" {
+			return "", nil
+		}
+		return "NOT (" + interested + ")", args
+	case "positive_reply":
+		clause = `
+			EXISTS (
+				SELECT 1 FROM contact_events ce
+				INNER JOIN email_sends es ON es.id = ce.email_send_id
+				WHERE es.contact_id = c.id AND es.user_id = c.user_id AND ce.event_type = 'REPLY'
+					AND ce.created_at >= CURRENT_TIMESTAMP - (90 * INTERVAL '1 day')` + campClause + `
+			)
+			AND LOWER(COALESCE(c.last_reply_sentiment, '')) = 'positive'`
+		return clause, extraArgs
+	case "negative_reply":
+		clause = `
+			EXISTS (
+				SELECT 1 FROM contact_events ce
+				INNER JOIN email_sends es ON es.id = ce.email_send_id
+				WHERE es.contact_id = c.id AND es.user_id = c.user_id AND ce.event_type = 'REPLY'
+					AND ce.created_at >= CURRENT_TIMESTAMP - (90 * INTERVAL '1 day')` + campClause + `
+			)
+			AND LOWER(COALESCE(c.last_reply_sentiment, '')) = 'negative'`
+		return clause, extraArgs
 	default:
 		return "", nil
 	}
@@ -296,7 +322,7 @@ func BulkSuppressContacts(userID int64, contactIDs []int64, reason string) (int,
 // ValidateEngagementPreset returns an error if engagement is unknown.
 func ValidateEngagementPreset(s string) error {
 	switch strings.TrimSpace(s) {
-	case "", "replied", "opened_no_reply", "clicked_no_reply", "interested":
+	case "", "replied", "opened_no_reply", "clicked_no_reply", "interested", "not_interested", "positive_reply", "negative_reply":
 		return nil
 	default:
 		return fmt.Errorf("unknown engagement filter %q", s)

@@ -2,6 +2,8 @@ package model
 
 import (
 	"database/sql"
+	"fmt"
+	"strings"
 	"time"
 
 	"emailtracker.com/db"
@@ -51,12 +53,48 @@ func GetContactListForUser(listID, userID int64) (ContactList, error) {
 }
 
 func CreateContactList(userID int64, name string) (int64, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return 0, fmt.Errorf("list name required")
+	}
+	if len(name) > 120 {
+		name = name[:120]
+	}
 	row := db.QueryRow(`
 		INSERT INTO contact_lists (user_id, name) VALUES (?, ?) RETURNING id
 	`, userID, name)
 	var id int64
 	err := row.Scan(&id)
 	return id, err
+}
+
+// FindContactListByName returns a list id for an exact name match (case-insensitive).
+func FindContactListByName(userID int64, name string) (int64, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return 0, sql.ErrNoRows
+	}
+	var id int64
+	err := db.QueryRow(`
+		SELECT id FROM contact_lists
+		WHERE user_id = ? AND LOWER(name) = LOWER(?)
+		ORDER BY id ASC LIMIT 1
+	`, userID, name).Scan(&id)
+	return id, err
+}
+
+// FindOrCreateContactListByName returns an existing list or creates one.
+func FindOrCreateContactListByName(userID int64, name string) (int64, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return 0, fmt.Errorf("list name required")
+	}
+	if id, err := FindContactListByName(userID, name); err == nil {
+		return id, nil
+	} else if err != sql.ErrNoRows {
+		return 0, err
+	}
+	return CreateContactList(userID, name)
 }
 
 func RenameContactList(listID, userID int64, name string) error {

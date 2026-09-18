@@ -18,6 +18,16 @@ type CampaignOverview struct {
 	TotalClicks      int
 	UniqueClicks     int
 	ReplyCount       int
+	PositiveReplies  int
+	NegativeReplies  int
+	NeutralReplies   int
+	PendingReplies   int
+	ReplyRate        float64
+	PositiveReplyRate float64
+	NegativeReplyRate float64
+	NeutralReplyRate  float64
+	PositivePctOfReplies float64
+	NegativePctOfReplies float64
 	OpenRate         float64
 	ClickRate        float64
 	ClickToOpenRate  float64
@@ -36,10 +46,15 @@ type VariantAnalytics struct {
 	Clicks             int
 	UniqueClicks       int
 	UniqueReplies      int
+	PositiveReplies    int
+	NegativeReplies    int
+	NeutralReplies     int
 	OpenRate           float64
 	ClickRate          float64
 	ClickToOpenRate    float64
 	ReplyRate          float64
+	PositiveReplyRate  float64
+	NegativeReplyRate  float64
 }
 
 type ContactEngagementRow struct {
@@ -185,9 +200,42 @@ func loadVariantMetrics(campaignID int64, variant string, va *VariantAnalytics) 
 		WHERE es.campaign_id = ? AND es.variant = ? AND ce.event_type = 'REPLY'
 	`, campaignID, variant).Scan(&va.UniqueReplies)
 
+	pos, neg, neu, _ := countCampaignReplySentiments(campaignID, variant)
+	va.PositiveReplies = pos
+	va.NegativeReplies = neg
+	va.NeutralReplies = neu
+
 	if va.Sent > 0 {
 		va.ReplyRate = float64(va.UniqueReplies) / float64(va.Sent) * 100
+		va.PositiveReplyRate = float64(va.PositiveReplies) / float64(va.Sent) * 100
+		va.NegativeReplyRate = float64(va.NegativeReplies) / float64(va.Sent) * 100
 	}
+}
+
+// countCampaignReplySentiments tallies unique reply contacts by last_reply_sentiment.
+// variant may be "" for the whole campaign.
+func countCampaignReplySentiments(campaignID int64, variant string) (positive, negative, neutral, pending int) {
+	q := `
+		SELECT
+			COUNT(*) FILTER (WHERE LOWER(COALESCE(c.last_reply_sentiment, '')) = 'positive'),
+			COUNT(*) FILTER (WHERE LOWER(COALESCE(c.last_reply_sentiment, '')) = 'negative'),
+			COUNT(*) FILTER (WHERE LOWER(COALESCE(c.last_reply_sentiment, '')) = 'neutral'),
+			COUNT(*) FILTER (WHERE LOWER(COALESCE(c.last_reply_sentiment, '')) NOT IN ('positive', 'negative', 'neutral'))
+		FROM (
+			SELECT DISTINCT es.contact_id
+			FROM contact_events ce
+			INNER JOIN email_sends es ON es.id = ce.email_send_id
+			WHERE es.campaign_id = ? AND ce.event_type = 'REPLY'`
+	args := []interface{}{campaignID}
+	if variant != "" {
+		q += ` AND es.variant = ?`
+		args = append(args, variant)
+	}
+	q += `
+		) r
+		INNER JOIN contact c ON c.id = r.contact_id`
+	_ = db.QueryRow(q, args...).Scan(&positive, &negative, &neutral, &pending)
+	return positive, negative, neutral, pending
 }
 
 func campaignOverviewCounts(campaignID int64) (sent, replies int) {
@@ -532,9 +580,19 @@ func fillOverview(a *CampaignAnalytics) {
 		WHERE es.campaign_id = ? AND ce.event_type = 'REPLY'
 	`, a.CampaignID).Scan(&o.ReplyCount)
 
+	o.PositiveReplies, o.NegativeReplies, o.NeutralReplies, o.PendingReplies = countCampaignReplySentiments(a.CampaignID, "")
+
 	if o.SentCount > 0 {
 		o.OpenRate = float64(o.UniqueOpens) / float64(o.SentCount) * 100
 		o.ClickRate = float64(o.UniqueClicks) / float64(o.SentCount) * 100
+		o.ReplyRate = float64(o.ReplyCount) / float64(o.SentCount) * 100
+		o.PositiveReplyRate = float64(o.PositiveReplies) / float64(o.SentCount) * 100
+		o.NegativeReplyRate = float64(o.NegativeReplies) / float64(o.SentCount) * 100
+		o.NeutralReplyRate = float64(o.NeutralReplies) / float64(o.SentCount) * 100
+	}
+	if o.ReplyCount > 0 {
+		o.PositivePctOfReplies = float64(o.PositiveReplies) / float64(o.ReplyCount) * 100
+		o.NegativePctOfReplies = float64(o.NegativeReplies) / float64(o.ReplyCount) * 100
 	}
 	if o.UniqueOpens > 0 {
 		o.ClickToOpenRate = float64(o.UniqueClicks) / float64(o.UniqueOpens) * 100

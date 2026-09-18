@@ -16,16 +16,26 @@ type CampaignWorkflowStepAnalytics struct {
 }
 
 type CampaignWorkflowEngagement struct {
-	EmailsSent      int
-	UniqueOpens     int
-	UniqueClicks    int
-	Replies         int
-	OpenRate        float64
-	ClickRate       float64
-	ClickToOpenRate float64
-	Funnel          EngagementFunnel
-	ClickPctOfSent  float64
-	ReplyPctOfSent  float64
+	EmailsSent           int
+	UniqueOpens          int
+	UniqueClicks         int
+	Replies              int
+	PositiveReplies      int
+	NegativeReplies      int
+	NeutralReplies       int
+	PendingReplies       int
+	OpenRate             float64
+	ClickRate            float64
+	ClickToOpenRate      float64
+	ReplyRate            float64
+	PositiveReplyRate    float64
+	NegativeReplyRate    float64
+	NeutralReplyRate     float64
+	PositivePctOfReplies float64
+	NegativePctOfReplies float64
+	Funnel               EngagementFunnel
+	ClickPctOfSent       float64
+	ReplyPctOfSent       float64
 }
 
 type CampaignWorkflowContactAnalytics struct {
@@ -96,11 +106,21 @@ func getCampaignWorkflowEngagement(campaignID int64, contactCount int) CampaignW
 		WHERE es.campaign_id = ? AND ce.event_type = 'REPLY'
 	`, campaignID).Scan(&eng.Replies)
 
+	eng.PositiveReplies, eng.NegativeReplies, eng.NeutralReplies, eng.PendingReplies = countCampaignReplySentiments(campaignID, "")
+
 	if eng.EmailsSent > 0 {
 		eng.OpenRate = float64(eng.UniqueOpens) / float64(eng.EmailsSent) * 100
 		eng.ClickRate = float64(eng.UniqueClicks) / float64(eng.EmailsSent) * 100
 		eng.ClickPctOfSent = eng.ClickRate
 		eng.ReplyPctOfSent = float64(eng.Replies) / float64(eng.EmailsSent) * 100
+		eng.ReplyRate = eng.ReplyPctOfSent
+		eng.PositiveReplyRate = float64(eng.PositiveReplies) / float64(eng.EmailsSent) * 100
+		eng.NegativeReplyRate = float64(eng.NegativeReplies) / float64(eng.EmailsSent) * 100
+		eng.NeutralReplyRate = float64(eng.NeutralReplies) / float64(eng.EmailsSent) * 100
+	}
+	if eng.Replies > 0 {
+		eng.PositivePctOfReplies = float64(eng.PositiveReplies) / float64(eng.Replies) * 100
+		eng.NegativePctOfReplies = float64(eng.NegativeReplies) / float64(eng.Replies) * 100
 	}
 	if eng.UniqueOpens > 0 {
 		eng.ClickToOpenRate = float64(eng.UniqueClicks) / float64(eng.UniqueOpens) * 100

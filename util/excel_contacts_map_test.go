@@ -47,10 +47,39 @@ func TestApplyContactColumnMap(t *testing.T) {
 	}
 }
 
-func TestApplyContactColumnMapRequiresEmail(t *testing.T) {
-	_, err := ApplyContactColumnMap([]string{"Name"}, [][]string{{"Ada"}}, map[string]string{"Name": "name"})
-	if err == nil || !strings.Contains(err.Error(), "email") {
-		t.Fatalf("err=%v", err)
+func TestApplyContactColumnMapSegment(t *testing.T) {
+	headers := []string{"Email", "Segment", "Company"}
+	rows := [][]string{
+		{"a@x.com", "Interested", "Acme"},
+		{"b@x.com", "Not interested", "Beta"},
+	}
+	colMap := map[string]string{
+		"Email":   "email",
+		"Segment": "segment",
+		"Company": "company",
+	}
+	out, err := ApplyContactColumnMap(headers, rows, colMap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out) != 2 {
+		t.Fatalf("len=%d", len(out))
+	}
+	if out[0].Segment != "Interested" || out[0].Variables["segment"] != "Interested" {
+		t.Fatalf("row0=%+v", out[0])
+	}
+	if out[1].Segment != "Not interested" {
+		t.Fatalf("row1 segment=%q", out[1].Segment)
+	}
+	if out[0].Variables["company"] != "Acme" {
+		t.Fatalf("company=%v", out[0].Variables)
+	}
+}
+
+func TestSuggestContactColumnMapSegmentHeader(t *testing.T) {
+	m := SuggestContactColumnMap([]string{"Email", "Segment", "Name"}, nil)
+	if m["Segment"] != MapTargetSegment {
+		t.Fatalf("got %v", m)
 	}
 }
 

@@ -151,10 +151,23 @@
             </div>
             <div class="workflow-analytics-pill">
                 <span class="workflow-analytics-pill-value text-violet-600">{{.analytics.Engagement.Replies}}</span>
-                <span class="workflow-analytics-pill-label">Replies</span>
+                <span class="workflow-analytics-pill-label">Replies ({{printf "%.1f" .analytics.Engagement.ReplyRate}}%)</span>
+            </div>
+            <div class="workflow-analytics-pill">
+                <span class="workflow-analytics-pill-value text-emerald-700">{{.analytics.Engagement.PositiveReplies}}</span>
+                <span class="workflow-analytics-pill-label">Positive ({{printf "%.1f" .analytics.Engagement.PositiveReplyRate}}%)</span>
+            </div>
+            <div class="workflow-analytics-pill">
+                <span class="workflow-analytics-pill-value text-red-600">{{.analytics.Engagement.NegativeReplies}}</span>
+                <span class="workflow-analytics-pill-label">Negative ({{printf "%.1f" .analytics.Engagement.NegativeReplyRate}}%)</span>
+            </div>
+            <div class="workflow-analytics-pill">
+                <span class="workflow-analytics-pill-value text-slate-600">{{.analytics.Engagement.NeutralReplies}} / {{.analytics.Engagement.PendingReplies}}</span>
+                <span class="workflow-analytics-pill-label">Neutral / pending</span>
             </div>
         </div>
         {{template "reply_pro_note" .}}
+        <p class="text-xs text-slate-500 mt-3">Of replies: {{printf "%.0f" .analytics.Engagement.PositivePctOfReplies}}% positive · {{printf "%.0f" .analytics.Engagement.NegativePctOfReplies}}% negative</p>
     </div>
 
     {{if gt .analytics.Engagement.Funnel.Sent 0}}

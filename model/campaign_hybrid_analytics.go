@@ -214,8 +214,25 @@ func loadStarterVariantMetrics(campaignID int64, firstSendNodeKey, variant strin
 		WHERE `+starterSendWhere+` AND es.variant = ? AND ce.event_type = 'REPLY'
 	`, campaignID, firstSendNodeKey, variant).Scan(&va.UniqueReplies)
 
+	_ = db.QueryRow(`
+		SELECT
+			COUNT(*) FILTER (WHERE LOWER(COALESCE(c.last_reply_sentiment, '')) = 'positive'),
+			COUNT(*) FILTER (WHERE LOWER(COALESCE(c.last_reply_sentiment, '')) = 'negative'),
+			COUNT(*) FILTER (WHERE LOWER(COALESCE(c.last_reply_sentiment, '')) = 'neutral')
+		FROM (
+			SELECT DISTINCT es.contact_id
+			FROM contact_events ce
+			INNER JOIN email_sends es ON es.id = ce.email_send_id
+			`+starterSendJoin+`
+			WHERE `+starterSendWhere+` AND es.variant = ? AND ce.event_type = 'REPLY'
+		) r
+		INNER JOIN contact c ON c.id = r.contact_id
+	`, campaignID, firstSendNodeKey, variant).Scan(&va.PositiveReplies, &va.NegativeReplies, &va.NeutralReplies)
+
 	if va.Sent > 0 {
 		va.ReplyRate = float64(va.UniqueReplies) / float64(va.Sent) * 100
+		va.PositiveReplyRate = float64(va.PositiveReplies) / float64(va.Sent) * 100
+		va.NegativeReplyRate = float64(va.NegativeReplies) / float64(va.Sent) * 100
 	}
 }
 

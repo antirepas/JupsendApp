@@ -27,7 +27,10 @@ type ListContactRow struct {
 // ListMembersFilter controls pagination and filtering for list detail.
 type ListMembersFilter struct {
 	Query      string
-	Engagement string // "", opened_no_reply, clicked_no_reply, replied, interested
+	Engagement string // "", opened_no_reply, clicked_no_reply, replied, interested, not_interested, positive_reply, negative_reply
+	VarKey     string
+	VarOp      string // equals, not_equals, exists, empty
+	VarValue   string
 	Sort       string // email, newest
 	Page       int
 	PageSize   int
@@ -256,7 +259,8 @@ func ListContactsInListFiltered(listID, userID int64, query string) (list Contac
 	return page.List, page.Items, columns, nil
 }
 
-// ListContactsInListPage returns paginated list members without loading contact variables.
+// ListContactsInListPage returns paginated list members. Variable columns from the list
+// schema are loaded for the current page when present.
 func ListContactsInListPage(listID, userID int64, f ListMembersFilter) (ListMembersPage, error) {
 	out := ListMembersPage{Filter: f}
 	list, err := GetContactListForUser(listID, userID)
@@ -278,17 +282,9 @@ func ListContactsInListPage(listID, userID int64, f ListMembersFilter) (ListMemb
 	out.Page = f.Page
 	out.PageSize = f.PageSize
 
-	where := []string{"m.list_id = ?", "c.user_id = ?"}
-	args := []interface{}{listID, userID}
-	if q := strings.TrimSpace(f.Query); q != "" {
-		where = append(where, "LOWER(c.email) LIKE ?")
-		args = append(args, "%"+strings.ToLower(q)+"%")
-	}
-	if f.Engagement == "replied" || f.Engagement == "opened_no_reply" || f.Engagement == "clicked_no_reply" || f.Engagement == "interested" {
-		if clause, extra := engagementFilterSQL(f.Engagement, 0); clause != "" {
-			where = append(where, "("+clause+")")
-			args = append(args, extra...)
-		}
+	where, args, err := listMembersWhere(listID, userID, f)
+	if err != nil {
+		return out, err
 	}
 	whereSQL := strings.Join(where, " AND ")
 
@@ -358,7 +354,205 @@ func ListContactsInListPage(listID, userID int64, f ListMembersFilter) (ListMemb
 			out.Items[i].LastActivity = eng.LastActivity
 		}
 	}
+	schema, _ := GetListVariableSchema(listID, userID)
+	if len(schema) > 0 && len(ids) > 0 {
+		varsByContact, _ := loadContactVariablesMap(ids, schema)
+		for i := range out.Items {
+			if m, ok := varsByContact[out.Items[i].ID]; ok {
+				out.Items[i].Variables = m
+			} else {
+				out.Items[i].Variables = map[string]string{}
+			}
+		}
+	}
 	return out, nil
+}
+
+func listMembersWhere(listID, userID int64, f ListMembersFilter) ([]string, []interface{}, error) {
+	where := []string{"m.list_id = ?", "c.user_id = ?"}
+	args := []interface{}{listID, userID}
+	if q := strings.TrimSpace(f.Query); q != "" {
+		where = append(where, "LOWER(c.email) LIKE ?")
+		args = append(args, "%"+strings.ToLower(q)+"%")
+	}
+	if err := ValidateEngagementPreset(f.Engagement); err != nil {
+		return nil, nil, err
+	}
+	if clause, extra := engagementFilterSQL(f.Engagement, 0); clause != "" {
+		where = append(where, "("+clause+")")
+		args = append(args, extra...)
+	}
+	varClause, varArgs, err := variableFilterSQL(f.VarKey, f.VarOp, f.VarValue)
+	if err != nil {
+		return nil, nil, err
+	}
+	if varClause != "" {
+		where = append(where, varClause)
+		args = append(args, varArgs...)
+	}
+	return where, args, nil
+}
+
+func variableFilterSQL(key, op, value string) (string, []interface{}, error) {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return "", nil, nil
+	}
+	op = strings.TrimSpace(strings.ToLower(op))
+	if op == "" {
+		op = "equals"
+	}
+	switch op {
+	case "equals":
+		return `EXISTS (
+			SELECT 1 FROM contact_variables cv
+			WHERE cv.contact_id = c.id AND LOWER(cv.key) = LOWER(?) AND LOWER(COALESCE(cv.value, '')) = LOWER(?)
+		)`, []interface{}{key, strings.TrimSpace(value)}, nil
+	case "not_equals":
+		return `EXISTS (
+			SELECT 1 FROM contact_variables cv
+			WHERE cv.contact_id = c.id AND LOWER(cv.key) = LOWER(?)
+		) AND NOT EXISTS (
+			SELECT 1 FROM contact_variables cv
+			WHERE cv.contact_id = c.id AND LOWER(cv.key) = LOWER(?) AND LOWER(COALESCE(cv.value, '')) = LOWER(?)
+		)`, []interface{}{key, key, strings.TrimSpace(value)}, nil
+	case "exists":
+		return `EXISTS (
+			SELECT 1 FROM contact_variables cv
+			WHERE cv.contact_id = c.id AND LOWER(cv.key) = LOWER(?) AND TRIM(COALESCE(cv.value, '')) <> ''
+		)`, []interface{}{key}, nil
+	case "empty":
+		return `NOT EXISTS (
+			SELECT 1 FROM contact_variables cv
+			WHERE cv.contact_id = c.id AND LOWER(cv.key) = LOWER(?) AND TRIM(COALESCE(cv.value, '')) <> ''
+		)`, []interface{}{key}, nil
+	default:
+		return "", nil, fmt.Errorf("unknown variable filter op %q", op)
+	}
+}
+
+func loadContactVariablesMap(contactIDs []int64, keys []string) (map[int64]map[string]string, error) {
+	out := make(map[int64]map[string]string, len(contactIDs))
+	if len(contactIDs) == 0 || len(keys) == 0 {
+		return out, nil
+	}
+	idPH := make([]string, len(contactIDs))
+	args := make([]interface{}, 0, len(contactIDs)+len(keys))
+	for i, id := range contactIDs {
+		idPH[i] = "?"
+		args = append(args, id)
+	}
+	keyPH := make([]string, len(keys))
+	for i, k := range keys {
+		keyPH[i] = "?"
+		args = append(args, k)
+	}
+	rows, err := db.Query(`
+		SELECT contact_id, key, value FROM contact_variables
+		WHERE contact_id IN (`+strings.Join(idPH, ",")+`) AND key IN (`+strings.Join(keyPH, ",")+`)
+	`, args...)
+	if err != nil {
+		return out, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid int64
+		var key, val string
+		if rows.Scan(&cid, &key, &val) != nil {
+			continue
+		}
+		if out[cid] == nil {
+			out[cid] = map[string]string{}
+		}
+		out[cid][key] = val
+	}
+	return out, nil
+}
+
+// ListMemberIDsMatching returns contact IDs in a list matching the filter (capped).
+func ListMemberIDsMatching(listID, userID int64, f ListMembersFilter, max int) ([]int64, error) {
+	if max <= 0 || max > 10000 {
+		max = 5000
+	}
+	f.Page = 1
+	f.PageSize = max
+	where, args, err := listMembersWhere(listID, userID, f)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := db.Query(`
+		SELECT c.id
+		FROM contact_list_members m
+		INNER JOIN contact c ON c.id = m.contact_id
+		WHERE `+strings.Join(where, " AND ")+`
+		ORDER BY c.id ASC
+		LIMIT ?
+	`, append(args, max)...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if rows.Scan(&id) == nil {
+			ids = append(ids, id)
+		}
+	}
+	return ids, nil
+}
+
+// ListDistinctVariableValues returns distinct non-empty values for a variable key among list members.
+func ListDistinctVariableValues(listID, userID int64, key string, limit int) ([]string, error) {
+	if _, err := GetContactListForUser(listID, userID); err != nil {
+		return nil, err
+	}
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return nil, nil
+	}
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	rows, err := db.Query(`
+		SELECT DISTINCT cv.value
+		FROM contact_list_members m
+		INNER JOIN contact c ON c.id = m.contact_id
+		INNER JOIN contact_variables cv ON cv.contact_id = c.id
+		WHERE m.list_id = ? AND c.user_id = ? AND LOWER(cv.key) = LOWER(?) AND TRIM(COALESCE(cv.value, '')) <> ''
+		ORDER BY cv.value ASC
+		LIMIT ?
+	`, listID, userID, key, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var v string
+		if rows.Scan(&v) == nil {
+			out = append(out, v)
+		}
+	}
+	return out, nil
+}
+
+// ListEngagementCounts returns quick stats for list header chips.
+func ListEngagementCounts(listID, userID int64) (total, interested, replied int, err error) {
+	list, err := GetContactListForUser(listID, userID)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	total = list.MemberCount
+	interestedIDs, err := ListMemberIDsMatching(listID, userID, ListMembersFilter{Engagement: "interested"}, 10000)
+	if err != nil {
+		return total, 0, 0, err
+	}
+	repliedIDs, err := ListMemberIDsMatching(listID, userID, ListMembersFilter{Engagement: "replied"}, 10000)
+	if err != nil {
+		return total, len(interestedIDs), 0, err
+	}
+	return total, len(interestedIDs), len(repliedIDs), nil
 }
 
 // RemoveContactsFromList removes many members from a list (does not delete contacts).

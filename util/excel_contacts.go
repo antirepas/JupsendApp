@@ -14,13 +14,15 @@ import (
 const emailColumn = "email"
 
 const (
-	MapTargetEmail = "email"
-	MapTargetSkip  = "skip"
+	MapTargetEmail   = "email"
+	MapTargetSkip    = "skip"
+	MapTargetSegment = "segment"
 )
 
 type ContactImportRow struct {
 	Email     string
 	Variables map[string]string
+	Segment   string // optional list-segment value from a mapped column
 }
 
 // ContactUploadPeek is a legacy preview of columns and sample rows before import.
@@ -87,6 +89,10 @@ func SuggestContactColumnMap(headers []string, templateVars []string) map[string
 			continue
 		}
 		norm := normalizeHeader(key)
+		if norm == "segment" || norm == "list" || norm == "group" || norm == "segment_name" {
+			out[key] = MapTargetSegment
+			continue
+		}
 		if len(templateVars) > 0 {
 			if tmpl[norm] {
 				out[key] = norm
@@ -121,12 +127,16 @@ func SuggestEmailHeader(headers []string) string {
 }
 
 // ApplyContactColumnMap builds import rows from a table using header→target mapping.
-// Targets: "email", "skip", or a variable name. Exactly one column must map to email.
+// Targets: "email", "skip", "segment", or a variable name. Exactly one column must map to email.
+// At most one column may map to segment; that column's value is also stored as a variable
+// under the normalized header name so list filters can use it later.
 func ApplyContactColumnMap(headers []string, dataRows [][]string, colMap map[string]string) ([]ContactImportRow, error) {
 	if len(headers) == 0 {
 		return nil, fmt.Errorf("spreadsheet has no headers")
 	}
 	emailIdx := -1
+	segmentIdx := -1
+	segmentVarName := ""
 	type varCol struct {
 		name string
 		idx  int
@@ -154,8 +164,19 @@ func ApplyContactColumnMap(headers []string, dataRows [][]string, colMap map[str
 			emailIdx = i
 			continue
 		}
+		if strings.EqualFold(target, MapTargetSegment) {
+			if segmentIdx >= 0 {
+				return nil, fmt.Errorf("map at most one column to list segment")
+			}
+			segmentIdx = i
+			segmentVarName = normalizeHeader(key)
+			if segmentVarName == "" || segmentVarName == emailColumn || segmentVarName == MapTargetSegment {
+				segmentVarName = "segment"
+			}
+			continue
+		}
 		vname := normalizeHeader(target)
-		if vname == "" || vname == emailColumn {
+		if vname == "" || vname == emailColumn || vname == MapTargetSegment {
 			continue
 		}
 		if seenVar[vname] {
@@ -166,6 +187,10 @@ func ApplyContactColumnMap(headers []string, dataRows [][]string, colMap map[str
 	}
 	if emailIdx < 0 {
 		return nil, fmt.Errorf("map one column to email")
+	}
+	if segmentIdx >= 0 && segmentVarName != "" && !seenVar[segmentVarName] {
+		seenVar[segmentVarName] = true
+		vars = append(vars, varCol{name: segmentVarName, idx: segmentIdx})
 	}
 
 	var contacts []ContactImportRow
@@ -182,7 +207,11 @@ func ApplyContactColumnMap(headers []string, dataRows [][]string, colMap map[str
 		for _, v := range vars {
 			m[v.name] = cellValue(row, v.idx)
 		}
-		contacts = append(contacts, ContactImportRow{Email: email, Variables: m})
+		seg := ""
+		if segmentIdx >= 0 {
+			seg = strings.TrimSpace(cellValue(row, segmentIdx))
+		}
+		contacts = append(contacts, ContactImportRow{Email: email, Variables: m, Segment: seg})
 	}
 	if len(contacts) == 0 {
 		return nil, fmt.Errorf("no valid contacts found in spreadsheet")

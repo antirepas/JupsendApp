@@ -386,7 +386,7 @@
 
         <div class="space-y-3">
           <h4 class="text-[11px] uppercase tracking-wide text-gray-400">Spam score test</h4>
-          <p class="text-sm text-gray-600">Send a probe from this mailbox to Mail-Tester, then open the score page.</p>
+          <p class="text-sm text-gray-600">Send a probe from this mailbox to Mail-Tester (<code class="text-xs">@srv1.mail-tester.com</code>), then open the score page.</p>
           <form method="POST" action="/mailboxes/{{.ID}}/mail-tester">
             <button type="submit" class="btn-primary text-sm w-full">Send to Mail-Tester</button>
           </form>
@@ -395,7 +395,7 @@
             Results:
             <a href="{{$.mailTesterURL}}" target="_blank" rel="noopener" class="text-brand-600 font-medium break-all">{{$.mailTesterURL}}</a>
           </p>
-          <p class="text-xs text-gray-500">Wait about a minute after queueing before opening the link.</p>
+          <p class="text-xs text-gray-500">Wait about a minute after queueing. The page may say “waiting for mail” until the probe arrives.</p>
           {{end}}
         </div>
 

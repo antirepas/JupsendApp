@@ -19,6 +19,7 @@ type ImportContactRow struct {
 	Variables         map[string]string
 	EmailStatus       string
 	EmailStatusReason string
+	Segment           string // optional: find/create a list with this name and add the contact
 }
 
 func ImportContactRows(userID int64, rows []ImportContactRow, listID int64, importKeys []string) (ImportContactsResult, error) {
@@ -28,6 +29,7 @@ func ImportContactRows(userID int64, rows []ImportContactRow, listID int64, impo
 			return result, err
 		}
 	}
+	segmentCache := map[string]int64{}
 	for _, row := range rows {
 		email := strings.TrimSpace(row.Email)
 		if !strings.Contains(email, "@") {
@@ -69,8 +71,39 @@ func ImportContactRows(userID int64, rows []ImportContactRow, listID int64, impo
 				continue
 			}
 		}
+		if seg := strings.TrimSpace(row.Segment); seg != "" {
+			segListID, ok := segmentCache[strings.ToLower(seg)]
+			if !ok {
+				var err error
+				segListID, err = FindOrCreateContactListByName(userID, sanitizeSegmentListName(seg))
+				if err != nil {
+					result.Errors++
+					continue
+				}
+				if len(segmentCache) < 100 {
+					segmentCache[strings.ToLower(seg)] = segListID
+				}
+				if len(importKeys) > 0 {
+					_ = EnsureListVariableSchema(segListID, userID, importKeys)
+				}
+			}
+			if err := addContactToListValidated(segListID, userID, contactID); err != nil {
+				result.Errors++
+				continue
+			}
+		}
 	}
 	return result, nil
+}
+
+func sanitizeSegmentListName(name string) string {
+	name = strings.TrimSpace(name)
+	name = strings.ReplaceAll(name, "\n", " ")
+	name = strings.Join(strings.Fields(name), " ")
+	if len(name) > 120 {
+		name = name[:120]
+	}
+	return name
 }
 
 func UpsertContactWithEmailStatus(userID int64, email string, variables []ContactVariables, emailStatus, emailReason string) (created bool, contactID int64, err error) {

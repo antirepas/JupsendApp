@@ -7,83 +7,211 @@
 {{template "sidebar" .}}
 <main class="flex-1 overflow-y-auto">
 <div class="max-w-6xl mx-auto p-8">
-<div class="mb-6">
-    <a href="/contacts?tab=lists" class="text-sm text-brand-600 font-medium">← Lists</a>
-    <h2 class="text-2xl font-bold text-charcoal mt-2">{{.list.Name}}</h2>
-    <p class="text-gray-500 mt-1 text-sm">{{.list.MemberCount}} contacts in this list</p>
+
+<div class="flex flex-wrap items-start justify-between gap-4 mb-6">
+    <div>
+        <a href="/contacts?tab=lists" class="text-sm text-brand-600 font-medium">← Lists</a>
+        <h2 class="text-2xl font-bold text-charcoal mt-2">{{.list.Name}}</h2>
+        <p class="text-gray-500 mt-1 text-sm">Segment by engagement or variables, then save or split into new lists.</p>
+    </div>
+    <div class="flex flex-wrap gap-2">
+        <a href="/contacts?tab=import" class="btn-secondary">Import contacts</a>
+        <button type="button" class="btn-primary" data-open-panel="segment">Split / save segment</button>
+    </div>
 </div>
 
 {{if .success}}<div class="alert-success mb-6">{{.success}}</div>{{end}}
 {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
 
-<div class="card mb-6">
-    <h3 class="card-title">Import schema</h3>
-    <p class="text-sm text-gray-500 mb-3">Column names expected on import. Missing values are OK; unknown keys are rejected.</p>
-    {{if .columns}}
-    <div class="flex flex-wrap gap-2 mb-4">
-        {{range .columns}}<span class="badge badge-blue">{{.}}</span>{{end}}
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+    <div class="rounded-xl border border-gray-200 bg-white px-5 py-4">
+        <div class="text-xs uppercase tracking-wide text-gray-500">Members</div>
+        <div class="text-2xl font-semibold text-charcoal mt-1">{{.statsTotal}}</div>
     </div>
-    {{else}}
-    <p class="text-sm text-gray-400 mb-4">No schema yet — set keys below or import with headers.</p>
-    {{end}}
-    <form method="POST" action="/contacts/lists/{{.list.ID}}/schema" class="flex flex-wrap gap-3 items-end">
-        <div class="flex-1 min-w-[220px]">
-            <label class="form-label">Set schema keys</label>
-            <input type="text" name="schema" class="form-input" placeholder="first_name, company, role" value="{{range $i, $c := .columns}}{{if $i}}, {{end}}{{$c}}{{end}}">
-        </div>
-        <button type="submit" class="btn-secondary">Save schema</button>
-    </form>
+    <div class="rounded-xl border border-gray-200 bg-white px-5 py-4">
+        <div class="text-xs uppercase tracking-wide text-gray-500">Interested (90d)</div>
+        <div class="text-2xl font-semibold text-charcoal mt-1">{{.statsInterested}}</div>
+        <a href="/contacts/lists/{{.list.ID}}?engagement=interested" class="text-xs text-brand-600 font-medium">View →</a>
+    </div>
+    <div class="rounded-xl border border-gray-200 bg-white px-5 py-4">
+        <div class="text-xs uppercase tracking-wide text-gray-500">Replied (90d)</div>
+        <div class="text-2xl font-semibold text-charcoal mt-1">{{.statsReplied}}</div>
+        <a href="/contacts/lists/{{.list.ID}}?engagement=replied" class="text-xs text-brand-600 font-medium">View →</a>
+    </div>
 </div>
 
-<div class="card mb-6">
-    <h3 class="card-title mb-3">Add members</h3>
-    {{if .addContacts}}
-    <form method="POST" action="/contacts/lists/{{.list.ID}}/members">
-        <div class="max-h-48 overflow-y-auto border border-gray-100 rounded-lg mb-3 p-2">
-            {{range .addContacts}}
-            <label class="flex items-center gap-2 py-1 px-2 text-sm hover:bg-gray-50 rounded">
-                <input type="checkbox" name="contact_ids" value="{{.ID}}">
-                <span>{{.Email}}</span>
-            </label>
-            {{end}}
+<details class="card mb-4 group" {{if not .columns}}open{{end}}>
+    <summary class="cursor-pointer list-none flex items-center justify-between gap-3">
+        <div>
+            <h3 class="card-title mb-0">Import schema</h3>
+            <p class="text-sm text-gray-500 mt-1">
+                {{if .columns}}{{len .columns}} variable keys{{else}}No schema yet — set keys or import with headers{{end}}
+            </p>
         </div>
-        <button type="submit" class="btn-primary">Add selected</button>
-    </form>
-    {{else}}
-    <p class="text-sm text-gray-400">All of your contacts are already in this list, or you have no contacts yet.
-        <a href="/contacts?tab=import" class="text-brand-600">Import contacts</a>
-    </p>
-    {{end}}
-</div>
+        <span class="text-sm text-brand-600 font-medium group-open:hidden">Edit</span>
+        <span class="text-sm text-gray-400 font-medium hidden group-open:inline">Close</span>
+    </summary>
+    <div class="mt-4 pt-4 border-t border-gray-100">
+        {{if .columns}}
+        <div class="flex flex-wrap gap-2 mb-4">
+            {{range .columns}}<span class="badge badge-blue">{{.}}</span>{{end}}
+        </div>
+        {{end}}
+        <p class="text-sm text-gray-500 mb-3">Missing values are OK; unknown keys are rejected on add/import.</p>
+        <form method="POST" action="/contacts/lists/{{.list.ID}}/schema" class="flex flex-wrap gap-3 items-end">
+            <div class="flex-1 min-w-[220px]">
+                <label class="form-label">Schema keys</label>
+                <input type="text" name="schema" class="form-input" placeholder="first_name, company, role" value="{{range $i, $c := .columns}}{{if $i}}, {{end}}{{$c}}{{end}}">
+            </div>
+            <button type="submit" class="btn-secondary">Save schema</button>
+        </form>
+    </div>
+</details>
+
+<details class="card mb-6 group">
+    <summary class="cursor-pointer list-none flex items-center justify-between gap-3">
+        <div>
+            <h3 class="card-title mb-0">Add members</h3>
+            <p class="text-sm text-gray-500 mt-1">Pick existing contacts that aren’t already on this list.</p>
+        </div>
+        <span class="text-sm text-brand-600 font-medium group-open:hidden">Open</span>
+        <span class="text-sm text-gray-400 font-medium hidden group-open:inline">Close</span>
+    </summary>
+    <div class="mt-4 pt-4 border-t border-gray-100">
+        {{if .addContacts}}
+        <form method="POST" action="/contacts/lists/{{.list.ID}}/members">
+            <div class="max-h-48 overflow-y-auto border border-gray-100 rounded-lg mb-3 p-2">
+                {{range .addContacts}}
+                <label class="flex items-center gap-2 py-1 px-2 text-sm hover:bg-gray-50 rounded">
+                    <input type="checkbox" name="contact_ids" value="{{.ID}}">
+                    <span>{{.Email}}</span>
+                </label>
+                {{end}}
+            </div>
+            <button type="submit" class="btn-primary">Add selected</button>
+        </form>
+        {{else}}
+        <p class="text-sm text-gray-400">All of your contacts are already in this list, or you have no contacts yet.
+            <a href="/contacts?tab=import" class="text-brand-600">Import contacts</a>
+        </p>
+        {{end}}
+    </div>
+</details>
 
 <div class="card mb-4">
-    <form method="GET" action="/contacts/lists/{{.list.ID}}" class="flex flex-wrap gap-3 items-end">
-        <div class="flex-1 min-w-[180px]">
-            <label class="form-label">Search email</label>
-            <input type="search" name="q" class="form-input" value="{{.filterQ}}" placeholder="alice@example.com">
+    <form method="GET" action="/contacts/lists/{{.list.ID}}" id="list-filter-form" class="space-y-4">
+        <div class="flex flex-wrap gap-3 items-end">
+            <div class="flex-1 min-w-[180px]">
+                <label class="form-label">Search email</label>
+                <input type="search" name="q" class="form-input" value="{{.filterQ}}" placeholder="alice@example.com">
+            </div>
+            <div class="min-w-[200px]">
+                <label class="form-label">Engagement</label>
+                <select name="engagement" class="form-input">
+                    <option value="" {{if eq .filterEngagement ""}}selected{{end}}>Any</option>
+                    <option value="interested" {{if eq .filterEngagement "interested"}}selected{{end}}>Interested (90d)</option>
+                    <option value="not_interested" {{if eq .filterEngagement "not_interested"}}selected{{end}}>Not interested (90d)</option>
+                    <option value="replied" {{if eq .filterEngagement "replied"}}selected{{end}}>Replied</option>
+                    <option value="positive_reply" {{if eq .filterEngagement "positive_reply"}}selected{{end}}>Positive reply</option>
+                    <option value="negative_reply" {{if eq .filterEngagement "negative_reply"}}selected{{end}}>Negative reply</option>
+                    <option value="opened_no_reply" {{if eq .filterEngagement "opened_no_reply"}}selected{{end}}>Opened, no reply</option>
+                    <option value="clicked_no_reply" {{if eq .filterEngagement "clicked_no_reply"}}selected{{end}}>Clicked, no reply</option>
+                </select>
+            </div>
+            <div class="min-w-[140px]">
+                <label class="form-label">Sort</label>
+                <select name="sort" class="form-input">
+                    <option value="email" {{if or (eq .filterSort "email") (eq .filterSort "")}}selected{{end}}>Email A–Z</option>
+                    <option value="newest" {{if eq .filterSort "newest"}}selected{{end}}>Newest</option>
+                </select>
+            </div>
+            <button type="submit" class="btn-secondary">Apply</button>
+            {{if or .filterQ .filterEngagement .filterVarKey}}
+            <a href="/contacts/lists/{{.list.ID}}" class="text-sm text-gray-500 pb-2">Clear</a>
+            {{end}}
         </div>
-        <div class="min-w-[180px]">
-            <label class="form-label">Engagement</label>
-            <select name="engagement" class="form-input">
-                <option value="" {{if eq .filterEngagement ""}}selected{{end}}>Any</option>
-                <option value="opened_no_reply" {{if eq .filterEngagement "opened_no_reply"}}selected{{end}}>Opened, no reply (90d)</option>
-                <option value="clicked_no_reply" {{if eq .filterEngagement "clicked_no_reply"}}selected{{end}}>Clicked, no reply</option>
-                <option value="replied" {{if eq .filterEngagement "replied"}}selected{{end}}>Replied</option>
-                <option value="interested" {{if eq .filterEngagement "interested"}}selected{{end}}>Interested (90d)</option>
-            </select>
+
+        <div class="flex flex-wrap gap-3 items-end border-t border-gray-100 pt-4">
+            <div class="min-w-[160px]">
+                <label class="form-label">Variable</label>
+                <select name="var_key" class="form-input">
+                    <option value="">Any variable</option>
+                    {{range .columns}}
+                    <option value="{{.}}" {{if eq $.filterVarKey .}}selected{{end}}>{{.}}</option>
+                    {{end}}
+                </select>
+            </div>
+            <div class="min-w-[140px]">
+                <label class="form-label">Condition</label>
+                <select name="var_op" class="form-input">
+                    <option value="equals" {{if or (eq .filterVarOp "equals") (eq .filterVarOp "")}}selected{{end}}>Equals</option>
+                    <option value="not_equals" {{if eq .filterVarOp "not_equals"}}selected{{end}}>Not equals</option>
+                    <option value="exists" {{if eq .filterVarOp "exists"}}selected{{end}}>Has value</option>
+                    <option value="empty" {{if eq .filterVarOp "empty"}}selected{{end}}>Empty / missing</option>
+                </select>
+            </div>
+            <div class="flex-1 min-w-[160px]">
+                <label class="form-label">Value</label>
+                <input type="text" name="var_value" class="form-input" list="var-value-suggestions" value="{{.filterVarValue}}" placeholder="e.g. enterprise">
+                <datalist id="var-value-suggestions">
+                    {{range .varDistinct}}<option value="{{.}}"></option>{{end}}
+                </datalist>
+            </div>
         </div>
-        <div class="min-w-[140px]">
-            <label class="form-label">Sort</label>
-            <select name="sort" class="form-input">
-                <option value="email" {{if or (eq .filterSort "email") (eq .filterSort "")}}selected{{end}}>Email A–Z</option>
-                <option value="newest" {{if eq .filterSort "newest"}}selected{{end}}>Newest</option>
-            </select>
+
+        <div class="flex flex-wrap gap-2">
+            <a class="badge {{if eq .filterEngagement "interested"}}badge-green{{else}}badge-gray{{end}}" href="/contacts/lists/{{.list.ID}}?engagement=interested">Interested</a>
+            <a class="badge {{if eq .filterEngagement "not_interested"}}badge-green{{else}}badge-gray{{end}}" href="/contacts/lists/{{.list.ID}}?engagement=not_interested">Not interested</a>
+            <a class="badge {{if eq .filterEngagement "replied"}}badge-green{{else}}badge-gray{{end}}" href="/contacts/lists/{{.list.ID}}?engagement=replied">Replied</a>
+            <a class="badge {{if eq .filterEngagement "positive_reply"}}badge-green{{else}}badge-gray{{end}}" href="/contacts/lists/{{.list.ID}}?engagement=positive_reply">Positive reply</a>
         </div>
-        <button type="submit" class="btn-secondary">Filter</button>
-        {{if or .filterQ .filterEngagement}}
-        <a href="/contacts/lists/{{.list.ID}}" class="text-sm text-gray-500 pb-2">Clear</a>
-        {{end}}
     </form>
+</div>
+
+<div id="segment-panel" class="card mb-6 {{if not .filterEngagement}}{{if not .filterVarKey}}hidden{{end}}{{end}}">
+    <h3 class="card-title">Save or split this filter</h3>
+    <p class="text-sm text-gray-500 mb-4">
+        Current match: <strong>{{.memberPage.Total}}</strong> contact{{if ne .memberPage.Total 1}}s{{end}}.
+        Split creates two new lists (match + everyone else). Save copies only the match.
+    </p>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <form method="POST" action="/contacts/lists/{{.list.ID}}/split" class="space-y-3">
+            <input type="hidden" name="q" value="{{.filterQ}}">
+            <input type="hidden" name="engagement" value="{{.filterEngagement}}">
+            <input type="hidden" name="var_key" value="{{.filterVarKey}}">
+            <input type="hidden" name="var_op" value="{{.filterVarOp}}">
+            <input type="hidden" name="var_value" value="{{.filterVarValue}}">
+            <input type="hidden" name="sort" value="{{.filterSort}}">
+            <p class="text-sm font-medium text-charcoal">Split into 2 lists</p>
+            <div>
+                <label class="form-label">Match list name</label>
+                <input type="text" name="match_name" class="form-input" value="Interested" required>
+            </div>
+            <div>
+                <label class="form-label">Everyone else</label>
+                <input type="text" name="rest_name" class="form-input" value="Not interested" required>
+            </div>
+            <label class="flex items-center gap-2 text-sm text-gray-600">
+                <input type="checkbox" name="remove_from_source" value="1">
+                Remove contacts from this list after splitting
+            </label>
+            <button type="submit" class="btn-primary" {{if eq .statsTotal 0}}disabled{{end}}>Split list</button>
+        </form>
+        <form method="POST" action="/contacts/lists/{{.list.ID}}/save-matching" class="space-y-3">
+            <input type="hidden" name="q" value="{{.filterQ}}">
+            <input type="hidden" name="engagement" value="{{.filterEngagement}}">
+            <input type="hidden" name="var_key" value="{{.filterVarKey}}">
+            <input type="hidden" name="var_op" value="{{.filterVarOp}}">
+            <input type="hidden" name="var_value" value="{{.filterVarValue}}">
+            <input type="hidden" name="sort" value="{{.filterSort}}">
+            <p class="text-sm font-medium text-charcoal">Save matching only</p>
+            <div>
+                <label class="form-label">New list name</label>
+                <input type="text" name="name" class="form-input" placeholder="Q1 interested" required>
+            </div>
+            <button type="submit" class="btn-secondary" {{if eq .memberPage.Total 0}}disabled{{end}}>Save matching as list</button>
+        </form>
+    </div>
 </div>
 
 <form method="POST" action="/contacts/lists/{{.list.ID}}/members/bulk" id="list-bulk-form">
@@ -93,18 +221,16 @@
         <label class="flex items-center gap-2"><input type="checkbox" id="select-all-page"> Select page</label>
         <button type="submit" class="text-amber-700 font-medium" onclick="document.getElementById('list-bulk-action').value='remove'; return confirm('Remove selected from this list?');">Remove from list</button>
         <button type="submit" class="text-red-600 font-medium" onclick="document.getElementById('list-bulk-action').value='delete'; return confirm('Permanently delete selected leads? This cannot be undone.');">Delete leads</button>
-        <span class="text-gray-400">{{.memberPage.Total}} match{{if gt .memberPage.TotalPages 0}} · page {{.memberPage.Page}} of {{.memberPage.TotalPages}}{{end}}</span>
+        <span class="text-gray-400 ml-auto">{{.memberPage.Total}} match{{if gt .memberPage.TotalPages 0}} · page {{.memberPage.Page}} of {{.memberPage.TotalPages}}{{end}}</span>
     </div>
-</div>
-</form>
 
-<div class="card overflow-hidden -mt-px">
     {{if .rows}}
     <table class="data-table">
         <thead>
             <tr>
                 <th class="w-10"></th>
                 <th>Email</th>
+                {{range $i, $col := .columns}}{{if lt $i 3}}<th>{{$col}}</th>{{end}}{{end}}
                 <th>Last campaign</th>
                 <th>Last signal</th>
                 <th class="text-right">Actions</th>
@@ -119,6 +245,9 @@
                     {{if $row.Suppressed}}<span class="badge badge-red ml-1">suppressed</span>{{end}}
                     {{if $row.RepliedAt}}<span class="badge badge-green ml-1">replied</span>{{end}}
                 </td>
+                {{range $i, $col := $.columns}}{{if lt $i 3}}
+                <td class="text-sm text-gray-600 max-w-[140px] truncate">{{with index $row.Variables $col}}{{.}}{{else}}—{{end}}</td>
+                {{end}}{{end}}
                 <td class="text-sm text-gray-600">
                     {{if $row.LastCampaignID}}
                     <a href="/campaigns/{{$row.LastCampaignID}}" class="text-brand-600 hover:underline">{{$row.LastCampaignName}}</a>
@@ -146,17 +275,17 @@
         <span class="text-gray-500">Page {{.memberPage.Page}} of {{.memberPage.TotalPages}}</span>
         <div class="flex gap-2">
             {{if .hasPrev}}
-            <a href="/contacts/lists/{{.list.ID}}?page={{.prevPage}}&q={{.filterQ}}&engagement={{.filterEngagement}}&sort={{.filterSort}}" class="btn-secondary text-xs">Previous</a>
+            <a href="/contacts/lists/{{.list.ID}}?page={{.prevPage}}&q={{.filterQ}}&engagement={{.filterEngagement}}&var_key={{.filterVarKey}}&var_op={{.filterVarOp}}&var_value={{.filterVarValue}}&sort={{.filterSort}}" class="btn-secondary text-xs">Previous</a>
             {{end}}
             {{if .hasNext}}
-            <a href="/contacts/lists/{{.list.ID}}?page={{.nextPage}}&q={{.filterQ}}&engagement={{.filterEngagement}}&sort={{.filterSort}}" class="btn-secondary text-xs">Next</a>
+            <a href="/contacts/lists/{{.list.ID}}?page={{.nextPage}}&q={{.filterQ}}&engagement={{.filterEngagement}}&var_key={{.filterVarKey}}&var_op={{.filterVarOp}}&var_value={{.filterVarValue}}&sort={{.filterSort}}" class="btn-secondary text-xs">Next</a>
             {{end}}
         </div>
     </div>
     {{end}}
     {{else}}
     <div class="empty-state">
-        {{if or .filterQ .filterEngagement}}
+        {{if or .filterQ .filterEngagement .filterVarKey}}
         <p>No members match your filters.</p>
         <a href="/contacts/lists/{{.list.ID}}" class="btn-secondary mt-4">Clear filters</a>
         {{else}}
@@ -166,6 +295,7 @@
     </div>
     {{end}}
 </div>
+</form>
 
 </div>
 </main>
@@ -173,10 +303,19 @@
 <script>
 (function () {
     const all = document.getElementById('select-all-page');
-    if (!all) return;
-    all.addEventListener('change', function () {
-        document.querySelectorAll('.list-member-cb').forEach(function (cb) {
-            cb.checked = all.checked;
+    if (all) {
+        all.addEventListener('change', function () {
+            document.querySelectorAll('.list-member-cb').forEach(function (cb) {
+                cb.checked = all.checked;
+            });
+        });
+    }
+    document.querySelectorAll('[data-open-panel="segment"]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            const panel = document.getElementById('segment-panel');
+            if (!panel) return;
+            panel.classList.remove('hidden');
+            panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         });
     });
 })();

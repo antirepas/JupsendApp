@@ -80,6 +80,9 @@ func ContactListDetailPage(c *gin.Context) {
 	filter := model.ListMembersFilter{
 		Query:      c.Query("q"),
 		Engagement: c.Query("engagement"),
+		VarKey:     c.Query("var_key"),
+		VarOp:      c.DefaultQuery("var_op", "equals"),
+		VarValue:   c.Query("var_value"),
 		Sort:       c.DefaultQuery("sort", "email"),
 		Page:       pageNum,
 		PageSize:   50,
@@ -102,6 +105,11 @@ func ContactListDetailPage(c *gin.Context) {
 			addable = append(addable, ct)
 		}
 	}
+	total, interestedN, repliedN, _ := model.ListEngagementCounts(listID, userID)
+	varDistinct := []string{}
+	if filter.VarKey != "" {
+		varDistinct, _ = model.ListDistinctVariableValues(listID, userID, filter.VarKey, 40)
+	}
 	hasPrev := memberPage.Page > 1
 	hasNext := memberPage.TotalPages > 0 && memberPage.Page < memberPage.TotalPages
 	c.HTML(http.StatusOK, "contacts_list_detail.html", gin.H{
@@ -113,7 +121,14 @@ func ContactListDetailPage(c *gin.Context) {
 		"memberPage":       memberPage,
 		"filterQ":          filter.Query,
 		"filterEngagement": filter.Engagement,
+		"filterVarKey":     filter.VarKey,
+		"filterVarOp":      filter.VarOp,
+		"filterVarValue":   filter.VarValue,
 		"filterSort":       filter.Sort,
+		"varDistinct":      varDistinct,
+		"statsTotal":       total,
+		"statsInterested":  interestedN,
+		"statsReplied":     repliedN,
 		"hasPrev":          hasPrev,
 		"hasNext":          hasNext,
 		"prevPage":         memberPage.Page - 1,
@@ -122,6 +137,65 @@ func ContactListDetailPage(c *gin.Context) {
 		"success":          c.Query("success"),
 		"error":            c.Query("error"),
 	})
+}
+
+func listFilterFromRequest(c *gin.Context) model.ListMembersFilter {
+	return model.ListMembersFilter{
+		Query:      c.DefaultPostForm("q", c.Query("q")),
+		Engagement: c.DefaultPostForm("engagement", c.Query("engagement")),
+		VarKey:     c.DefaultPostForm("var_key", c.Query("var_key")),
+		VarOp:      c.DefaultPostForm("var_op", c.DefaultQuery("var_op", "equals")),
+		VarValue:   c.DefaultPostForm("var_value", c.Query("var_value")),
+		Sort:       c.DefaultPostForm("sort", c.DefaultQuery("sort", "email")),
+		Page:       1,
+		PageSize:   50,
+	}
+}
+
+func SplitContactList(c *gin.Context) {
+	userID := mustUserID(c)
+	listID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.Redirect(http.StatusFound, "/contacts?tab=lists&error=Invalid+list")
+		return
+	}
+	filter := listFilterFromRequest(c)
+	matchName := strings.TrimSpace(c.PostForm("match_name"))
+	restName := strings.TrimSpace(c.PostForm("rest_name"))
+	remove := c.PostForm("remove_from_source") == "1"
+	if matchName == "" {
+		matchName = "Interested"
+	}
+	if restName == "" {
+		restName = "Not interested"
+	}
+	result, err := model.SplitContactList(userID, listID, matchName, restName, filter, remove)
+	if err != nil {
+		c.Redirect(http.StatusFound, "/contacts/lists/"+strconv.FormatInt(listID, 10)+"?error="+url.QueryEscape(err.Error()))
+		return
+	}
+	msg := "Created \"" + result.MatchListName + "\" (" + strconv.Itoa(result.MatchCount) + ") and \"" + result.RestListName + "\" (" + strconv.Itoa(result.RestCount) + ")"
+	c.Redirect(http.StatusFound, "/contacts?tab=lists&success="+url.QueryEscape(msg))
+}
+
+func SaveMatchingList(c *gin.Context) {
+	userID := mustUserID(c)
+	listID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.Redirect(http.StatusFound, "/contacts?tab=lists&error=Invalid+list")
+		return
+	}
+	filter := listFilterFromRequest(c)
+	name := strings.TrimSpace(c.PostForm("name"))
+	if name == "" {
+		name = "Segment from " + strconv.FormatInt(listID, 10)
+	}
+	newID, count, err := model.SaveMatchingAsList(userID, listID, name, filter)
+	if err != nil {
+		c.Redirect(http.StatusFound, "/contacts/lists/"+strconv.FormatInt(listID, 10)+"?error="+url.QueryEscape(err.Error()))
+		return
+	}
+	c.Redirect(http.StatusFound, "/contacts/lists/"+strconv.FormatInt(newID, 10)+"?success="+url.QueryEscape("Saved "+strconv.Itoa(count)+" contacts to new list"))
 }
 
 func SetContactListSchema(c *gin.Context) {

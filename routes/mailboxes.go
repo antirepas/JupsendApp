@@ -821,7 +821,16 @@ func mailTesterResultsURL(token string) string {
 	if token == "" {
 		return ""
 	}
+	// Free Mail-Tester IDs use the test-… local-part; results live at /{id} (202 until mail arrives).
 	return "https://www.mail-tester.com/" + url.PathEscape(token)
+}
+
+func mailTesterRecipient(token string) string {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return ""
+	}
+	return token + "@srv1.mail-tester.com"
 }
 
 func MailboxesDNSCheck(c *gin.Context) {
@@ -853,7 +862,7 @@ func MailboxesMailTester(c *gin.Context) {
 	}
 
 	token := newMailTesterToken()
-	recipient := token + "@mail-tester.com"
+	recipient := mailTesterRecipient(token)
 	contactID, err := model.FindOrCreateContact(userID, recipient, nil)
 	if err != nil {
 		c.Redirect(http.StatusFound, mailboxManageURL(id, "deliverability", "Could not create Mail-Tester contact: "+err.Error(), ""))
@@ -883,15 +892,16 @@ func MailboxesMailTester(c *gin.Context) {
 }
 
 func newMailTesterToken() string {
+	// Match mail-tester.com free flow: test-{base36} @ srv1.mail-tester.com
 	const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789"
-	b := make([]byte, 12)
+	b := make([]byte, 9)
 	if _, err := rand.Read(b); err != nil {
-		return "jup" + strconv.FormatInt(time.Now().UnixNano()%1e12, 36)
+		return "test-" + strconv.FormatInt(time.Now().UnixNano()%1e12, 36)
 	}
 	for i := range b {
 		b[i] = alphabet[int(b[i])%len(alphabet)]
 	}
-	return "jup" + string(b)
+	return "test-" + string(b)
 }
 
 func MailboxesDelete(c *gin.Context) {

@@ -12,7 +12,7 @@ func parseImportRowsFromPaste(paste string, variableKeys []string) []model.Impor
 		utilRows, detectedKeys := util.ParseContactPasteAuto(paste)
 		rows := make([]model.ImportContactRow, 0, len(utilRows))
 		for _, r := range utilRows {
-			rows = append(rows, model.ImportContactRow{Email: r.Email, Variables: r.Variables})
+			rows = append(rows, model.ImportContactRow{Email: r.Email, Variables: r.Variables, Segment: r.Segment})
 		}
 		if len(rows) == 0 && len(detectedKeys) == 0 {
 			for _, line := range strings.Split(paste, "\n") {
@@ -27,7 +27,7 @@ func parseImportRowsFromPaste(paste string, variableKeys []string) []model.Impor
 	utilRows := util.ParseContactPasteWithHeaders(paste, variableKeys)
 	rows := make([]model.ImportContactRow, 0, len(utilRows))
 	for _, r := range utilRows {
-		rows = append(rows, model.ImportContactRow{Email: r.Email, Variables: r.Variables})
+		rows = append(rows, model.ImportContactRow{Email: r.Email, Variables: r.Variables, Segment: r.Segment})
 	}
 	return applyEmailValidation(rows)
 }
@@ -45,7 +45,7 @@ func parseImportRowsFromExcel(excelRows []util.ContactImportRow, variableKeys []
 				vars[k] = r.Variables[k]
 			}
 		}
-		rows = append(rows, model.ImportContactRow{Email: r.Email, Variables: vars})
+		rows = append(rows, model.ImportContactRow{Email: r.Email, Variables: vars, Segment: r.Segment})
 	}
 	return applyEmailValidation(rows)
 }

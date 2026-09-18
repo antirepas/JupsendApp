@@ -121,10 +121,17 @@ func TestMailboxesMailTester_WrongUser(t *testing.T) {
 }
 
 func TestMailTesterResultsURL(t *testing.T) {
-	if got := mailTesterResultsURL("jupabc"); got != "https://www.mail-tester.com/jupabc" {
+	if got := mailTesterResultsURL("test-abc123xyz"); got != "https://www.mail-tester.com/test-abc123xyz" {
 		t.Fatalf("%s", got)
 	}
 	if mailTesterResultsURL("  ") != "" {
 		t.Fatal("empty token should yield empty URL")
+	}
+	if got := mailTesterRecipient("test-abc123xyz"); got != "test-abc123xyz@srv1.mail-tester.com" {
+		t.Fatalf("recipient=%q", got)
+	}
+	tok := newMailTesterToken()
+	if !strings.HasPrefix(tok, "test-") || len(tok) < 8 {
+		t.Fatalf("token=%q", tok)
 	}
 }

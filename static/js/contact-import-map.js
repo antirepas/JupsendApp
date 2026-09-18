@@ -77,8 +77,9 @@
     const opts = [
       { value: "email", label: "Email" },
       { value: "skip", label: "Skip" },
+      { value: "segment", label: "List segment" },
     ];
-    const seen = { email: true, skip: true };
+    const seen = { email: true, skip: true, segment: true };
     for (const v of state.templateVars) {
       const key = String(v).trim().toLowerCase();
       if (!key || seen[key]) continue;
@@ -89,7 +90,7 @@
       opts.push({ value: norm, label: `Variable: ${norm}` });
     }
     // Custom selected variable not in list
-    if (selected && !seen[selected] && selected !== "email" && selected !== "skip") {
+    if (selected && !seen[selected] && selected !== "email" && selected !== "skip" && selected !== "segment") {
       opts.push({ value: selected, label: `Variable: ${selected}` });
     }
     return opts
@@ -127,11 +128,13 @@
       .join("");
     rowsEl.querySelectorAll(".import-map-select").forEach((el) => {
       el.addEventListener("change", () => {
-        // Enforce single email mapping
-        if (el.value === "email") {
+        // Enforce single email / segment mapping
+        if (el.value === "email" || el.value === "segment") {
           rowsEl.querySelectorAll(".import-map-select").forEach((other) => {
-            if (other !== el && other.value === "email") other.value = "skip";
+            if (other !== el && other.value === el.value) other.value = "skip";
           });
+        }
+        if (el.value === "email") {
           let multi = false;
           const idx = state.headers.indexOf(el.dataset.header);
           if (idx >= 0) {
