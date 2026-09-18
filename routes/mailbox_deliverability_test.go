@@ -22,16 +22,18 @@ func TestMailboxesMailTester_NotFound(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	w := httptest.NewRecorder()
-	ctx, _ := gin.CreateTestContext(w)
-	ctx.Request = httptest.NewRequest(http.MethodPost, "/mailboxes/999999/mail-tester", nil)
-	ctx.Params = gin.Params{{Key: "id", Value: "999999"}}
-	setTestUser(ctx, userID)
+	router := gin.New()
+	router.POST("/mailboxes/:id/mail-tester", func(c *gin.Context) {
+		setTestUser(c, userID)
+		MailboxesMailTester(c)
+	})
 
-	MailboxesMailTester(ctx)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/mailboxes/999999/mail-tester", nil)
+	router.ServeHTTP(w, req)
 
 	if w.Code != http.StatusFound {
-		t.Fatalf("status %d", w.Code)
+		t.Fatalf("status %d body=%q", w.Code, w.Body.String())
 	}
 	loc := w.Header().Get("Location")
 	if !strings.Contains(loc, "Mailbox+not+found") && !strings.Contains(loc, "error=") {
@@ -53,16 +55,18 @@ func TestMailboxesMailTester_MissingSMTP(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	w := httptest.NewRecorder()
-	ctx, _ := gin.CreateTestContext(w)
-	ctx.Request = httptest.NewRequest(http.MethodPost, "/mailboxes/"+fmt.Sprint(oid)+"/mail-tester", nil)
-	ctx.Params = gin.Params{{Key: "id", Value: fmt.Sprint(oid)}}
-	setTestUser(ctx, userID)
+	router := gin.New()
+	router.POST("/mailboxes/:id/mail-tester", func(c *gin.Context) {
+		setTestUser(c, userID)
+		MailboxesMailTester(c)
+	})
 
-	MailboxesMailTester(ctx)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/mailboxes/"+fmt.Sprint(oid)+"/mail-tester", nil)
+	router.ServeHTTP(w, req)
 
 	if w.Code != http.StatusFound {
-		t.Fatalf("status %d", w.Code)
+		t.Fatalf("status %d body=%q", w.Code, w.Body.String())
 	}
 	loc := w.Header().Get("Location")
 	if !strings.Contains(loc, "tab=deliverability") {
@@ -97,16 +101,18 @@ func TestMailboxesMailTester_WrongUser(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	w := httptest.NewRecorder()
-	ctx, _ := gin.CreateTestContext(w)
-	ctx.Request = httptest.NewRequest(http.MethodPost, "/mailboxes/"+fmt.Sprint(oid)+"/mail-tester", nil)
-	ctx.Params = gin.Params{{Key: "id", Value: fmt.Sprint(oid)}}
-	setTestUser(ctx, otherID)
+	router := gin.New()
+	router.POST("/mailboxes/:id/mail-tester", func(c *gin.Context) {
+		setTestUser(c, otherID)
+		MailboxesMailTester(c)
+	})
 
-	MailboxesMailTester(ctx)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/mailboxes/"+fmt.Sprint(oid)+"/mail-tester", nil)
+	router.ServeHTTP(w, req)
 
 	if w.Code != http.StatusFound {
-		t.Fatalf("status %d", w.Code)
+		t.Fatalf("status %d body=%q", w.Code, w.Body.String())
 	}
 	loc := w.Header().Get("Location")
 	if !strings.Contains(loc, "error=") {

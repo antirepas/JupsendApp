@@ -38,12 +38,21 @@ func TestTemperatureConditionExecutor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for i := 0; i < 2; i++ {
-		_, _ = db.Exec(`INSERT INTO email_events (email_send_id, tracking_id, event_type, is_bot, created_at) VALUES (?, ?, 'open', 0, ?)`,
-			sendID, fmt.Sprintf("o-%d-%d", sendID, i), time.Now())
+	_, err = model.InsertContactEvent(model.ContactEventInput{
+		ContactID: contactID, EmailSendID: sendID, EventType: "REPLY",
+		Metadata: map[string]interface{}{"sentiment": "neutral", "sentiment_source": "manual"},
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
-	_, _ = db.Exec(`INSERT INTO email_events (email_send_id, tracking_id, event_type, is_bot, created_at) VALUES (?, ?, 'click', 0, ?)`,
-		sendID, fmt.Sprintf("c-%d", sendID), time.Now())
+	_, err = model.InsertConversationMessage(model.ConversationMessageInput{
+		UserID: userID, ContactID: contactID, EmailSendID: sendID, Direction: model.ConversationInbound,
+		FromEmail: c.Email, ToEmail: "me@example.com", Subject: "Re: hi",
+		BodyText: "Thanks", ReplySentiment: model.ReplySentimentNeutral,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	camp := campID
 	inst := model.WorkflowInstance{ContactID: contactID, CampaignID: &camp}

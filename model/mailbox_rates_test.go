@@ -81,15 +81,15 @@ func TestGetMailboxSendRates(t *testing.T) {
 }
 
 func TestMailboxHealthFromRates(t *testing.T) {
-	label, _ := mailboxHealthFromRates(MailboxSendRates{PeriodDays: 30, TotalSends: 25, BounceRate: 6, OpenRate: 20})
+	label, _ := mailboxHealthFromRates(MailboxSendRates{PeriodDays: 30, TotalSends: 25, BounceRate: 6, ReplyRate: 5})
 	if label != "Poor" {
 		t.Fatalf("got %q", label)
 	}
-	label, _ = mailboxHealthFromRates(MailboxSendRates{PeriodDays: 30, TotalSends: 25, BounceRate: 3, OpenRate: 20})
+	label, _ = mailboxHealthFromRates(MailboxSendRates{PeriodDays: 30, TotalSends: 25, BounceRate: 3, ReplyRate: 5})
 	if label != "Watch" {
 		t.Fatalf("got %q", label)
 	}
-	label, _ = mailboxHealthFromRates(MailboxSendRates{PeriodDays: 30, TotalSends: 25, BounceRate: 0.5, OpenRate: 30})
+	label, _ = mailboxHealthFromRates(MailboxSendRates{PeriodDays: 30, TotalSends: 25, BounceRate: 0.5, ReplyRate: 5})
 	if label != "Healthy" {
 		t.Fatalf("got %q", label)
 	}
