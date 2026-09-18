@@ -574,23 +574,28 @@ func pickABWinner(a, b VariantAnalytics, hasB bool) (string, string) {
 		}
 	}
 
+	// Fallback: prefer any-reply rate, then sent volume — not open/click composites.
 	if a.Sent == 0 || b.Sent == 0 {
-		if a.OpenRate > b.OpenRate {
-			return "A", "opens"
+		if a.ReplyRate > b.ReplyRate {
+			return "A", "reply"
 		}
-		if b.OpenRate > a.OpenRate {
-			return "B", "opens"
+		if b.ReplyRate > a.ReplyRate {
+			return "B", "reply"
 		}
-		return "Tie", "opens"
+		if a.Sent > b.Sent {
+			return "A", "volume"
+		}
+		if b.Sent > a.Sent {
+			return "B", "volume"
+		}
+		return "Tie", "volume"
 	}
 
-	scoreA := a.OpenRate*0.6 + a.ClickRate*0.4
-	scoreB := b.OpenRate*0.6 + b.ClickRate*0.4
-	if scoreA > scoreB+0.5 {
-		return "A", "opens"
+	if a.ReplyRate > b.ReplyRate+0.01 {
+		return "A", "reply"
 	}
-	if scoreB > scoreA+0.5 {
-		return "B", "opens"
+	if b.ReplyRate > a.ReplyRate+0.01 {
+		return "B", "reply"
 	}
-	return "Tie", "opens"
+	return "Tie", "reply"
 }

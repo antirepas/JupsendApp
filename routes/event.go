@@ -93,6 +93,13 @@ func TrackClick(ctx *gin.Context) {
 		return
 	}
 
+	sendID := resolveSendFromLinkTracking(trackingID)
+	if sendID > 0 && !model.EmailSendClickTrackingEnabled(sendID) {
+		trackResponseHeaders(ctx)
+		ctx.Redirect(http.StatusFound, dest)
+		return
+	}
+
 	err = storeEvent(trackingID, "click", ctx.Request.UserAgent(), util.RequestClientIP(ctx))
 	if err != nil {
 		log.Print(err)

@@ -9,7 +9,7 @@
 <div class="max-w-6xl mx-auto p-8">
 <div class="mb-8">
     <h2 class="text-2xl font-bold text-slate-900">Send Email</h2>
-    <p class="text-slate-500 mt-1">The email goes to the <strong>contact you pick below</strong>, not automatically to your inbox.</p>
+    <p class="text-slate-500 mt-1">One-off send to a contact. Pick the mailbox that should appear as From.</p>
 </div>
 
 {{if .gmailSendBlocked}}
@@ -24,6 +24,20 @@
 
 <div class="card max-w-lg">
     <form method="POST" action="/sends" class="space-y-5">
+        <div>
+            <label class="form-label" for="smtp_account_id">Send from</label>
+            <select name="smtp_account_id" id="smtp_account_id" class="form-input" required {{if not .mailboxes}}disabled{{end}}>
+                {{if not .mailboxes}}
+                <option value="">No ready mailboxes</option>
+                {{else}}
+                <option value="">Select a mailbox...</option>
+                {{range .mailboxes}}
+                <option value="{{.ID}}" {{if eq $.preselectedMailboxID .ID}}selected{{end}}>{{.Label}}</option>
+                {{end}}
+                {{end}}
+            </select>
+            <p class="form-hint mt-1">Recipients see this address as From. Manage seats under <a href="/mailboxes" class="text-brand-600 font-medium">Mailboxes</a>.</p>
+        </div>
         <div>
             <label class="form-label">Template</label>
             <select name="template_id" class="form-input" required>
@@ -43,10 +57,13 @@
             </select>
         </div>
         <div class="flex gap-3 pt-2">
-            <button type="submit" class="btn-primary">Send Email</button>
+            <button type="submit" class="btn-primary" {{if or (not .mailboxes) (not .templates) (not .contacts)}}disabled{{end}}>Send Email</button>
             <a href="/sends" class="btn-secondary">Cancel</a>
         </div>
     </form>
+    {{if not .mailboxes}}
+    <p class="text-sm text-amber-600 mt-4">You need a ready <a href="/mailboxes" class="underline">mailbox</a> to send from.</p>
+    {{end}}
     {{if not .templates}}
     <p class="text-sm text-amber-600 mt-4">You need at least one <a href="/templates/new" class="underline">template</a> to send emails.</p>
     {{end}}

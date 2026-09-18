@@ -9,7 +9,7 @@ import (
 
 type stubMailer struct{}
 
-func (stubMailer) SendWorkflowEmail(templateID, contactID, campaignID int64, variant string, workflowInstanceID int64) (int64, error) {
+func (stubMailer) SendWorkflowEmail(templateID, contactID, campaignID int64, variant string, workflowInstanceID int64, openTracking, clickTracking bool) (int64, error) {
 	return 1, nil
 }
 

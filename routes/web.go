@@ -901,6 +901,42 @@ func ReplyContactWeb(ctx *gin.Context) {
 	ctx.Redirect(http.StatusFound, "/contacts/"+strconv.FormatInt(contactID, 10)+"?success="+url.QueryEscape("Reply sent")+"#conversation")
 }
 
+func ContactMessageSentiment(ctx *gin.Context) {
+	userID := mustUserID(ctx)
+	contactID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
+	if err != nil {
+		ctx.Redirect(http.StatusFound, "/contacts?error=Invalid+contact")
+		return
+	}
+	messageID, err := strconv.ParseInt(ctx.Param("messageId"), 10, 64)
+	if err != nil {
+		ctx.Redirect(http.StatusFound, "/contacts/"+strconv.FormatInt(contactID, 10)+"?error=Invalid+message")
+		return
+	}
+	sentiment := model.NormalizeReplySentiment(ctx.PostForm("sentiment"))
+	if sentiment != model.ReplySentimentPositive && sentiment != model.ReplySentimentNegative && sentiment != model.ReplySentimentNeutral {
+		ctx.Redirect(http.StatusFound, "/contacts/"+strconv.FormatInt(contactID, 10)+"?error=Invalid+sentiment#conversation")
+		return
+	}
+	msg, err := model.GetConversationMessageForUser(userID, contactID, messageID)
+	if err != nil || !msg.IsInbound() {
+		ctx.Redirect(http.StatusFound, "/contacts/"+strconv.FormatInt(contactID, 10)+"?error=Message+not+found#conversation")
+		return
+	}
+	if err := model.SetConversationReplySentiment(messageID, sentiment, "manual"); err != nil {
+		ctx.Redirect(http.StatusFound, "/contacts/"+strconv.FormatInt(contactID, 10)+"?error="+url.QueryEscape(err.Error())+"#conversation")
+		return
+	}
+	campaignID := int64(0)
+	if msg.EmailSendID > 0 {
+		if detail, err := model.GetEmailSendDetail(msg.EmailSendID); err == nil {
+			campaignID = detail.CampaignID
+		}
+	}
+	model.ApplyReplySentimentSideEffects(userID, contactID, campaignID, messageID, sentiment)
+	ctx.Redirect(http.StatusFound, "/contacts/"+strconv.FormatInt(contactID, 10)+"?success=Reply+labeled#conversation")
+}
+
 func UpdateContactLists(ctx *gin.Context) {
 	userID := mustUserID(ctx)
 	contactID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
@@ -1012,6 +1048,32 @@ func NewSendPage(ctx *gin.Context) {
 		log.Print(err)
 	}
 	preselectedContactID, _ := strconv.ParseInt(ctx.Query("contact_id"), 10, 64)
+	preselectedMailboxID, _ := strconv.ParseInt(ctx.Query("smtp_account_id"), 10, 64)
+
+	mailboxes, _ := model.ListSendReadyAccountsForUser(userID)
+	type mailboxOption struct {
+		ID    int64
+		Label string
+	}
+	var mailboxOpts []mailboxOption
+	defaultMailboxID := int64(0)
+	for _, acc := range mailboxes {
+		email := acc.SenderEmail()
+		label := email
+		if fn := strings.TrimSpace(acc.FromName); fn != "" {
+			label = fn + " <" + email + ">"
+		}
+		mailboxOpts = append(mailboxOpts, mailboxOption{ID: acc.ID, Label: label})
+		if acc.IsDefault && defaultMailboxID == 0 {
+			defaultMailboxID = acc.ID
+		}
+	}
+	if preselectedMailboxID == 0 {
+		preselectedMailboxID = defaultMailboxID
+	}
+	if preselectedMailboxID == 0 && len(mailboxOpts) > 0 {
+		preselectedMailboxID = mailboxOpts[0].ID
+	}
 
 	gmailEmail := ""
 	if acc, err := model.GetSMTPAccountByUserID(userID); err == nil && acc.IsGoogleOAuth() {
@@ -1024,18 +1086,21 @@ func NewSendPage(ctx *gin.Context) {
 	}
 
 	ctx.HTML(http.StatusOK, "send_form.html", gin.H{
-		"title":                "Send Email",
-		"active":               "sends",
-		"templates":            templates,
-		"contacts":             contacts,
-		"preselectedContactID": preselectedContactID,
-		"gmailEmail":           gmailEmail,
-		"gmailSendBlocked":     model.GmailSendBlocked(userID),
-		"error":                ctx.Query("error"),
+		"title":                 "Send Email",
+		"active":                "sends",
+		"templates":             templates,
+		"contacts":              contacts,
+		"mailboxes":             mailboxOpts,
+		"preselectedContactID":  preselectedContactID,
+		"preselectedMailboxID":  preselectedMailboxID,
+		"gmailEmail":            gmailEmail,
+		"gmailSendBlocked":      model.GmailSendBlocked(userID),
+		"error":                 ctx.Query("error"),
 	})
 }
 
 func CreateSend(ctx *gin.Context) {
+	userID := mustUserID(ctx)
 	templateID, err := strconv.ParseInt(ctx.PostForm("template_id"), 10, 64)
 	if err != nil {
 		ctx.Redirect(http.StatusFound, "/sends/new?error=Invalid+template")
@@ -1046,11 +1111,16 @@ func CreateSend(ctx *gin.Context) {
 		ctx.Redirect(http.StatusFound, "/sends/new?error=Invalid+contact")
 		return
 	}
+	smtpAccountID, _ := strconv.ParseInt(ctx.PostForm("smtp_account_id"), 10, 64)
+	if smtpAccountID <= 0 {
+		ctx.Redirect(http.StatusFound, "/sends/new?error="+url.QueryEscape("Pick a mailbox to send from"))
+		return
+	}
 
-	emailSendID, err := processAndSendEmail(mustUserID(ctx), templateID, contactID, 0, "", 0)
+	emailSendID, err := processAndSendEmail(userID, templateID, contactID, 0, "", 0, smtpAccountID)
 	if err != nil {
 		log.Print(err)
-		ctx.Redirect(http.StatusFound, "/sends/new?error="+err.Error())
+		ctx.Redirect(http.StatusFound, "/sends/new?error="+url.QueryEscape(err.Error()))
 		return
 	}
 	ctx.Redirect(http.StatusFound, "/sends/"+strconv.FormatInt(emailSendID, 10)+"?success=Email+queued+for+delivery")

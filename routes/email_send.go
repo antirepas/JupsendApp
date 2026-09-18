@@ -4,12 +4,11 @@ import (
 	"log"
 	"net/http"
 
-	"emailtracker.com/model"
 	"emailtracker.com/outbound"
 	"github.com/gin-gonic/gin"
 )
 
-var enqueueSendFn = func(userID, templateID, contactID, campaignID int64, variant string, workflowInstanceID int64) (int64, error) {
+var enqueueSendFn = func(userID, templateID, contactID, campaignID int64, variant string, workflowInstanceID, smtpAccountID int64) (int64, error) {
 	emailSendID, _, err := outbound.EnqueueSend(outbound.EnqueueInput{
 		UserID:             userID,
 		ContactID:          contactID,
@@ -17,16 +16,21 @@ var enqueueSendFn = func(userID, templateID, contactID, campaignID int64, varian
 		CampaignID:         campaignID,
 		Variant:            variant,
 		WorkflowInstanceID: workflowInstanceID,
+		SMTPAccountID:      smtpAccountID,
 	})
 	return emailSendID, err
 }
 
-func processAndSendEmail(userID, templateID, contactID, campaignID int64, variant string, workflowInstanceID int64) (int64, error) {
-	return enqueueSendFn(userID, templateID, contactID, campaignID, variant, workflowInstanceID)
+func processAndSendEmail(userID, templateID, contactID, campaignID int64, variant string, workflowInstanceID, smtpAccountID int64) (int64, error) {
+	return enqueueSendFn(userID, templateID, contactID, campaignID, variant, workflowInstanceID, smtpAccountID)
 }
 
 func Email_send(ctx *gin.Context) {
-	var emailSend model.EmailSend
+	var emailSend struct {
+		TemplateID    int64 `json:"template_id"`
+		ContactID     int64 `json:"contact_id"`
+		SMTPAccountID int64 `json:"smtp_account_id"`
+	}
 
 	err := ctx.ShouldBindJSON(&emailSend)
 	if err != nil {
@@ -35,7 +39,7 @@ func Email_send(ctx *gin.Context) {
 		return
 	}
 
-	emailSendID, err := enqueueSendFn(mustUserID(ctx), emailSend.TemplateID, emailSend.ContactID, 0, "", 0)
+	emailSendID, err := enqueueSendFn(mustUserID(ctx), emailSend.TemplateID, emailSend.ContactID, 0, "", 0, emailSend.SMTPAccountID)
 	if err != nil {
 		log.Print(err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})

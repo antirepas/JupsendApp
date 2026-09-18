@@ -18,7 +18,7 @@ func TestEmailSend_Success(t *testing.T) {
 		enqueueSendFn = origEnqueue
 	}()
 
-	enqueueSendFn = func(userID, templateID, contactID, campaignID int64, variant string, workflowInstanceID int64) (int64, error) {
+	enqueueSendFn = func(userID, templateID, contactID, campaignID int64, variant string, workflowInstanceID, smtpAccountID int64) (int64, error) {
 		return 1, nil
 	}
 
@@ -66,7 +66,7 @@ func TestEmailSend_EnqueueError(t *testing.T) {
 		enqueueSendFn = origEnqueue
 	}()
 
-	enqueueSendFn = func(userID, templateID, contactID, campaignID int64, variant string, workflowInstanceID int64) (int64, error) {
+	enqueueSendFn = func(userID, templateID, contactID, campaignID int64, variant string, workflowInstanceID, smtpAccountID int64) (int64, error) {
 		return 0, assert.AnError
 	}
 

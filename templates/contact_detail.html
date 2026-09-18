@@ -42,7 +42,21 @@
             {{if and (not .IsInbound) .EmailSendID}}
             <a href="/sends/{{.EmailSendID}}" class="text-xs text-brand-600 font-medium">Send details</a>
             {{else if .IsInbound}}
-            <a href="/contacts/{{$.summary.Contact.ID}}/reply?reply_to={{.ID}}" class="text-xs text-brand-600 font-medium">Reply to this</a>
+            <div class="flex flex-wrap items-center gap-2 mt-1">
+                <a href="/contacts/{{$.summary.Contact.ID}}/reply?reply_to={{.ID}}" class="text-xs text-brand-600 font-medium">Reply to this</a>
+                {{if .ReplySentiment}}
+                <span class="text-xs px-2 py-0.5 rounded
+                  {{if eq .ReplySentiment "positive"}}bg-emerald-50 text-emerald-800
+                  {{else if eq .ReplySentiment "negative"}}bg-red-50 text-red-800
+                  {{else if eq .ReplySentiment "neutral"}}bg-slate-100 text-slate-700
+                  {{else}}bg-amber-50 text-amber-800{{end}}">{{.ReplySentiment}}</span>
+                {{end}}
+                <form method="POST" action="/contacts/{{$.summary.Contact.ID}}/messages/{{.ID}}/sentiment" class="inline-flex gap-1">
+                    <button name="sentiment" value="positive" class="text-xs text-emerald-700 font-medium">Positive</button>
+                    <button name="sentiment" value="neutral" class="text-xs text-slate-600 font-medium">Neutral</button>
+                    <button name="sentiment" value="negative" class="text-xs text-red-700 font-medium">Negative</button>
+                </form>
+            </div>
             {{end}}
         </div>
         {{end}}

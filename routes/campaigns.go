@@ -125,6 +125,10 @@ func CreateCampaign(ctx *gin.Context) {
 	if err := model.SetCampaignOpenTracking(id, userID, openTracking); err != nil {
 		log.Printf("open tracking setting: %v", err)
 	}
+	clickTracking := ctx.PostForm("click_tracking_enabled") == "1"
+	if err := model.SetCampaignClickTracking(id, userID, clickTracking); err != nil {
+		log.Printf("click tracking setting: %v", err)
+	}
 	tempRules := parseTemperatureRulesFromForm(ctx)
 	if err := model.SetCampaignTemperatureRules(id, userID, tempRules); err != nil {
 		log.Printf("temperature rules: %v", err)
@@ -152,17 +156,21 @@ func firstNonEmptyForm(ctx *gin.Context, key string) string {
 }
 
 func parseTemperatureRulesFromForm(ctx *gin.Context) model.LeadTemperatureRules {
-	warmOpens, _ := strconv.Atoi(strings.TrimSpace(ctx.PostForm("temp_warm_opens")))
-	warmClicks, _ := strconv.Atoi(strings.TrimSpace(ctx.PostForm("temp_warm_clicks")))
-	hotOpens, _ := strconv.Atoi(strings.TrimSpace(ctx.PostForm("temp_hot_opens")))
-	hotClicks, _ := strconv.Atoi(strings.TrimSpace(ctx.PostForm("temp_hot_clicks")))
-	replyIsHot := ctx.PostForm("temp_reply_is_hot") == "1"
-	// Empty create form fields: Atoi of "" is 0 — treat all-zero without reply as defaults.
-	if warmOpens == 0 && warmClicks == 0 && hotOpens == 0 && hotClicks == 0 && !replyIsHot &&
-		ctx.PostForm("temp_warm_opens") == "" {
+	// Empty create form → defaults
+	if ctx.PostForm("temp_min_positive") == "" && ctx.PostForm("temp_warm_opens") == "" {
 		return model.DefaultLeadTemperatureRules()
 	}
-	return model.LeadTemperatureRulesFromForm(warmOpens, warmClicks, hotOpens, hotClicks, replyIsHot)
+	// Legacy form fields still posted from old bookmarks → map to defaults
+	if ctx.PostForm("temp_warm_opens") != "" && ctx.PostForm("temp_min_positive") == "" {
+		return model.DefaultLeadTemperatureRules()
+	}
+	minPos, _ := strconv.Atoi(strings.TrimSpace(ctx.PostForm("temp_min_positive")))
+	if minPos < 1 {
+		minPos = 1
+	}
+	anyNonNeg := ctx.PostForm("temp_warm_any_reply") == "1"
+	negStops := ctx.PostForm("temp_negative_stops") == "1"
+	return model.LeadTemperatureRulesFromForm(minPos, anyNonNeg, negStops)
 }
 
 func SaveCampaignTemperatureRules(ctx *gin.Context) {

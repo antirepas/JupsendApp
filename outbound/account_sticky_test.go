@@ -9,6 +9,52 @@ import (
 	"emailtracker.com/model"
 )
 
+func TestEnqueueSendExplicitMailbox(t *testing.T) {
+	db.OpenTestDB(t)
+	userID, err := model.CreateUser(fmt.Sprintf("explicit-mb-%d@test.com", time.Now().UnixNano()), "hash", "http://localhost")
+	if err != nil {
+		t.Fatal(err)
+	}
+	idA, err := model.UpsertInboxKitSMTPAccount(userID, "a@example.com", "smtp.gmail.com", "587", "a@example.com", "pass-aaaa-aaaa-aaaa", "A", "ik-a", true, 100, "imap.gmail.com", "993")
+	if err != nil {
+		t.Fatal(err)
+	}
+	idB, err := model.UpsertInboxKitSMTPAccount(userID, "b@example.com", "smtp.gmail.com", "587", "b@example.com", "pass-bbbb-bbbb-bbbb", "B", "ik-b", false, 100, "imap.gmail.com", "993")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := model.Contact{Email: "lead@example.com"}
+	contactID, err := c.SaveContact(userID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tpl := model.Template{Name: "t", Subject: "hi", Body: "body"}
+	tplID, err := tpl.SaveTemplate(userID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sendID, jobID, err := EnqueueSend(EnqueueInput{
+		UserID:        userID,
+		ContactID:     contactID,
+		TemplateID:    tplID,
+		SMTPAccountID: idB,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sendID == 0 || jobID == 0 {
+		t.Fatalf("send=%d job=%d", sendID, jobID)
+	}
+	job, err := model.GetSendJob(jobID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if job.SMTPAccountID != idB {
+		t.Fatalf("expected pin %d got %d (default was %d)", idB, job.SMTPAccountID, idA)
+	}
+}
+
 func TestResolveSendAccountForContactSticky(t *testing.T) {
 	db.OpenTestDB(t)
 	userID, err := model.CreateUser(fmt.Sprintf("sticky-mb-%d@test.com", time.Now().UnixNano()), "hash", "http://localhost")

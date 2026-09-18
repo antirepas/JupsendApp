@@ -7,7 +7,7 @@ import (
 )
 
 type MailSender interface {
-	SendWorkflowEmail(templateID, contactID, campaignID int64, variant string, workflowInstanceID int64) (int64, error)
+	SendWorkflowEmail(templateID, contactID, campaignID int64, variant string, workflowInstanceID int64, openTracking, clickTracking bool) (int64, error)
 }
 
 type NodeResult struct {
@@ -22,10 +22,10 @@ type NodeResult struct {
 }
 
 type ExecutionContext struct {
-	Instance  model.WorkflowInstance
-	Node      model.WorkflowNode
-	Graph     model.WorkflowGraph
-	Mailer    MailSender
+	Instance   model.WorkflowInstance
+	Node       model.WorkflowNode
+	Graph      model.WorkflowGraph
+	Mailer     MailSender
 	WorkflowID int64
 }
 

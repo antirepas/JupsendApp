@@ -9,10 +9,7 @@ import (
 )
 
 func MarkContactReplied(contactID int64) error {
-	_, err := db.Exec(`
-		UPDATE contact SET replied_at = COALESCE(replied_at, CURRENT_TIMESTAMP) WHERE id = ?
-	`, contactID)
-	return err
+	return MarkContactRepliedPending(contactID)
 }
 
 func CancelActiveInstancesForContact(contactID int64) error {

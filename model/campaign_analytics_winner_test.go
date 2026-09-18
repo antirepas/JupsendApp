@@ -11,11 +11,12 @@ func TestPickABWinnerReplyFirst(t *testing.T) {
 	}
 }
 
-func TestPickABWinnerFallbackOpens(t *testing.T) {
+func TestPickABWinnerFallbackReplyTie(t *testing.T) {
 	a := VariantAnalytics{Sent: 50, OpenRate: 25, ClickRate: 3}
 	b := VariantAnalytics{Sent: 50, OpenRate: 15, ClickRate: 2}
 	winner, method := pickABWinner(a, b, true)
-	if winner != "A" || method != "opens" {
+	// No replies → reply-rate tie (opens no longer decide).
+	if winner != "Tie" || method != "reply" {
 		t.Fatalf("got %q %q", winner, method)
 	}
 }

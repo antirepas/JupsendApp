@@ -1,11 +1,13 @@
 package outbound
 
 import (
+	"context"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
+	"emailtracker.com/ai"
 	"emailtracker.com/db"
 	"emailtracker.com/model"
 	"emailtracker.com/notify"
@@ -251,8 +253,10 @@ func handleReply(userID int64, match ReplyMatch, msg inboxMessage, accountID int
 		EventType:   "REPLY",
 		DedupeKey:   dedupe,
 		Metadata: map[string]interface{}{
-			"source":  "imap",
-			"subject": msg.Subject,
+			"source":           "imap",
+			"subject":          msg.Subject,
+			"sentiment":        model.ReplySentimentPending,
+			"sentiment_source": "pending",
 		},
 		OccurredAt: time.Now(),
 	})
@@ -264,20 +268,21 @@ func handleReply(userID int64, match ReplyMatch, msg inboxMessage, accountID int
 			toEmail = detail.SenderEmail
 		}
 	}
-	_, _ = model.InsertConversationMessage(model.ConversationMessageInput{
-		UserID:        userID,
-		ContactID:     match.ContactID,
-		SMTPAccountID: accountID,
-		EmailSendID:   match.EmailSendID,
-		Direction:     model.ConversationInbound,
-		FromEmail:     msg.From,
-		ToEmail:       toEmail,
-		Subject:       msg.Subject,
-		BodyText:      parsed.Text,
-		BodyHTML:      parsed.HTML,
-		MessageID:     msg.MessageID,
-		InReplyTo:     msg.InReplyTo,
-		OccurredAt:    time.Now(),
+	msgID, _ := model.InsertConversationMessage(model.ConversationMessageInput{
+		UserID:         userID,
+		ContactID:      match.ContactID,
+		SMTPAccountID:  accountID,
+		EmailSendID:    match.EmailSendID,
+		Direction:      model.ConversationInbound,
+		FromEmail:      msg.From,
+		ToEmail:        toEmail,
+		Subject:        msg.Subject,
+		BodyText:       parsed.Text,
+		BodyHTML:       parsed.HTML,
+		MessageID:      msg.MessageID,
+		InReplyTo:      msg.InReplyTo,
+		ReplySentiment: model.ReplySentimentPending,
+		OccurredAt:     time.Now(),
 	})
 
 	_ = model.MarkContactReplied(match.ContactID)
@@ -300,6 +305,23 @@ func handleReply(userID int64, match ReplyMatch, msg inboxMessage, accountID int
 		BodySnippet:  parsed.Text,
 		MailboxEmail: toEmail,
 	})
+
+	if msgID > 0 {
+		go classifyReplySentimentAsync(userID, match.ContactID, campaignID, msgID, msg.Subject, parsed.Text)
+	}
+}
+
+func classifyReplySentimentAsync(userID, contactID, campaignID, messageID int64, subject, body string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+	res, err := ai.ClassifyReplySentiment(ctx, subject, body)
+	if err != nil {
+		return
+	}
+	if err := model.SetConversationReplySentiment(messageID, res.Sentiment, "ai"); err != nil {
+		return
+	}
+	model.ApplyReplySentimentSideEffects(userID, contactID, campaignID, messageID, res.Sentiment)
 }
 
 func replyDedupeKey(match ReplyMatch, imapMessageID string) string {

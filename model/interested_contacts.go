@@ -1,6 +1,7 @@
 package model
 
 import (
+	"encoding/json"
 	"sort"
 	"time"
 
@@ -29,14 +30,12 @@ func ListInterestedContactsFiltered(userID, campaignID int64, limit int) ([]Inte
 
 	type agg struct {
 		email        string
-		score        int
 		lastSignal   string
 		lastActivity time.Time
 		campaignName string
 		campaignID   int64
-		openCount    int
-		hasClick     bool
-		hasReply     bool
+		positive     bool
+		neutral      bool
 	}
 
 	byContact := map[int64]*agg{}
@@ -48,26 +47,39 @@ func ListInterestedContactsFiltered(userID, campaignID int64, limit int) ([]Inte
 		args = append(args, campaignID)
 	}
 
-	rows, err := db.Query(`
-		SELECT es.contact_id, c.email, es.campaign_id, COALESCE(camp.name, ''),
-			ee.event_type, ee.created_at
-		FROM email_sends es
+	replyRows, err := db.Query(`
+		SELECT es.contact_id, c.email, es.campaign_id, COALESCE(camp.name, ''), ce.created_at,
+			COALESCE(cm.reply_sentiment, ''), COALESCE(ce.metadata_json, '{}')
+		FROM contact_events ce
+		INNER JOIN email_sends es ON es.id = ce.email_send_id
 		INNER JOIN contact c ON c.id = es.contact_id
 		LEFT JOIN campaigns camp ON camp.id = es.campaign_id
-		INNER JOIN email_events ee ON (ee.email_send_id = es.id OR ee.tracking_id = es.tracking_id)
-			AND (ee.event_type = 'click' OR (ee.event_type = 'open' AND COALESCE(ee.is_bot, 0) = 0))
-		WHERE es.user_id = ? AND ee.created_at >= CURRENT_TIMESTAMP - (90 * INTERVAL '1 day')`+campSQL+`
+		LEFT JOIN conversation_messages cm
+			ON cm.email_send_id = ce.email_send_id AND cm.contact_id = ce.contact_id AND cm.direction = 'inbound'
+		WHERE es.user_id = ? AND ce.event_type = 'REPLY'
+			AND ce.created_at >= CURRENT_TIMESTAMP - (90 * INTERVAL '1 day')`+campSQL+`
 	`, args...)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer replyRows.Close()
 
-	for rows.Next() {
+	for replyRows.Next() {
 		var contactID, campID int64
-		var email, campaignName, eventType string
-		var createdAt time.Time
-		if err := rows.Scan(&contactID, &email, &campID, &campaignName, &eventType, &createdAt); err != nil {
+		var email, campaignName, sentRaw, metaRaw string
+		var created time.Time
+		if replyRows.Scan(&contactID, &email, &campID, &campaignName, &created, &sentRaw, &metaRaw) != nil {
+			continue
+		}
+		s := NormalizeReplySentiment(sentRaw)
+		if s == ReplySentimentPending || s == "" {
+			meta := map[string]interface{}{}
+			_ = json.Unmarshal([]byte(metaRaw), &meta)
+			if v, ok := meta["sentiment"].(string); ok {
+				s = NormalizeReplySentiment(v)
+			}
+		}
+		if s == ReplySentimentNegative {
 			continue
 		}
 		a := byContact[contactID]
@@ -75,58 +87,20 @@ func ListInterestedContactsFiltered(userID, campaignID int64, limit int) ([]Inte
 			a = &agg{email: email, campaignName: campaignName, campaignID: campID}
 			byContact[contactID] = a
 		}
-		if createdAt.After(a.lastActivity) {
-			a.lastActivity = createdAt
-			a.lastSignal = eventType
-			if campaignName != "" {
-				a.campaignName = campaignName
-				a.campaignID = campID
+		if created.After(a.lastActivity) {
+			a.lastActivity = created
+			a.campaignName = campaignName
+			a.campaignID = campID
+			if s == ReplySentimentPositive {
+				a.lastSignal = "positive_reply"
+			} else {
+				a.lastSignal = "reply"
 			}
 		}
-		switch eventType {
-		case "open":
-			a.openCount++
-		case "click":
-			a.hasClick = true
-		}
-	}
-
-	replyArgs := []interface{}{userID}
-	replyCamp := ""
-	if campaignID > 0 {
-		replyCamp = " AND es.campaign_id = ?"
-		replyArgs = append(replyArgs, campaignID)
-	}
-	replyRows, err := db.Query(`
-		SELECT es.contact_id, c.email, es.campaign_id, COALESCE(camp.name, ''), ce.created_at
-		FROM contact_events ce
-		INNER JOIN email_sends es ON es.id = ce.email_send_id
-		INNER JOIN contact c ON c.id = es.contact_id
-		LEFT JOIN campaigns camp ON camp.id = es.campaign_id
-		WHERE es.user_id = ? AND ce.event_type = 'REPLY'
-			AND ce.created_at >= CURRENT_TIMESTAMP - (90 * INTERVAL '1 day')`+replyCamp+`
-	`, replyArgs...)
-	if err == nil {
-		defer replyRows.Close()
-		for replyRows.Next() {
-			var contactID, campID int64
-			var email, campaignName string
-			var createdAt time.Time
-			if replyRows.Scan(&contactID, &email, &campID, &campaignName, &createdAt) != nil {
-				continue
-			}
-			a := byContact[contactID]
-			if a == nil {
-				a = &agg{email: email}
-				byContact[contactID] = a
-			}
-			a.hasReply = true
-			if createdAt.After(a.lastActivity) {
-				a.lastActivity = createdAt
-				a.lastSignal = "replied"
-				a.campaignName = campaignName
-				a.campaignID = campID
-			}
+		if s == ReplySentimentPositive {
+			a.positive = true
+		} else {
+			a.neutral = true
 		}
 	}
 
@@ -139,17 +113,11 @@ func ListInterestedContactsFiltered(userID, campaignID int64, limit int) ([]Inte
 		score := 0
 		tier := "cold"
 		switch {
-		case a.hasReply:
+		case a.positive:
 			score = 100
 			tier = "hot"
-		case a.hasClick:
-			score = 40
-			tier = "warm"
-		case a.openCount >= 2:
-			score = 25
-			tier = "warm"
-		case a.openCount >= 1:
-			score = 10
+		case a.neutral:
+			score = 50
 			tier = "warm"
 		default:
 			continue
@@ -172,7 +140,6 @@ func ListInterestedContactsFiltered(userID, campaignID int64, limit int) ([]Inte
 		}
 		return list[i].LastActivity.After(list[j].LastActivity)
 	})
-
 	if len(list) > limit {
 		list = list[:limit]
 	}

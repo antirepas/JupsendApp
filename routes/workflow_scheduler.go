@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"emailtracker.com/model"
+	"emailtracker.com/outbound"
 	"emailtracker.com/workflow"
 )
 
@@ -37,10 +38,21 @@ func InitWorkflowEngine() *workflow.Engine {
 
 type workflowMailAdapter struct{}
 
-func (workflowMailAdapter) SendWorkflowEmail(templateID, contactID, campaignID int64, variant string, workflowInstanceID int64) (int64, error) {
+func (workflowMailAdapter) SendWorkflowEmail(templateID, contactID, campaignID int64, variant string, workflowInstanceID int64, openTracking, clickTracking bool) (int64, error) {
 	userID, err := model.GetUserIDForContact(contactID)
 	if err != nil {
 		return 0, err
 	}
-	return processAndSendEmail(userID, templateID, contactID, campaignID, variant, workflowInstanceID)
+	emailSendID, _, err := outbound.EnqueueSend(outbound.EnqueueInput{
+		UserID:               userID,
+		ContactID:            contactID,
+		TemplateID:           templateID,
+		CampaignID:           campaignID,
+		Variant:              variant,
+		WorkflowInstanceID:   workflowInstanceID,
+		TrackingExplicit:     true,
+		OpenTrackingEnabled:  openTracking,
+		ClickTrackingEnabled: clickTracking,
+	})
+	return emailSendID, err
 }

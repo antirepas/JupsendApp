@@ -76,7 +76,11 @@ func (SendEmailExecutor) Execute(ctx ExecutionContext) (NodeResult, error) {
 		return NodeResult{Failed: true, ErrorMessage: err.Error()}, nil
 	}
 
-	sendID, err := ctx.Mailer.SendWorkflowEmail(templateID, ctx.Instance.ContactID, campaignID, variant, ctx.Instance.ID)
+	cfg := model.ParseNodeConfig(ctx.Node.ConfigJSON)
+	openTrack := boolCfg(cfg, "open_tracking", false)
+	clickTrack := boolCfg(cfg, "click_tracking", false)
+
+	sendID, err := ctx.Mailer.SendWorkflowEmail(templateID, ctx.Instance.ContactID, campaignID, variant, ctx.Instance.ID, openTrack, clickTrack)
 	if err != nil {
 		return NodeResult{Failed: true, ErrorMessage: err.Error()}, nil
 	}
@@ -147,6 +151,29 @@ func intFromConfig(v interface{}) int {
 		return n
 	default:
 		return 0
+	}
+}
+
+func boolCfg(cfg map[string]interface{}, key string, def bool) bool {
+	if cfg == nil {
+		return def
+	}
+	v, ok := cfg[key]
+	if !ok || v == nil {
+		return def
+	}
+	switch t := v.(type) {
+	case bool:
+		return t
+	case string:
+		s := strings.ToLower(strings.TrimSpace(t))
+		return s == "1" || s == "true" || s == "yes" || s == "on"
+	case float64:
+		return t != 0
+	case int:
+		return t != 0
+	default:
+		return def
 	}
 }
 

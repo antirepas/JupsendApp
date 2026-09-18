@@ -200,13 +200,18 @@ func TestDismissInterestedContacts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = db.Exec(`
-		INSERT INTO email_events (email_send_id, tracking_id, event_type, created_at)
-		VALUES (?, ?, 'click', CURRENT_TIMESTAMP)
-	`, sendID, fmt.Sprintf("track-test-%d", cid))
+	_, err = InsertContactEvent(ContactEventInput{
+		ContactID: cid, EmailSendID: sendID, EventType: "REPLY",
+		Metadata: map[string]interface{}{"sentiment": "positive"},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
+	_, _ = InsertConversationMessage(ConversationMessageInput{
+		UserID: userID, ContactID: cid, EmailSendID: sendID, Direction: ConversationInbound,
+		FromEmail: "dismiss-me@test.com", ToEmail: "me@example.com", Subject: "Re",
+		BodyText: "yes", ReplySentiment: ReplySentimentPositive,
+	})
 
 	before, err := ListInterestedContacts(userID, 10)
 	if err != nil || len(before) == 0 {

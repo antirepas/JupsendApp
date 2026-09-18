@@ -52,6 +52,10 @@ func EvaluateCondition(predicate string, params map[string]interface{}, inst mod
 	case "has_not_replied":
 		ok, err := EvaluateCondition("has_replied", params, inst, contactID)
 		return !ok, err
+	case "has_positive_reply":
+		return hasReplySentiment(params, inst, contactID, model.ReplySentimentPositive)
+	case "has_negative_reply":
+		return hasReplySentiment(params, inst, contactID, model.ReplySentimentNegative)
 	case "contact_var_equals":
 		key, _ := params["key"].(string)
 		want, _ := params["value"].(string)
@@ -179,6 +183,18 @@ func hasClickedURL(sendID int64, url string) bool {
 	}
 	// check contact events with metadata
 	return n > 0
+}
+
+func hasReplySentiment(params map[string]interface{}, inst model.WorkflowInstance, contactID int64, want string) (bool, error) {
+	sendID, err := resolveScopeSendID(params, inst)
+	if err != nil || sendID == 0 {
+		return false, nil
+	}
+	sent, err := model.ReplySentimentForSend(sendID, contactID)
+	if err != nil {
+		return false, nil
+	}
+	return model.NormalizeReplySentiment(sent) == want, nil
 }
 
 func recentActivity(sendID int64, days int) bool {

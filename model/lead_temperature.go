@@ -14,45 +14,48 @@ const (
 	LeadTemperatureHot  = "hot"
 )
 
-// LeadTemperatureTierThresholds is the AND rule for a single tier.
-type LeadTemperatureTierThresholds struct {
-	MinOpens   int  `json:"min_opens"`
-	MinClicks  int  `json:"min_clicks"`
-	ReplyIsHot bool `json:"reply_is_hot,omitempty"` // only meaningful on hot
-}
-
-// LeadTemperatureRules are campaign-level cold/warm/hot definitions.
-// Evaluation order: hot first, then warm, else cold.
+// LeadTemperatureRules are campaign-level cold/warm/hot definitions (reply-centric).
+// Evaluation order: hot (positive) → warm (non-negative reply) → cold.
 type LeadTemperatureRules struct {
-	Warm LeadTemperatureTierThresholds `json:"warm"`
-	Hot  LeadTemperatureTierThresholds `json:"hot"`
+	Hot struct {
+		MinPositiveReplies int `json:"min_positive_replies"`
+	} `json:"hot"`
+	Warm struct {
+		AnyNonNegativeReply bool `json:"any_non_negative_reply"`
+	} `json:"warm"`
+	NegativeStops bool `json:"negative_stops"`
+
+	// Legacy open/click fields retained for JSON migration only.
+	LegacyWarm *struct {
+		MinOpens  int `json:"min_opens"`
+		MinClicks int `json:"min_clicks"`
+	} `json:"-"`
 }
 
-// DefaultLeadTemperatureRules matches the product defaults from the plan.
+// DefaultLeadTemperatureRules: hot = ≥1 positive reply; warm = any non-negative reply.
 func DefaultLeadTemperatureRules() LeadTemperatureRules {
-	return LeadTemperatureRules{
-		Warm: LeadTemperatureTierThresholds{MinOpens: 2, MinClicks: 1},
-		Hot:  LeadTemperatureTierThresholds{MinOpens: 3, MinClicks: 2, ReplyIsHot: true},
-	}
+	var r LeadTemperatureRules
+	r.Hot.MinPositiveReplies = 1
+	r.Warm.AnyNonNegativeReply = true
+	r.NegativeStops = true
+	return r
 }
 
 func NormalizeLeadTemperatureRules(r LeadTemperatureRules) LeadTemperatureRules {
 	def := DefaultLeadTemperatureRules()
-	if r.Warm.MinOpens < 0 {
-		r.Warm.MinOpens = 0
+	if r.Hot.MinPositiveReplies < 0 {
+		r.Hot.MinPositiveReplies = 0
 	}
-	if r.Warm.MinClicks < 0 {
-		r.Warm.MinClicks = 0
-	}
-	if r.Hot.MinOpens < 0 {
-		r.Hot.MinOpens = 0
-	}
-	if r.Hot.MinClicks < 0 {
-		r.Hot.MinClicks = 0
-	}
-	// Empty/zeroed hot+warm from missing JSON → defaults.
-	if r.Warm.MinOpens == 0 && r.Warm.MinClicks == 0 && r.Hot.MinOpens == 0 && r.Hot.MinClicks == 0 && !r.Hot.ReplyIsHot {
+	// Empty / zeroed → defaults.
+	if r.Hot.MinPositiveReplies == 0 && !r.Warm.AnyNonNegativeReply && !r.NegativeStops {
 		return def
+	}
+	if r.Hot.MinPositiveReplies == 0 {
+		r.Hot.MinPositiveReplies = def.Hot.MinPositiveReplies
+	}
+	if !r.Warm.AnyNonNegativeReply && r.Hot.MinPositiveReplies > 0 {
+		// Keep warm enabled by default when hot is set.
+		r.Warm.AnyNonNegativeReply = true
 	}
 	return r
 }
@@ -60,6 +63,10 @@ func NormalizeLeadTemperatureRules(r LeadTemperatureRules) LeadTemperatureRules 
 func ParseLeadTemperatureRulesJSON(raw string) LeadTemperatureRules {
 	raw = strings.TrimSpace(raw)
 	if raw == "" || raw == "{}" {
+		return DefaultLeadTemperatureRules()
+	}
+	// Detect legacy open/click shape and map to reply-centric defaults.
+	if strings.Contains(raw, "min_opens") || strings.Contains(raw, "reply_is_hot") {
 		return DefaultLeadTemperatureRules()
 	}
 	var r LeadTemperatureRules
@@ -81,28 +88,37 @@ func (r LeadTemperatureRules) ToJSON() string {
 // PreviewLeadTemperatureRules returns a short human summary for the UI.
 func PreviewLeadTemperatureRules(r LeadTemperatureRules) string {
 	r = NormalizeLeadTemperatureRules(r)
-	hot := fmt.Sprintf("Hot = ≥%d opens and ≥%d clicks", r.Hot.MinOpens, r.Hot.MinClicks)
-	if r.Hot.ReplyIsHot {
-		hot += " (or any reply)"
+	hot := fmt.Sprintf("Hot = ≥%d positive reply", r.Hot.MinPositiveReplies)
+	if r.Hot.MinPositiveReplies != 1 {
+		hot = fmt.Sprintf("Hot = ≥%d positive replies", r.Hot.MinPositiveReplies)
 	}
-	warm := fmt.Sprintf("Warm = ≥%d opens and ≥%d clicks", r.Warm.MinOpens, r.Warm.MinClicks)
-	return warm + ". " + hot + ". Otherwise cold."
+	warm := "Warm = any non-negative reply (pending/neutral/positive)"
+	if !r.Warm.AnyNonNegativeReply {
+		warm = "Warm disabled"
+	}
+	neg := "Negative replies stop outreach"
+	if !r.NegativeStops {
+		neg = "Negative replies do not auto-stop"
+	}
+	return warm + ". " + hot + ". " + neg + ". Otherwise cold."
 }
 
 // CampaignContactEngagementCounts is lifetime engagement within one campaign.
 type CampaignContactEngagementCounts struct {
-	Opens   int
-	Clicks  int
-	Replies int
+	Opens              int
+	Clicks             int
+	Replies            int
+	PositiveReplies    int
+	NegativeReplies    int
+	NonNegativeReplies int
 }
 
-// CountCampaignContactEngagement sums human opens, clicks, and replies for a contact in a campaign.
+// CountCampaignContactEngagement sums opens/clicks/replies and reply sentiments.
 func CountCampaignContactEngagement(campaignID, contactID int64) (CampaignContactEngagementCounts, error) {
 	var out CampaignContactEngagementCounts
 	if campaignID <= 0 || contactID <= 0 {
 		return out, nil
 	}
-	// Opens: human-only via email_events.is_bot. Clicks from email_events.
 	err := db.QueryRow(`
 		SELECT
 			COALESCE(SUM(CASE WHEN ee.event_type = 'open' AND COALESCE(ee.is_bot, 0) = 0 THEN 1 ELSE 0 END), 0),
@@ -114,13 +130,15 @@ func CountCampaignContactEngagement(campaignID, contactID int64) (CampaignContac
 	if err != nil {
 		return out, err
 	}
-	err = db.QueryRow(`
-		SELECT COUNT(*)
-		FROM contact_events ce
-		INNER JOIN email_sends es ON es.id = ce.email_send_id
-		WHERE es.campaign_id = ? AND es.contact_id = ? AND ce.event_type = 'REPLY'
-	`, campaignID, contactID).Scan(&out.Replies)
-	return out, err
+	pos, neg, nonNeg, total, err := CountCampaignContactReplySentiments(campaignID, contactID)
+	if err != nil {
+		return out, err
+	}
+	out.PositiveReplies = pos
+	out.NegativeReplies = neg
+	out.NonNegativeReplies = nonNeg
+	out.Replies = total
+	return out, nil
 }
 
 // ResolveLeadTemperature applies campaign rules to engagement counts.
@@ -139,13 +157,14 @@ func ResolveLeadTemperature(campaignID, contactID int64) (string, error) {
 // ClassifyLeadTemperature is pure rule evaluation (hot → warm → cold).
 func ClassifyLeadTemperature(rules LeadTemperatureRules, counts CampaignContactEngagementCounts) string {
 	rules = NormalizeLeadTemperatureRules(rules)
-	if rules.Hot.ReplyIsHot && counts.Replies > 0 {
+	if counts.PositiveReplies >= rules.Hot.MinPositiveReplies && rules.Hot.MinPositiveReplies > 0 {
 		return LeadTemperatureHot
 	}
-	if counts.Opens >= rules.Hot.MinOpens && counts.Clicks >= rules.Hot.MinClicks {
-		return LeadTemperatureHot
+	if rules.Warm.AnyNonNegativeReply && counts.NonNegativeReplies > 0 {
+		return LeadTemperatureWarm
 	}
-	if counts.Opens >= rules.Warm.MinOpens && counts.Clicks >= rules.Warm.MinClicks {
+	// Fallback: any reply without sentiment still counts as warm when pending.
+	if rules.Warm.AnyNonNegativeReply && counts.Replies > 0 && counts.NegativeReplies < counts.Replies {
 		return LeadTemperatureWarm
 	}
 	return LeadTemperatureCold
@@ -181,13 +200,11 @@ func SetCampaignTemperatureRules(campaignID, userID int64, rules LeadTemperature
 	return nil
 }
 
-// LeadTemperatureRulesFromForm parses warm/hot thresholds from form fields.
-func LeadTemperatureRulesFromForm(
-	warmOpens, warmClicks, hotOpens, hotClicks int,
-	replyIsHot bool,
-) LeadTemperatureRules {
-	return NormalizeLeadTemperatureRules(LeadTemperatureRules{
-		Warm: LeadTemperatureTierThresholds{MinOpens: warmOpens, MinClicks: warmClicks},
-		Hot:  LeadTemperatureTierThresholds{MinOpens: hotOpens, MinClicks: hotClicks, ReplyIsHot: replyIsHot},
-	})
+// LeadTemperatureRulesFromForm builds reply-centric rules from campaign form fields.
+func LeadTemperatureRulesFromForm(minPositive int, anyNonNegative, negativeStops bool) LeadTemperatureRules {
+	var r LeadTemperatureRules
+	r.Hot.MinPositiveReplies = minPositive
+	r.Warm.AnyNonNegativeReply = anyNonNegative
+	r.NegativeStops = negativeStops
+	return NormalizeLeadTemperatureRules(r)
 }

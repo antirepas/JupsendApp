@@ -75,7 +75,8 @@ func runSchema() {
 			workflow_version_id BIGINT,
 			execution_mode TEXT DEFAULT 'bulk',
 			is_sending SMALLINT DEFAULT 0,
-			open_tracking_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+			open_tracking_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+			click_tracking_enabled BOOLEAN NOT NULL DEFAULT FALSE,
 			temperature_rules_json TEXT NOT NULL DEFAULT '',
 			stop_on_reply BOOLEAN NOT NULL DEFAULT TRUE,
 			stop_on_hot BOOLEAN NOT NULL DEFAULT FALSE,
@@ -110,7 +111,9 @@ func runSchema() {
 			delivery_status TEXT DEFAULT 'sent',
 			rendered_subject TEXT DEFAULT '',
 			rendered_html TEXT DEFAULT '',
-			rendered_text TEXT DEFAULT ''
+			rendered_text TEXT DEFAULT '',
+			open_tracking_enabled BOOLEAN,
+			click_tracking_enabled BOOLEAN
 		)`,
 
 		`CREATE TABLE IF NOT EXISTS conversation_messages (
@@ -127,6 +130,7 @@ func runSchema() {
 			body_html TEXT NOT NULL DEFAULT '',
 			message_id TEXT DEFAULT '',
 			in_reply_to TEXT DEFAULT '',
+			reply_sentiment TEXT NOT NULL DEFAULT '',
 			occurred_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 		)`,

@@ -58,9 +58,9 @@
   }
 
   function defaultConfig(type) {
-    if (type === 'action_send_email') return {};
+    if (type === 'action_send_email') return { open_tracking: false, click_tracking: false };
     if (type === 'action_wait') return { duration_seconds: 259200 };
-    if (type === 'condition_engagement') return { predicate: 'has_opened', priority: 50, params: { email_send_scope: 'last_in_workflow' } };
+    if (type === 'condition_engagement') return { predicate: 'has_replied', priority: 50, params: { email_send_scope: 'last_in_workflow' } };
     if (type === 'condition_temperature') return {};
     return {};
   }
@@ -123,11 +123,13 @@
     has_not_opened: 'Not opened',
     click_count_gte: 'Clicked',
     has_replied: 'Replied',
-    has_not_replied: 'Not replied'
+    has_not_replied: 'Not replied',
+    has_positive_reply: 'Positive reply',
+    has_negative_reply: 'Negative reply'
   };
 
   function conditionPredicateSummary(n) {
-    const pred = n.config.predicate || 'has_opened';
+    const pred = n.config.predicate || 'has_replied';
     const params = ensureConditionParams(n);
     let label = PREDICATE_LABELS[pred] || pred;
     if (pred === 'click_count_gte') {
@@ -981,6 +983,28 @@
       fields.innerHTML += `<label class="form-label mt-2">Wait (days)</label><input type="number" min="1" class="form-input" id="prop-days" value="${days}">`;
       document.getElementById('prop-days').onchange = e => { n.config.duration_seconds = parseInt(e.target.value, 10) * 86400; };
     }
+	if (n.node_type === 'action_send_email') {
+      const openOn = !!n.config.open_tracking;
+      const clickOn = !!n.config.click_tracking;
+      fields.innerHTML += `
+        <p class="text-sm text-slate-600 mt-3">Tracking is off by default for deliverability. Enable only when you need the signal.</p>
+        <label class="flex items-center gap-2 text-sm text-slate-700 mt-2">
+          <input type="checkbox" id="prop-open-track" ${openOn ? 'checked' : ''}>
+          Track opens (pixel)
+        </label>
+        <label class="flex items-center gap-2 text-sm text-slate-700 mt-2">
+          <input type="checkbox" id="prop-click-track" ${clickOn ? 'checked' : ''}>
+          Track link clicks
+        </label>`;
+      document.getElementById('prop-open-track').onchange = e => {
+        n.config.open_tracking = !!e.target.checked;
+        render();
+      };
+      document.getElementById('prop-click-track').onchange = e => {
+        n.config.click_tracking = !!e.target.checked;
+        render();
+      };
+    }
     if (n.node_type === 'condition_engagement') {
       const params = ensureConditionParams(n);
       const sends = sendEmailNodes();
@@ -1003,11 +1027,13 @@
         <p class="text-xs text-slate-500 mt-1">Link the condition to a specific send step — not just the node before it. You can branch on the same email from multiple conditions.</p>
         <label class="form-label mt-2">Check</label>
         <select class="form-input" id="prop-predicate">
+          <option value="has_replied">Has replied</option>
+          <option value="has_not_replied">Has not replied (after wait)</option>
+          <option value="has_positive_reply">Has positive reply</option>
+          <option value="has_negative_reply">Has negative reply</option>
           <option value="has_opened">Has opened</option>
           <option value="has_not_opened">Has not opened (after wait)</option>
           <option value="click_count_gte">Click count ≥</option>
-          <option value="has_replied">Has replied</option>
-          <option value="has_not_replied">Has not replied (after wait)</option>
         </select>
         <label class="form-label mt-2">Condition priority</label>
         <input type="number" min="0" class="form-input" id="prop-cond-priority" value="${n.config.priority || 50}">
@@ -1037,7 +1063,7 @@
       };
 
       const predSel = document.getElementById('prop-predicate');
-      predSel.value = n.config.predicate || 'has_opened';
+      predSel.value = n.config.predicate || 'has_replied';
       const condPrioInput = document.getElementById('prop-cond-priority');
       if (condPrioInput) {
         condPrioInput.value = n.config.priority || 50;
@@ -1175,7 +1201,7 @@
       const config = JSON.parse(n.ConfigJSON || n.config_json || '{}');
       if ((n.NodeType || n.node_type) === 'condition_engagement') {
         if (!config.params) config.params = { email_send_scope: 'last_in_workflow' };
-        if (!config.predicate) config.predicate = 'has_opened';
+        if (!config.predicate) config.predicate = 'has_replied';
         if ((config.predicate === 'has_not_opened' || config.predicate === 'has_not_replied') && !config.params.wait_days) {
           config.params.wait_days = 3;
         }

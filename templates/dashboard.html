@@ -98,16 +98,6 @@
         <span class="kpi-value">{{.benchmark.TotalSends}}</span>
     </div>
     <div class="kpi-card">
-        <span class="kpi-accent kpi-accent-open"></span>
-        <span class="kpi-label">Open rate</span>
-        <span class="kpi-value">{{printf "%.0f" .benchmark.OpenRate}}%</span>
-    </div>
-    <div class="kpi-card">
-        <span class="kpi-accent kpi-accent-click"></span>
-        <span class="kpi-label">Click rate</span>
-        <span class="kpi-value">{{printf "%.0f" .benchmark.ClickRate}}%</span>
-    </div>
-    <div class="kpi-card">
         <span class="kpi-accent kpi-accent-reply"></span>
         <span class="kpi-label">Reply rate</span>
         <span class="kpi-value">{{printf "%.0f" .benchmark.ReplyRate}}%</span>
@@ -116,9 +106,21 @@
     </div>
     <div class="kpi-card">
         <span class="kpi-accent kpi-accent-opp"></span>
+        <span class="kpi-label">Positive reply rate</span>
+        <span class="kpi-value">{{printf "%.0f" .benchmark.PositiveReplyRate}}%</span>
+        <span class="kpi-sub">{{.benchmark.PositiveReplies}} positive</span>
+    </div>
+    <div class="kpi-card">
+        <span class="kpi-accent kpi-accent-click"></span>
+        <span class="kpi-label">Negative reply rate</span>
+        <span class="kpi-value">{{printf "%.0f" .benchmark.NegativeReplyRate}}%</span>
+        <span class="kpi-sub">{{.benchmark.NegativeReplies}} negative</span>
+    </div>
+    <div class="kpi-card">
+        <span class="kpi-accent kpi-accent-opp"></span>
         <span class="kpi-label">Opportunities</span>
         <a href="/contacts/interested" class="kpi-value hover:text-brand-600 transition-colors">{{.interestedCount}}</a>
-        <span class="kpi-sub">warm &amp; hot contacts</span>
+        <span class="kpi-sub">positive &amp; warm replies</span>
     </div>
 </div>
 

@@ -104,6 +104,32 @@ func MarkEmailSendSent(sendID, accountID, jobID int64) error {
 	return err
 }
 
+// SetEmailSendTrackingFlags stores effective open/click tracking for this send.
+func SetEmailSendTrackingFlags(sendID int64, openEnabled, clickEnabled bool) error {
+	if sendID <= 0 {
+		return nil
+	}
+	_, err := db.Exec(`
+		UPDATE email_sends SET open_tracking_enabled = ?, click_tracking_enabled = ? WHERE id = ?
+	`, openEnabled, clickEnabled, sendID)
+	return err
+}
+
+// GetEmailSendTrackingFlags returns stored flags; missing columns/null → false.
+func GetEmailSendTrackingFlags(sendID int64) (openEnabled, clickEnabled bool) {
+	if sendID <= 0 {
+		return false, false
+	}
+	var openNS, clickNS sql.NullBool
+	err := db.QueryRow(`
+		SELECT open_tracking_enabled, click_tracking_enabled FROM email_sends WHERE id = ?
+	`, sendID).Scan(&openNS, &clickNS)
+	if err != nil {
+		return false, false
+	}
+	return openNS.Valid && openNS.Bool, clickNS.Valid && clickNS.Bool
+}
+
 // PinEmailSendSMTPAccount stamps the sticky mailbox onto a queued/sending row so
 // later jobs for the same contact resolve the same From before delivery finishes.
 func PinEmailSendSMTPAccount(sendID, accountID int64) error {

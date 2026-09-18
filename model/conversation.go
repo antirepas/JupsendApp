@@ -20,21 +20,22 @@ const (
 )
 
 type ConversationMessage struct {
-	ID            int64
-	UserID        int64
-	ContactID     int64
-	SMTPAccountID int64
-	EmailSendID   int64
-	Direction     string
-	FromEmail     string
-	ToEmail       string
-	Subject       string
-	BodyText      string
-	BodyHTML      string
-	MessageID     string
-	InReplyTo     string
-	OccurredAt    time.Time
-	CreatedAt     time.Time
+	ID             int64
+	UserID         int64
+	ContactID      int64
+	SMTPAccountID  int64
+	EmailSendID    int64
+	Direction      string
+	FromEmail      string
+	ToEmail        string
+	Subject        string
+	BodyText       string
+	BodyHTML       string
+	MessageID      string
+	InReplyTo      string
+	ReplySentiment string
+	OccurredAt     time.Time
+	CreatedAt      time.Time
 	// Display helpers (not always filled)
 	CampaignName string
 	OpenCount    int
@@ -42,19 +43,20 @@ type ConversationMessage struct {
 }
 
 type ConversationMessageInput struct {
-	UserID        int64
-	ContactID     int64
-	SMTPAccountID int64
-	EmailSendID   int64
-	Direction     string
-	FromEmail     string
-	ToEmail       string
-	Subject       string
-	BodyText      string
-	BodyHTML      string
-	MessageID     string
-	InReplyTo     string
-	OccurredAt    time.Time
+	UserID         int64
+	ContactID      int64
+	SMTPAccountID  int64
+	EmailSendID    int64
+	Direction      string
+	FromEmail      string
+	ToEmail        string
+	Subject        string
+	BodyText       string
+	BodyHTML       string
+	MessageID      string
+	InReplyTo      string
+	ReplySentiment string
+	OccurredAt     time.Time
 }
 
 func truncateConversationBody(s string) string {
@@ -92,16 +94,17 @@ func InsertConversationMessage(in ConversationMessageInput) (int64, error) {
 	}
 
 	var id int64
+	sentiment := strings.TrimSpace(in.ReplySentiment)
 	err := db.QueryRow(`
 		INSERT INTO conversation_messages (
 			user_id, contact_id, smtp_account_id, email_send_id, direction,
 			from_email, to_email, subject, body_text, body_html,
-			message_id, in_reply_to, occurred_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			message_id, in_reply_to, reply_sentiment, occurred_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		RETURNING id
 	`, in.UserID, in.ContactID, in.SMTPAccountID, in.EmailSendID, in.Direction,
 		in.FromEmail, in.ToEmail, in.Subject, bodyText, bodyHTML,
-		msgID, strings.TrimSpace(in.InReplyTo), occurred).Scan(&id)
+		msgID, strings.TrimSpace(in.InReplyTo), sentiment, occurred).Scan(&id)
 	return id, err
 }
 
@@ -112,7 +115,7 @@ func ListConversationMessages(userID, contactID int64, limit int) ([]Conversatio
 	rows, err := db.Query(`
 		SELECT id, user_id, contact_id, COALESCE(smtp_account_id,0), COALESCE(email_send_id,0),
 			direction, from_email, to_email, subject, body_text, body_html,
-			COALESCE(message_id,''), COALESCE(in_reply_to,''), occurred_at, created_at
+			COALESCE(message_id,''), COALESCE(in_reply_to,''), COALESCE(reply_sentiment,''), occurred_at, created_at
 		FROM conversation_messages
 		WHERE user_id = ? AND contact_id = ?
 		ORDER BY occurred_at ASC, id ASC
@@ -128,7 +131,7 @@ func ListConversationMessages(userID, contactID int64, limit int) ([]Conversatio
 		if err := rows.Scan(
 			&m.ID, &m.UserID, &m.ContactID, &m.SMTPAccountID, &m.EmailSendID,
 			&m.Direction, &m.FromEmail, &m.ToEmail, &m.Subject, &m.BodyText, &m.BodyHTML,
-			&m.MessageID, &m.InReplyTo, &m.OccurredAt, &m.CreatedAt,
+			&m.MessageID, &m.InReplyTo, &m.ReplySentiment, &m.OccurredAt, &m.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -257,7 +260,7 @@ func LatestInboundMessage(userID, contactID int64) (ConversationMessage, error) 
 	row := db.QueryRow(`
 		SELECT id, user_id, contact_id, COALESCE(smtp_account_id,0), COALESCE(email_send_id,0),
 			direction, from_email, to_email, subject, body_text, body_html,
-			COALESCE(message_id,''), COALESCE(in_reply_to,''), occurred_at, created_at
+			COALESCE(message_id,''), COALESCE(in_reply_to,''), COALESCE(reply_sentiment,''), occurred_at, created_at
 		FROM conversation_messages
 		WHERE user_id = ? AND contact_id = ? AND direction = 'inbound'
 		ORDER BY occurred_at DESC, id DESC
@@ -267,7 +270,7 @@ func LatestInboundMessage(userID, contactID int64) (ConversationMessage, error) 
 	err := row.Scan(
 		&m.ID, &m.UserID, &m.ContactID, &m.SMTPAccountID, &m.EmailSendID,
 		&m.Direction, &m.FromEmail, &m.ToEmail, &m.Subject, &m.BodyText, &m.BodyHTML,
-		&m.MessageID, &m.InReplyTo, &m.OccurredAt, &m.CreatedAt,
+		&m.MessageID, &m.InReplyTo, &m.ReplySentiment, &m.OccurredAt, &m.CreatedAt,
 	)
 	return m, err
 }
@@ -276,7 +279,7 @@ func GetConversationMessageForUser(userID, contactID, messageID int64) (Conversa
 	row := db.QueryRow(`
 		SELECT id, user_id, contact_id, COALESCE(smtp_account_id,0), COALESCE(email_send_id,0),
 			direction, from_email, to_email, subject, body_text, body_html,
-			COALESCE(message_id,''), COALESCE(in_reply_to,''), occurred_at, created_at
+			COALESCE(message_id,''), COALESCE(in_reply_to,''), COALESCE(reply_sentiment,''), occurred_at, created_at
 		FROM conversation_messages
 		WHERE id = ? AND user_id = ? AND contact_id = ?
 	`, messageID, userID, contactID)
@@ -284,7 +287,7 @@ func GetConversationMessageForUser(userID, contactID, messageID int64) (Conversa
 	err := row.Scan(
 		&m.ID, &m.UserID, &m.ContactID, &m.SMTPAccountID, &m.EmailSendID,
 		&m.Direction, &m.FromEmail, &m.ToEmail, &m.Subject, &m.BodyText, &m.BodyHTML,
-		&m.MessageID, &m.InReplyTo, &m.OccurredAt, &m.CreatedAt,
+		&m.MessageID, &m.InReplyTo, &m.ReplySentiment, &m.OccurredAt, &m.CreatedAt,
 	)
 	return m, err
 }
@@ -298,7 +301,7 @@ func ListReplyTargets(userID, contactID int64, limit int) ([]ConversationMessage
 	rows, err := db.Query(`
 		SELECT id, user_id, contact_id, COALESCE(smtp_account_id,0), COALESCE(email_send_id,0),
 			direction, from_email, to_email, subject, body_text, body_html,
-			COALESCE(message_id,''), COALESCE(in_reply_to,''), occurred_at, created_at
+			COALESCE(message_id,''), COALESCE(in_reply_to,''), COALESCE(reply_sentiment,''), occurred_at, created_at
 		FROM conversation_messages
 		WHERE user_id = ? AND contact_id = ?
 		ORDER BY occurred_at DESC, id DESC
@@ -314,7 +317,7 @@ func ListReplyTargets(userID, contactID int64, limit int) ([]ConversationMessage
 		if err := rows.Scan(
 			&m.ID, &m.UserID, &m.ContactID, &m.SMTPAccountID, &m.EmailSendID,
 			&m.Direction, &m.FromEmail, &m.ToEmail, &m.Subject, &m.BodyText, &m.BodyHTML,
-			&m.MessageID, &m.InReplyTo, &m.OccurredAt, &m.CreatedAt,
+			&m.MessageID, &m.InReplyTo, &m.ReplySentiment, &m.OccurredAt, &m.CreatedAt,
 		); err != nil {
 			return nil, err
 		}

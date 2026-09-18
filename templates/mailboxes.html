@@ -305,6 +305,7 @@
     </div>
     <div class="px-5 pt-3 border-b border-gray-100 flex gap-4 text-sm">
       <a href="/mailboxes?manage={{.ID}}&tab=overview" class="pb-2 {{if eq $.manageTab "overview"}}border-b-2 border-charcoal font-semibold text-charcoal{{else}}text-gray-500{{end}}">Overview</a>
+      <a href="/mailboxes?manage={{.ID}}&tab=deliverability" class="pb-2 {{if eq $.manageTab "deliverability"}}border-b-2 border-charcoal font-semibold text-charcoal{{else}}text-gray-500{{end}}">Deliverability</a>
       <a href="/mailboxes?manage={{.ID}}&tab=credentials" class="pb-2 {{if eq $.manageTab "credentials"}}border-b-2 border-charcoal font-semibold text-charcoal{{else}}text-gray-500{{end}}">Credentials</a>
       <a href="/mailboxes?manage={{.ID}}&tab=settings" class="pb-2 {{if eq $.manageTab "settings"}}border-b-2 border-charcoal font-semibold text-charcoal{{else}}text-gray-500{{end}}">Settings</a>
       <a href="/mailboxes?manage={{.ID}}&tab=forwarding" class="pb-2 {{if eq $.manageTab "forwarding"}}border-b-2 border-charcoal font-semibold text-charcoal{{else}}text-gray-500{{end}}">Forwarding</a>
@@ -346,6 +347,83 @@
         <dl class="space-y-3 text-sm">
           <div class="flex justify-between gap-4"><dt class="text-gray-500">Forwarding Email</dt><dd class="font-medium truncate">{{if .ForwardingEmail}}{{.ForwardingEmail}}{{else}}—{{end}}</dd></div>
         </dl>
+      </div>
+      {{end}}
+
+      {{if eq $.manageTab "deliverability"}}
+      <div class="space-y-6">
+        <div>
+          <div class="flex items-center justify-between gap-3 mb-3">
+            <h4 class="text-[11px] uppercase tracking-wide text-gray-400">Setup authentication</h4>
+            <form method="POST" action="/mailboxes/{{.ID}}/dns-check">
+              <button type="submit" class="text-xs text-brand-600 font-medium">Re-check DNS</button>
+            </form>
+          </div>
+          {{if $.dnsChecks}}
+          <dl class="space-y-3 text-sm rounded-lg border border-gray-100 p-4">
+            {{range $.dnsChecks}}
+            <div class="flex justify-between gap-4 items-start">
+              <dt class="text-gray-500 shrink-0">{{.Name}}</dt>
+              <dd class="text-right min-w-0">
+                {{if eq .Status "pass"}}
+                <span class="text-xs font-medium text-emerald-700">Pass</span>
+                {{else if eq .Status "warn"}}
+                <span class="text-xs font-medium text-amber-700">Warn</span>
+                {{else if eq .Status "unknown"}}
+                <span class="text-xs font-medium text-gray-600">Unknown</span>
+                {{else}}
+                <span class="text-xs font-medium text-red-700">Fail</span>
+                {{end}}
+                <div class="text-xs text-gray-500 mt-0.5 break-all">{{.Detail}}</div>
+              </dd>
+            </div>
+            {{end}}
+          </dl>
+          {{else}}
+          <p class="text-sm text-gray-500">No domain on this mailbox to check.</p>
+          {{end}}
+        </div>
+
+        <div class="space-y-3">
+          <h4 class="text-[11px] uppercase tracking-wide text-gray-400">Spam score test</h4>
+          <p class="text-sm text-gray-600">Send a probe from this mailbox to Mail-Tester, then open the score page.</p>
+          <form method="POST" action="/mailboxes/{{.ID}}/mail-tester">
+            <button type="submit" class="btn-primary text-sm w-full">Send to Mail-Tester</button>
+          </form>
+          {{if $.mailTesterURL}}
+          <p class="text-sm text-gray-700">
+            Results:
+            <a href="{{$.mailTesterURL}}" target="_blank" rel="noopener" class="text-brand-600 font-medium break-all">{{$.mailTesterURL}}</a>
+          </p>
+          <p class="text-xs text-gray-500">Wait about a minute after queueing before opening the link.</p>
+          {{end}}
+        </div>
+
+        <div>
+          <h4 class="text-[11px] uppercase tracking-wide text-gray-400 mb-3">Recent performance ({{$.mailboxRates.PeriodDays}} days)</h4>
+          {{if gt $.mailboxRates.TotalSends 0}}
+          <dl class="space-y-3 text-sm rounded-lg border border-gray-100 p-4">
+            <div class="flex justify-between gap-4"><dt class="text-gray-500">Sends</dt><dd class="font-medium">{{$.mailboxRates.TotalSends}}</dd></div>
+            <div class="flex justify-between gap-4"><dt class="text-gray-500">Open rate</dt><dd class="font-medium">{{printf "%.1f" $.mailboxRates.OpenRate}}%</dd></div>
+            <div class="flex justify-between gap-4"><dt class="text-gray-500">Bounce rate</dt><dd class="font-medium">{{printf "%.1f" $.mailboxRates.BounceRate}}%</dd></div>
+            <div class="flex justify-between gap-4"><dt class="text-gray-500">Reply rate</dt><dd class="font-medium">{{printf "%.1f" $.mailboxRates.ReplyRate}}%</dd></div>
+            <div class="flex justify-between gap-4 items-start">
+              <dt class="text-gray-500">Health</dt>
+              <dd class="text-right">
+                <span class="font-medium
+                  {{if eq $.mailboxRates.HealthLabel "Healthy"}}text-emerald-700
+                  {{else if eq $.mailboxRates.HealthLabel "Watch"}}text-amber-700
+                  {{else if eq $.mailboxRates.HealthLabel "Poor"}}text-red-700
+                  {{else}}text-gray-600{{end}}">{{$.mailboxRates.HealthLabel}}</span>
+                {{if $.mailboxRates.HealthNote}}<div class="text-xs text-gray-500 mt-0.5">{{$.mailboxRates.HealthNote}}</div>{{end}}
+              </dd>
+            </div>
+          </dl>
+          {{else}}
+          <p class="text-sm text-gray-500">No sent emails from this mailbox in the last {{$.mailboxRates.PeriodDays}} days yet.</p>
+          {{if $.mailboxRates.HealthNote}}<p class="text-xs text-gray-500 mt-1">{{$.mailboxRates.HealthNote}}</p>{{end}}
+          {{end}}
+        </div>
       </div>
       {{end}}
 

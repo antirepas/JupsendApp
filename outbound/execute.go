@@ -84,10 +84,22 @@ func executeJob(job model.SendJob, account model.SMTPAccount) error {
 	}
 
 	newBody = util.WrapHTMLBody(newBody)
-	if model.CampaignOpenTrackingEnabled(detail.CampaignID) {
+	openTrack, clickTrack := model.GetEmailSendTrackingFlags(emailSendID)
+	if !openTrack && !clickTrack {
+		// Legacy rows without flags: fall back to campaign settings (defaults off).
+		openTrack = model.CampaignOpenTrackingEnabled(detail.CampaignID)
+		clickTrack = model.CampaignClickTrackingEnabled(detail.CampaignID)
+	}
+	if openTrack {
 		newBody = util.InjectTrackingPixelWithBase(newBody, trackID, baseURL)
 	}
-	replacedLinksBody := util.RewriteLinksWithBase(newBody, emailSendID, baseURL)
+	replacedLinksBody := newBody
+	if clickTrack {
+		replacedLinksBody = util.RewriteLinksWithBase(newBody, emailSendID, baseURL)
+	} else {
+		// Still autolink plain URLs without redirect tracking when clicks are off.
+		replacedLinksBody = util.AutolinkBareURLs(newBody)
+	}
 	plainBody := util.StripHTML(replacedLinksBody)
 
 	if model.UserIncludeUnsubscribeLink(job.UserID) {

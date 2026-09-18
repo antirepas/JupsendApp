@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -8,6 +9,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"emailtracker.com/config"
 	"emailtracker.com/inboxkit"
@@ -638,6 +640,26 @@ func MailboxesPage(c *gin.Context) {
 	readySMTP, _ := model.ListSendReadyAccountsForUser(userID)
 	combinedWarmup := outbound.ComputeCombinedWarmupProgress(readySMTP)
 
+	var dnsChecks []util.DNSAuthCheck
+	var mailboxRates model.MailboxSendRates
+	mailTesterToken := strings.TrimSpace(c.Query("mail_tester"))
+	if manageRow != nil && manageTab == "deliverability" {
+		domain := manageRow.DomainName
+		if domain == "" && manageRow.Email != "" {
+			if i := strings.Index(manageRow.Email, "@"); i >= 0 {
+				domain = manageRow.Email[i+1:]
+			}
+		}
+		if domain != "" {
+			dnsChecks = util.CheckDNSAuth(domain)
+		}
+		if m, err := model.GetOutreachMailbox(manageID, userID); err == nil && m.SMTPAccountID > 0 {
+			mailboxRates = model.GetMailboxSendRates(userID, m.SMTPAccountID, 30)
+		} else {
+			mailboxRates = model.GetMailboxSendRates(userID, 0, 30)
+		}
+	}
+
 	c.HTML(http.StatusOK, "mailboxes.html", gin.H{
 		"title":           "Mailboxes",
 		"active":          "mailboxes",
@@ -665,6 +687,10 @@ func MailboxesPage(c *gin.Context) {
 		"showAttach":      showAttach,
 		"combinedWarmup":  combinedWarmup,
 		"playbook":        playbookMailboxes(),
+		"dnsChecks":       dnsChecks,
+		"mailboxRates":    mailboxRates,
+		"mailTesterToken": mailTesterToken,
+		"mailTesterURL":   mailTesterResultsURL(mailTesterToken),
 	})
 }
 
@@ -788,6 +814,84 @@ func mailboxManageURL(id int64, tab, errMsg, success string) string {
 		u += "&success=" + url.QueryEscape(success)
 	}
 	return u
+}
+
+func mailTesterResultsURL(token string) string {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return ""
+	}
+	return "https://www.mail-tester.com/" + url.PathEscape(token)
+}
+
+func MailboxesDNSCheck(c *gin.Context) {
+	userID := mustUserID(c)
+	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
+	if _, err := model.GetOutreachMailbox(id, userID); err != nil {
+		c.Redirect(http.StatusFound, "/mailboxes?error="+url.QueryEscape("Mailbox not found"))
+		return
+	}
+	c.Redirect(http.StatusFound, mailboxManageURL(id, "deliverability", "", "DNS checks refreshed"))
+}
+
+func MailboxesMailTester(c *gin.Context) {
+	userID := mustUserID(c)
+	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
+	m, err := model.GetOutreachMailbox(id, userID)
+	if err != nil {
+		c.Redirect(http.StatusFound, "/mailboxes?error="+url.QueryEscape("Mailbox not found"))
+		return
+	}
+	if m.SMTPAccountID <= 0 {
+		c.Redirect(http.StatusFound, mailboxManageURL(id, "deliverability", "Mailbox has no SMTP credentials", ""))
+		return
+	}
+	acc, err := model.GetSMTPAccount(m.SMTPAccountID)
+	if err != nil || acc.UserID != userID || !acc.IsSendReady() {
+		c.Redirect(http.StatusFound, mailboxManageURL(id, "deliverability", "Mailbox is not ready to send", ""))
+		return
+	}
+
+	token := newMailTesterToken()
+	recipient := token + "@mail-tester.com"
+	contactID, err := model.FindOrCreateContact(userID, recipient, nil)
+	if err != nil {
+		c.Redirect(http.StatusFound, mailboxManageURL(id, "deliverability", "Could not create Mail-Tester contact: "+err.Error(), ""))
+		return
+	}
+	tplID, err := model.EnsureDeliverabilityProbeTemplate(userID)
+	if err != nil {
+		c.Redirect(http.StatusFound, mailboxManageURL(id, "deliverability", "Could not prepare probe template: "+err.Error(), ""))
+		return
+	}
+
+	_, _, err = outbound.EnqueueSend(outbound.EnqueueInput{
+		UserID:        userID,
+		ContactID:     contactID,
+		TemplateID:    tplID,
+		SMTPAccountID: m.SMTPAccountID,
+		Variant:       model.DeliverabilityProbeVariant,
+	})
+	if err != nil {
+		c.Redirect(http.StatusFound, mailboxManageURL(id, "deliverability", err.Error(), ""))
+		return
+	}
+
+	u := mailboxManageURL(id, "deliverability", "", "Spam score test queued. Wait about a minute, then open the Mail-Tester link.")
+	u += "&mail_tester=" + url.QueryEscape(token)
+	c.Redirect(http.StatusFound, u)
+}
+
+func newMailTesterToken() string {
+	const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789"
+	b := make([]byte, 12)
+	if _, err := rand.Read(b); err != nil {
+		return "jup" + strconv.FormatInt(time.Now().UnixNano()%1e12, 36)
+	}
+	for i := range b {
+		b[i] = alphabet[int(b[i])%len(alphabet)]
+	}
+	return "jup" + string(b)
 }
 
 func MailboxesDelete(c *gin.Context) {

@@ -6,7 +6,11 @@ type AccountBenchmark struct {
 	PeriodDays             int
 	TotalSends             int
 	UniqueReplies          int
+	PositiveReplies        int
+	NegativeReplies        int
 	ReplyRate              float64
+	PositiveReplyRate      float64
+	NegativeReplyRate      float64
 	OpenRate               float64
 	ClickRate              float64
 	PersonalBestReplyRate  float64
@@ -66,8 +70,18 @@ func GetAccountBenchmark(userID int64, periodDays int) AccountBenchmark {
 		WHERE es.user_id = ? AND ce.event_type = 'REPLY'
 	`, periodDays, periodDays*2, periodDays, userID).Scan(&b.UniqueReplies, &priorReplies)
 
+	_ = db.QueryRow(`
+		SELECT
+			COUNT(DISTINCT c.id) FILTER (WHERE COALESCE(c.last_reply_sentiment,'') = 'positive'),
+			COUNT(DISTINCT c.id) FILTER (WHERE COALESCE(c.last_reply_sentiment,'') = 'negative')
+		FROM contact c
+		WHERE c.user_id = ? AND c.replied_at >= CURRENT_TIMESTAMP - (? * INTERVAL '1 day')
+	`, userID, periodDays).Scan(&b.PositiveReplies, &b.NegativeReplies)
+
 	if b.TotalSends > 0 {
 		b.ReplyRate = float64(b.UniqueReplies) / float64(b.TotalSends) * 100
+		b.PositiveReplyRate = float64(b.PositiveReplies) / float64(b.TotalSends) * 100
+		b.NegativeReplyRate = float64(b.NegativeReplies) / float64(b.TotalSends) * 100
 		b.OpenRate = float64(uniqueOpens) / float64(b.TotalSends) * 100
 		b.ClickRate = float64(uniqueClicks) / float64(b.TotalSends) * 100
 	}

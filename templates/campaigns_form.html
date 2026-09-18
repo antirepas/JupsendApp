@@ -147,10 +147,17 @@
 
         <div class="rounded-lg border border-slate-200 p-4 space-y-2">
             <label class="flex items-start gap-3 cursor-pointer">
-                <input type="checkbox" name="open_tracking_enabled" value="1" class="mt-1" checked>
+                <input type="checkbox" name="open_tracking_enabled" value="1" class="mt-1">
                 <span>
                     <span class="font-medium text-charcoal text-sm">Track email opens</span>
-                    <span class="block text-xs text-slate-500 mt-1">Adds a tiny tracking pixel. Turn off for cold outreach when you want to avoid privacy-proxy / scanner noise and slightly better deliverability. Link click tracking still works.</span>
+                    <span class="block text-xs text-slate-500 mt-1">Adds a tracking pixel. Off by default for cold outreach (better deliverability). Enable when you need open signals.</span>
+                </span>
+            </label>
+            <label class="flex items-start gap-3 cursor-pointer">
+                <input type="checkbox" name="click_tracking_enabled" value="1" class="mt-1">
+                <span>
+                    <span class="font-medium text-charcoal text-sm">Track link clicks</span>
+                    <span class="block text-xs text-slate-500 mt-1">Rewrites links through jupsend. Off by default; enable on follow-ups when you want click data.</span>
                 </span>
             </label>
         </div>
@@ -158,41 +165,29 @@
         <div class="rounded-lg border border-slate-200 p-4 space-y-3">
             <div>
                 <h3 class="font-medium text-charcoal text-sm">Lead temperature</h3>
-                <p class="text-xs text-slate-500 mt-1">Defines cold / warm / hot for this campaign only. Workflows can branch on these rules. Opens use human opens (bots excluded). If open tracking is off, open counts stay at 0 — clicks and replies still apply.</p>
+                <p class="text-xs text-slate-500 mt-1">Based on reply sentiment (AI + manual). Hot = positive replies. Warm = any non-negative reply. Cold = no reply. Negative replies stop outreach.</p>
             </div>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div class="space-y-2">
                     <p class="text-xs font-semibold text-amber-800 uppercase tracking-wide">Warm</p>
-                    <div class="grid grid-cols-2 gap-2">
-                        <div>
-                            <label class="form-label text-xs">Min opens</label>
-                            <input type="number" min="0" name="temp_warm_opens" class="form-input text-sm" value="2">
-                        </div>
-                        <div>
-                            <label class="form-label text-xs">Min clicks</label>
-                            <input type="number" min="0" name="temp_warm_clicks" class="form-input text-sm" value="1">
-                        </div>
-                    </div>
+                    <label class="flex items-center gap-2 text-xs text-slate-600">
+                        <input type="checkbox" name="temp_warm_any_reply" value="1" checked>
+                        Any non-negative reply (pending / neutral / positive)
+                    </label>
                 </div>
                 <div class="space-y-2">
                     <p class="text-xs font-semibold text-red-800 uppercase tracking-wide">Hot</p>
-                    <div class="grid grid-cols-2 gap-2">
-                        <div>
-                            <label class="form-label text-xs">Min opens</label>
-                            <input type="number" min="0" name="temp_hot_opens" class="form-input text-sm" value="3">
-                        </div>
-                        <div>
-                            <label class="form-label text-xs">Min clicks</label>
-                            <input type="number" min="0" name="temp_hot_clicks" class="form-input text-sm" value="2">
-                        </div>
+                    <div>
+                        <label class="form-label text-xs">Min positive replies</label>
+                        <input type="number" min="1" name="temp_min_positive" class="form-input text-sm" value="1">
                     </div>
-                    <label class="flex items-center gap-2 text-xs text-slate-600 mt-1">
-                        <input type="checkbox" name="temp_reply_is_hot" value="1" checked>
-                        Any reply counts as hot
-                    </label>
                 </div>
             </div>
-            <p class="text-xs text-slate-500" id="temp-rules-preview">Warm = ≥2 opens and ≥1 click. Hot = ≥3 opens and ≥2 clicks (or any reply). Otherwise cold.</p>
+            <label class="flex items-center gap-2 text-xs text-slate-600">
+                <input type="checkbox" name="temp_negative_stops" value="1" checked>
+                Negative replies stop outreach and suppress the contact
+            </label>
+            <p class="text-xs text-slate-500" id="temp-rules-preview">Warm = any non-negative reply. Hot = ≥1 positive reply. Negative replies stop outreach. Otherwise cold.</p>
             <div id="workflow-stop-rules" class="border-t border-slate-100 pt-3 space-y-2 hidden">
                 <input type="hidden" name="has_stop_policy" value="1" disabled>
                 <h3 class="font-medium text-charcoal text-sm">Workflow stop rules</h3>
@@ -289,20 +284,21 @@ setMode('bulk');
 (function syncTempPreview() {
     const preview = document.getElementById('temp-rules-preview');
     if (!preview) return;
-    const fields = ['temp_warm_opens', 'temp_warm_clicks', 'temp_hot_opens', 'temp_hot_clicks', 'temp_reply_is_hot'];
     const update = () => {
-        const wo = parseInt(document.querySelector('[name=temp_warm_opens]')?.value, 10) || 0;
-        const wc = parseInt(document.querySelector('[name=temp_warm_clicks]')?.value, 10) || 0;
-        const ho = parseInt(document.querySelector('[name=temp_hot_opens]')?.value, 10) || 0;
-        const hc = parseInt(document.querySelector('[name=temp_hot_clicks]')?.value, 10) || 0;
-        const reply = document.querySelector('[name=temp_reply_is_hot]')?.checked;
-        let hot = `Hot = ≥${ho} opens and ≥${hc} clicks`;
-        if (reply) hot += ' (or any reply)';
-        preview.textContent = `Warm = ≥${wo} opens and ≥${wc} clicks. ${hot}. Otherwise cold.`;
+        const minPos = parseInt(document.querySelector('[name=temp_min_positive]')?.value, 10) || 1;
+        const warm = document.querySelector('[name=temp_warm_any_reply]')?.checked;
+        const neg = document.querySelector('[name=temp_negative_stops]')?.checked;
+        let text = warm ? 'Warm = any non-negative reply. ' : 'Warm disabled. ';
+        text += `Hot = ≥${minPos} positive ${minPos === 1 ? 'reply' : 'replies'}. `;
+        text += neg ? 'Negative replies stop outreach. ' : '';
+        text += 'Otherwise cold.';
+        preview.textContent = text;
     };
-    fields.forEach(name => {
-        document.querySelectorAll(`[name=${name}]`).forEach(el => el.addEventListener('input', update));
-        document.querySelectorAll(`[name=${name}]`).forEach(el => el.addEventListener('change', update));
+    ['temp_min_positive', 'temp_warm_any_reply', 'temp_negative_stops'].forEach(name => {
+        document.querySelectorAll(`[name=${name}]`).forEach(el => {
+            el.addEventListener('input', update);
+            el.addEventListener('change', update);
+        });
     });
     update();
 })();

@@ -2865,7 +2865,7 @@ g.wf-edge-hovering .wf-edge-delete-btn {
     text-decoration: underline;
 }
 
-/* —— Domain / mailbox setup flows —— */
+/* ï¿½ï¿½ Domain / mailbox setup flows ï¿½ï¿½ */
 .setup-shell {
     max-width: 46rem;
     margin: 0 auto;
@@ -2940,7 +2940,7 @@ g.wf-edge-hovering .wf-edge-delete-btn {
     font-size: 0.65rem;
     background: currentColor;
     color: #fff;
-    /* reset: use bg via filter on parent color — use explicit */
+    /* reset: use bg via filter on parent color ï¿½ use explicit */
 }
 .setup-step .setup-step-num {
     background: #94A3B8;

@@ -21,10 +21,18 @@ func TestListInterestedContactsScoring(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = db.Exec(`
-		INSERT INTO email_events (email_send_id, tracking_id, event_type, created_at)
-		VALUES (?, ?, 'click', CURRENT_TIMESTAMP)
-	`, sendID, fmt.Sprintf("track-test-%d", cid))
+	_, err = InsertContactEvent(ContactEventInput{
+		ContactID: cid, EmailSendID: sendID, EventType: "REPLY",
+		Metadata: map[string]interface{}{"sentiment": "positive", "sentiment_source": "manual"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = InsertConversationMessage(ConversationMessageInput{
+		UserID: userID, ContactID: cid, EmailSendID: sendID, Direction: ConversationInbound,
+		FromEmail: "hot@test.com", ToEmail: "me@example.com", Subject: "Re: hi",
+		BodyText: "Yes let's talk", ReplySentiment: ReplySentimentPositive,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,14 +44,11 @@ func TestListInterestedContactsScoring(t *testing.T) {
 	if len(list) == 0 {
 		t.Fatal("expected interested contact")
 	}
-	if list[0].Tier != "warm" {
+	if list[0].Tier != "hot" {
 		t.Fatalf("tier=%q", list[0].Tier)
 	}
-	if list[0].LastSignal != "click" {
-		t.Fatalf("lastSignal=%q", list[0].LastSignal)
-	}
-	if list[0].Score != 40 {
-		t.Fatalf("score=%d want 40", list[0].Score)
+	if list[0].Score != 100 {
+		t.Fatalf("score=%d want 100", list[0].Score)
 	}
 }
 

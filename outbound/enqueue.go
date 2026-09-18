@@ -22,6 +22,14 @@ type EnqueueInput struct {
 	CampaignID         int64
 	Variant            string
 	WorkflowInstanceID int64
+	// SMTPAccountID forces the From mailbox when > 0 (one-off / explicit sends).
+	// Campaign/workflow jobs leave this 0 and use sticky resolution.
+	SMTPAccountID int64
+	// When TrackingExplicit is true, Open/ClickTrackingEnabled are used as-is.
+	// Otherwise campaign defaults apply (one-offs: both off).
+	TrackingExplicit       bool
+	OpenTrackingEnabled    bool
+	ClickTrackingEnabled   bool
 	// SubjectPrefix is prepended to the rendered subject at send time (e.g. "[Test]").
 	// Encoded on the send job only so email_sends keeps a clean variant label.
 	SubjectPrefix string
@@ -50,10 +58,19 @@ func EnqueueSend(input EnqueueInput) (int64, int64, error) {
 		return 0, 0, fmt.Errorf("contact has invalid email")
 	}
 
-	// Pin sticky mailbox up front so concurrent / follow-up jobs keep the same From.
-	pinAcc, pinErr := ResolveSendAccountForContact(input.UserID, input.ContactID)
+	// Pin mailbox: explicit one-off choice, else sticky resolution for the contact.
 	pinID := int64(0)
-	if pinErr == nil {
+	if input.SMTPAccountID > 0 {
+		acc, err := model.GetSMTPAccount(input.SMTPAccountID)
+		if err != nil || acc.UserID != input.UserID {
+			return 0, 0, fmt.Errorf("mailbox not found")
+		}
+		if !acc.IsSendReady() {
+			return 0, 0, fmt.Errorf("mailbox is not ready to send")
+		}
+		_ = model.EnsureDailyCounterReset(acc.ID)
+		pinID = acc.ID
+	} else if pinAcc, pinErr := ResolveSendAccountForContact(input.UserID, input.ContactID); pinErr == nil {
 		pinID = pinAcc.ID
 	}
 
@@ -65,6 +82,8 @@ func EnqueueSend(input EnqueueInput) (int64, int64, error) {
 	if err != nil {
 		return 0, 0, err
 	}
+	openTrack, clickTrack := resolveEnqueueTracking(input)
+	_ = model.SetEmailSendTrackingFlags(emailSendID, openTrack, clickTrack)
 	if pinID > 0 {
 		_ = model.PinEmailSendSMTPAccount(emailSendID, pinID)
 	}
@@ -108,6 +127,16 @@ func sendPriority(input EnqueueInput) int {
 	return PriorityCampaign
 }
 
+func resolveEnqueueTracking(input EnqueueInput) (open, click bool) {
+	if input.TrackingExplicit {
+		return input.OpenTrackingEnabled, input.ClickTrackingEnabled
+	}
+	if input.CampaignID > 0 {
+		return model.CampaignOpenTrackingEnabled(input.CampaignID), model.CampaignClickTrackingEnabled(input.CampaignID)
+	}
+	return false, false
+}
+
 func EnqueueCampaignContacts(userID, campaignID int64, contactIDs []int64, templateForContact func(contactID int64, index int) (templateID int64, variant string)) (EnqueueResult, error) {
 	allowed, skippedReasons, err := model.FilterSendEligible(userID, campaignID, contactIDs)
 	if err != nil {
@@ -117,14 +146,19 @@ func EnqueueCampaignContacts(userID, campaignID int64, contactIDs []int64, templ
 		Skipped:        len(skippedReasons),
 		SkippedReasons: model.CountSkipReasons(skippedReasons),
 	}
+	openTrack := model.CampaignOpenTrackingEnabled(campaignID)
+	clickTrack := model.CampaignClickTrackingEnabled(campaignID)
 	for i, contactID := range allowed {
 		templateID, variant := templateForContact(contactID, i)
 		_, _, err := EnqueueSend(EnqueueInput{
-			UserID:     userID,
-			ContactID:  contactID,
-			TemplateID: templateID,
-			CampaignID: campaignID,
-			Variant:    variant,
+			UserID:               userID,
+			ContactID:            contactID,
+			TemplateID:           templateID,
+			CampaignID:           campaignID,
+			Variant:              variant,
+			TrackingExplicit:     true,
+			OpenTrackingEnabled:  openTrack,
+			ClickTrackingEnabled: clickTrack,
 		})
 		if err != nil {
 			result.Skipped++

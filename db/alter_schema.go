@@ -179,6 +179,13 @@ func runAlterSchema() {
 		`ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS stop_on_reply BOOLEAN NOT NULL DEFAULT TRUE`,
 		`ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS stop_on_hot BOOLEAN NOT NULL DEFAULT FALSE`,
 		`CREATE INDEX IF NOT EXISTS idx_email_events_open_human ON email_events(email_send_id) WHERE event_type = 'open' AND COALESCE(is_bot, 0) = 0`,
+		// Reply-centric analytics
+		`ALTER TABLE conversation_messages ADD COLUMN IF NOT EXISTS reply_sentiment TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE contact ADD COLUMN IF NOT EXISTS last_reply_sentiment TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS click_tracking_enabled BOOLEAN NOT NULL DEFAULT FALSE`,
+		`ALTER TABLE campaigns ALTER COLUMN open_tracking_enabled SET DEFAULT FALSE`,
+		`ALTER TABLE email_sends ADD COLUMN IF NOT EXISTS open_tracking_enabled BOOLEAN`,
+		`ALTER TABLE email_sends ADD COLUMN IF NOT EXISTS click_tracking_enabled BOOLEAN`,
 	}
 	for _, stmt := range alters {
 		if _, err := DB.Exec(stmt); err != nil {
