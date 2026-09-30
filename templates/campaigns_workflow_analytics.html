@@ -121,8 +121,11 @@
 </div>
 
 <div class="card workflow-analytics-card mb-6">
-    <h3 class="card-title">Email engagement</h3>
-    <p class="text-sm text-slate-500 mb-4">Aggregate performance across all emails sent by this workflow campaign.</p>
+    <h3 class="card-title">Reply performance</h3>
+    <p class="text-sm text-slate-500 mb-4">
+        {{if .analytics.ShowPixelMetrics}}Aggregate engagement across emails in this workflow.{{else}}Open/click tracking is off — metrics focus on replies and sentiment.{{end}}
+    </p>
+    {{if .analytics.ShowPixelMetrics}}
     <div class="workflow-analytics-rings">
         <div class="workflow-rate-ring" style="--ring-pct: {{printf "%.1f" .analytics.Engagement.OpenRate}}">
             <div class="workflow-rate-ring-inner">
@@ -136,11 +139,27 @@
                 <span class="workflow-rate-ring-label">Click rate</span>
             </div>
         </div>
+    {{else}}
+    <div class="workflow-analytics-rings">
+        <div class="workflow-rate-ring" style="--ring-pct: {{printf "%.1f" .analytics.Engagement.ReplyRate}}">
+            <div class="workflow-rate-ring-inner">
+                <span class="workflow-rate-ring-value">{{printf "%.0f" .analytics.Engagement.ReplyRate}}%</span>
+                <span class="workflow-rate-ring-label">Reply rate</span>
+            </div>
+        </div>
+        <div class="workflow-rate-ring workflow-rate-ring--click" style="--ring-pct: {{printf "%.1f" .analytics.Engagement.PositiveReplyRate}}">
+            <div class="workflow-rate-ring-inner">
+                <span class="workflow-rate-ring-value">{{printf "%.0f" .analytics.Engagement.PositiveReplyRate}}%</span>
+                <span class="workflow-rate-ring-label">Positive rate</span>
+            </div>
+        </div>
+    {{end}}
         <div class="workflow-analytics-pills">
             <div class="workflow-analytics-pill">
                 <span class="workflow-analytics-pill-value">{{.analytics.Engagement.EmailsSent}}</span>
                 <span class="workflow-analytics-pill-label">Emails sent</span>
             </div>
+            {{if .analytics.ShowPixelMetrics}}
             <div class="workflow-analytics-pill">
                 <span class="workflow-analytics-pill-value text-blue-600">{{.analytics.Engagement.UniqueOpens}}</span>
                 <span class="workflow-analytics-pill-label">Unique opens</span>
@@ -149,6 +168,7 @@
                 <span class="workflow-analytics-pill-value text-emerald-600">{{.analytics.Engagement.UniqueClicks}}</span>
                 <span class="workflow-analytics-pill-label">Unique clicks</span>
             </div>
+            {{end}}
             <div class="workflow-analytics-pill">
                 <span class="workflow-analytics-pill-value text-violet-600">{{.analytics.Engagement.Replies}}</span>
                 <span class="workflow-analytics-pill-label">Replies ({{printf "%.1f" .analytics.Engagement.ReplyRate}}%)</span>
@@ -172,12 +192,13 @@
 
     {{if gt .analytics.Engagement.Funnel.Sent 0}}
     <div class="workflow-engagement-funnel">
-        <p class="workflow-engagement-funnel-title">Engagement funnel</p>
+        <p class="workflow-engagement-funnel-title">{{if .analytics.ShowPixelMetrics}}Engagement funnel{{else}}Reply funnel{{end}}</p>
         <div class="workflow-funnel-row">
             <span class="workflow-funnel-label">Sent</span>
             <div class="workflow-funnel-track"><div class="workflow-funnel-bar workflow-funnel-bar--sent" style="width: 100%"></div></div>
             <span class="workflow-funnel-count">{{.analytics.Engagement.Funnel.Sent}}</span>
         </div>
+        {{if .analytics.ShowPixelMetrics}}
         <div class="workflow-funnel-row">
             <span class="workflow-funnel-label">Opened</span>
             <div class="workflow-funnel-track"><div class="workflow-funnel-bar workflow-funnel-bar--open" style="width: {{printf "%.1f" .analytics.Engagement.Funnel.OpenPctOfSent}}%"></div></div>
@@ -188,15 +209,21 @@
             <div class="workflow-funnel-track"><div class="workflow-funnel-bar workflow-funnel-bar--click" style="width: {{printf "%.1f" .analytics.Engagement.ClickPctOfSent}}%"></div></div>
             <span class="workflow-funnel-count">{{.analytics.Engagement.Funnel.Clicked}} <span class="workflow-funnel-pct">({{printf "%.0f" .analytics.Engagement.ClickPctOfSent}}%)</span></span>
         </div>
+        {{end}}
         <div class="workflow-funnel-row">
             <span class="workflow-funnel-label">Replied</span>
             <div class="workflow-funnel-track"><div class="workflow-funnel-bar workflow-funnel-bar--reply" style="width: {{printf "%.1f" .analytics.Engagement.ReplyPctOfSent}}%"></div></div>
             <span class="workflow-funnel-count">{{.analytics.Engagement.Funnel.Replied}} <span class="workflow-funnel-pct">({{printf "%.0f" .analytics.Engagement.ReplyPctOfSent}}%)</span></span>
         </div>
+        <div class="workflow-funnel-row">
+            <span class="workflow-funnel-label">Positive</span>
+            <div class="workflow-funnel-track"><div class="workflow-funnel-bar workflow-funnel-bar--reply" style="width: {{printf "%.1f" .analytics.Engagement.PositiveReplyRate}}%"></div></div>
+            <span class="workflow-funnel-count">{{.analytics.Engagement.PositiveReplies}} <span class="workflow-funnel-pct">({{printf "%.0f" .analytics.Engagement.PositiveReplyRate}}%)</span></span>
+        </div>
         {{template "reply_pro_note" .}}
     </div>
     {{else}}
-    <p class="text-sm text-slate-500 py-4 text-center">No emails sent yet. Launch the workflow to start collecting engagement data.</p>
+    <p class="text-sm text-slate-500 py-4 text-center">No emails sent yet. Launch the workflow to start collecting reply data.</p>
     {{end}}
 </div>
 
@@ -206,7 +233,7 @@
         <canvas id="timelineChart" height="200"></canvas>
     </div>
     <div class="card">
-        <h3 class="card-title">Opens &amp; clicks by hour</h3>
+        <h3 class="card-title">{{if .analytics.ShowPixelMetrics}}Opens &amp; clicks by hour{{else}}Replies by hour{{end}}</h3>
         <canvas id="hourlyChart" height="200"></canvas>
     </div>
 </div>
@@ -288,24 +315,35 @@
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
+const showPixel = {{if .analytics.ShowPixelMetrics}}true{{else}}false{{end}};
 const dailyStats = [
     {{range .analytics.DailyStats}}
-    { date: "{{.Date}}", sends: {{.Sends}}, opens: {{.Opens}}, clicks: {{.Clicks}} },
+    { date: "{{.Date}}", sends: {{.Sends}}, opens: {{.Opens}}, clicks: {{.Clicks}}, replies: {{.Replies}}, positive: {{.PositiveReplies}}, negative: {{.NegativeReplies}} },
     {{end}}
 ];
 const hourlyOpens = [{{range .analytics.HourlyOpens}}{{ .Count }},{{end}}];
 const hourlyClicks = [{{range .analytics.HourlyClicks}}{{ .Count }},{{end}}];
+const hourlyReplies = [{{range .analytics.HourlyReplies}}{{ .Count }},{{end}}];
 const hourLabels = Array.from({length: 24}, (_, i) => i + ':00');
+
+const timelineDatasets = [
+    { label: 'Sends', data: dailyStats.map(d => d.sends), borderColor: '#94a3b8', tension: 0.3 },
+    { label: 'Replies', data: dailyStats.map(d => d.replies), borderColor: '#7c3aed', tension: 0.3 },
+    { label: 'Positive', data: dailyStats.map(d => d.positive), borderColor: '#059669', tension: 0.3 },
+    { label: 'Negative', data: dailyStats.map(d => d.negative), borderColor: '#dc2626', tension: 0.3 },
+];
+if (showPixel) {
+    timelineDatasets.splice(1, 0,
+        { label: 'Opens', data: dailyStats.map(d => d.opens), borderColor: '#3b82f6', tension: 0.3 },
+        { label: 'Clicks', data: dailyStats.map(d => d.clicks), borderColor: '#10b981', tension: 0.3 }
+    );
+}
 
 new Chart(document.getElementById('timelineChart'), {
     type: 'line',
     data: {
         labels: dailyStats.length ? dailyStats.map(d => d.date) : ['No data'],
-        datasets: [
-            { label: 'Sends', data: dailyStats.map(d => d.sends), borderColor: '#94a3b8', tension: 0.3 },
-            { label: 'Opens', data: dailyStats.map(d => d.opens), borderColor: '#3b82f6', tension: 0.3 },
-            { label: 'Clicks', data: dailyStats.map(d => d.clicks), borderColor: '#10b981', tension: 0.3 }
-        ]
+        datasets: timelineDatasets
     },
     options: { responsive: true, plugins: { legend: { position: 'bottom' } }, scales: { y: { beginAtZero: true } } }
 });
@@ -314,9 +352,11 @@ new Chart(document.getElementById('hourlyChart'), {
     type: 'bar',
     data: {
         labels: hourLabels,
-        datasets: [
+        datasets: showPixel ? [
             { label: 'Opens', data: hourlyOpens, backgroundColor: '#93c5fd' },
             { label: 'Clicks', data: hourlyClicks, backgroundColor: '#6ee7b7' }
+        ] : [
+            { label: 'Replies', data: hourlyReplies, backgroundColor: '#c4b5fd' }
         ]
     },
     options: { responsive: true, plugins: { legend: { position: 'bottom' } }, scales: { y: { beginAtZero: true } } }

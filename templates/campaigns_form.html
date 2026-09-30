@@ -164,6 +164,28 @@
 
         <div class="rounded-lg border border-slate-200 p-4 space-y-3">
             <div>
+                <h3 class="font-medium text-charcoal text-sm">Sending mailboxes</h3>
+                <p class="text-xs text-slate-500 mt-1">Choose which seats send this campaign. Contacts stick to one mailbox; load is split across the ones you pick.</p>
+            </div>
+            {{if .smtpOptions}}
+            <div class="space-y-2">
+                {{range .smtpOptions}}
+                <label class="flex items-start gap-3 cursor-pointer">
+                    <input type="checkbox" name="smtp_account_ids" value="{{.Account.ID}}" class="mt-1"{{if .Selected}} checked{{end}}>
+                    <span>
+                        <span class="font-medium text-charcoal text-sm">{{if .Account.FromName}}{{.Account.FromName}} · {{end}}{{.Account.SenderEmail}}</span>
+                        {{if not .Ready}}<span class="text-amber-700 text-xs ml-1">(not ready yet)</span>{{end}}
+                    </span>
+                </label>
+                {{end}}
+            </div>
+            {{else}}
+            <p class="text-sm text-amber-800">No ready mailboxes yet. <a href="/mailboxes" class="text-brand-600 font-medium">Finish mailbox setup</a> before sending.</p>
+            {{end}}
+        </div>
+
+        <div class="rounded-lg border border-slate-200 p-4 space-y-3">
+            <div>
                 <h3 class="font-medium text-charcoal text-sm">Lead temperature</h3>
                 <p class="text-xs text-slate-500 mt-1">Based on reply sentiment (AI + manual). Hot = positive replies. Warm = any non-negative reply. Cold = no reply. Negative replies stop outreach.</p>
             </div>

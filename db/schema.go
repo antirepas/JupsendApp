@@ -282,6 +282,12 @@ func runSchema() {
 			updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 		)`,
 
+		`CREATE TABLE IF NOT EXISTS campaign_smtp_accounts (
+			campaign_id BIGINT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+			smtp_account_id BIGINT NOT NULL REFERENCES smtp_accounts(id) ON DELETE CASCADE,
+			PRIMARY KEY (campaign_id, smtp_account_id)
+		)`,
+
 		`CREATE TABLE IF NOT EXISTS send_jobs (
 			id BIGSERIAL PRIMARY KEY,
 			user_id BIGINT REFERENCES users(id),

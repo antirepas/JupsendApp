@@ -73,6 +73,10 @@ type CampaignWorkflowAnalytics struct {
 	DailyStats   []CampaignDailyStat
 	HourlyOpens  []HourlyStat
 	HourlyClicks []HourlyStat
+	HourlyReplies []HourlyStat
+	ShowPixelMetrics bool
+	OpenTrackingEnabled  bool
+	ClickTrackingEnabled bool
 }
 
 func GetCampaignWorkflowAnalytics(campaignID, userID int64) (CampaignWorkflowAnalytics, error) {

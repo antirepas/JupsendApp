@@ -344,6 +344,78 @@ func TestResolveAccountForJobRebalancesUnsentWhenPinnedOverCap(t *testing.T) {
 	}
 }
 
+func TestResolveSendAccountForCampaignAllowlist(t *testing.T) {
+	db.OpenTestDB(t)
+	userID, err := model.CreateUser(fmt.Sprintf("camp-allow-%d@test.com", time.Now().UnixNano()), "hash", "http://localhost")
+	if err != nil {
+		t.Fatal(err)
+	}
+	idA, err := model.UpsertInboxKitSMTPAccount(userID, "allow-a@example.com", "smtp.gmail.com", "587", "allow-a@example.com", "pass-aaaa-aaaa-aaaa", "A", "ik-allow-a", true, 100, "imap.gmail.com", "993")
+	if err != nil {
+		t.Fatal(err)
+	}
+	idB, err := model.UpsertInboxKitSMTPAccount(userID, "allow-b@example.com", "smtp.gmail.com", "587", "allow-b@example.com", "pass-bbbb-bbbb-bbbb", "B", "ik-allow-b", false, 100, "imap.gmail.com", "993")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var templateID int64
+	if err := db.QueryRow(`INSERT INTO template (name, subject, body, user_id) VALUES ('t','s','b', ?) RETURNING id`, userID).Scan(&templateID); err != nil {
+		t.Fatal(err)
+	}
+	campID, err := model.CreateCampaign(userID, "allow", templateID, 0, "bulk", 0, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := model.SetCampaignSMTPAccounts(campID, userID, []int64{idB}); err != nil {
+		t.Fatal(err)
+	}
+	c := model.Contact{Email: "allow-lead@x.com"}
+	contactID, err := c.SaveContact(userID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	acc, err := ResolveSendAccountForContactInCampaign(userID, contactID, campID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if acc.ID != idB {
+		t.Fatalf("expected allowlisted B (%d), got %d (A=%d)", idB, acc.ID, idA)
+	}
+
+	// Unsent job pinned to A must rebalance to B.
+	job := model.SendJob{UserID: userID, ContactID: contactID, CampaignID: campID, SMTPAccountID: idA}
+	acc2, err := ResolveAccountForJob(job)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if acc2.ID != idB {
+		t.Fatalf("expected rebalance to B (%d), got %d", idB, acc2.ID)
+	}
+
+	// Even after a prior send from A (other campaign / sticky), this campaign must stay on B.
+	if _, err := db.Exec(`
+		INSERT INTO email_sends (user_id, contact_id, template_id, tracking_id, smtp_account_id, delivery_status, sent_at)
+		VALUES (?, ?, 0, ?, ?, 'sent', NOW())
+	`, userID, contactID, fmt.Sprintf("allow-prior-%d", time.Now().UnixNano()), idA); err != nil {
+		t.Fatal(err)
+	}
+	acc3, err := ResolveSendAccountForContactInCampaign(userID, contactID, campID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if acc3.ID != idB {
+		t.Fatalf("after prior A sticky, campaign allowlist must still use B (%d), got %d", idB, acc3.ID)
+	}
+	jobDelivered := model.SendJob{UserID: userID, ContactID: contactID, CampaignID: campID, SMTPAccountID: idA}
+	acc4, err := ResolveAccountForJob(jobDelivered)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if acc4.ID != idB {
+		t.Fatalf("delivered sticky A must rebalance to allowlisted B (%d), got %d", idB, acc4.ID)
+	}
+}
+
 func TestComputeCombinedWarmupProgress(t *testing.T) {
 	empty := ComputeCombinedWarmupProgress(nil)
 	if empty.HasAccount {

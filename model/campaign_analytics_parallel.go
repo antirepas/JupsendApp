@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"emailtracker.com/db"
 	"golang.org/x/sync/errgroup"
@@ -59,6 +60,8 @@ func GetCampaignAnalyticsFor(c Campaign, userID int64) (CampaignAnalytics, error
 		TemplateBName:          bName,
 		ExperimentVariable:     c.ExperimentVariable,
 		ExperimentHypothesis:   c.ExperimentHypothesis,
+		OpenTrackingEnabled:    c.OpenTrackingEnabled,
+		ClickTrackingEnabled:   c.ClickTrackingEnabled,
 		Overview:               CampaignOverview{ContactCount: len(contactIDs)},
 	}
 
@@ -92,6 +95,10 @@ func GetCampaignAnalyticsFor(c Campaign, userID int64) (CampaignAnalytics, error
 		return nil
 	})
 	g.Go(func() error {
+		analytics.HourlyReplies = getCampaignHourlyReplyStats(campaignID)
+		return nil
+	})
+	g.Go(func() error {
 		analytics.LinkClicks = getCampaignLinkClicks(campaignID)
 		return nil
 	})
@@ -109,6 +116,9 @@ func GetCampaignAnalyticsFor(c Campaign, userID int64) (CampaignAnalytics, error
 	}
 
 	fillOverview(&analytics)
+	analytics.ShowPixelMetrics = c.OpenTrackingEnabled || c.ClickTrackingEnabled ||
+		analytics.Overview.UniqueOpens > 0 || analytics.Overview.UniqueClicks > 0 ||
+		analytics.Overview.TotalOpens > 0 || analytics.Overview.TotalClicks > 0
 	analytics.Funnel = EngagementFunnel{
 		Sent:    analytics.Overview.SentCount,
 		Opened:  analytics.Overview.UniqueOpens,
@@ -185,6 +195,7 @@ func getContactEngagementFast(campaignID int64, contactIDs []int64, hasB bool, a
 	}
 
 	emailMap, _ := GetCampaignContactEmailMap(campaignID)
+	replyMap := getCampaignContactReplyMap(campaignID)
 
 	var result []ContactEngagementRow
 	for i, cid := range contactIDs {
@@ -210,9 +221,52 @@ func getContactEngagementFast(campaignID int64, contactIDs []int64, hasB bool, a
 			row.Engaged = sent.Engaged
 			row.MinutesToFirstOpen = sent.MinutesToFirstOpen
 		}
+		if reply, ok := replyMap[cid]; ok {
+			row.HasReplied = true
+			row.ReplySentiment = reply.Sentiment
+			row.RepliedAt = reply.At
+			row.Engaged = true
+			if row.LastActivityAt == nil || (reply.At != nil && reply.At.After(*row.LastActivityAt)) {
+				row.LastActivityAt = reply.At
+			}
+		}
 		result = append(result, row)
 	}
 	return result
+}
+
+type contactReplyInfo struct {
+	Sentiment string
+	At        *time.Time
+}
+
+func getCampaignContactReplyMap(campaignID int64) map[int64]contactReplyInfo {
+	out := map[int64]contactReplyInfo{}
+	rows, err := db.Query(`
+		SELECT es.contact_id,
+			COALESCE(NULLIF(c.last_reply_sentiment, ''), 'pending'),
+			MAX(ce.created_at)
+		FROM contact_events ce
+		INNER JOIN email_sends es ON es.id = ce.email_send_id
+		INNER JOIN contact c ON c.id = es.contact_id
+		WHERE es.campaign_id = ? AND ce.event_type = 'REPLY'
+		GROUP BY es.contact_id, c.last_reply_sentiment
+	`, campaignID)
+	if err != nil {
+		return out
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid int64
+		var sentiment string
+		var at time.Time
+		if rows.Scan(&cid, &sentiment, &at) != nil {
+			continue
+		}
+		t := at
+		out[cid] = contactReplyInfo{Sentiment: NormalizeReplySentiment(sentiment), At: &t}
+	}
+	return out
 }
 
 func getVariableCoverageFast(campaignID int64, templateAID, templateBID int64, contactIDs []int64) []VariableCoverageStat {
@@ -302,6 +356,7 @@ func GetCampaignWorkflowAnalyticsFor(c Campaign, userID int64) (CampaignWorkflow
 		daily      []CampaignDailyStat
 		hourlyOpen []HourlyStat
 		hourlyClk  []HourlyStat
+		hourlyRep  []HourlyStat
 	)
 
 	g, _ := errgroup.WithContext(context.Background())
@@ -345,6 +400,10 @@ func GetCampaignWorkflowAnalyticsFor(c Campaign, userID int64) (CampaignWorkflow
 	})
 	g.Go(func() error {
 		hourlyClk = getCampaignHourlyStats(campaignID, "click")
+		return nil
+	})
+	g.Go(func() error {
+		hourlyRep = getCampaignHourlyReplyStats(campaignID)
 		return nil
 	})
 	if err := g.Wait(); err != nil {
@@ -397,22 +456,27 @@ func GetCampaignWorkflowAnalyticsFor(c Campaign, userID int64) (CampaignWorkflow
 	hasPipeline := treeErr == nil && pipelineTree.NodeKey != ""
 
 	result := CampaignWorkflowAnalytics{
-		CampaignID:   campaignID,
-		CampaignName: c.Name,
-		WorkflowName: wfInfo.WorkflowName,
-		Status:       ComputeDisplayStatus(c.Status, c.ScheduledAt, c.IsSending),
-		CreatedAt:    c.CreatedAt,
-		Overview:     overview,
-		Engagement:   engagement,
-		Steps:        steps,
-		PipelineTree: pipelineTree,
-		HasPipeline:  hasPipeline,
-		Canvas:       canvas,
-		HasCanvas:    hasCanvas,
-		Contacts:     contacts,
-		DailyStats:   daily,
-		HourlyOpens:  hourlyOpen,
-		HourlyClicks: hourlyClk,
+		CampaignID:           campaignID,
+		CampaignName:         c.Name,
+		WorkflowName:         wfInfo.WorkflowName,
+		Status:               ComputeDisplayStatus(c.Status, c.ScheduledAt, c.IsSending),
+		CreatedAt:            c.CreatedAt,
+		Overview:             overview,
+		Engagement:           engagement,
+		Steps:                steps,
+		PipelineTree:         pipelineTree,
+		HasPipeline:          hasPipeline,
+		Canvas:               canvas,
+		HasCanvas:            hasCanvas,
+		Contacts:             contacts,
+		DailyStats:           daily,
+		HourlyOpens:          hourlyOpen,
+		HourlyClicks:         hourlyClk,
+		HourlyReplies:        hourlyRep,
+		OpenTrackingEnabled:  c.OpenTrackingEnabled,
+		ClickTrackingEnabled: c.ClickTrackingEnabled,
+		ShowPixelMetrics: c.OpenTrackingEnabled || c.ClickTrackingEnabled ||
+			engagement.UniqueOpens > 0 || engagement.UniqueClicks > 0,
 	}
 
 	sort.Slice(result.DailyStats, func(i, j int) bool {

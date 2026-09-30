@@ -28,7 +28,7 @@ type CampaignMailboxDistribution struct {
 // GetCampaignMailboxDistribution builds planned (sticky) and sent counts per mailbox for a campaign.
 func GetCampaignMailboxDistribution(userID, campaignID int64) (CampaignMailboxDistribution, error) {
 	out := CampaignMailboxDistribution{}
-	ready, err := ListSendReadyAccountsForUser(userID)
+	ready, err := ListSendReadyAccountsForCampaign(userID, campaignID)
 	if err != nil || len(ready) == 0 {
 		return out, nil
 	}

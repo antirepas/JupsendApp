@@ -58,25 +58,31 @@ type VariantAnalytics struct {
 }
 
 type ContactEngagementRow struct {
-	ContactID        int64
-	Email            string
-	Variant          string
-	TemplateName     string
-	SendID           int64
-	SentAt           *time.Time
-	OpenCount        int
-	ClickCount       int
-	FirstOpenAt      *time.Time
-	LastActivityAt   *time.Time
-	Engaged          bool
+	ContactID          int64
+	Email              string
+	Variant            string
+	TemplateName       string
+	SendID             int64
+	SentAt             *time.Time
+	OpenCount          int
+	ClickCount         int
+	FirstOpenAt        *time.Time
+	LastActivityAt     *time.Time
+	Engaged            bool // open, click, or reply
 	MinutesToFirstOpen float64
+	HasReplied         bool
+	ReplySentiment     string // positive | negative | neutral | pending | ""
+	RepliedAt          *time.Time
 }
 
 type CampaignDailyStat struct {
-	Date   string
-	Sends  int
-	Opens  int
-	Clicks int
+	Date             string
+	Sends            int
+	Opens            int
+	Clicks           int
+	Replies          int
+	PositiveReplies  int
+	NegativeReplies  int
 }
 
 type HourlyStat struct {
@@ -122,6 +128,7 @@ type CampaignAnalytics struct {
 	DailyStats   []CampaignDailyStat
 	HourlyOpens  []HourlyStat
 	HourlyClicks []HourlyStat
+	HourlyReplies []HourlyStat
 	LinkClicks   []LinkClickStat
 	Funnel       EngagementFunnel
 	VariableCoverage []VariableCoverageStat
@@ -133,6 +140,11 @@ type CampaignAnalytics struct {
 	ReplyRateDelta      float64
 	IsPersonalBest      bool
 	AccountBenchmark    AccountBenchmark
+	// Tracking / display mode
+	OpenTrackingEnabled  bool
+	ClickTrackingEnabled bool
+	// ShowPixelMetrics is true when open/click tracking is on, or when any pixel data exists.
+	ShowPixelMetrics bool
 }
 
 func GetCampaignAnalytics(campaignID, userID int64) (CampaignAnalytics, error) {
@@ -401,6 +413,33 @@ func getCampaignDailyStats(campaignID int64) []CampaignDailyStat {
 		}
 	}
 
+	replyMap := map[string]int{}
+	posMap := map[string]int{}
+	negMap := map[string]int{}
+	replyRows, _ := db.Query(`
+		SELECT (ce.created_at)::date,
+			COUNT(DISTINCT ce.contact_id),
+			COUNT(DISTINCT ce.contact_id) FILTER (WHERE LOWER(COALESCE(c.last_reply_sentiment, '')) = 'positive'),
+			COUNT(DISTINCT ce.contact_id) FILTER (WHERE LOWER(COALESCE(c.last_reply_sentiment, '')) = 'negative')
+		FROM contact_events ce
+		INNER JOIN email_sends es ON es.id = ce.email_send_id
+		INNER JOIN contact c ON c.id = es.contact_id
+		WHERE es.campaign_id = ? AND ce.event_type = 'REPLY'
+		GROUP BY (ce.created_at)::date
+	`, campaignID)
+	if replyRows != nil {
+		defer replyRows.Close()
+		for replyRows.Next() {
+			var day string
+			var n, pos, neg int
+			if replyRows.Scan(&day, &n, &pos, &neg) == nil {
+				replyMap[day] = n
+				posMap[day] = pos
+				negMap[day] = neg
+			}
+		}
+	}
+
 	seen := map[string]bool{}
 	for d := range sendMap {
 		seen[d] = true
@@ -411,15 +450,48 @@ func getCampaignDailyStats(campaignID int64) []CampaignDailyStat {
 	for d := range clickMap {
 		seen[d] = true
 	}
+	for d := range replyMap {
+		seen[d] = true
+	}
 
 	var stats []CampaignDailyStat
 	for day := range seen {
 		stats = append(stats, CampaignDailyStat{
-			Date:   day,
-			Sends:  sendMap[day],
-			Opens:  openMap[day],
-			Clicks: clickMap[day],
+			Date:            day,
+			Sends:           sendMap[day],
+			Opens:           openMap[day],
+			Clicks:          clickMap[day],
+			Replies:         replyMap[day],
+			PositiveReplies: posMap[day],
+			NegativeReplies: negMap[day],
 		})
+	}
+	return stats
+}
+
+func getCampaignHourlyReplyStats(campaignID int64) []HourlyStat {
+	rows, err := db.Query(`
+		SELECT CAST(EXTRACT(HOUR FROM ce.created_at) AS INTEGER), COUNT(DISTINCT ce.contact_id)
+		FROM contact_events ce
+		INNER JOIN email_sends es ON es.id = ce.email_send_id
+		WHERE es.campaign_id = ? AND ce.event_type = 'REPLY'
+		GROUP BY EXTRACT(HOUR FROM ce.created_at)
+	`, campaignID)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+
+	counts := make([]int, 24)
+	for rows.Next() {
+		var hour, n int
+		if rows.Scan(&hour, &n) == nil && hour >= 0 && hour < 24 {
+			counts[hour] = n
+		}
+	}
+	var stats []HourlyStat
+	for h := 0; h < 24; h++ {
+		stats = append(stats, HourlyStat{Hour: h, Count: counts[h]})
 	}
 	return stats
 }

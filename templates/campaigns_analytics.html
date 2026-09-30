@@ -7,11 +7,16 @@
 {{template "sidebar" .}}
 <main class="flex-1 overflow-y-auto">
 <div class="max-w-7xl mx-auto p-8">
-<div class="flex items-center justify-between mb-8">
+<div class="flex items-center justify-between mb-8 flex-wrap gap-4">
     <div>
         <a href="/campaigns/{{.analytics.CampaignID}}" class="text-sm text-brand-600 font-medium">← {{.analytics.Name}}</a>
         <h2 class="text-2xl font-bold text-slate-900 mt-2">Campaign Analytics</h2>
-        <p class="text-slate-500 mt-1">{{.analytics.TemplateAName}}{{if .analytics.HasVariantB}} vs {{.analytics.TemplateBName}}{{end}} · Created {{.analytics.CreatedAt.Format "Jan 2, 2006"}}</p>
+        <p class="text-slate-500 mt-1">
+            {{.analytics.TemplateAName}}{{if .analytics.HasVariantB}} vs {{.analytics.TemplateBName}}{{end}} · Created {{.analytics.CreatedAt.Format "Jan 2, 2006"}}
+            {{if not .analytics.ShowPixelMetrics}}
+            <span class="badge badge-gray ml-2">Reply-based · open/click tracking off</span>
+            {{end}}
+        </p>
     </div>
     <span class="badge {{if eq .analytics.Status "sent"}}badge-green{{else if eq .analytics.Status "scheduled"}}badge-amber{{else}}badge-gray{{end}}">{{.analytics.Status}}</span>
 </div>
@@ -28,6 +33,10 @@
             {{template "reply_pro_note" .}}
         </div>
         <div>
+            <p class="stat-label">Positive reply rate</p>
+            <p class="text-2xl font-bold text-emerald-700">{{printf "%.1f" .analytics.Overview.PositiveReplyRate}}%</p>
+        </div>
+        <div>
             <p class="stat-label">vs your 30-day avg</p>
             <p class="text-2xl font-bold {{if gt .analytics.ReplyRateDelta 0.0}}text-emerald-600{{else if lt .analytics.ReplyRateDelta 0.0}}text-red-600{{else}}text-slate-600{{end}}">
                 {{if gt .analytics.ReplyRateDelta 0.0}}+{{end}}{{printf "%.1f" .analytics.ReplyRateDelta}}%
@@ -41,27 +50,19 @@
 </div>
 {{end}}
 
-<!-- Overview -->
-<div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-8">
+<!-- Primary reply metrics -->
+<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
     <div class="stat-card"><p class="stat-label">Contacts</p><p class="stat-value">{{.analytics.Overview.ContactCount}}</p></div>
     <div class="stat-card"><p class="stat-label">Sent</p><p class="stat-value">{{.analytics.Overview.SentCount}}</p></div>
     <div class="stat-card"><p class="stat-label">Pending</p><p class="stat-value text-slate-500">{{.analytics.Overview.PendingCount}}</p></div>
-    <div class="stat-card"><p class="stat-label">Unique opens</p><p class="stat-value text-blue-600">{{.analytics.Overview.UniqueOpens}}</p><p class="text-xs text-slate-500">{{printf "%.1f" .analytics.Overview.OpenRate}}% rate</p></div>
-    {{if gt .analytics.Overview.TotalBotOpens 0}}
-    <div class="stat-card"><p class="stat-label">Bot / scanned</p><p class="stat-value text-slate-500">{{.analytics.Overview.TotalBotOpens}}</p><p class="text-xs text-slate-500">Excluded from open rate</p></div>
-    {{end}}
-    <div class="stat-card"><p class="stat-label">Unique clicks</p><p class="stat-value text-emerald-600">{{.analytics.Overview.UniqueClicks}}</p><p class="text-xs text-slate-500">{{printf "%.1f" .analytics.Overview.ClickRate}}% rate</p></div>
     <div class="stat-card"><p class="stat-label">Replies</p><p class="stat-value text-violet-600">{{.analytics.Overview.ReplyCount}}</p><p class="text-xs text-slate-500">{{printf "%.1f" .analytics.Overview.ReplyRate}}% of sent</p>{{template "reply_pro_note" .}}</div>
-    <div class="stat-card"><p class="stat-label">Positive replies</p><p class="stat-value text-emerald-700">{{.analytics.Overview.PositiveReplies}}</p><p class="text-xs text-slate-500">{{printf "%.1f" .analytics.Overview.PositiveReplyRate}}% of sent · {{printf "%.0f" .analytics.Overview.PositivePctOfReplies}}% of replies</p></div>
-    <div class="stat-card"><p class="stat-label">Negative replies</p><p class="stat-value text-red-600">{{.analytics.Overview.NegativeReplies}}</p><p class="text-xs text-slate-500">{{printf "%.1f" .analytics.Overview.NegativeReplyRate}}% of sent · {{printf "%.0f" .analytics.Overview.NegativePctOfReplies}}% of replies</p></div>
-    <div class="stat-card"><p class="stat-label">Neutral / pending</p><p class="stat-value text-slate-600">{{.analytics.Overview.NeutralReplies}} / {{.analytics.Overview.PendingReplies}}</p><p class="text-xs text-slate-500">{{printf "%.1f" .analytics.Overview.NeutralReplyRate}}% neutral of sent</p></div>
-    <div class="stat-card"><p class="stat-label">Click-to-open</p><p class="stat-value">{{printf "%.1f" .analytics.Overview.ClickToOpenRate}}%</p>{{if .analytics.Overview.AvgMinutesToOpen}}<p class="text-xs text-slate-500">Avg {{printf "%.0f" .analytics.Overview.AvgMinutesToOpen}} min to open</p>{{end}}</div>
+    <div class="stat-card"><p class="stat-label">Positive</p><p class="stat-value text-emerald-700">{{.analytics.Overview.PositiveReplies}}</p><p class="text-xs text-slate-500">{{printf "%.1f" .analytics.Overview.PositiveReplyRate}}% of sent</p></div>
+    <div class="stat-card"><p class="stat-label">Negative</p><p class="stat-value text-red-600">{{.analytics.Overview.NegativeReplies}}</p><p class="text-xs text-slate-500">{{printf "%.1f" .analytics.Overview.NegativeReplyRate}}% of sent</p></div>
 </div>
 
-<!-- Reply sentiment -->
 <div class="card mb-8">
     <h3 class="card-title">Reply sentiment</h3>
-    <p class="text-sm text-slate-500 mb-4">Unique contacts who replied, classified by AI/manual sentiment.</p>
+    <p class="text-sm text-slate-500 mb-4">The core signal for cold outreach — unique contacts who replied, by AI/manual sentiment.</p>
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div class="rounded-lg bg-violet-50 px-4 py-3">
             <p class="text-xs uppercase tracking-wide text-violet-700">Reply rate</p>
@@ -86,31 +87,19 @@
     </div>
 </div>
 
-<!-- Funnel -->
+<!-- Reply funnel (always) -->
 <div class="card mb-8">
-    <h3 class="card-title">Engagement funnel</h3>
+    <h3 class="card-title">Reply funnel</h3>
     <div class="flex items-center justify-center gap-4 py-6 flex-wrap">
         <div class="text-center px-8 py-4 bg-slate-100 rounded-lg min-w-[120px]">
             <p class="text-3xl font-bold">{{.analytics.Funnel.Sent}}</p>
             <p class="text-sm text-slate-600">Sent</p>
         </div>
         <span class="text-slate-400 text-2xl">→</span>
-        <div class="text-center px-8 py-4 bg-blue-50 rounded-lg min-w-[120px]">
-            <p class="text-3xl font-bold text-blue-600">{{.analytics.Funnel.Opened}}</p>
-            <p class="text-sm text-slate-600">Opened</p>
-            {{if gt .analytics.Funnel.Sent 0}}<p class="text-xs text-slate-500">{{printf "%.0f" .analytics.Funnel.OpenPctOfSent}}% of sent</p>{{end}}
-        </div>
-        <span class="text-slate-400 text-2xl">→</span>
-        <div class="text-center px-8 py-4 bg-emerald-50 rounded-lg min-w-[120px]">
-            <p class="text-3xl font-bold text-emerald-600">{{.analytics.Funnel.Clicked}}</p>
-            <p class="text-sm text-slate-600">Clicked</p>
-            {{if gt .analytics.Funnel.Opened 0}}<p class="text-xs text-slate-500">{{printf "%.0f" .analytics.Funnel.ClickPctOfOpens}}% of opens</p>{{end}}
-        </div>
-        <span class="text-slate-400 text-2xl">→</span>
         <div class="text-center px-8 py-4 bg-violet-50 rounded-lg min-w-[120px]">
             <p class="text-3xl font-bold text-violet-600">{{.analytics.Funnel.Replied}}</p>
             <p class="text-sm text-slate-600">Replied</p>
-            {{template "reply_pro_note" .}}
+            {{if gt .analytics.Funnel.Sent 0}}<p class="text-xs text-slate-500">{{printf "%.1f" .analytics.Overview.ReplyRate}}% of sent</p>{{end}}
         </div>
         <span class="text-slate-400 text-2xl">→</span>
         <div class="text-center px-8 py-4 bg-emerald-100 rounded-lg min-w-[120px]">
@@ -118,8 +107,38 @@
             <p class="text-sm text-slate-600">Positive</p>
             {{if gt .analytics.Funnel.Replied 0}}<p class="text-xs text-slate-500">{{printf "%.0f" .analytics.Overview.PositivePctOfReplies}}% of replies</p>{{end}}
         </div>
+        <span class="text-slate-400 text-2xl">→</span>
+        <div class="text-center px-8 py-4 bg-red-50 rounded-lg min-w-[120px]">
+            <p class="text-3xl font-bold text-red-700">{{.analytics.Overview.NegativeReplies}}</p>
+            <p class="text-sm text-slate-600">Negative</p>
+            {{if gt .analytics.Funnel.Replied 0}}<p class="text-xs text-slate-500">{{printf "%.0f" .analytics.Overview.NegativePctOfReplies}}% of replies</p>{{end}}
+        </div>
     </div>
 </div>
+
+{{if .analytics.ShowPixelMetrics}}
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+    <div class="stat-card"><p class="stat-label">Unique opens</p><p class="stat-value text-blue-600">{{.analytics.Overview.UniqueOpens}}</p><p class="text-xs text-slate-500">{{printf "%.1f" .analytics.Overview.OpenRate}}%</p></div>
+    {{if gt .analytics.Overview.TotalBotOpens 0}}
+    <div class="stat-card"><p class="stat-label">Bot / scanned</p><p class="stat-value text-slate-500">{{.analytics.Overview.TotalBotOpens}}</p></div>
+    {{end}}
+    <div class="stat-card"><p class="stat-label">Unique clicks</p><p class="stat-value text-emerald-600">{{.analytics.Overview.UniqueClicks}}</p><p class="text-xs text-slate-500">{{printf "%.1f" .analytics.Overview.ClickRate}}%</p></div>
+    <div class="stat-card"><p class="stat-label">Click-to-open</p><p class="stat-value">{{printf "%.1f" .analytics.Overview.ClickToOpenRate}}%</p>{{if .analytics.Overview.AvgMinutesToOpen}}<p class="text-xs text-slate-500">Avg {{printf "%.0f" .analytics.Overview.AvgMinutesToOpen}} min to open</p>{{end}}</div>
+</div>
+<div class="card mb-8">
+    <h3 class="card-title">Pixel engagement funnel</h3>
+    <p class="text-sm text-slate-500 mb-2">Open and click tracking is enabled (or pixel events were recorded).</p>
+    <div class="flex items-center justify-center gap-4 py-4 flex-wrap">
+        <div class="text-center px-6 py-3 bg-slate-100 rounded-lg min-w-[100px]"><p class="text-2xl font-bold">{{.analytics.Funnel.Sent}}</p><p class="text-sm text-slate-600">Sent</p></div>
+        <span class="text-slate-400 text-xl">→</span>
+        <div class="text-center px-6 py-3 bg-blue-50 rounded-lg min-w-[100px]"><p class="text-2xl font-bold text-blue-600">{{.analytics.Funnel.Opened}}</p><p class="text-sm text-slate-600">Opened</p></div>
+        <span class="text-slate-400 text-xl">→</span>
+        <div class="text-center px-6 py-3 bg-emerald-50 rounded-lg min-w-[100px]"><p class="text-2xl font-bold text-emerald-600">{{.analytics.Funnel.Clicked}}</p><p class="text-sm text-slate-600">Clicked</p></div>
+        <span class="text-slate-400 text-xl">→</span>
+        <div class="text-center px-6 py-3 bg-violet-50 rounded-lg min-w-[100px]"><p class="text-2xl font-bold text-violet-600">{{.analytics.Funnel.Replied}}</p><p class="text-sm text-slate-600">Replied</p></div>
+    </div>
+</div>
+{{end}}
 
 <!-- A/B Comparison -->
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
@@ -133,12 +152,12 @@
         <div class="grid grid-cols-2 gap-4 mt-4 text-sm">
             <div><span class="text-slate-500">Assigned</span><p class="font-bold text-lg">{{.analytics.VariantA.AssignedContacts}}</p></div>
             <div><span class="text-slate-500">Sent / Pending</span><p class="font-bold text-lg">{{.analytics.VariantA.Sent}} / {{.analytics.VariantA.Pending}}</p></div>
-            <div><span class="text-slate-500">Opens (unique)</span><p class="font-bold text-lg text-blue-600">{{.analytics.VariantA.UniqueOpens}} <span class="text-xs font-normal">({{printf "%.1f" .analytics.VariantA.OpenRate}}%)</span></p></div>
-            <div><span class="text-slate-500">Clicks (unique)</span><p class="font-bold text-lg text-emerald-600">{{.analytics.VariantA.UniqueClicks}} <span class="text-xs font-normal">({{printf "%.1f" .analytics.VariantA.ClickRate}}%)</span></p></div>
-            <div><span class="text-slate-500">Replies (unique)</span><p class="font-bold text-lg text-violet-600">{{.analytics.VariantA.UniqueReplies}} <span class="text-xs font-normal">({{printf "%.1f" .analytics.VariantA.ReplyRate}}%)</span></p>{{template "reply_pro_note" .}}</div>
+            <div><span class="text-slate-500">Replies</span><p class="font-bold text-lg text-violet-600">{{.analytics.VariantA.UniqueReplies}} <span class="text-xs font-normal">({{printf "%.1f" .analytics.VariantA.ReplyRate}}%)</span></p>{{template "reply_pro_note" .}}</div>
             <div><span class="text-slate-500">Positive / negative</span><p class="font-bold text-lg"><span class="text-emerald-700">{{.analytics.VariantA.PositiveReplies}}</span> / <span class="text-red-600">{{.analytics.VariantA.NegativeReplies}}</span> <span class="text-xs font-normal text-slate-500">({{printf "%.1f" .analytics.VariantA.PositiveReplyRate}}% / {{printf "%.1f" .analytics.VariantA.NegativeReplyRate}}%)</span></p></div>
-            <div><span class="text-slate-500">Click-to-open</span><p class="font-bold">{{printf "%.1f" .analytics.VariantA.ClickToOpenRate}}%</p></div>
-            <div><span class="text-slate-500">Total events</span><p class="font-bold">{{.analytics.VariantA.Opens}} opens · {{.analytics.VariantA.Clicks}} clicks</p></div>
+            {{if $.analytics.ShowPixelMetrics}}
+            <div><span class="text-slate-500">Opens</span><p class="font-bold text-lg text-blue-600">{{.analytics.VariantA.UniqueOpens}} <span class="text-xs font-normal">({{printf "%.1f" .analytics.VariantA.OpenRate}}%)</span></p></div>
+            <div><span class="text-slate-500">Clicks</span><p class="font-bold text-lg text-emerald-600">{{.analytics.VariantA.UniqueClicks}} <span class="text-xs font-normal">({{printf "%.1f" .analytics.VariantA.ClickRate}}%)</span></p></div>
+            {{end}}
         </div>
     </div>
     {{if .analytics.HasVariantB}}
@@ -153,12 +172,12 @@
         <div class="grid grid-cols-2 gap-4 mt-4 text-sm">
             <div><span class="text-slate-500">Assigned</span><p class="font-bold text-lg">{{.analytics.VariantB.AssignedContacts}}</p></div>
             <div><span class="text-slate-500">Sent / Pending</span><p class="font-bold text-lg">{{.analytics.VariantB.Sent}} / {{.analytics.VariantB.Pending}}</p></div>
-            <div><span class="text-slate-500">Opens (unique)</span><p class="font-bold text-lg text-blue-600">{{.analytics.VariantB.UniqueOpens}} <span class="text-xs font-normal">({{printf "%.1f" .analytics.VariantB.OpenRate}}%)</span></p></div>
-            <div><span class="text-slate-500">Clicks (unique)</span><p class="font-bold text-lg text-emerald-600">{{.analytics.VariantB.UniqueClicks}} <span class="text-xs font-normal">({{printf "%.1f" .analytics.VariantB.ClickRate}}%)</span></p></div>
-            <div><span class="text-slate-500">Replies (unique)</span><p class="font-bold text-lg text-violet-600">{{.analytics.VariantB.UniqueReplies}} <span class="text-xs font-normal">({{printf "%.1f" .analytics.VariantB.ReplyRate}}%)</span></p>{{template "reply_pro_note" .}}</div>
+            <div><span class="text-slate-500">Replies</span><p class="font-bold text-lg text-violet-600">{{.analytics.VariantB.UniqueReplies}} <span class="text-xs font-normal">({{printf "%.1f" .analytics.VariantB.ReplyRate}}%)</span></p>{{template "reply_pro_note" .}}</div>
             <div><span class="text-slate-500">Positive / negative</span><p class="font-bold text-lg"><span class="text-emerald-700">{{.analytics.VariantB.PositiveReplies}}</span> / <span class="text-red-600">{{.analytics.VariantB.NegativeReplies}}</span> <span class="text-xs font-normal text-slate-500">({{printf "%.1f" .analytics.VariantB.PositiveReplyRate}}% / {{printf "%.1f" .analytics.VariantB.NegativeReplyRate}}%)</span></p></div>
-            <div><span class="text-slate-500">Click-to-open</span><p class="font-bold">{{printf "%.1f" .analytics.VariantB.ClickToOpenRate}}%</p></div>
-            <div><span class="text-slate-500">Total events</span><p class="font-bold">{{.analytics.VariantB.Opens}} opens · {{.analytics.VariantB.Clicks}} clicks</p></div>
+            {{if $.analytics.ShowPixelMetrics}}
+            <div><span class="text-slate-500">Opens</span><p class="font-bold text-lg text-blue-600">{{.analytics.VariantB.UniqueOpens}} <span class="text-xs font-normal">({{printf "%.1f" .analytics.VariantB.OpenRate}}%)</span></p></div>
+            <div><span class="text-slate-500">Clicks</span><p class="font-bold text-lg text-emerald-600">{{.analytics.VariantB.UniqueClicks}} <span class="text-xs font-normal">({{printf "%.1f" .analytics.VariantB.ClickRate}}%)</span></p></div>
+            {{end}}
         </div>
     </div>
     {{end}}
@@ -184,7 +203,7 @@
         <canvas id="timelineChart" height="200"></canvas>
     </div>
     <div class="card">
-        <h3 class="card-title">Opens &amp; clicks by hour</h3>
+        <h3 class="card-title">{{if .analytics.ShowPixelMetrics}}Opens &amp; clicks by hour{{else}}Replies by hour{{end}}</h3>
         <canvas id="hourlyChart" height="200"></canvas>
     </div>
 </div>
@@ -216,7 +235,7 @@
 </div>
 {{end}}
 
-{{if .analytics.LinkClicks}}
+{{if and .analytics.ShowPixelMetrics .analytics.LinkClicks}}
 <div class="card mb-8">
     <h3 class="card-title">Link performance</h3>
     <table class="data-table">
@@ -236,7 +255,7 @@
 
 <div class="card overflow-hidden mb-8">
     <div class="px-4 pt-4 pb-3 border-b border-gray-100">
-        <h3 class="card-title mb-3">Per-contact engagement</h3>
+        <h3 class="card-title mb-3">Per-contact results</h3>
         <form method="GET" action="/campaigns/{{.analytics.CampaignID}}/analytics" class="flex flex-wrap gap-3 items-end">
             <div class="flex-1 min-w-[160px]">
                 <label class="form-label">Search email</label>
@@ -246,10 +265,13 @@
                 <label class="form-label">Sort</label>
                 <select name="sort" class="form-input text-sm">
                     <option value="email" {{if eq .contactPage.Sort "email"}}selected{{end}}>Email A–Z</option>
+                    <option value="replied" {{if eq .contactPage.Sort "replied"}}selected{{end}}>Replied first</option>
+                    <option value="engaged" {{if eq .contactPage.Sort "engaged"}}selected{{end}}>Engaged first</option>
+                    <option value="sent" {{if eq .contactPage.Sort "sent"}}selected{{end}}>Sent (newest)</option>
+                    {{if .analytics.ShowPixelMetrics}}
                     <option value="opens" {{if eq .contactPage.Sort "opens"}}selected{{end}}>Opens (high→low)</option>
                     <option value="clicks" {{if eq .contactPage.Sort "clicks"}}selected{{end}}>Clicks (high→low)</option>
-                    <option value="sent" {{if eq .contactPage.Sort "sent"}}selected{{end}}>Sent (newest)</option>
-                    <option value="engaged" {{if eq .contactPage.Sort "engaged"}}selected{{end}}>Engaged first</option>
+                    {{end}}
                 </select>
             </div>
             <button type="submit" class="btn-secondary text-sm">Apply</button>
@@ -261,32 +283,40 @@
             <tr>
                 <th>Email</th>
                 <th>Variant</th>
-                <th>Template</th>
                 <th>Sent</th>
+                <th>Reply</th>
+                <th>Sentiment</th>
+                {{if .analytics.ShowPixelMetrics}}
                 <th>Opens</th>
                 <th>Clicks</th>
-                <th>First open</th>
-                <th>Time to open</th>
+                {{end}}
                 <th>Last activity</th>
                 <th></th>
             </tr>
         </thead>
         <tbody>
         {{range .analytics.Contacts}}
-        <tr class="{{if .Engaged}}bg-emerald-50/30{{end}}">
-            <td class="font-medium">{{.Email}}</td>
+        <tr class="{{if .HasReplied}}bg-violet-50/40{{else if .Engaged}}bg-emerald-50/30{{end}}">
+            <td class="font-medium"><a href="/contacts/{{.ContactID}}" class="text-brand-600 hover:underline">{{.Email}}</a></td>
             <td><span class="badge {{if eq .Variant "A"}}badge-blue{{else}}badge-violet{{end}}">{{.Variant}}</span></td>
-            <td class="text-sm text-slate-600">{{.TemplateName}}</td>
             <td>{{if .SentAt}}{{.SentAt.Format "Jan 2, 15:04"}}{{else}}—{{end}}</td>
+            <td>{{if .HasReplied}}<span class="badge badge-green">Yes</span>{{if .RepliedAt}} <span class="text-xs text-gray-400">{{.RepliedAt.Format "Jan 2"}}</span>{{end}}{{else}}—{{end}}</td>
+            <td>
+                {{if eq .ReplySentiment "positive"}}<span class="badge badge-green">positive</span>
+                {{else if eq .ReplySentiment "negative"}}<span class="badge badge-red">negative</span>
+                {{else if eq .ReplySentiment "neutral"}}<span class="badge badge-gray">neutral</span>
+                {{else if eq .ReplySentiment "pending"}}<span class="badge badge-amber">pending</span>
+                {{else}}—{{end}}
+            </td>
+            {{if $.analytics.ShowPixelMetrics}}
             <td class="text-blue-600 font-medium">{{.OpenCount}}</td>
             <td class="text-emerald-600 font-medium">{{.ClickCount}}</td>
-            <td class="text-sm">{{if .FirstOpenAt}}{{.FirstOpenAt.Format "Jan 2, 15:04"}}{{else}}—{{end}}</td>
-            <td class="text-sm">{{if .MinutesToFirstOpen}}{{printf "%.0f" .MinutesToFirstOpen}} min{{else}}—{{end}}</td>
+            {{end}}
             <td class="text-sm">{{if .LastActivityAt}}{{.LastActivityAt.Format "Jan 2, 15:04"}}{{else}}—{{end}}</td>
             <td>{{if .SendID}}<a href="/sends/{{.SendID}}" class="text-brand-600 text-sm">View</a>{{end}}</td>
         </tr>
         {{else}}
-        <tr><td colspan="10" class="text-sm text-gray-400 py-6 text-center">No contacts match.</td></tr>
+        <tr><td colspan="9" class="text-sm text-gray-400 py-6 text-center">No contacts match.</td></tr>
         {{end}}
         </tbody>
     </table>
@@ -307,24 +337,35 @@
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
+const showPixel = {{if .analytics.ShowPixelMetrics}}true{{else}}false{{end}};
 const dailyStats = [
     {{range .analytics.DailyStats}}
-    { date: "{{.Date}}", sends: {{.Sends}}, opens: {{.Opens}}, clicks: {{.Clicks}} },
+    { date: "{{.Date}}", sends: {{.Sends}}, opens: {{.Opens}}, clicks: {{.Clicks}}, replies: {{.Replies}}, positive: {{.PositiveReplies}}, negative: {{.NegativeReplies}} },
     {{end}}
 ];
 const hourlyOpens = [{{range .analytics.HourlyOpens}}{{ .Count }},{{end}}];
 const hourlyClicks = [{{range .analytics.HourlyClicks}}{{ .Count }},{{end}}];
+const hourlyReplies = [{{range .analytics.HourlyReplies}}{{ .Count }},{{end}}];
 const hourLabels = Array.from({length: 24}, (_, i) => i + ':00');
+
+const timelineDatasets = [
+    { label: 'Sends', data: dailyStats.map(d => d.sends), borderColor: '#94a3b8', tension: 0.3 },
+    { label: 'Replies', data: dailyStats.map(d => d.replies), borderColor: '#7c3aed', tension: 0.3 },
+    { label: 'Positive', data: dailyStats.map(d => d.positive), borderColor: '#059669', tension: 0.3 },
+    { label: 'Negative', data: dailyStats.map(d => d.negative), borderColor: '#dc2626', tension: 0.3 },
+];
+if (showPixel) {
+    timelineDatasets.splice(1, 0,
+        { label: 'Opens', data: dailyStats.map(d => d.opens), borderColor: '#3b82f6', tension: 0.3 },
+        { label: 'Clicks', data: dailyStats.map(d => d.clicks), borderColor: '#10b981', tension: 0.3 }
+    );
+}
 
 new Chart(document.getElementById('timelineChart'), {
     type: 'line',
     data: {
         labels: dailyStats.length ? dailyStats.map(d => d.date) : ['No data'],
-        datasets: [
-            { label: 'Sends', data: dailyStats.map(d => d.sends), borderColor: '#94a3b8', tension: 0.3 },
-            { label: 'Opens', data: dailyStats.map(d => d.opens), borderColor: '#3b82f6', tension: 0.3 },
-            { label: 'Clicks', data: dailyStats.map(d => d.clicks), borderColor: '#10b981', tension: 0.3 }
-        ]
+        datasets: timelineDatasets
     },
     options: { responsive: true, plugins: { legend: { position: 'bottom' } }, scales: { y: { beginAtZero: true } } }
 });
@@ -333,9 +374,11 @@ new Chart(document.getElementById('hourlyChart'), {
     type: 'bar',
     data: {
         labels: hourLabels,
-        datasets: [
+        datasets: showPixel ? [
             { label: 'Opens', data: hourlyOpens, backgroundColor: '#93c5fd' },
             { label: 'Clicks', data: hourlyClicks, backgroundColor: '#6ee7b7' }
+        ] : [
+            { label: 'Replies', data: hourlyReplies, backgroundColor: '#c4b5fd' }
         ]
     },
     options: { responsive: true, plugins: { legend: { position: 'bottom' } }, scales: { y: { beginAtZero: true } } }

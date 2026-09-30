@@ -114,8 +114,33 @@ func PageContactEngagementRows(rows []ContactEngagementRow, f AnalyticsContactFi
 			if a.Engaged != b.Engaged {
 				return a.Engaged && !b.Engaged
 			}
+			if a.HasReplied != b.HasReplied {
+				return a.HasReplied && !b.HasReplied
+			}
 			if a.OpenCount != b.OpenCount {
 				return a.OpenCount > b.OpenCount
+			}
+		case "replied":
+			if a.HasReplied != b.HasReplied {
+				return a.HasReplied && !b.HasReplied
+			}
+			if a.ReplySentiment != b.ReplySentiment {
+				// positive first, then neutral, pending, negative
+				rank := func(s string) int {
+					switch s {
+					case "positive":
+						return 0
+					case "neutral":
+						return 1
+					case "pending":
+						return 2
+					case "negative":
+						return 3
+					default:
+						return 4
+					}
+				}
+				return rank(a.ReplySentiment) < rank(b.ReplySentiment)
 			}
 		}
 		return strings.ToLower(a.Email) < strings.ToLower(b.Email)

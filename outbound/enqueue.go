@@ -70,7 +70,7 @@ func EnqueueSend(input EnqueueInput) (int64, int64, error) {
 		}
 		_ = model.EnsureDailyCounterReset(acc.ID)
 		pinID = acc.ID
-	} else if pinAcc, pinErr := ResolveSendAccountForContact(input.UserID, input.ContactID); pinErr == nil {
+	} else if pinAcc, pinErr := ResolveSendAccountForContactInCampaign(input.UserID, input.ContactID, input.CampaignID); pinErr == nil {
 		pinID = pinAcc.ID
 	}
 

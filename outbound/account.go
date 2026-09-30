@@ -11,13 +11,25 @@ func resolveSendAccount(userID int64) (model.SMTPAccount, error) {
 	return model.GetSendReadyAccountForUser(userID)
 }
 
-// ResolveSendAccountForContact picks a sticky mailbox for a contact:
-// 1) last SMTP actually delivered / in-flight for that contact — keep From identity
-//    (even if at cap; caller reschedules — never switch From after the recipient saw it)
-// 2) for first-touch / unsent contacts: stable hash across seats that can send now
-// 3) fallback default ready seat
+// ResolveSendAccountForContact picks a sticky mailbox for a contact (all ready seats).
 func ResolveSendAccountForContact(userID, contactID int64) (model.SMTPAccount, error) {
-	ready, err := model.ListSendReadyAccountsForUser(userID)
+	return ResolveSendAccountForContactInCampaign(userID, contactID, 0)
+}
+
+// ResolveSendAccountForContactInCampaign picks a sticky mailbox scoped to a campaign allowlist
+// when campaignID > 0. Empty allowlist = all ready seats.
+// 1) last SMTP for that contact — keep it only when it is still in the campaign seat set
+//    (over-cap sticky is OK; outside-allowlist is not — campaign sends must honor the picker)
+// 2) first-touch: stable hash across campaign-ready seats that can send now
+// 3) fallback default ready seat
+func ResolveSendAccountForContactInCampaign(userID, contactID, campaignID int64) (model.SMTPAccount, error) {
+	var ready []model.SMTPAccount
+	var err error
+	if campaignID > 0 {
+		ready, err = model.ListSendReadyAccountsForCampaign(userID, campaignID)
+	} else {
+		ready, err = model.ListSendReadyAccountsForUser(userID)
+	}
 	if err != nil {
 		return model.SMTPAccount{}, err
 	}
@@ -35,13 +47,16 @@ func ResolveSendAccountForContact(userID, contactID int64) (model.SMTPAccount, e
 			if acc, ok := byID[lastID]; ok {
 				return acc, nil
 			}
-			// Sticky seat may be over-cap / temporarily filtered from ready — still pin it.
-			if acc, gErr := model.GetSMTPAccount(lastID); gErr == nil && acc.UserID == userID && acc.Status == "active" {
-				_ = model.EnsureDailyCounterReset(acc.ID)
-				if fresh, fErr := model.GetSMTPAccount(acc.ID); fErr == nil {
-					return fresh, nil
+			// Sticky seat may be over-cap / temporarily filtered from ready — still pin it
+			// when it remains allowed for this campaign (or when there is no campaign scope).
+			if campaignID <= 0 || accountInCampaignAllowlist(campaignID, lastID) {
+				if acc, gErr := model.GetSMTPAccount(lastID); gErr == nil && acc.UserID == userID && acc.Status == "active" {
+					_ = model.EnsureDailyCounterReset(acc.ID)
+					if fresh, fErr := model.GetSMTPAccount(acc.ID); fErr == nil {
+						return fresh, nil
+					}
+					return acc, nil
 				}
-				return acc, nil
 			}
 		}
 		start := int(contactID % int64(len(ready)))
@@ -71,6 +86,7 @@ func ResolveSendAccountForContact(userID, contactID int64) (model.SMTPAccount, e
 // ResolveAccountForJob prefers a mailbox already pinned on the job, then sticky contact routing.
 // If the pin cannot send yet and this contact has never received mail from us, rebalance to
 // another seat with capacity (combined daily headroom is real; unsent pins must not waste it).
+// Campaign jobs always stay on the campaign mailbox allowlist when one is set.
 func ResolveAccountForJob(job model.SendJob) (model.SMTPAccount, error) {
 	if job.SMTPAccountID > 0 {
 		acc, err := model.GetSMTPAccount(job.SMTPAccountID)
@@ -79,6 +95,13 @@ func ResolveAccountForJob(job model.SendJob) (model.SMTPAccount, error) {
 			if fresh, fErr := model.GetSMTPAccount(acc.ID); fErr == nil {
 				acc = fresh
 			}
+			// Campaign allowlist wins over a stale pin (including prior-campaign sticky).
+			if job.CampaignID > 0 && !accountInCampaignAllowlist(job.CampaignID, acc.ID) {
+				if alt, aErr := pickReadyAccountForContact(job.UserID, job.ContactID, job.CampaignID, acc.ID); aErr == nil && alt.ID > 0 {
+					return alt, nil
+				}
+				return ResolveSendAccountForContactInCampaign(job.UserID, job.ContactID, job.CampaignID)
+			}
 			if AccountCanSendNowForJob(acc, job) {
 				return acc, nil
 			}
@@ -86,18 +109,40 @@ func ResolveAccountForJob(job model.SendJob) (model.SMTPAccount, error) {
 			if model.ContactHasDeliveredOutbound(job.UserID, job.ContactID) {
 				return acc, nil
 			}
-			// Unsent: try another seat with capacity.
-			if alt, aErr := pickReadyAccountForContact(job.UserID, job.ContactID, acc.ID); aErr == nil && alt.ID > 0 && alt.ID != acc.ID {
+			// Unsent: try another seat with capacity (campaign allowlist when set).
+			if alt, aErr := pickReadyAccountForContact(job.UserID, job.ContactID, job.CampaignID, acc.ID); aErr == nil && alt.ID > 0 && alt.ID != acc.ID {
 				return alt, nil
 			}
 			return acc, nil
 		}
 	}
-	return ResolveSendAccountForContact(job.UserID, job.ContactID)
+	return ResolveSendAccountForContactInCampaign(job.UserID, job.ContactID, job.CampaignID)
 }
 
-func pickReadyAccountForContact(userID, contactID, excludeID int64) (model.SMTPAccount, error) {
-	ready, err := model.ListSendReadyAccountsForUser(userID)
+func accountInCampaignAllowlist(campaignID, smtpID int64) bool {
+	if campaignID <= 0 || smtpID <= 0 {
+		return true
+	}
+	allowed, err := model.ListCampaignSMTPAccountIDs(campaignID)
+	if err != nil || len(allowed) == 0 {
+		return true // empty allowlist = all seats
+	}
+	for _, id := range allowed {
+		if id == smtpID {
+			return true
+		}
+	}
+	return false
+}
+
+func pickReadyAccountForContact(userID, contactID, campaignID, excludeID int64) (model.SMTPAccount, error) {
+	var ready []model.SMTPAccount
+	var err error
+	if campaignID > 0 {
+		ready, err = model.ListSendReadyAccountsForCampaign(userID, campaignID)
+	} else {
+		ready, err = model.ListSendReadyAccountsForUser(userID)
+	}
 	if err != nil {
 		return model.SMTPAccount{}, err
 	}

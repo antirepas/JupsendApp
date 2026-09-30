@@ -54,11 +54,16 @@ func NewCampaignPage(ctx *gin.Context) {
 			StepCount: model.CountWorkflowSteps(w.CurrentVersionID),
 		})
 	}
+	smtpSel, _ := model.GetCampaignSMTPSelection(userID, 0)
 	ctx.HTML(http.StatusOK, "campaigns_form.html", gin.H{
-		"title":     "New Campaign",
-		"active":    "campaigns",
-		"templates": templates,
-		"workflows": workflowOptions,
+		"title":        "New Campaign",
+		"active":       "campaigns",
+		"templates":    templates,
+		"workflows":    workflowOptions,
+		"smtpAccounts": smtpSel.Accounts,
+		"smtpOptions":  smtpSel.Options,
+		"smtpSelected": smtpSel.SelectedIDs,
+		"error":        ctx.Query("error"),
 	})
 }
 
@@ -115,6 +120,12 @@ func CreateCampaign(ctx *gin.Context) {
 		}
 	}
 
+	smtpIDs := model.ParseSMTPAccountIDsForm(ctx.PostFormArray("smtp_account_ids"))
+	if ready, rErr := model.ListSendReadyAccountsForUser(userID); rErr == nil && len(ready) > 0 && len(smtpIDs) == 0 {
+		ctx.Redirect(http.StatusFound, "/campaigns/new?error="+url.QueryEscape("Select at least one sending mailbox"))
+		return
+	}
+
 	id, err := model.CreateCampaign(userID, name, templateAID, templateBID, executionMode, workflowVersionID, experimentVariable, experimentHypothesis)
 	if err != nil {
 		log.Print(err)
@@ -141,6 +152,13 @@ func CreateCampaign(ctx *gin.Context) {
 	}
 	if err := model.SetCampaignStopPolicy(id, userID, stopOnReply, stopOnHot); err != nil {
 		log.Printf("stop policy: %v", err)
+	}
+	if len(smtpIDs) > 0 {
+		if err := model.SetCampaignSMTPAccounts(id, userID, smtpIDs); err != nil {
+			log.Printf("campaign mailboxes: %v", err)
+			ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(id, 10)+"?error="+url.QueryEscape(err.Error()))
+			return
+		}
 	}
 
 	ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(id, 10)+"?success=Campaign+created")
@@ -198,6 +216,25 @@ func SaveCampaignTemperatureRules(ctx *gin.Context) {
 		}
 	}
 	ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?success="+url.QueryEscape("Lead temperature and stop rules saved"))
+}
+
+func SaveCampaignMailboxes(ctx *gin.Context) {
+	userID := mustUserID(ctx)
+	campaignID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
+	if err != nil {
+		ctx.Redirect(http.StatusFound, "/campaigns?error=Invalid+campaign")
+		return
+	}
+	smtpIDs := model.ParseSMTPAccountIDsForm(ctx.PostFormArray("smtp_account_ids"))
+	if len(smtpIDs) == 0 {
+		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error="+url.QueryEscape("Select at least one sending mailbox"))
+		return
+	}
+	if err := model.SetCampaignSMTPAccounts(campaignID, userID, smtpIDs); err != nil {
+		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error="+url.QueryEscape(err.Error()))
+		return
+	}
+	ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?success="+url.QueryEscape("Sending mailboxes updated"))
 }
 
 func parseStepTemplatesFromForm(ctx *gin.Context) map[string]int64 {
@@ -332,6 +369,7 @@ func CampaignDetailPage(ctx *gin.Context) {
 	}
 
 	mailboxDist, _ := model.GetCampaignMailboxDistribution(userID, detail.ID)
+	smtpSel, _ := model.GetCampaignSMTPSelection(userID, detail.ID)
 
 	var scheduledAtLocal string
 	if detail.ScheduledAt != nil {
@@ -365,6 +403,9 @@ func CampaignDetailPage(ctx *gin.Context) {
 		"temperaturePreview":  model.PreviewLeadTemperatureRules(detail.TemperatureRules),
 		"openTrackingEnabled": detail.OpenTrackingEnabled,
 		"mailboxDist":         mailboxDist,
+		"smtpAccounts":        smtpSel.Accounts,
+		"smtpOptions":         smtpSel.Options,
+		"smtpSelected":        smtpSel.SelectedIDs,
 	}
 
 	if isWorkflow {
@@ -922,6 +963,9 @@ func launchCampaign(userID, campaignID int64) (outbound.EnqueueResult, error) {
 	}
 	if campaign.Status == "stopped" {
 		return outbound.EnqueueResult{}, fmt.Errorf("campaign was stopped")
+	}
+	if _, err := model.ListSendReadyAccountsForCampaign(userID, campaignID); err != nil {
+		return outbound.EnqueueResult{}, err
 	}
 	if (campaign.ExecutionMode == "workflow" || campaign.ExecutionMode == "workflow_ab") && campaign.WorkflowVersionID > 0 {
 		sent, failed, err := startWorkflowCampaign(campaignID, campaign)

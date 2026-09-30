@@ -186,6 +186,11 @@ func runAlterSchema() {
 		`ALTER TABLE campaigns ALTER COLUMN open_tracking_enabled SET DEFAULT FALSE`,
 		`ALTER TABLE email_sends ADD COLUMN IF NOT EXISTS open_tracking_enabled BOOLEAN`,
 		`ALTER TABLE email_sends ADD COLUMN IF NOT EXISTS click_tracking_enabled BOOLEAN`,
+		`CREATE TABLE IF NOT EXISTS campaign_smtp_accounts (
+			campaign_id BIGINT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+			smtp_account_id BIGINT NOT NULL REFERENCES smtp_accounts(id) ON DELETE CASCADE,
+			PRIMARY KEY (campaign_id, smtp_account_id)
+		)`,
 	}
 	for _, stmt := range alters {
 		if _, err := DB.Exec(stmt); err != nil {
