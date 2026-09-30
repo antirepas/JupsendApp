@@ -57,7 +57,7 @@ func SetCampaignSMTPAccounts(campaignID, userID int64, smtpIDs []int64) error {
 		clean = append(clean, id)
 	}
 
-	tx, err := db.DB.Begin()
+	tx, err := db.Begin()
 	if err != nil {
 		return err
 	}
