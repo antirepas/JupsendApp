@@ -112,6 +112,84 @@ func AdminConnectDomainWithMailboxes(userID int64, domain string, specs []Starte
 	return domainID, fmt.Sprintf("Linked %s — %d mailbox(es) linked (InboxKit wallet charged for new seats)", domain, ready), nil
 }
 
+// AdminImportExistingInboxKitDomain links a domain already in the InboxKit workspace and
+// imports every seat InboxKit lists for it — no mailbox purchase. Use this when seats
+// were created manually (e.g. included free mailboxes) and only need to appear in jupsend.
+func AdminImportExistingInboxKitDomain(userID int64, domain string) (domainID int64, detail string, err error) {
+	domain = strings.ToLower(strings.TrimSpace(domain))
+	if domain == "" || !strings.Contains(domain, ".") {
+		return 0, "", fmt.Errorf("enter a valid domain")
+	}
+	if userID <= 0 {
+		return 0, "", fmt.Errorf("user is required")
+	}
+	if !inboxkit.Configured() {
+		return 0, "", fmt.Errorf("%s", inboxkit.ConfiguredHint())
+	}
+
+	redirect := config.InboxKitRedirectURL
+	if redirect == "" {
+		redirect = config.BaseURL
+	}
+
+	existing, gErr := GetOutreachDomainByName(userID, domain)
+	if gErr == nil {
+		domainID = existing.ID
+	} else {
+		domainID, err = CreateOutreachDomain(userID, domain, "", redirect, false)
+		if err != nil {
+			return 0, "", err
+		}
+	}
+
+	ns, cErr := connectInboxKitNameservers(domain)
+	if cErr != nil {
+		// Domain may already be connected; still try listing mailboxes.
+		log.Printf("admin import connect %s: %v (continuing with list/sync)", domain, cErr)
+	}
+	orderID := ""
+	if cErr == nil {
+		orderID = inboxkit.ConnectOrderID(ns.UID, domain)
+		if orderID == "" || ns.UID == "" {
+			orderID = inboxkit.ConnectOrderID("linked", domain)
+		}
+		status := "connecting"
+		if ns.Ready || ns.Propagated {
+			status = "ready"
+		}
+		_ = UpdateOutreachDomainStatus(domainID, status, orderID)
+		if len(ns.Nameservers) > 0 {
+			_ = SetOutreachDomainNameservers(domainID, ns.Nameservers)
+		}
+		_ = ClearOutreachDomainError(domainID)
+	} else if orderID == "" {
+		orderID = inboxkit.ConnectOrderID("import", domain)
+		_ = UpdateOutreachDomainStatus(domainID, "ready", orderID)
+	}
+
+	if syncErr := syncMailboxCredentials(userID, domainID, domain); syncErr != nil {
+		_ = SetOutreachDomainError(domainID, "error", syncErr.Error())
+		return domainID, "", fmt.Errorf("import mailboxes from InboxKit: %w", syncErr)
+	}
+
+	ready, _ := countDomainReadyMailboxes(userID, domainID)
+	total := 0
+	if mboxes, lErr := ListOutreachMailboxes(userID); lErr == nil {
+		for _, m := range mboxes {
+			if m.DomainID == domainID {
+				total++
+			}
+		}
+	}
+	if ready > 0 {
+		_ = UpdateOutreachDomainStatus(domainID, "ready", orderID)
+	}
+	if total == 0 {
+		return domainID, "", fmt.Errorf("linked %s but InboxKit returned no mailboxes — check the domain name matches InboxKit exactly", domain)
+	}
+	return domainID, fmt.Sprintf("Imported %s — %d mailbox(es) on domain (%d send-ready). No seats were purchased.", domain, total, ready), nil
+}
+
 func countDomainReadyMailboxes(userID, domainID int64) (int, error) {
 	mailboxes, err := ListOutreachMailboxes(userID)
 	if err != nil {

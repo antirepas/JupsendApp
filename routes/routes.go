@@ -306,5 +306,6 @@ func RegisterRoutes(server *gin.Engine) {
 		adminOps.POST("/provisioning/domains/:id/fulfill", OpsFulfillDomain)
 		adminOps.POST("/provisioning/purchases/:id/fulfill", OpsFulfillPurchase)
 		adminOps.POST("/provisioning/connect-domain", OpsAdminConnectDomain)
+		adminOps.POST("/provisioning/import-domain", OpsAdminImportExistingDomain)
 	}
 }

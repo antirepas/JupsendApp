@@ -134,6 +134,27 @@ func OpsAdminConnectDomain(c *gin.Context) {
 	c.Redirect(http.StatusFound, "/ops/provisioning?success="+url.QueryEscape(detail))
 }
 
+func OpsAdminImportExistingDomain(c *gin.Context) {
+	userEmail := strings.TrimSpace(c.PostForm("user_email"))
+	domain := strings.TrimSpace(c.PostForm("domain"))
+	if userEmail == "" || domain == "" {
+		c.Redirect(http.StatusFound, "/ops/provisioning?error="+url.QueryEscape("User email and domain are required"))
+		return
+	}
+	u, err := model.GetUserByEmail(userEmail)
+	if err != nil {
+		c.Redirect(http.StatusFound, "/ops/provisioning?error="+url.QueryEscape("User not found: "+userEmail))
+		return
+	}
+	_, detail, err := model.AdminImportExistingInboxKitDomain(u.ID, domain)
+	if err != nil {
+		log.Printf("ops admin import %s for %s: %v", domain, userEmail, err)
+		c.Redirect(http.StatusFound, "/ops/provisioning?error="+url.QueryEscape(err.Error()))
+		return
+	}
+	c.Redirect(http.StatusFound, "/ops/provisioning?success="+url.QueryEscape(detail))
+}
+
 func OpsFulfillDomain(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 	if id <= 0 {

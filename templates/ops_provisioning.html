@@ -17,6 +17,26 @@
   {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
 
   <div class="card mb-8">
+    <h3 class="card-title">Import existing InboxKit domain (no buy)</h3>
+    <p class="text-sm text-gray-500 mb-4">
+      Domain and free seats already exist in InboxKit? Link them to a jupsend account and pull SMTP credentials — does <strong>not</strong> purchase mailboxes.
+    </p>
+    <form method="POST" action="/ops/provisioning/import-domain" class="space-y-4">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label class="form-label">Customer email (jupsend login)</label>
+          <input name="user_email" type="email" class="form-input" required placeholder="you@gmail.com">
+        </div>
+        <div>
+          <label class="form-label">Domain (must match InboxKit exactly)</label>
+          <input name="domain" class="form-input" required placeholder="outreach.example.com">
+        </div>
+      </div>
+      <button type="submit" class="btn-primary" onclick="return confirm('Import this domain and all its InboxKit mailboxes into jupsend? No seats will be purchased.');">Import domain &amp; seats</button>
+    </form>
+  </div>
+
+  <div class="card mb-8">
     <h3 class="card-title">Connect domain + mailboxes (repair)</h3>
     <p class="text-sm text-gray-500 mb-4">
       Link a domain that already exists in InboxKit (409 “already connected” is OK), sync seats, and buy any new mailbox rows you enter below (up to {{.includedSeats}}). Charges the InboxKit wallet for new seats only.
