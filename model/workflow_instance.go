@@ -28,6 +28,19 @@ type WorkflowInstance struct {
 }
 
 func CreateWorkflowInstance(versionID, contactID, campaignID int64, entryNodeKey string) (int64, error) {
+	// One root instance per contact per campaign — prevents double-launch duplicates.
+	if campaignID > 0 {
+		var existing int64
+		err := db.QueryRow(`
+			SELECT id FROM workflow_instances
+			WHERE campaign_id = ? AND contact_id = ? AND fork_root_id IS NULL
+			  AND status IN ('active', 'waiting')
+			ORDER BY id ASC LIMIT 1
+		`, campaignID, contactID).Scan(&existing)
+		if err == nil && existing > 0 {
+			return existing, nil
+		}
+	}
 	var camp interface{}
 	if campaignID > 0 {
 		camp = campaignID
@@ -391,6 +404,49 @@ func CreateExecution(instanceID int64, nodeKey, executionKey, status, outputJSON
 		err = db.QueryRow(`SELECT id FROM workflow_executions WHERE execution_key = ?`, executionKey).Scan(&id)
 	}
 	return id, err
+}
+
+// TryBeginExecution inserts a started execution row. claimed=false means this send already ran or is in flight.
+func TryBeginExecution(instanceID int64, nodeKey, executionKey string) (claimed bool, err error) {
+	if db.DB == nil {
+		return true, nil
+	}
+	row := db.QueryRow(`
+		INSERT INTO workflow_executions (instance_id, node_key, execution_key, status, output_json, error_message)
+		VALUES (?, ?, ?, 'started', '{}', '')
+		ON CONFLICT(execution_key) DO NOTHING
+		RETURNING id
+	`, instanceID, nodeKey, executionKey)
+	var id int64
+	err = row.Scan(&id)
+	if err != nil {
+		return false, nil
+	}
+	return id > 0, nil
+}
+
+// CompleteExecution marks a started execution as succeeded.
+func CompleteExecution(executionKey, outputJSON string) error {
+	if db.DB == nil {
+		return nil
+	}
+	if outputJSON == "" {
+		outputJSON = "{}"
+	}
+	_, err := db.Exec(`
+		UPDATE workflow_executions
+		SET status = 'succeeded', output_json = ?, error_message = '', finished_at = CURRENT_TIMESTAMP
+		WHERE execution_key = ?
+	`, outputJSON, executionKey)
+	return err
+}
+
+// AbortStartedExecution removes an in-flight claim so the node can retry after a failed send.
+func AbortStartedExecution(executionKey string) {
+	if db.DB == nil {
+		return
+	}
+	_, _ = db.Exec(`DELETE FROM workflow_executions WHERE execution_key = ? AND status = 'started'`, executionKey)
 }
 
 func ExecutionExists(executionKey string) (bool, error) {

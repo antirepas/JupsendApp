@@ -2,6 +2,7 @@ package model
 
 import (
 	"testing"
+	"time"
 
 	"emailtracker.com/db"
 )
@@ -48,8 +49,9 @@ func TestCountCampaignReplySentiments(t *testing.T) {
 		t.Fatalf("pos=%d neg=%d neu=%d pend=%d", pos, neg, neu, pend)
 	}
 
+	now := time.Now()
 	a := CampaignAnalytics{CampaignID: campID, Overview: CampaignOverview{ContactCount: 2}, Contacts: []ContactEngagementRow{
-		{SendID: sendPos}, {SendID: sendNeg},
+		{SendID: sendPos, SentAt: &now}, {SendID: sendNeg, SentAt: &now},
 	}}
 	fillOverview(&a)
 	if a.Overview.PositiveReplies != 1 || a.Overview.NegativeReplies != 1 {

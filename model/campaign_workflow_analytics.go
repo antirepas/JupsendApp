@@ -90,7 +90,10 @@ type stepEngagement struct {
 
 func getCampaignWorkflowEngagement(campaignID int64, contactCount int) CampaignWorkflowEngagement {
 	eng := CampaignWorkflowEngagement{}
-	_ = db.QueryRow(`SELECT COUNT(*) FROM email_sends WHERE campaign_id = ?`, campaignID).Scan(&eng.EmailsSent)
+	_ = db.QueryRow(`
+		SELECT COUNT(*) FROM email_sends
+		WHERE campaign_id = ? AND LOWER(COALESCE(delivery_status, '')) = 'sent'
+	`, campaignID).Scan(&eng.EmailsSent)
 
 	_ = db.QueryRow(`
 		SELECT COUNT(DISTINCT es.contact_id) FROM email_sends es
@@ -199,7 +202,8 @@ func buildCampaignWorkflowContactAnalytics(campaignID, versionID int64, contactI
 	instanceMap, _ := GetCampaignInstanceMap(campaignID)
 	sendMap := map[int64]struct{ sent, opens, clicks int }{}
 	rows, err := db.Query(`
-		SELECT es.contact_id, COUNT(*),
+		SELECT es.contact_id,
+			COUNT(*) FILTER (WHERE LOWER(COALESCE(es.delivery_status, '')) = 'sent'),
 			COALESCE(SUM(CASE WHEN ee.event_type = 'open' AND COALESCE(ee.is_bot, 0) = 0 THEN 1 ELSE 0 END), 0),
 			COALESCE(SUM(CASE WHEN ee.event_type = 'click' THEN 1 ELSE 0 END), 0)
 		FROM email_sends es

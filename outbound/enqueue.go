@@ -42,6 +42,12 @@ func EnqueueSend(input EnqueueInput) (int64, int64, error) {
 		return 0, 0, err
 	}
 
+	if input.WorkflowInstanceID > 0 && input.TemplateID > 0 {
+		if sendID, jobID, ok := model.FindActiveWorkflowEmailSend(input.WorkflowInstanceID, input.TemplateID); ok {
+			return sendID, jobID, nil
+		}
+	}
+
 	suppressed, err := model.IsContactSuppressed(input.ContactID)
 	if err != nil {
 		return 0, 0, err

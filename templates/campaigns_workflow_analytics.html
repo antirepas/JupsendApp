@@ -90,8 +90,10 @@
                 <th>Here now</th>
                 <th>Passed through</th>
                 <th>% of enrolled</th>
+                {{if .analytics.ShowPixelMetrics}}
                 <th>Opens</th>
                 <th>Open rate</th>
+                {{end}}
                 <th>Stopped</th>
             </tr>
         </thead>
@@ -111,8 +113,10 @@
             <td>{{.ContactsHere}}</td>
             <td>{{.PassedThrough}}</td>
             <td>{{printf "%.0f" .PassedPct}}%</td>
+            {{if $.analytics.ShowPixelMetrics}}
             <td class="text-blue-600">{{if eq .NodeType "action_send_email"}}{{.Opens}}{{else}}—{{end}}</td>
             <td>{{if eq .NodeType "action_send_email"}}{{printf "%.0f" .OpenRate}}%{{else}}—{{end}}</td>
+            {{end}}
             <td class="text-red-600">{{if gt .StoppedHere 0}}{{.StoppedHere}}{{else}}—{{end}}</td>
         </tr>
         {{end}}
@@ -250,11 +254,13 @@
                 <label class="form-label">Sort</label>
                 <select name="sort" class="form-input text-sm">
                     <option value="email" {{if eq .contactPage.Sort "email"}}selected{{end}}>Email A–Z</option>
-                    <option value="opens" {{if eq .contactPage.Sort "opens"}}selected{{end}}>Opens (high→low)</option>
-                    <option value="clicks" {{if eq .contactPage.Sort "clicks"}}selected{{end}}>Clicks (high→low)</option>
                     <option value="emails_sent" {{if eq .contactPage.Sort "emails_sent"}}selected{{end}}>Emails sent</option>
                     <option value="status" {{if eq .contactPage.Sort "status"}}selected{{end}}>Status</option>
                     <option value="replied" {{if eq .contactPage.Sort "replied"}}selected{{end}}>Replied first</option>
+                    {{if .analytics.ShowPixelMetrics}}
+                    <option value="opens" {{if eq .contactPage.Sort "opens"}}selected{{end}}>Opens (high→low)</option>
+                    <option value="clicks" {{if eq .contactPage.Sort "clicks"}}selected{{end}}>Clicks (high→low)</option>
+                    {{end}}
                 </select>
             </div>
             <button type="submit" class="btn-secondary text-sm">Apply</button>
@@ -270,8 +276,10 @@
                 <th>Status</th>
                 <th>Wait remaining</th>
                 <th>Emails sent</th>
+                {{if .analytics.ShowPixelMetrics}}
                 <th>Opens</th>
                 <th>Clicks</th>
+                {{end}}
                 <th>Replied</th>
             </tr>
         </thead>
@@ -289,8 +297,10 @@
                 {{else}}—{{end}}
             </td>
             <td>{{.EmailsSent}}</td>
+            {{if $.analytics.ShowPixelMetrics}}
             <td class="text-blue-600">{{.OpenCount}}</td>
             <td class="text-emerald-600">{{.ClickCount}}</td>
+            {{end}}
             <td>{{if .HasReplied}}<span class="badge badge-violet">Yes</span>{{else}}—{{end}}</td>
         </tr>
         {{else}}

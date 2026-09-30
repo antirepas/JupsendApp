@@ -94,8 +94,10 @@
                 <th>Here now</th>
                 <th>Passed through</th>
                 <th>% of enrolled</th>
+                {{if $wf.ShowPixelMetrics}}
                 <th>Opens</th>
                 <th>Open rate</th>
+                {{end}}
                 <th>Stopped</th>
             </tr>
         </thead>
@@ -115,8 +117,10 @@
             <td>{{.ContactsHere}}</td>
             <td>{{.PassedThrough}}</td>
             <td>{{printf "%.0f" .PassedPct}}%</td>
+            {{if $wf.ShowPixelMetrics}}
             <td class="text-blue-600">{{if eq .NodeType "action_send_email"}}{{.Opens}}{{else}}—{{end}}</td>
             <td>{{if eq .NodeType "action_send_email"}}{{printf "%.0f" .OpenRate}}%{{else}}—{{end}}</td>
+            {{end}}
             <td class="text-red-600">{{if gt .StoppedHere 0}}{{.StoppedHere}}{{else}}—{{end}}</td>
         </tr>
         {{end}}
@@ -217,11 +221,13 @@
                 <label class="form-label">Sort</label>
                 <select name="sort" class="form-input text-sm">
                     <option value="email" {{if eq $.contactPage.Sort "email"}}selected{{end}}>Email A–Z</option>
-                    <option value="opens" {{if eq $.contactPage.Sort "opens"}}selected{{end}}>Opens</option>
-                    <option value="clicks" {{if eq $.contactPage.Sort "clicks"}}selected{{end}}>Clicks</option>
                     <option value="emails_sent" {{if eq $.contactPage.Sort "emails_sent"}}selected{{end}}>Emails sent</option>
                     <option value="status" {{if eq $.contactPage.Sort "status"}}selected{{end}}>Status</option>
                     <option value="replied" {{if eq $.contactPage.Sort "replied"}}selected{{end}}>Replied first</option>
+                    {{if $wf.ShowPixelMetrics}}
+                    <option value="opens" {{if eq $.contactPage.Sort "opens"}}selected{{end}}>Opens</option>
+                    <option value="clicks" {{if eq $.contactPage.Sort "clicks"}}selected{{end}}>Clicks</option>
+                    {{end}}
                 </select>
             </div>
             <input type="hidden" name="ab_q" value="{{$.abContactPage.Query}}">
@@ -240,8 +246,10 @@
                 <th>Status</th>
                 <th>Wait remaining</th>
                 <th>Emails sent</th>
+                {{if $wf.ShowPixelMetrics}}
                 <th>Opens</th>
                 <th>Clicks</th>
+                {{end}}
                 <th>Replied</th>
             </tr>
         </thead>
@@ -259,8 +267,10 @@
                 {{else}}—{{end}}
             </td>
             <td>{{.EmailsSent}}</td>
+            {{if $wf.ShowPixelMetrics}}
             <td class="text-blue-600">{{.OpenCount}}</td>
             <td class="text-emerald-600">{{.ClickCount}}</td>
+            {{end}}
             <td>{{if .HasReplied}}<span class="badge badge-violet">Yes</span>{{else}}—{{end}}</td>
         </tr>
         {{else}}
@@ -287,7 +297,7 @@
 <!-- Starter email A/B section -->
 <div class="mb-8">
     <h3 class="text-lg font-bold text-slate-900 mb-4 pb-2 border-b border-violet-200">Starter email A/B test</h3>
-    <p class="text-sm text-slate-500 mb-6">Results for the first send step only{{if $ab.FirstSendStepLabel}} ({{$ab.FirstSendStepLabel}}){{end}}. Follow-up emails are excluded from this comparison.</p>
+    <p class="text-sm text-slate-500 mb-6">Results for the first send step only{{if $ab.FirstSendStepLabel}} ({{$ab.FirstSendStepLabel}}){{end}}. Follow-up emails are excluded from this comparison.{{if not $ab.ShowPixelMetrics}} <span class="badge badge-gray ml-1">Reply-based · open/click tracking off</span>{{end}}</p>
 
 {{if or $ab.ExperimentHypothesis $ab.HasVariantB}}
 <div class="card mb-6 border-l-4 border-violet-500">
@@ -298,13 +308,14 @@
 {{end}}
 
 <div class="card mb-6">
-    <h3 class="card-title">Starter email funnel</h3>
+    <h3 class="card-title">{{if $ab.ShowPixelMetrics}}Starter email funnel{{else}}Starter reply funnel{{end}}</h3>
     <div class="flex items-center justify-center gap-4 py-6 flex-wrap">
         <div class="text-center px-8 py-4 bg-slate-100 rounded-lg min-w-[120px]">
             <p class="text-3xl font-bold">{{$ab.Funnel.Sent}}</p>
             <p class="text-sm text-slate-600">Sent</p>
         </div>
         <span class="text-slate-400 text-2xl">→</span>
+        {{if $ab.ShowPixelMetrics}}
         <div class="text-center px-8 py-4 bg-blue-50 rounded-lg min-w-[120px]">
             <p class="text-3xl font-bold text-blue-600">{{$ab.Funnel.Opened}}</p>
             <p class="text-sm text-slate-600">Opened</p>
@@ -317,6 +328,7 @@
             {{if gt $ab.Funnel.Opened 0}}<p class="text-xs text-slate-500">{{printf "%.0f" $ab.Funnel.ClickPctOfOpens}}% of opens</p>{{end}}
         </div>
         <span class="text-slate-400 text-2xl">→</span>
+        {{end}}
         <div class="text-center px-8 py-4 bg-violet-50 rounded-lg min-w-[120px]">
             <p class="text-3xl font-bold text-violet-600">{{$ab.Funnel.Replied}}</p>
             <p class="text-sm text-slate-600">Replied</p>
@@ -336,11 +348,13 @@
         <div class="grid grid-cols-2 gap-4 mt-4 text-sm">
             <div><span class="text-slate-500">Assigned</span><p class="font-bold text-lg">{{$ab.VariantA.AssignedContacts}}</p></div>
             <div><span class="text-slate-500">Sent / Pending</span><p class="font-bold text-lg">{{$ab.VariantA.Sent}} / {{$ab.VariantA.Pending}}</p></div>
-            <div><span class="text-slate-500">Opens (unique)</span><p class="font-bold text-lg text-blue-600">{{$ab.VariantA.UniqueOpens}} <span class="text-xs font-normal">({{printf "%.1f" $ab.VariantA.OpenRate}}%)</span></p></div>
-            <div><span class="text-slate-500">Clicks (unique)</span><p class="font-bold text-lg text-emerald-600">{{$ab.VariantA.UniqueClicks}} <span class="text-xs font-normal">({{printf "%.1f" $ab.VariantA.ClickRate}}%)</span></p></div>
             <div><span class="text-slate-500">Replies (unique)</span><p class="font-bold text-lg text-violet-600">{{$ab.VariantA.UniqueReplies}} <span class="text-xs font-normal">({{printf "%.1f" $ab.VariantA.ReplyRate}}%)</span></p>{{template "reply_pro_note" $}}</div>
             <div><span class="text-slate-500">Positive / negative</span><p class="font-bold text-lg"><span class="text-emerald-700">{{$ab.VariantA.PositiveReplies}}</span> / <span class="text-red-600">{{$ab.VariantA.NegativeReplies}}</span></p></div>
+            {{if $ab.ShowPixelMetrics}}
+            <div><span class="text-slate-500">Opens (unique)</span><p class="font-bold text-lg text-blue-600">{{$ab.VariantA.UniqueOpens}} <span class="text-xs font-normal">({{printf "%.1f" $ab.VariantA.OpenRate}}%)</span></p></div>
+            <div><span class="text-slate-500">Clicks (unique)</span><p class="font-bold text-lg text-emerald-600">{{$ab.VariantA.UniqueClicks}} <span class="text-xs font-normal">({{printf "%.1f" $ab.VariantA.ClickRate}}%)</span></p></div>
             <div><span class="text-slate-500">Click-to-open</span><p class="font-bold">{{printf "%.1f" $ab.VariantA.ClickToOpenRate}}%</p></div>
+            {{end}}
         </div>
     </div>
     {{if $ab.HasVariantB}}
@@ -355,11 +369,13 @@
         <div class="grid grid-cols-2 gap-4 mt-4 text-sm">
             <div><span class="text-slate-500">Assigned</span><p class="font-bold text-lg">{{$ab.VariantB.AssignedContacts}}</p></div>
             <div><span class="text-slate-500">Sent / Pending</span><p class="font-bold text-lg">{{$ab.VariantB.Sent}} / {{$ab.VariantB.Pending}}</p></div>
-            <div><span class="text-slate-500">Opens (unique)</span><p class="font-bold text-lg text-blue-600">{{$ab.VariantB.UniqueOpens}} <span class="text-xs font-normal">({{printf "%.1f" $ab.VariantB.OpenRate}}%)</span></p></div>
-            <div><span class="text-slate-500">Clicks (unique)</span><p class="font-bold text-lg text-emerald-600">{{$ab.VariantB.UniqueClicks}} <span class="text-xs font-normal">({{printf "%.1f" $ab.VariantB.ClickRate}}%)</span></p></div>
             <div><span class="text-slate-500">Replies (unique)</span><p class="font-bold text-lg text-violet-600">{{$ab.VariantB.UniqueReplies}} <span class="text-xs font-normal">({{printf "%.1f" $ab.VariantB.ReplyRate}}%)</span></p>{{template "reply_pro_note" $}}</div>
             <div><span class="text-slate-500">Positive / negative</span><p class="font-bold text-lg"><span class="text-emerald-700">{{$ab.VariantB.PositiveReplies}}</span> / <span class="text-red-600">{{$ab.VariantB.NegativeReplies}}</span></p></div>
+            {{if $ab.ShowPixelMetrics}}
+            <div><span class="text-slate-500">Opens (unique)</span><p class="font-bold text-lg text-blue-600">{{$ab.VariantB.UniqueOpens}} <span class="text-xs font-normal">({{printf "%.1f" $ab.VariantB.OpenRate}}%)</span></p></div>
+            <div><span class="text-slate-500">Clicks (unique)</span><p class="font-bold text-lg text-emerald-600">{{$ab.VariantB.UniqueClicks}} <span class="text-xs font-normal">({{printf "%.1f" $ab.VariantB.ClickRate}}%)</span></p></div>
             <div><span class="text-slate-500">Click-to-open</span><p class="font-bold">{{printf "%.1f" $ab.VariantB.ClickToOpenRate}}%</p></div>
+            {{end}}
         </div>
     </div>
     {{end}}
@@ -391,10 +407,13 @@
                 <label class="form-label">Sort</label>
                 <select name="ab_sort" class="form-input text-sm">
                     <option value="email" {{if eq $.abContactPage.Sort "email"}}selected{{end}}>Email A–Z</option>
-                    <option value="opens" {{if eq $.abContactPage.Sort "opens"}}selected{{end}}>Opens</option>
-                    <option value="clicks" {{if eq $.abContactPage.Sort "clicks"}}selected{{end}}>Clicks</option>
+                    <option value="replied" {{if eq $.abContactPage.Sort "replied"}}selected{{end}}>Replied first</option>
                     <option value="sent" {{if eq $.abContactPage.Sort "sent"}}selected{{end}}>Sent (newest)</option>
                     <option value="engaged" {{if eq $.abContactPage.Sort "engaged"}}selected{{end}}>Engaged first</option>
+                    {{if $ab.ShowPixelMetrics}}
+                    <option value="opens" {{if eq $.abContactPage.Sort "opens"}}selected{{end}}>Opens</option>
+                    <option value="clicks" {{if eq $.abContactPage.Sort "clicks"}}selected{{end}}>Clicks</option>
+                    {{end}}
                 </select>
             </div>
             <input type="hidden" name="q" value="{{$.contactPage.Query}}">
@@ -411,24 +430,38 @@
                 <th>Variant</th>
                 <th>Template</th>
                 <th>Sent</th>
+                <th>Reply</th>
+                <th>Sentiment</th>
+                {{if $ab.ShowPixelMetrics}}
                 <th>Opens</th>
                 <th>Clicks</th>
                 <th>First open</th>
                 <th>Time to open</th>
+                {{end}}
                 <th></th>
             </tr>
         </thead>
         <tbody>
         {{range $ab.Contacts}}
-        <tr class="{{if .Engaged}}bg-emerald-50/30{{end}}">
+        <tr class="{{if .HasReplied}}bg-violet-50/40{{else if .Engaged}}bg-emerald-50/30{{end}}">
             <td class="font-medium">{{.Email}}</td>
-            <td><span class="badge {{if eq .Variant "A"}}badge-blue{{else}}badge-violet{{end}}">{{.Variant}}</span></td>
-            <td class="text-sm text-slate-600">{{.TemplateName}}</td>
+            <td>{{if .Variant}}<span class="badge {{if eq .Variant "A"}}badge-blue{{else}}badge-violet{{end}}">{{.Variant}}</span>{{else}}—{{end}}</td>
+            <td class="text-sm text-slate-600">{{if .TemplateName}}{{.TemplateName}}{{else}}—{{end}}</td>
             <td>{{if .SentAt}}{{.SentAt.Format "Jan 2, 15:04"}}{{else}}—{{end}}</td>
+            <td>{{if .HasReplied}}<span class="badge badge-green">Yes</span>{{if .RepliedAt}} <span class="text-xs text-gray-400">{{.RepliedAt.Format "Jan 2"}}</span>{{end}}{{else}}—{{end}}</td>
+            <td>
+                {{if eq .ReplySentiment "positive"}}<span class="badge badge-green">positive</span>
+                {{else if eq .ReplySentiment "negative"}}<span class="badge badge-red">negative</span>
+                {{else if eq .ReplySentiment "neutral"}}<span class="badge badge-gray">neutral</span>
+                {{else if eq .ReplySentiment "pending"}}<span class="badge badge-amber">pending</span>
+                {{else}}—{{end}}
+            </td>
+            {{if $ab.ShowPixelMetrics}}
             <td class="text-blue-600 font-medium">{{.OpenCount}}</td>
             <td class="text-emerald-600 font-medium">{{.ClickCount}}</td>
             <td class="text-sm">{{if .FirstOpenAt}}{{.FirstOpenAt.Format "Jan 2, 15:04"}}{{else}}—{{end}}</td>
             <td class="text-sm">{{if .MinutesToFirstOpen}}{{printf "%.0f" .MinutesToFirstOpen}} min{{else}}—{{end}}</td>
+            {{end}}
             <td>{{if .SendID}}<a href="/sends/{{.SendID}}" class="text-brand-600 text-sm">View</a>{{end}}</td>
         </tr>
         {{else}}

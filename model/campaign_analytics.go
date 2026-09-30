@@ -143,7 +143,7 @@ type CampaignAnalytics struct {
 	// Tracking / display mode
 	OpenTrackingEnabled  bool
 	ClickTrackingEnabled bool
-	// ShowPixelMetrics is true when open/click tracking is on, or when any pixel data exists.
+	// ShowPixelMetrics is true when open/click tracking is enabled on the campaign.
 	ShowPixelMetrics bool
 }
 
@@ -174,7 +174,9 @@ func buildVariantAnalytics(variant string, templateID int64, templateName string
 
 func loadVariantMetrics(campaignID int64, variant string, va *VariantAnalytics) {
 	_ = db.QueryRow(`
-		SELECT COUNT(*) FROM email_sends WHERE campaign_id = ? AND variant = ?
+		SELECT COUNT(*) FROM email_sends
+		WHERE campaign_id = ? AND variant = ?
+		  AND LOWER(COALESCE(delivery_status, '')) = 'sent'
 	`, campaignID, variant).Scan(&va.Sent)
 
 	_ = db.QueryRow(`
@@ -251,7 +253,10 @@ func countCampaignReplySentiments(campaignID int64, variant string) (positive, n
 }
 
 func campaignOverviewCounts(campaignID int64) (sent, replies int) {
-	_ = db.QueryRow(`SELECT COUNT(*) FROM email_sends WHERE campaign_id = ?`, campaignID).Scan(&sent)
+	_ = db.QueryRow(`
+		SELECT COUNT(*) FROM email_sends
+		WHERE campaign_id = ? AND LOWER(COALESCE(delivery_status, '')) = 'sent'
+	`, campaignID).Scan(&sent)
 	_ = db.QueryRow(`
 		SELECT COUNT(DISTINCT ce.contact_id) FROM contact_events ce
 		INNER JOIN email_sends es ON es.id = ce.email_send_id
@@ -294,6 +299,7 @@ func getContactEngagement(campaignID int64, contactIDs []int64, hasB bool, templ
 		FROM email_sends es
 		LEFT JOIN email_events ee ON ee.email_send_id = es.id OR ee.tracking_id = es.tracking_id
 		WHERE es.campaign_id = ?
+		  AND LOWER(COALESCE(es.delivery_status, '')) = 'sent'
 		GROUP BY es.id, es.contact_id, es.variant, es.sent_at
 	`, campaignID)
 	if err == nil {
@@ -325,19 +331,11 @@ func getContactEngagement(campaignID int64, contactIDs []int64, hasB bool, templ
 	}
 
 	var result []ContactEngagementRow
-	for i, cid := range contactIDs {
-		variant := "A"
-		templateName := aName
-		if hasB && i%2 == 1 {
-			variant = "B"
-			templateName = bName
-		}
+	for _, cid := range contactIDs {
 		_, email, _ := getContactEmail(cid)
 		row := ContactEngagementRow{
-			ContactID:    cid,
-			Email:        email,
-			Variant:      variant,
-			TemplateName: templateName,
+			ContactID: cid,
+			Email:     email,
 		}
 		if sent, ok := sendMap[cid]; ok {
 			row.SendID = sent.SendID
@@ -348,7 +346,15 @@ func getContactEngagement(campaignID int64, contactIDs []int64, hasB bool, templ
 			row.LastActivityAt = sent.LastActivityAt
 			row.Engaged = sent.Engaged
 			row.MinutesToFirstOpen = sent.MinutesToFirstOpen
+			// Variant is only shown after delivery — planned A/B assignment is not "passed through".
+			row.Variant = sent.Variant
+			if row.Variant == "B" {
+				row.TemplateName = bName
+			} else {
+				row.TemplateName = aName
+			}
 		}
+		_ = hasB
 		result = append(result, row)
 	}
 	return result
@@ -364,7 +370,10 @@ func getCampaignDailyStats(campaignID int64) []CampaignDailyStat {
 	sendMap := map[string]int{}
 	rows, _ := db.Query(`
 		SELECT (sent_at)::date, COUNT(*) FROM email_sends
-		WHERE campaign_id = ? GROUP BY (sent_at)::date
+		WHERE campaign_id = ?
+		  AND LOWER(COALESCE(delivery_status, '')) = 'sent'
+		  AND sent_at IS NOT NULL
+		GROUP BY (sent_at)::date
 	`, campaignID)
 	if rows != nil {
 		defer rows.Close()
@@ -619,7 +628,8 @@ func getVariableCoverage(campaignID int64, templateAID, templateBID int64, conta
 func fillOverview(a *CampaignAnalytics) {
 	o := &a.Overview
 	for _, c := range a.Contacts {
-		if c.SendID > 0 {
+		// Only count actual deliveries — queued/warmup-held sends are pending.
+		if c.SentAt != nil {
 			o.SentCount++
 		}
 	}

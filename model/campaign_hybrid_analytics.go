@@ -35,6 +35,7 @@ type CampaignStarterABAnalytics struct {
 	Funnel               EngagementFunnel
 	ABWinner             string
 	ABWinnerMethod       string
+	ShowPixelMetrics     bool
 }
 
 const starterSendJoin = `
@@ -105,6 +106,7 @@ func GetStarterABAnalyticsFor(c Campaign, userID int64) (CampaignStarterABAnalyt
 		ExperimentVariable:   c.ExperimentVariable,
 		ExperimentHypothesis: c.ExperimentHypothesis,
 		FirstSendStepLabel:   LabelFromMap(labels, firstSendKey),
+		ShowPixelMetrics:     c.OpenTrackingEnabled || c.ClickTrackingEnabled,
 	}
 
 	analytics.VariantA = buildStarterVariantAnalytics("A", c.TemplateAID, aName, contactIDs, hasB, c.ID, firstSendKey)
@@ -173,6 +175,7 @@ func loadStarterVariantMetrics(campaignID int64, firstSendNodeKey, variant strin
 		SELECT COUNT(*) FROM email_sends es
 		`+starterSendJoin+`
 		WHERE `+starterSendWhere+` AND es.variant = ?
+		  AND LOWER(COALESCE(es.delivery_status, '')) = 'sent'
 	`, campaignID, firstSendNodeKey, variant).Scan(&va.Sent)
 
 	_ = db.QueryRow(`
@@ -249,6 +252,7 @@ func getStarterContactEngagement(campaignID int64, firstSendNodeKey string, cont
 		`+starterSendJoin+`
 		LEFT JOIN email_events ee ON ee.email_send_id = es.id OR ee.tracking_id = es.tracking_id
 		WHERE `+starterSendWhere+`
+		  AND LOWER(COALESCE(es.delivery_status, '')) = 'sent'
 		GROUP BY es.id, es.contact_id, es.variant, es.sent_at
 	`, campaignID, firstSendNodeKey)
 	if err == nil {
@@ -280,20 +284,13 @@ func getStarterContactEngagement(campaignID int64, firstSendNodeKey string, cont
 	}
 
 	emailMap, _ := GetCampaignContactEmailMap(campaignID)
+	replyMap := getCampaignContactReplyMap(campaignID)
 
 	var result []ContactEngagementRow
-	for i, cid := range contactIDs {
-		variant := "A"
-		templateName := aName
-		if hasB && i%2 == 1 {
-			variant = "B"
-			templateName = bName
-		}
+	for _, cid := range contactIDs {
 		row := ContactEngagementRow{
-			ContactID:    cid,
-			Email:        emailMap[cid],
-			Variant:      variant,
-			TemplateName: templateName,
+			ContactID: cid,
+			Email:     emailMap[cid],
 		}
 		if sent, ok := sendMap[cid]; ok {
 			row.SendID = sent.SendID
@@ -304,7 +301,23 @@ func getStarterContactEngagement(campaignID int64, firstSendNodeKey string, cont
 			row.LastActivityAt = sent.LastActivityAt
 			row.Engaged = sent.Engaged
 			row.MinutesToFirstOpen = sent.MinutesToFirstOpen
+			row.Variant = sent.Variant
+			if row.Variant == "B" {
+				row.TemplateName = bName
+			} else {
+				row.TemplateName = aName
+			}
 		}
+		if reply, ok := replyMap[cid]; ok {
+			row.HasReplied = true
+			row.ReplySentiment = reply.Sentiment
+			row.RepliedAt = reply.At
+			row.Engaged = true
+			if row.LastActivityAt == nil || (reply.At != nil && reply.At.After(*row.LastActivityAt)) {
+				row.LastActivityAt = reply.At
+			}
+		}
+		_ = hasB
 		result = append(result, row)
 	}
 	return result

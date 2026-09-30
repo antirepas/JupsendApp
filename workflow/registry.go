@@ -43,8 +43,11 @@ func (SendEmailExecutor) Type() string { return "action_send_email" }
 
 func (SendEmailExecutor) Execute(ctx ExecutionContext) (NodeResult, error) {
 	execKey := fmt.Sprintf("%d:%s:send", ctx.Instance.ID, ctx.Node.NodeKey)
-	exists, _ := model.ExecutionExists(execKey)
-	if exists {
+	claimed, err := model.TryBeginExecution(ctx.Instance.ID, ctx.Node.NodeKey, execKey)
+	if err != nil {
+		return NodeResult{Failed: true, ErrorMessage: err.Error()}, nil
+	}
+	if !claimed {
 		return NodeResult{NextEdgeType: "default", SkipDuplicate: true}, nil
 	}
 
@@ -59,10 +62,12 @@ func (SendEmailExecutor) Execute(ctx ExecutionContext) (NodeResult, error) {
 		campaignID = *ctx.Instance.CampaignID
 	}
 	if campaignID > 0 && model.CampaignIsStopped(campaignID) {
+		model.AbortStartedExecution(execKey)
 		return NodeResult{Failed: true, ErrorMessage: "campaign stopped"}, nil
 	}
 	if campaignID > 0 {
 		if block, reason := model.ShouldBlockWorkflowSend(campaignID, ctx.Instance.ContactID); block {
+			model.AbortStartedExecution(execKey)
 			_ = model.CancelActiveInstancesForContactCampaign(ctx.Instance.ContactID, campaignID)
 			return NodeResult{Failed: true, ErrorMessage: reason}, nil
 		}
@@ -70,6 +75,7 @@ func (SendEmailExecutor) Execute(ctx ExecutionContext) (NodeResult, error) {
 
 	templateID, err := model.ResolveCampaignSendTemplate(campaignID, ctx.Node.NodeKey, variant, ctx.Instance.WorkflowVersionID)
 	if err != nil || templateID == 0 {
+		model.AbortStartedExecution(execKey)
 		if err == nil {
 			err = fmt.Errorf("missing template for node %s", ctx.Node.NodeKey)
 		}
@@ -82,14 +88,14 @@ func (SendEmailExecutor) Execute(ctx ExecutionContext) (NodeResult, error) {
 
 	sendID, err := ctx.Mailer.SendWorkflowEmail(templateID, ctx.Instance.ContactID, campaignID, variant, ctx.Instance.ID, openTrack, clickTrack)
 	if err != nil {
+		model.AbortStartedExecution(execKey)
 		return NodeResult{Failed: true, ErrorMessage: err.Error()}, nil
 	}
 
 	instCtx["last_send_id"] = sendID
 	_ = model.SetInstanceContext(&ctx.Instance, instCtx)
 
-	_, _ = model.CreateExecution(ctx.Instance.ID, ctx.Node.NodeKey, execKey, "succeeded",
-		fmt.Sprintf(`{"email_send_id":%d}`, sendID), "")
+	_ = model.CompleteExecution(execKey, fmt.Sprintf(`{"email_send_id":%d}`, sendID))
 
 	return NodeResult{
 		NextEdgeType: "default",

@@ -66,6 +66,26 @@ func CreateQueuedEmailSend(userID, tId, cId int64, trackId string, campaignID in
 	return id, err
 }
 
+// FindActiveWorkflowEmailSend returns an existing queued/sending/sent email for this
+// workflow instance + template (prevents duplicate deliveries if enqueue is retried).
+func FindActiveWorkflowEmailSend(workflowInstanceID, templateID int64) (emailSendID, jobID int64, ok bool) {
+	if workflowInstanceID <= 0 || templateID <= 0 {
+		return 0, 0, false
+	}
+	err := db.QueryRow(`
+		SELECT es.id, COALESCE(es.send_job_id, 0)
+		FROM email_sends es
+		WHERE es.workflow_instance_id = ? AND es.template_id = ?
+		  AND COALESCE(es.delivery_status, '') IN ('queued', 'sending', 'sent')
+		ORDER BY es.id ASC
+		LIMIT 1
+	`, workflowInstanceID, templateID).Scan(&emailSendID, &jobID)
+	if err != nil || emailSendID <= 0 {
+		return 0, 0, false
+	}
+	return emailSendID, jobID, true
+}
+
 // CreateManualReplyEmailSend creates a sent-record shell for an in-app conversation reply.
 func CreateManualReplyEmailSend(userID, contactID int64, trackID string, smtpAccountID int64) (int64, error) {
 	var acct interface{}

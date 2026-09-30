@@ -116,9 +116,7 @@ func GetCampaignAnalyticsFor(c Campaign, userID int64) (CampaignAnalytics, error
 	}
 
 	fillOverview(&analytics)
-	analytics.ShowPixelMetrics = c.OpenTrackingEnabled || c.ClickTrackingEnabled ||
-		analytics.Overview.UniqueOpens > 0 || analytics.Overview.UniqueClicks > 0 ||
-		analytics.Overview.TotalOpens > 0 || analytics.Overview.TotalClicks > 0
+	analytics.ShowPixelMetrics = c.OpenTrackingEnabled || c.ClickTrackingEnabled
 	analytics.Funnel = EngagementFunnel{
 		Sent:    analytics.Overview.SentCount,
 		Opened:  analytics.Overview.UniqueOpens,
@@ -164,6 +162,7 @@ func getContactEngagementFast(campaignID int64, contactIDs []int64, hasB bool, a
 		FROM email_sends es
 		LEFT JOIN email_events ee ON ee.email_send_id = es.id OR ee.tracking_id = es.tracking_id
 		WHERE es.campaign_id = ?
+		  AND LOWER(COALESCE(es.delivery_status, '')) = 'sent'
 		GROUP BY es.id, es.contact_id, es.variant, es.sent_at
 	`, campaignID)
 	if err == nil {
@@ -198,18 +197,10 @@ func getContactEngagementFast(campaignID int64, contactIDs []int64, hasB bool, a
 	replyMap := getCampaignContactReplyMap(campaignID)
 
 	var result []ContactEngagementRow
-	for i, cid := range contactIDs {
-		variant := "A"
-		templateName := aName
-		if hasB && i%2 == 1 {
-			variant = "B"
-			templateName = bName
-		}
+	for _, cid := range contactIDs {
 		row := ContactEngagementRow{
-			ContactID:    cid,
-			Email:        emailMap[cid],
-			Variant:      variant,
-			TemplateName: templateName,
+			ContactID: cid,
+			Email:     emailMap[cid],
 		}
 		if sent, ok := sendMap[cid]; ok {
 			row.SendID = sent.SendID
@@ -220,6 +211,12 @@ func getContactEngagementFast(campaignID int64, contactIDs []int64, hasB bool, a
 			row.LastActivityAt = sent.LastActivityAt
 			row.Engaged = sent.Engaged
 			row.MinutesToFirstOpen = sent.MinutesToFirstOpen
+			row.Variant = sent.Variant
+			if row.Variant == "B" {
+				row.TemplateName = bName
+			} else {
+				row.TemplateName = aName
+			}
 		}
 		if reply, ok := replyMap[cid]; ok {
 			row.HasReplied = true
@@ -230,6 +227,7 @@ func getContactEngagementFast(campaignID int64, contactIDs []int64, hasB bool, a
 				row.LastActivityAt = reply.At
 			}
 		}
+		_ = hasB
 		result = append(result, row)
 	}
 	return result
@@ -475,8 +473,7 @@ func GetCampaignWorkflowAnalyticsFor(c Campaign, userID int64) (CampaignWorkflow
 		HourlyReplies:        hourlyRep,
 		OpenTrackingEnabled:  c.OpenTrackingEnabled,
 		ClickTrackingEnabled: c.ClickTrackingEnabled,
-		ShowPixelMetrics: c.OpenTrackingEnabled || c.ClickTrackingEnabled ||
-			engagement.UniqueOpens > 0 || engagement.UniqueClicks > 0,
+		ShowPixelMetrics:     c.OpenTrackingEnabled || c.ClickTrackingEnabled,
 	}
 
 	sort.Slice(result.DailyStats, func(i, j int) bool {
@@ -561,7 +558,8 @@ func buildCampaignWorkflowContactAnalyticsFast(campaignID, versionID int64, cont
 func loadCampaignContactSendStats(campaignID int64) map[int64]struct{ sent, opens, clicks int } {
 	result := map[int64]struct{ sent, opens, clicks int }{}
 	rows, err := db.Query(`
-		SELECT es.contact_id, COUNT(*),
+		SELECT es.contact_id,
+			COUNT(*) FILTER (WHERE LOWER(COALESCE(es.delivery_status, '')) = 'sent'),
 			COALESCE(SUM(CASE WHEN ee.event_type = 'open' AND COALESCE(ee.is_bot, 0) = 0 THEN 1 ELSE 0 END), 0),
 			COALESCE(SUM(CASE WHEN ee.event_type = 'click' THEN 1 ELSE 0 END), 0)
 		FROM email_sends es
