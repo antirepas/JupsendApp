@@ -3,6 +3,7 @@ package outbound
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -74,6 +75,66 @@ func TestHandleReplyStoresInboundAndMarksReplied(t *testing.T) {
 	}
 	if repliedAt == nil {
 		t.Fatal("expected contact marked replied")
+	}
+}
+
+func TestHandleReplyBackfillsConversationWhenEventExists(t *testing.T) {
+	db.OpenTestDB(t)
+	userID, err := model.CreateUser("imap-backfill@example.com", "hash", "http://localhost")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var contactID, templateID int64
+	if err := db.QueryRow(`INSERT INTO contact (email, user_id) VALUES ('lead@example.com', ?) RETURNING id`, userID).Scan(&contactID); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow(`INSERT INTO template (name, subject, body, user_id) VALUES ('t','Hello','body', ?) RETURNING id`, userID).Scan(&templateID); err != nil {
+		t.Fatal(err)
+	}
+	sendID, err := model.CreateQueuedEmailSend(userID, templateID, contactID, fmt.Sprintf("track-bf-%d", time.Now().UnixNano()), 0, "", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	acctID, err := model.CreateSMTPAccountForUser(userID, model.SMTPAccount{
+		Name: "mbox", SMTPHost: "smtp.test", SMTPPort: "587", SMTPUser: "u", SMTPPassword: "p",
+		FromEmail: "me@test.com", Status: "active", DailyLimit: 50, PerMinuteLimit: 10, MinSecondsBetweenSends: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := model.MarkEmailSendSent(sendID, acctID, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	// Pretend the contact_event was stored but conversation insert failed.
+	_, err = model.InsertContactEvent(model.ContactEventInput{
+		ContactID: contactID, EmailSendID: sendID, EventType: "REPLY",
+		DedupeKey:  "imap-msg:orphan-reply",
+		OccurredAt: time.Now(),
+		Metadata:   map[string]interface{}{"subject": "Re: Hello"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = model.MarkContactReplied(contactID)
+
+	handleReply(userID, ReplyMatch{
+		ContactID: contactID, EmailSendID: sendID, TrackingID: "x",
+	}, inboxMessage{
+		From: "lead@example.com", Subject: "Re: Hello",
+		Body: "Content-Type: text/plain\r\n\r\nStill interested",
+		MessageID: "<orphan-reply>", InReplyTo: "<orig@test>",
+	}, acctID, "me@test.com")
+
+	msgs, err := model.ListConversationMessages(userID, contactID, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(msgs) != 1 || msgs[0].Direction != model.ConversationInbound {
+		t.Fatalf("expected backfilled inbound, got %+v", msgs)
+	}
+	if !strings.Contains(msgs[0].BodyText, "Still interested") {
+		t.Fatalf("body %q", msgs[0].BodyText)
 	}
 }
 

@@ -639,6 +639,7 @@ func ContactDetailPage(ctx *gin.Context) {
 	for _, l := range allLists {
 		listMemberships = append(listMemberships, listMembership{List: l, Member: memberIDs[l.ID]})
 	}
+	model.EnsureInboundFromReplyEvents(userID, id)
 	conversation, _ := model.ListContactConversation(userID, id, 200)
 	enrichLegacyConversationBodies(userID, id, conversation)
 	repairMangledConversationBodies(conversation)
@@ -772,6 +773,7 @@ func ReplyContactPage(ctx *gin.Context) {
 		return
 	}
 
+	model.EnsureInboundFromReplyEvents(userID, contactID)
 	targets, _ := model.ListReplyTargets(userID, contactID, 100)
 	// Prefer rendered subjects on outbound targets that have a send snapshot.
 	enrichLegacyConversationBodies(userID, contactID, targets)

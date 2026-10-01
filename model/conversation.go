@@ -2,6 +2,8 @@ package model
 
 import (
 	"database/sql"
+	"encoding/json"
+	"fmt"
 	"html"
 	htmltemplate "html/template"
 	"regexp"
@@ -85,11 +87,21 @@ func InsertConversationMessage(in ConversationMessageInput) (int64, error) {
 
 	if msgID != "" {
 		var existing int64
+		var existingDir string
 		err := db.QueryRow(`
-			SELECT id FROM conversation_messages WHERE user_id = ? AND message_id = ?
-		`, in.UserID, msgID).Scan(&existing)
+			SELECT id, direction FROM conversation_messages WHERE user_id = ? AND message_id = ?
+		`, in.UserID, msgID).Scan(&existing, &existingDir)
 		if err == nil && existing > 0 {
-			return existing, nil
+			if existingDir == in.Direction {
+				return existing, nil
+			}
+			// Same Message-ID claimed by the other direction (broken IMAP / In-Reply-To
+			// reused as Message-ID). Keep uniqueness without dropping the inbound row.
+			if in.Direction == ConversationInbound {
+				msgID = msgID + "#inbound"
+			} else {
+				msgID = msgID + "#outbound"
+			}
 		}
 	}
 
@@ -105,6 +117,16 @@ func InsertConversationMessage(in ConversationMessageInput) (int64, error) {
 	`, in.UserID, in.ContactID, in.SMTPAccountID, in.EmailSendID, in.Direction,
 		in.FromEmail, in.ToEmail, in.Subject, bodyText, bodyHTML,
 		msgID, strings.TrimSpace(in.InReplyTo), sentiment, occurred).Scan(&id)
+	if err != nil && msgID != "" {
+		// Race on unique index: return the winner if same direction.
+		var existing int64
+		var existingDir string
+		if qErr := db.QueryRow(`
+			SELECT id, direction FROM conversation_messages WHERE user_id = ? AND message_id = ?
+		`, in.UserID, msgID).Scan(&existing, &existingDir); qErr == nil && existing > 0 && existingDir == in.Direction {
+			return existing, nil
+		}
+	}
 	return id, err
 }
 
@@ -333,6 +355,77 @@ func HasInboundConversation(userID, contactID int64) bool {
 		WHERE user_id = ? AND contact_id = ? AND direction = 'inbound'
 	`, userID, contactID).Scan(&n)
 	return n > 0
+}
+
+// EnsureInboundFromReplyEvents creates stub inbound conversation rows when IMAP
+// recorded a REPLY contact_event but conversation_messages insert was skipped
+// (dedupe early-return or Message-ID collision). Safe to call on every contact view.
+func EnsureInboundFromReplyEvents(userID, contactID int64) {
+	if userID <= 0 || contactID <= 0 || HasInboundConversation(userID, contactID) {
+		return
+	}
+	rows, err := db.Query(`
+		SELECT ce.id, COALESCE(ce.email_send_id, 0), COALESCE(ce.metadata_json, '{}'), ce.occurred_at,
+			COALESCE(c.email, ''), COALESCE(sa.from_email, ''), COALESCE(es.smtp_account_id, 0)
+		FROM contact_events ce
+		INNER JOIN email_sends es ON es.id = ce.email_send_id
+		INNER JOIN contact c ON c.id = ce.contact_id
+		LEFT JOIN smtp_accounts sa ON sa.id = es.smtp_account_id
+		WHERE ce.contact_id = ? AND es.user_id = ? AND ce.event_type = 'REPLY'
+		ORDER BY ce.occurred_at ASC, ce.id ASC
+	`, contactID, userID)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var eventID, sendID, smtpID int64
+		var metaJSON, contactEmail, fromEmail string
+		var occurred time.Time
+		if rows.Scan(&eventID, &sendID, &metaJSON, &occurred, &contactEmail, &fromEmail, &smtpID) != nil {
+			continue
+		}
+		subject := ""
+		snippet := ""
+		sentiment := ReplySentimentPending
+		if metaJSON != "" && metaJSON != "{}" {
+			var meta map[string]interface{}
+			if json.Unmarshal([]byte(metaJSON), &meta) == nil {
+				if s, ok := meta["subject"].(string); ok {
+					subject = strings.TrimSpace(s)
+				}
+				if s, ok := meta["body_snippet"].(string); ok {
+					snippet = strings.TrimSpace(s)
+				}
+				if s, ok := meta["sentiment"].(string); ok && strings.TrimSpace(s) != "" {
+					sentiment = NormalizeReplySentiment(s)
+				}
+			}
+		}
+		if subject == "" {
+			subject = "(reply)"
+		}
+		bodyText := snippet
+		if bodyText == "" {
+			bodyText = "Reply detected. Full message body was not stored — open Reply to continue the thread."
+		}
+		dedupeMsgID := fmt.Sprintf("reply-event:%d", eventID)
+		_, _ = InsertConversationMessage(ConversationMessageInput{
+			UserID:         userID,
+			ContactID:      contactID,
+			SMTPAccountID:  smtpID,
+			EmailSendID:    sendID,
+			Direction:      ConversationInbound,
+			FromEmail:      contactEmail,
+			ToEmail:        fromEmail,
+			Subject:        subject,
+			BodyText:       bodyText,
+			MessageID:      dedupeMsgID,
+			ReplySentiment: sentiment,
+			OccurredAt:     occurred,
+		})
+	}
 }
 
 // LatestSMTPAccountForContact returns the mailbox used for the most recent outbound

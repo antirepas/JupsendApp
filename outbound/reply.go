@@ -2,6 +2,7 @@ package outbound
 
 import (
 	"context"
+	"log"
 	"regexp"
 	"strconv"
 	"strings"
@@ -225,14 +226,24 @@ func MatchReply(userID int64, from, subject, body string, inReplyTo []string, us
 
 func handleReply(userID int64, match ReplyMatch, msg inboxMessage, accountID int64, ownEmail string) {
 	dedupe := replyDedupeKey(match, msg.MessageID)
+	eventExists := false
 	if dedupe != "" {
 		if exists, _ := model.ContactEventExistsByDedupe(dedupe); exists {
-			return
+			eventExists = true
 		}
 	} else if match.EmailSendID > 0 {
 		if exists, _ := model.HasContactEventForSend(match.EmailSendID, "REPLY"); exists {
-			return
+			eventExists = true
 		}
+	}
+
+	parsed := util.ParseMIMEBody(msg.Body)
+	snippet := strings.TrimSpace(parsed.Text)
+	if snippet == "" {
+		snippet = strings.TrimSpace(util.StripHTML(parsed.HTML))
+	}
+	if len(snippet) > 2000 {
+		snippet = snippet[:2000]
 	}
 
 	var wfID int64
@@ -246,29 +257,32 @@ func handleReply(userID int64, match ReplyMatch, msg inboxMessage, accountID int
 			}
 		}
 	}
-	_, _ = model.InsertContactEvent(model.ContactEventInput{
-		ContactID:   match.ContactID,
-		WorkflowID:  wfID,
-		EmailSendID: match.EmailSendID,
-		EventType:   "REPLY",
-		DedupeKey:   dedupe,
-		Metadata: map[string]interface{}{
-			"source":           "imap",
-			"subject":          msg.Subject,
-			"sentiment":        model.ReplySentimentPending,
-			"sentiment_source": "pending",
-		},
-		OccurredAt: time.Now(),
-	})
 
-	parsed := util.ParseMIMEBody(msg.Body)
+	if !eventExists {
+		_, _ = model.InsertContactEvent(model.ContactEventInput{
+			ContactID:   match.ContactID,
+			WorkflowID:  wfID,
+			EmailSendID: match.EmailSendID,
+			EventType:   "REPLY",
+			DedupeKey:   dedupe,
+			Metadata: map[string]interface{}{
+				"source":           "imap",
+				"subject":          msg.Subject,
+				"body_snippet":     snippet,
+				"sentiment":        model.ReplySentimentPending,
+				"sentiment_source": "pending",
+			},
+			OccurredAt: time.Now(),
+		})
+	}
+
 	toEmail := ownEmail
 	if match.EmailSendID > 0 {
 		if detail, err := model.GetEmailSendDetail(match.EmailSendID); err == nil && detail.SenderEmail != "" {
 			toEmail = detail.SenderEmail
 		}
 	}
-	msgID, _ := model.InsertConversationMessage(model.ConversationMessageInput{
+	msgID, err := model.InsertConversationMessage(model.ConversationMessageInput{
 		UserID:         userID,
 		ContactID:      match.ContactID,
 		SMTPAccountID:  accountID,
@@ -284,6 +298,14 @@ func handleReply(userID int64, match ReplyMatch, msg inboxMessage, accountID int
 		ReplySentiment: model.ReplySentimentPending,
 		OccurredAt:     time.Now(),
 	})
+	if err != nil {
+		log.Printf("outbound: inbound conversation insert failed user=%d contact=%d: %v", userID, match.ContactID, err)
+	}
+
+	if eventExists {
+		// Event already recorded earlier — still ensure the conversation row exists above.
+		return
+	}
 
 	_ = model.MarkContactReplied(match.ContactID)
 	campaignID := int64(0)

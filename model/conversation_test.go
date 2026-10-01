@@ -2,6 +2,7 @@ package model
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -210,6 +211,106 @@ func TestConversationMessageIDDedupe(t *testing.T) {
 	}
 	if id1 != id2 {
 		t.Fatalf("expected dedupe same id, got %d and %d", id1, id2)
+	}
+}
+
+func TestConversationMessageIDCrossDirectionCollision(t *testing.T) {
+	db.OpenTestDB(t)
+	userID, err := CreateUser("cross-msgid@example.com", "hash", "http://localhost")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var contactID int64
+	if err := db.QueryRow(`INSERT INTO contact (email, user_id) VALUES ('lead@example.com', ?) RETURNING id`, userID).Scan(&contactID); err != nil {
+		t.Fatal(err)
+	}
+	outID, err := InsertConversationMessage(ConversationMessageInput{
+		UserID: userID, ContactID: contactID, Direction: ConversationOutbound,
+		FromEmail: "me@test.com", ToEmail: "lead@example.com", Subject: "Hi",
+		BodyText: "hello", MessageID: "<shared@id>",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	inID, err := InsertConversationMessage(ConversationMessageInput{
+		UserID: userID, ContactID: contactID, Direction: ConversationInbound,
+		FromEmail: "lead@example.com", ToEmail: "me@test.com", Subject: "Re: Hi",
+		BodyText: "thanks", MessageID: "<shared@id>",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if inID == outID {
+		t.Fatal("inbound should not collapse onto outbound when Message-IDs collide")
+	}
+	msgs, err := ListConversationMessages(userID, contactID, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(msgs) != 2 {
+		t.Fatalf("expected outbound+inbound, got %d", len(msgs))
+	}
+}
+
+func TestEnsureInboundFromReplyEvents(t *testing.T) {
+	db.OpenTestDB(t)
+	userID, err := CreateUser("ensure-inbound@example.com", "hash", "http://localhost")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var contactID, templateID int64
+	if err := db.QueryRow(`INSERT INTO contact (email, user_id) VALUES ('lead@example.com', ?) RETURNING id`, userID).Scan(&contactID); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow(`INSERT INTO template (name, subject, body, user_id) VALUES ('t','s','b', ?) RETURNING id`, userID).Scan(&templateID); err != nil {
+		t.Fatal(err)
+	}
+	sendID, err := CreateQueuedEmailSend(userID, templateID, contactID, fmt.Sprintf("track-ensure-%d", time.Now().UnixNano()), 0, "", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := MarkEmailSendSent(sendID, 0, 0); err != nil {
+		t.Fatal(err)
+	}
+	_, err = InsertContactEvent(ContactEventInput{
+		ContactID: contactID, EmailSendID: sendID, EventType: "REPLY",
+		DedupeKey: "ensure-inbound-test",
+		Metadata: map[string]interface{}{
+			"subject":      "Re: Hello",
+			"body_snippet": "Yes, interested!",
+		},
+		OccurredAt: time.Now(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = MarkContactReplied(contactID)
+
+	if HasInboundConversation(userID, contactID) {
+		t.Fatal("expected no inbound yet")
+	}
+	EnsureInboundFromReplyEvents(userID, contactID)
+	if !HasInboundConversation(userID, contactID) {
+		t.Fatal("expected repaired inbound conversation row")
+	}
+	msgs, err := ListConversationMessages(userID, contactID, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(msgs) != 1 || msgs[0].Direction != ConversationInbound {
+		t.Fatalf("got %+v", msgs)
+	}
+	if msgs[0].Subject != "Re: Hello" {
+		t.Fatalf("subject %q", msgs[0].Subject)
+	}
+	if !strings.Contains(msgs[0].BodyText, "interested") {
+		t.Fatalf("body %q", msgs[0].BodyText)
+	}
+	// Idempotent
+	EnsureInboundFromReplyEvents(userID, contactID)
+	msgs2, _ := ListConversationMessages(userID, contactID, 10)
+	if len(msgs2) != 1 {
+		t.Fatalf("expected still 1 inbound, got %d", len(msgs2))
 	}
 }
 

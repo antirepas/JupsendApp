@@ -38,12 +38,17 @@
                 {{if .Subject}}{{.Subject}}{{else}}(no subject){{end}}
                 {{end}}
             </p>
-            <p class="text-xs text-gray-500">{{.FromEmail}} → {{.ToEmail}}</p>
+            <p class="text-xs text-gray-500 mb-2">{{.FromEmail}} → {{.ToEmail}}</p>
+            {{if or .BodyHTML .BodyText}}
+            <div class="conv-msg-body mb-2">
+                <iframe class="conv-msg-frame" title="Message" sandbox="" srcdoc="{{.DisplaySrcDoc}}"></iframe>
+            </div>
+            {{end}}
             {{if and (not .IsInbound) .EmailSendID}}
             <a href="/sends/{{.EmailSendID}}" class="text-xs text-brand-600 font-medium">Send details</a>
             {{else if .IsInbound}}
             <div class="flex flex-wrap items-center gap-2 mt-1">
-                <a href="/contacts/{{$.summary.Contact.ID}}/reply?reply_to={{.ID}}" class="text-xs text-brand-600 font-medium">Reply to this</a>
+                <a href="/contacts/{{$.summary.Contact.ID}}/reply?reply_to={{.ID}}" class="btn-primary text-xs inline-flex">Reply to this</a>
                 {{if .ReplySentiment}}
                 <span class="text-xs px-2 py-0.5 rounded
                   {{if eq .ReplySentiment "positive"}}bg-emerald-50 text-emerald-800
@@ -73,7 +78,7 @@
         <p class="text-xs text-slate-600 mt-2">Next reply will send as <strong>{{.replyFromEmail}}</strong> (same seat as prior sends when available).</p>
         {{end}}
     </div>
-    {{else if .summary.RecentSends}}
+    {{else if or .summary.RepliedAt .summary.RecentSends}}
     <p class="text-xs text-gray-500 border-t border-gray-100 pt-4">Reply opens here after their first reply is detected (or when a send used a known mailbox).</p>
     {{end}}
 </div>
