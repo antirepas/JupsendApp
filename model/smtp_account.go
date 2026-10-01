@@ -173,6 +173,24 @@ func ListActiveSMTPAccounts() ([]SMTPAccount, error) {
 	return items, nil
 }
 
+// ListActiveSMTPAccountsForUser returns active mailboxes owned by this user.
+func ListActiveSMTPAccountsForUser(userID int64) ([]SMTPAccount, error) {
+	rows, err := db.Query(`SELECT `+smtpAccountCols+` FROM smtp_accounts WHERE user_id = ? AND status = 'active' ORDER BY id ASC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SMTPAccount
+	for rows.Next() {
+		a, err := scanSMTPAccount(rows)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, a)
+	}
+	return items, nil
+}
+
 func CreateDefaultSMTPAccountForUser(userID int64) error {
 	now := time.Now()
 	_, err := db.Exec(`

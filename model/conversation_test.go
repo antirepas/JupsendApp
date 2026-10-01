@@ -314,6 +314,52 @@ func TestEnsureInboundFromReplyEvents(t *testing.T) {
 	}
 }
 
+func TestUpsertInboundReplyUpgradesStub(t *testing.T) {
+	db.OpenTestDB(t)
+	userID, err := CreateUser("upsert-stub@example.com", "hash", "http://localhost")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var contactID int64
+	if err := db.QueryRow(`INSERT INTO contact (email, user_id) VALUES ('lead@example.com', ?) RETURNING id`, userID).Scan(&contactID); err != nil {
+		t.Fatal(err)
+	}
+	stubID, err := InsertConversationMessage(ConversationMessageInput{
+		UserID: userID, ContactID: contactID, Direction: ConversationInbound,
+		FromEmail: "lead@example.com", ToEmail: "me@test.com", Subject: "Re: Hi",
+		BodyText: "Reply detected. Full message body was not stored — open Reply to continue the thread.",
+		MessageID: "reply-event:99", OccurredAt: time.Now(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := UpsertInboundReply(ConversationMessageInput{
+		UserID: userID, ContactID: contactID, Direction: ConversationInbound,
+		FromEmail: "lead@example.com", ToEmail: "me@test.com", Subject: "Re: Hi",
+		BodyText: "We'd love to chat next week!", MessageID: "<real-reply@client>",
+		OccurredAt: time.Now(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id != stubID {
+		t.Fatalf("expected stub upgraded id=%d got %d", stubID, id)
+	}
+	msgs, err := ListConversationMessages(userID, contactID, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(msgs) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(msgs))
+	}
+	if !strings.Contains(msgs[0].BodyText, "love to chat") {
+		t.Fatalf("body not upgraded: %q", msgs[0].BodyText)
+	}
+	if ContactNeedsInboundBody(userID, contactID) {
+		t.Fatal("should not need recovery after upgrade")
+	}
+}
+
 func TestFollowUpSubject(t *testing.T) {
 	if got := FollowUpSubject("Quick question", "Anything else"); got != "Re: Quick question" {
 		t.Fatalf("got %q", got)

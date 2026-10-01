@@ -16,6 +16,15 @@
 {{if .success}}<div class="alert-success mb-6">{{.success}}</div>{{end}}
 {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
 
+{{if .needsBodyRecovery}}
+<div class="alert-error mb-6 flex flex-wrap items-center justify-between gap-3">
+    <p class="text-sm">We detected their reply but the full message body isn’t in the thread yet. Pull it from the mailbox that received it.</p>
+    <form method="POST" action="/contacts/{{.summary.Contact.ID}}/recover-reply">
+        <button type="submit" class="btn-primary text-sm">Recover reply from mailbox</button>
+    </form>
+</div>
+{{end}}
+
 <div id="conversation" class="card mb-6">
     <h3 class="card-title">Conversation</h3>
     <p class="text-sm text-gray-500 mb-4">Emails you sent and replies from this lead. Reply from the same mailbox that sent the outreach.</p>

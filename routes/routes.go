@@ -229,6 +229,7 @@ func RegisterRoutes(server *gin.Engine) {
 		authd.GET("/contacts/:id", ContactDetailPage)
 		authd.POST("/contacts/:id/lists", UpdateContactLists)
 		authd.POST("/contacts/:id/reply", ReplyContactWeb)
+		authd.POST("/contacts/:id/recover-reply", RecoverContactReplyWeb)
 		authd.POST("/contacts/:id/messages/:messageId/sentiment", ContactMessageSentiment)
 		authd.POST("/contacts", CreateContact)
 		authd.POST("/contacts/:id", UpdateContact)

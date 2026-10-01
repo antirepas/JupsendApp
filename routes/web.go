@@ -640,6 +640,14 @@ func ContactDetailPage(ctx *gin.Context) {
 		listMemberships = append(listMemberships, listMembership{List: l, Member: memberIDs[l.ID]})
 	}
 	model.EnsureInboundFromReplyEvents(userID, id)
+	needsBodyRecovery := model.ContactNeedsInboundBody(userID, id)
+	if needsBodyRecovery {
+		if ok, err := outbound.RecoverContactReplyFromIMAP(userID, id); err != nil {
+			log.Printf("contact %d reply recovery: %v", id, err)
+		} else if ok {
+			needsBodyRecovery = model.ContactNeedsInboundBody(userID, id)
+		}
+	}
 	conversation, _ := model.ListContactConversation(userID, id, 200)
 	enrichLegacyConversationBodies(userID, id, conversation)
 	repairMangledConversationBodies(conversation)
@@ -670,16 +678,17 @@ func ContactDetailPage(ctx *gin.Context) {
 	}
 
 	ctx.HTML(http.StatusOK, "contact_detail.html", gin.H{
-		"title":           summary.Contact.Email,
-		"active":          "contacts",
-		"summary":         summary,
-		"listMemberships": listMemberships,
-		"conversation":    conversation,
-		"canReply":        canReply,
-		"replyFromEmail":  replyFromEmail,
-		"replySubject":    replySubject,
-		"success":         ctx.Query("success"),
-		"error":           ctx.Query("error"),
+		"title":              summary.Contact.Email,
+		"active":             "contacts",
+		"summary":            summary,
+		"listMemberships":    listMemberships,
+		"conversation":       conversation,
+		"canReply":           canReply,
+		"replyFromEmail":     replyFromEmail,
+		"replySubject":       replySubject,
+		"needsBodyRecovery":  needsBodyRecovery,
+		"success":            ctx.Query("success"),
+		"error":              ctx.Query("error"),
 	})
 }
 
@@ -901,6 +910,30 @@ func ReplyContactWeb(ctx *gin.Context) {
 		return
 	}
 	ctx.Redirect(http.StatusFound, "/contacts/"+strconv.FormatInt(contactID, 10)+"?success="+url.QueryEscape("Reply sent")+"#conversation")
+}
+
+func RecoverContactReplyWeb(ctx *gin.Context) {
+	userID := mustUserID(ctx)
+	contactID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
+	if err != nil {
+		ctx.Redirect(http.StatusFound, "/contacts?error=Invalid+contact")
+		return
+	}
+	if _, err := model.GetContactSummary(userID, contactID); err != nil {
+		ctx.Redirect(http.StatusFound, "/contacts?error=Contact+not+found")
+		return
+	}
+	ok, err := outbound.RecoverContactReplyFromIMAP(userID, contactID)
+	if err != nil {
+		log.Print(err)
+		ctx.Redirect(http.StatusFound, "/contacts/"+strconv.FormatInt(contactID, 10)+"?error="+url.QueryEscape("Could not reach mailbox to recover reply")+"#conversation")
+		return
+	}
+	if !ok || model.ContactNeedsInboundBody(userID, contactID) {
+		ctx.Redirect(http.StatusFound, "/contacts/"+strconv.FormatInt(contactID, 10)+"?error="+url.QueryEscape("Reply not found in mailbox inbox — check the mailbox or your notification email for the text")+"#conversation")
+		return
+	}
+	ctx.Redirect(http.StatusFound, "/contacts/"+strconv.FormatInt(contactID, 10)+"?success="+url.QueryEscape("Reply recovered from mailbox")+"#conversation")
 }
 
 func ContactMessageSentiment(ctx *gin.Context) {

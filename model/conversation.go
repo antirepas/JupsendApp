@@ -357,6 +357,137 @@ func HasInboundConversation(userID, contactID int64) bool {
 	return n > 0
 }
 
+const stubInboundBodyMarker = "Full message body was not stored"
+
+// IsStubInboundBody reports placeholder text used when a reply event existed without MIME body.
+func IsStubInboundBody(bodyText, bodyHTML string) bool {
+	combined := bodyText + "\n" + bodyHTML
+	return strings.Contains(combined, stubInboundBodyMarker)
+}
+
+// ContactNeedsInboundBody is true when the contact has a reply signal but no real inbound body.
+func ContactNeedsInboundBody(userID, contactID int64) bool {
+	if userID <= 0 || contactID <= 0 {
+		return false
+	}
+	var replied sql.NullTime
+	_ = db.QueryRow(`SELECT replied_at FROM contact WHERE id = ? AND user_id = ?`, contactID, userID).Scan(&replied)
+	hasReplySignal := replied.Valid
+	if !hasReplySignal {
+		var n int
+		_ = db.QueryRow(`
+			SELECT COUNT(*) FROM contact_events ce
+			INNER JOIN email_sends es ON es.id = ce.email_send_id
+			WHERE ce.contact_id = ? AND es.user_id = ? AND ce.event_type = 'REPLY'
+		`, contactID, userID).Scan(&n)
+		hasReplySignal = n > 0
+	}
+	if !hasReplySignal {
+		return false
+	}
+	rows, err := db.Query(`
+		SELECT COALESCE(body_text,''), COALESCE(body_html,''), COALESCE(message_id,'')
+		FROM conversation_messages
+		WHERE user_id = ? AND contact_id = ? AND direction = 'inbound'
+		ORDER BY occurred_at DESC, id DESC
+	`, userID, contactID)
+	if err != nil {
+		return true
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var text, html, msgID string
+		if rows.Scan(&text, &html, &msgID) != nil {
+			continue
+		}
+		if strings.HasPrefix(msgID, "reply-event:") || IsStubInboundBody(text, html) {
+			continue
+		}
+		if strings.TrimSpace(text) != "" || strings.TrimSpace(html) != "" {
+			return false
+		}
+	}
+	return true
+}
+
+// UpsertInboundReply inserts an inbound message, or upgrades a stub/empty inbound for this contact.
+func UpsertInboundReply(in ConversationMessageInput) (int64, error) {
+	in.Direction = ConversationInbound
+	bodyText := truncateConversationBody(in.BodyText)
+	bodyHTML := truncateConversationBody(in.BodyHTML)
+	if strings.TrimSpace(bodyText) == "" && strings.TrimSpace(bodyHTML) == "" {
+		return InsertConversationMessage(in)
+	}
+
+	msgID := strings.TrimSpace(in.MessageID)
+	if msgID != "" {
+		var existing int64
+		var existingDir, existingText, existingHTML string
+		err := db.QueryRow(`
+			SELECT id, direction, COALESCE(body_text,''), COALESCE(body_html,'')
+			FROM conversation_messages WHERE user_id = ? AND message_id = ?
+		`, in.UserID, msgID).Scan(&existing, &existingDir, &existingText, &existingHTML)
+		if err == nil && existing > 0 && existingDir == ConversationInbound {
+			if IsStubInboundBody(existingText, existingHTML) || (strings.TrimSpace(existingText) == "" && strings.TrimSpace(existingHTML) == "") {
+				_, err = db.Exec(`
+					UPDATE conversation_messages SET
+						body_text = ?, body_html = ?, subject = COALESCE(NULLIF(?, ''), subject),
+						from_email = COALESCE(NULLIF(?, ''), from_email),
+						to_email = COALESCE(NULLIF(?, ''), to_email),
+						smtp_account_id = CASE WHEN ? > 0 THEN ? ELSE smtp_account_id END,
+						email_send_id = CASE WHEN ? > 0 THEN ? ELSE email_send_id END,
+						in_reply_to = COALESCE(NULLIF(?, ''), in_reply_to)
+					WHERE id = ?
+				`, bodyText, bodyHTML, in.Subject, in.FromEmail, in.ToEmail,
+					in.SMTPAccountID, in.SMTPAccountID, in.EmailSendID, in.EmailSendID,
+					strings.TrimSpace(in.InReplyTo), existing)
+				return existing, err
+			}
+			return existing, nil
+		}
+	}
+
+	// Upgrade stub created from contact_events (message_id reply-event:N).
+	var stubID int64
+	var stubText, stubHTML string
+	err := db.QueryRow(`
+		SELECT id, COALESCE(body_text,''), COALESCE(body_html,'')
+		FROM conversation_messages
+		WHERE user_id = ? AND contact_id = ? AND direction = 'inbound'
+			AND (message_id LIKE 'reply-event:%' OR body_text LIKE '%' || ? || '%')
+		ORDER BY occurred_at DESC, id DESC
+		LIMIT 1
+	`, in.UserID, in.ContactID, stubInboundBodyMarker).Scan(&stubID, &stubText, &stubHTML)
+	if err == nil && stubID > 0 {
+		newMsgID := msgID
+		if newMsgID == "" {
+			newMsgID = fmt.Sprintf("recovered:%d", stubID)
+		}
+		// Avoid unique collision with an outbound that reused this Message-ID.
+		var clashDir string
+		_ = db.QueryRow(`SELECT direction FROM conversation_messages WHERE user_id = ? AND message_id = ?`, in.UserID, newMsgID).Scan(&clashDir)
+		if clashDir == ConversationOutbound {
+			newMsgID = newMsgID + "#inbound"
+		}
+		_, err = db.Exec(`
+			UPDATE conversation_messages SET
+				body_text = ?, body_html = ?, subject = COALESCE(NULLIF(?, ''), subject),
+				from_email = COALESCE(NULLIF(?, ''), from_email),
+				to_email = COALESCE(NULLIF(?, ''), to_email),
+				message_id = ?,
+				in_reply_to = COALESCE(NULLIF(?, ''), in_reply_to),
+				smtp_account_id = CASE WHEN ? > 0 THEN ? ELSE smtp_account_id END,
+				email_send_id = CASE WHEN ? > 0 THEN ? ELSE email_send_id END
+			WHERE id = ?
+		`, bodyText, bodyHTML, in.Subject, in.FromEmail, in.ToEmail, newMsgID,
+			strings.TrimSpace(in.InReplyTo),
+			in.SMTPAccountID, in.SMTPAccountID, in.EmailSendID, in.EmailSendID, stubID)
+		return stubID, err
+	}
+
+	return InsertConversationMessage(in)
+}
+
 // EnsureInboundFromReplyEvents creates stub inbound conversation rows when IMAP
 // recorded a REPLY contact_event but conversation_messages insert was skipped
 // (dedupe early-return or Message-ID collision). Safe to call on every contact view.

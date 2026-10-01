@@ -120,14 +120,13 @@ type inboxMessage struct {
 }
 
 func processInboxMessage(acc model.SMTPAccount, ownEmail string, msg inboxMessage) {
+	processInboxMessageOpts(acc, ownEmail, msg, false)
+}
+
+func processInboxMessageOpts(acc model.SMTPAccount, ownEmail string, msg inboxMessage, forceReplyRecovery bool) {
 	dedupeKey := msg.DedupeID
 	if dedupeKey == "" {
 		dedupeKey = strings.TrimSpace(msg.From + "|" + msg.Subject)
-	}
-	if dedupeKey != "" {
-		if done, _ := model.GmailMessageAlreadyProcessed(acc.UserID, dedupeKey); done {
-			return
-		}
 	}
 
 	replyRefs := []string{}
@@ -141,25 +140,191 @@ func processInboxMessage(acc model.SMTPAccount, ownEmail string, msg inboxMessag
 		replyRefs = append(replyRefs, msg.MessageID)
 	}
 
+	already := false
+	if !forceReplyRecovery && dedupeKey != "" {
+		if done, _ := model.GmailMessageAlreadyProcessed(acc.UserID, dedupeKey); done {
+			already = true
+		}
+	}
+
 	if IsBounceMessage(msg.From, msg.Subject, msg.Body) {
-		handleBounce(acc, msg.From, msg.Subject, msg.Body)
-		if dedupeKey != "" {
-			_ = model.MarkGmailMessageProcessed(acc.UserID, dedupeKey)
+		if !already {
+			handleBounce(acc, msg.From, msg.Subject, msg.Body)
+			if dedupeKey != "" {
+				_ = model.MarkGmailMessageProcessed(acc.UserID, dedupeKey)
+			}
 		}
 		return
 	}
 	if IsAutoReplyMessage(msg.From, msg.Subject, msg.Body) {
-		if dedupeKey != "" {
+		if !already && dedupeKey != "" {
 			_ = model.MarkGmailMessageProcessed(acc.UserID, dedupeKey)
 		}
 		return
 	}
-	if match, ok := MatchReply(acc.UserID, msg.From, msg.Subject, msg.Body, replyRefs, ownEmail); ok {
-		handleReply(acc.UserID, match, msg, acc.ID, ownEmail)
+
+	match, ok := MatchReply(acc.UserID, msg.From, msg.Subject, msg.Body, replyRefs, ownEmail)
+	if ok {
+		needsBody := forceReplyRecovery || model.ContactNeedsInboundBody(acc.UserID, match.ContactID)
+		if !already || needsBody {
+			handleReply(acc.UserID, match, msg, acc.ID, ownEmail)
+		}
 	}
-	if dedupeKey != "" {
+	if !already && dedupeKey != "" {
 		_ = model.MarkGmailMessageProcessed(acc.UserID, dedupeKey)
 	}
+}
+
+// RecoverContactReplyFromIMAP re-reads the mailbox for this contact's inbound reply
+// and upgrades stub conversation rows with the real MIME body.
+func RecoverContactReplyFromIMAP(userID, contactID int64) (recovered bool, err error) {
+	if userID <= 0 || contactID <= 0 {
+		return false, nil
+	}
+	c, _, err := model.GetContactForUser(contactID, userID)
+	if err != nil {
+		return false, err
+	}
+	wantFrom := strings.ToLower(strings.TrimSpace(c.Email))
+	if wantFrom == "" {
+		return false, nil
+	}
+
+	accounts, err := model.ListActiveSMTPAccountsForUser(userID)
+	if err != nil {
+		return false, err
+	}
+	// Prefer the seat that sent to this contact first.
+	if acctID, aErr := model.LatestSMTPAccountForContact(userID, contactID); aErr == nil && acctID > 0 {
+		ordered := make([]model.SMTPAccount, 0, len(accounts))
+		var preferred *model.SMTPAccount
+		for i := range accounts {
+			if accounts[i].ID == acctID {
+				preferred = &accounts[i]
+				continue
+			}
+			ordered = append(ordered, accounts[i])
+		}
+		if preferred != nil {
+			accounts = append([]model.SMTPAccount{*preferred}, ordered...)
+		}
+	}
+
+	for _, acc := range accounts {
+		if !shouldPollMailbox(acc) {
+			continue
+		}
+		prepareMailboxForPoll(&acc)
+		if acc.IMAPHost == "" || acc.IMAPUser == "" {
+			continue
+		}
+		ok, ferr := recoverReplyFromAccount(acc, wantFrom)
+		if ferr != nil {
+			log.Printf("IMAP recover contact %d via account %d: %v", contactID, acc.ID, ferr)
+			continue
+		}
+		if ok && !model.ContactNeedsInboundBody(userID, contactID) {
+			return true, nil
+		}
+		if ok {
+			recovered = true
+		}
+	}
+	if recovered && !model.ContactNeedsInboundBody(userID, contactID) {
+		return true, nil
+	}
+	return recovered && !model.ContactNeedsInboundBody(userID, contactID), nil
+}
+
+func recoverReplyFromAccount(acc model.SMTPAccount, wantFrom string) (bool, error) {
+	c, err := dialIMAP(acc)
+	if err != nil {
+		return false, err
+	}
+	defer c.Logout()
+
+	mbox, err := c.Select("INBOX", false)
+	if err != nil {
+		return false, err
+	}
+	if mbox.Messages == 0 {
+		return false, nil
+	}
+
+	from := uint32(1)
+	lookback := uint32(500)
+	if mbox.Messages > lookback {
+		from = mbox.Messages - lookback + 1
+	}
+	seqset := new(imap.SeqSet)
+	seqset.AddRange(from, mbox.Messages)
+
+	section := &imap.BodySectionName{}
+	items := []imap.FetchItem{imap.FetchEnvelope, section.FetchItem()}
+	messages := make(chan *imap.Message, 10)
+	done := make(chan error, 1)
+	go func() {
+		done <- c.Fetch(seqset, items, messages)
+	}()
+
+	ownEmail := acc.IMAPUser
+	if ownEmail == "" {
+		ownEmail = acc.SMTPUser
+	}
+
+	matched := false
+	for msg := range messages {
+		if msg == nil || msg.Envelope == nil {
+			continue
+		}
+		fromAddr := ""
+		if len(msg.Envelope.From) > 0 {
+			fromAddr = msg.Envelope.From[0].Address()
+		}
+		fromNorm := strings.ToLower(strings.Trim(strings.TrimSpace(fromAddr), "<>"))
+		if fromNorm != wantFrom {
+			continue
+		}
+		if IsBounceMessage(fromAddr, msg.Envelope.Subject, "") || IsAutoReplyMessage(fromAddr, msg.Envelope.Subject, "") {
+			continue
+		}
+		body := readIMAPMessageBody(msg, section)
+		inbox := inboxMessage{
+			From:      fromAddr,
+			Subject:   msg.Envelope.Subject,
+			Body:      body,
+			MessageID: msg.Envelope.MessageId,
+			InReplyTo: msg.Envelope.InReplyTo,
+			DedupeID:  normalizeMessageID(msg.Envelope.MessageId),
+		}
+		replyRefs := []string{}
+		if inbox.InReplyTo != "" {
+			replyRefs = append(replyRefs, inbox.InReplyTo)
+		}
+		match, ok := MatchReply(acc.UserID, inbox.From, inbox.Subject, inbox.Body, replyRefs, ownEmail)
+		if !ok {
+			// Forced recovery path: known From + recent send to this contact.
+			contact, err := model.FindContactByEmail(acc.UserID, wantFrom)
+			if err != nil {
+				continue
+			}
+			sendID, _ := model.FindRecentSendToContact(acc.UserID, contact.ID, 90)
+			if sendID == 0 {
+				continue
+			}
+			trackingID := ""
+			if detail, err := model.GetEmailSendDetail(sendID); err == nil {
+				trackingID = detail.TrackingID
+			}
+			match = ReplyMatch{ContactID: contact.ID, EmailSendID: sendID, TrackingID: trackingID}
+		}
+		handleReply(acc.UserID, match, inbox, acc.ID, ownEmail)
+		matched = true
+	}
+	if err := <-done; err != nil {
+		return matched, err
+	}
+	return matched, nil
 }
 
 func pollIMAPAccount(acc model.SMTPAccount) error {

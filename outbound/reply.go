@@ -282,7 +282,7 @@ func handleReply(userID int64, match ReplyMatch, msg inboxMessage, accountID int
 			toEmail = detail.SenderEmail
 		}
 	}
-	msgID, err := model.InsertConversationMessage(model.ConversationMessageInput{
+	msgID, err := model.UpsertInboundReply(model.ConversationMessageInput{
 		UserID:         userID,
 		ContactID:      match.ContactID,
 		SMTPAccountID:  accountID,
@@ -302,18 +302,22 @@ func handleReply(userID int64, match ReplyMatch, msg inboxMessage, accountID int
 		log.Printf("outbound: inbound conversation insert failed user=%d contact=%d: %v", userID, match.ContactID, err)
 	}
 
-	if eventExists {
-		// Event already recorded earlier — still ensure the conversation row exists above.
-		return
-	}
-
-	_ = model.MarkContactReplied(match.ContactID)
 	campaignID := int64(0)
 	if match.EmailSendID > 0 {
 		if detail, err := model.GetEmailSendDetail(match.EmailSendID); err == nil {
 			campaignID = detail.CampaignID
 		}
 	}
+
+	if eventExists {
+		// Backfill path: event was already recorded; still classify if we just got a real body.
+		if msgID > 0 && (strings.TrimSpace(parsed.Text) != "" || strings.TrimSpace(parsed.HTML) != "") {
+			go classifyReplySentimentAsync(userID, match.ContactID, campaignID, msgID, msg.Subject, parsed.Text)
+		}
+		return
+	}
+
+	_ = model.MarkContactReplied(match.ContactID)
 	model.ApplyStopOnReplyForContact(match.ContactID, campaignID)
 	if campaignID > 0 {
 		model.MaybeStopWorkflowOnHot(campaignID, match.ContactID)
