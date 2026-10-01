@@ -116,6 +116,8 @@
     </div>
 </div>
 
+{{template "campaign_deliverability" .analytics.Deliverability}}
+
 {{if .analytics.ShowPixelMetrics}}
 <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
     <div class="stat-card"><p class="stat-label">Unique opens</p><p class="stat-value text-blue-600">{{.analytics.Overview.UniqueOpens}}</p><p class="text-xs text-slate-500">{{printf "%.1f" .analytics.Overview.OpenRate}}%</p></div>
@@ -340,7 +342,7 @@
 const showPixel = {{if .analytics.ShowPixelMetrics}}true{{else}}false{{end}};
 const dailyStats = [
     {{range .analytics.DailyStats}}
-    { date: "{{.Date}}", sends: {{.Sends}}, opens: {{.Opens}}, clicks: {{.Clicks}}, replies: {{.Replies}}, positive: {{.PositiveReplies}}, negative: {{.NegativeReplies}} },
+    { date: "{{.Date}}", sends: {{.Sends}}, opens: {{.Opens}}, clicks: {{.Clicks}}, replies: {{.Replies}}, positive: {{.PositiveReplies}}, negative: {{.NegativeReplies}}, bounces: {{.Bounces}} },
     {{end}}
 ];
 const hourlyOpens = [{{range .analytics.HourlyOpens}}{{ .Count }},{{end}}];
@@ -353,6 +355,7 @@ const timelineDatasets = [
     { label: 'Replies', data: dailyStats.map(d => d.replies), borderColor: '#7c3aed', tension: 0.3 },
     { label: 'Positive', data: dailyStats.map(d => d.positive), borderColor: '#059669', tension: 0.3 },
     { label: 'Negative', data: dailyStats.map(d => d.negative), borderColor: '#dc2626', tension: 0.3 },
+    { label: 'Bounces', data: dailyStats.map(d => d.bounces), borderColor: '#ea580c', tension: 0.3 },
 ];
 if (showPixel) {
     timelineDatasets.splice(1, 0,

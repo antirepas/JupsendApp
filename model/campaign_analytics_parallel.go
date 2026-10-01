@@ -110,6 +110,10 @@ func GetCampaignAnalyticsFor(c Campaign, userID int64) (CampaignAnalytics, error
 		analytics.AccountBenchmark = GetAccountBenchmark(userID, 30)
 		return nil
 	})
+	g.Go(func() error {
+		analytics.Deliverability = loadCampaignDeliverability(campaignID, len(contactIDs), 0)
+		return nil
+	})
 
 	if err := g.Wait(); err != nil {
 		return CampaignAnalytics{}, err
@@ -344,17 +348,18 @@ func GetCampaignWorkflowAnalyticsFor(c Campaign, userID int64) (CampaignWorkflow
 	}
 
 	var (
-		wfInfo     WorkflowVersionInfo
-		overview   CampaignWorkflowOverview
-		engagement CampaignWorkflowEngagement
-		stepEng    map[string]stepEngagement
-		stoppedAt  map[string]int
-		edgeFlow   map[string]int
-		contacts   []CampaignWorkflowContactAnalytics
-		daily      []CampaignDailyStat
-		hourlyOpen []HourlyStat
-		hourlyClk  []HourlyStat
-		hourlyRep  []HourlyStat
+		wfInfo         WorkflowVersionInfo
+		overview       CampaignWorkflowOverview
+		engagement     CampaignWorkflowEngagement
+		stepEng        map[string]stepEngagement
+		stoppedAt      map[string]int
+		edgeFlow       map[string]int
+		contacts       []CampaignWorkflowContactAnalytics
+		daily          []CampaignDailyStat
+		hourlyOpen     []HourlyStat
+		hourlyClk      []HourlyStat
+		hourlyRep      []HourlyStat
+		deliverability CampaignDeliverability
 	)
 
 	g, _ := errgroup.WithContext(context.Background())
@@ -402,6 +407,10 @@ func GetCampaignWorkflowAnalyticsFor(c Campaign, userID int64) (CampaignWorkflow
 	})
 	g.Go(func() error {
 		hourlyRep = getCampaignHourlyReplyStats(campaignID)
+		return nil
+	})
+	g.Go(func() error {
+		deliverability = loadCampaignDeliverability(campaignID, len(contactIDs), 0)
 		return nil
 	})
 	if err := g.Wait(); err != nil {
@@ -474,6 +483,7 @@ func GetCampaignWorkflowAnalyticsFor(c Campaign, userID int64) (CampaignWorkflow
 		OpenTrackingEnabled:  c.OpenTrackingEnabled,
 		ClickTrackingEnabled: c.ClickTrackingEnabled,
 		ShowPixelMetrics:     c.OpenTrackingEnabled || c.ClickTrackingEnabled,
+		Deliverability:       deliverability,
 	}
 
 	sort.Slice(result.DailyStats, func(i, j int) bool {

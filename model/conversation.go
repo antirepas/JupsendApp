@@ -62,10 +62,14 @@ type ConversationMessageInput struct {
 }
 
 func truncateConversationBody(s string) string {
+	// IMAP bodies sometimes include Windows-1252 bytes (e.g. en-dash 0x96) that
+	// are invalid UTF-8 and reject Postgres inserts.
+	if !utf8.ValidString(s) {
+		s = strings.ToValidUTF8(s, "�")
+	}
 	if len(s) <= MaxConversationBody {
 		return s
 	}
-	// Avoid cutting mid-rune.
 	s = s[:MaxConversationBody]
 	for !utf8.ValidString(s) && len(s) > 0 {
 		s = s[:len(s)-1]
@@ -84,6 +88,9 @@ func InsertConversationMessage(in ConversationMessageInput) (int64, error) {
 	msgID := strings.TrimSpace(in.MessageID)
 	bodyText := truncateConversationBody(in.BodyText)
 	bodyHTML := truncateConversationBody(in.BodyHTML)
+	in.Subject = strings.ToValidUTF8(in.Subject, "�")
+	in.FromEmail = strings.ToValidUTF8(in.FromEmail, "�")
+	in.ToEmail = strings.ToValidUTF8(in.ToEmail, "�")
 
 	if msgID != "" {
 		var existing int64
@@ -413,6 +420,9 @@ func ContactNeedsInboundBody(userID, contactID int64) bool {
 // UpsertInboundReply inserts an inbound message, or upgrades a stub/empty inbound for this contact.
 func UpsertInboundReply(in ConversationMessageInput) (int64, error) {
 	in.Direction = ConversationInbound
+	in.Subject = strings.ToValidUTF8(in.Subject, "�")
+	in.FromEmail = strings.ToValidUTF8(in.FromEmail, "�")
+	in.ToEmail = strings.ToValidUTF8(in.ToEmail, "�")
 	bodyText := truncateConversationBody(in.BodyText)
 	bodyHTML := truncateConversationBody(in.BodyHTML)
 	if strings.TrimSpace(bodyText) == "" && strings.TrimSpace(bodyHTML) == "" {

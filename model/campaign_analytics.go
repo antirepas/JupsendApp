@@ -83,6 +83,7 @@ type CampaignDailyStat struct {
 	Replies          int
 	PositiveReplies  int
 	NegativeReplies  int
+	Bounces          int
 }
 
 type HourlyStat struct {
@@ -145,6 +146,8 @@ type CampaignAnalytics struct {
 	ClickTrackingEnabled bool
 	// ShowPixelMetrics is true when open/click tracking is enabled on the campaign.
 	ShowPixelMetrics bool
+	// Deliverability is bounce + opt-out health for mailbox reputation.
+	Deliverability CampaignDeliverability
 }
 
 func GetCampaignAnalytics(campaignID, userID int64) (CampaignAnalytics, error) {
@@ -462,6 +465,10 @@ func getCampaignDailyStats(campaignID int64) []CampaignDailyStat {
 	for d := range replyMap {
 		seen[d] = true
 	}
+	bounceMap := getCampaignDailyBounceStats(campaignID)
+	for d := range bounceMap {
+		seen[d] = true
+	}
 
 	var stats []CampaignDailyStat
 	for day := range seen {
@@ -473,6 +480,7 @@ func getCampaignDailyStats(campaignID int64) []CampaignDailyStat {
 			Replies:         replyMap[day],
 			PositiveReplies: posMap[day],
 			NegativeReplies: negMap[day],
+			Bounces:         bounceMap[day],
 		})
 	}
 	return stats

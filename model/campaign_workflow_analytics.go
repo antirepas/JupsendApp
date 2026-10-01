@@ -77,6 +77,7 @@ type CampaignWorkflowAnalytics struct {
 	ShowPixelMetrics bool
 	OpenTrackingEnabled  bool
 	ClickTrackingEnabled bool
+	Deliverability       CampaignDeliverability
 }
 
 func GetCampaignWorkflowAnalytics(campaignID, userID int64) (CampaignWorkflowAnalytics, error) {

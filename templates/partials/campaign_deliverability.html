@@ -1,0 +1,74 @@
+{{define "campaign_deliverability"}}
+<div class="card mb-8 {{if eq .Health "poor"}}border-l-4 border-red-500{{else if eq .Health "watch"}}border-l-4 border-amber-500{{else}}border-l-4 border-emerald-500{{end}}">
+    <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
+        <div>
+            <h3 class="card-title mb-1">Mailbox health</h3>
+            <p class="text-sm text-slate-500">Bounces and opt-outs from this campaign — critical for inbox reputation.</p>
+        </div>
+        <span class="badge {{if eq .Health "poor"}}badge-red{{else if eq .Health "watch"}}badge-amber{{else}}badge-green{{end}}">{{.HealthLabel}}</span>
+    </div>
+
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div class="rounded-lg {{if eq .Health "poor"}}bg-red-50{{else if eq .Health "watch"}}bg-amber-50{{else}}bg-emerald-50{{end}} px-4 py-3">
+            <p class="text-xs uppercase tracking-wide text-slate-600">Bounce rate</p>
+            <p class="text-2xl font-bold {{if eq .Health "poor"}}text-red-700{{else if eq .Health "watch"}}text-amber-700{{else}}text-emerald-700{{end}}">{{printf "%.1f" .BounceRate}}%</p>
+            <p class="text-xs text-slate-500 mt-1">{{.BounceSends}} bounced sends · {{.BounceContacts}} contacts</p>
+        </div>
+        <div class="rounded-lg bg-slate-50 px-4 py-3">
+            <p class="text-xs uppercase tracking-wide text-slate-600">Opt-outs</p>
+            <p class="text-2xl font-bold text-slate-800">{{.SuppressUnsub}}</p>
+            <p class="text-xs text-slate-500 mt-1">Unsubscribe link / preference</p>
+        </div>
+        <div class="rounded-lg bg-slate-50 px-4 py-3">
+            <p class="text-xs uppercase tracking-wide text-slate-600">Negative → suppressed</p>
+            <p class="text-2xl font-bold text-red-600">{{.SuppressNegative}}</p>
+            <p class="text-xs text-slate-500 mt-1">Stopped outreach automatically</p>
+        </div>
+        <div class="rounded-lg bg-slate-50 px-4 py-3">
+            <p class="text-xs uppercase tracking-wide text-slate-600">All suppressions</p>
+            <p class="text-2xl font-bold text-slate-800">{{.SuppressedTotal}}</p>
+            <p class="text-xs text-slate-500 mt-1">{{printf "%.1f" .SuppressRate}}% of enrolled
+                {{if or .SuppressBounce .SuppressManual .SuppressOther}}
+                · {{.SuppressBounce}} bounce · {{.SuppressManual}} manual{{if .SuppressOther}} · {{.SuppressOther}} other{{end}}
+                {{end}}
+            </p>
+        </div>
+    </div>
+
+    <p class="text-xs text-slate-500 mb-4">Industry guideline: keep bounce rate under 2%. At 5%+ pause sending and clean the list.</p>
+
+    {{if .Contacts}}
+    <h4 class="text-sm font-semibold text-slate-800 mb-2">Suppressed contacts in this campaign</h4>
+    <div class="overflow-x-auto">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Email</th>
+                    <th>Reason</th>
+                    <th>Detail</th>
+                    <th>When</th>
+                </tr>
+            </thead>
+            <tbody>
+            {{range .Contacts}}
+            <tr>
+                <td class="font-medium"><a href="/contacts/{{.ContactID}}" class="text-brand-600 hover:underline">{{.Email}}</a></td>
+                <td>
+                    {{if eq .Reason "bounce"}}<span class="badge badge-red">{{.ReasonLabel}}</span>
+                    {{else if eq .Reason "unsubscribe"}}<span class="badge badge-amber">{{.ReasonLabel}}</span>
+                    {{else if eq .Reason "negative_reply"}}<span class="badge badge-red">{{.ReasonLabel}}</span>
+                    {{else}}<span class="badge badge-gray">{{.ReasonLabel}}</span>{{end}}
+                </td>
+                <td class="text-sm text-slate-500 max-w-xs truncate" title="{{.SourceMessage}}">{{if .SourceMessage}}{{.SourceMessage}}{{else}}—{{end}}</td>
+                <td class="text-sm text-slate-500">{{.CreatedAt.Format "Jan 2, 15:04"}}</td>
+            </tr>
+            {{end}}
+            </tbody>
+        </table>
+    </div>
+    <p class="text-xs text-slate-500 mt-2"><a href="/contacts?tab=suppressions" class="text-brand-600">Manage all suppressions</a>{{if gt .SuppressedTotal 100}} · showing latest 100{{end}}</p>
+    {{else}}
+    <p class="text-sm text-slate-400 py-2">No suppressions from contacts in this campaign yet.</p>
+    {{end}}
+</div>
+{{end}}
