@@ -19,6 +19,7 @@
         </p>
     </div>
     <div class="flex gap-3 items-center flex-wrap justify-end">
+        <a href="/campaigns/{{.campaign.ID}}/sop" class="btn-secondary" title="Download a full SOP of this campaign’s strategy, workflow, and templates">Export SOP</a>
         <a href="/campaigns/{{.campaign.ID}}/analytics" class="btn-secondary">{{if .isWorkflowAB}}Analytics{{else if .isWorkflow}}Workflow analytics{{else}}Campaign analytics{{end}}</a>
         {{if and .isWorkflow .workflowTestReady}}
         <form method="POST" action="/campaigns/{{.campaign.ID}}/test-workflow" onsubmit="return confirm('Send all workflow emails to your account email now? Waits are skipped.');">

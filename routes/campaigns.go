@@ -1069,6 +1069,22 @@ func DownloadCampaignSample(ctx *gin.Context) {
 	ctx.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", data)
 }
 
+func DownloadCampaignSOP(ctx *gin.Context) {
+	campaignID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
+	if err != nil {
+		ctx.String(http.StatusBadRequest, "Invalid campaign ID")
+		return
+	}
+	md, filename, err := model.BuildCampaignSOPMarkdown(campaignID, mustUserID(ctx))
+	if err != nil {
+		ctx.String(http.StatusNotFound, "Campaign not found")
+		return
+	}
+	ctx.Header("Content-Type", "text/markdown; charset=utf-8")
+	ctx.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+	ctx.Data(http.StatusOK, "text/markdown; charset=utf-8", []byte(md))
+}
+
 func parseContactIDs(ctx *gin.Context) []int64 {
 	raw := ctx.PostFormArray("contact_ids")
 	var ids []int64
