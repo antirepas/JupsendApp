@@ -55,3 +55,41 @@ func TestConfigDurationSecondsHelpers(t *testing.T) {
 		t.Fatalf("days=%d", got)
 	}
 }
+
+// Regression: after wait#1 completes, wait#2 must arm a fresh full delay when entered
+// as active — not immediately advance because status is still "waiting" from wait#1.
+func TestWaitExecutorArmsEachWaitIndependently(t *testing.T) {
+	ex := WaitExecutor{}
+	wait1 := model.WorkflowNode{NodeKey: "wait1", NodeType: "action_wait", ConfigJSON: `{"duration_days":2}`}
+	wait2 := model.WorkflowNode{NodeKey: "wait2", NodeType: "action_wait", ConfigJSON: `{"duration_days":2}`}
+
+	// Resume wait1 (due).
+	waiting := model.WorkflowInstance{ID: 42, Status: "waiting", CurrentNodeKey: "wait1"}
+	past := time.Now().Add(-time.Minute)
+	waiting.NextWakeAt = &past
+	res1, err := ex.Execute(ExecutionContext{Instance: waiting, Node: wait1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res1.WakeAt != nil || res1.NextEdgeType != "default" {
+		t.Fatalf("wait1 resume: WakeAt=%v edge=%q", res1.WakeAt, res1.NextEdgeType)
+	}
+
+	// Engine sets status=active before entering wait2 (see ProcessInstance).
+	active := model.WorkflowInstance{ID: 42, Status: "active", CurrentNodeKey: "wait2"}
+	before := time.Now()
+	res2, err := ex.Execute(ExecutionContext{Instance: active, Node: wait2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res2.WakeAt == nil {
+		t.Fatal("wait2 must arm a new WakeAt")
+	}
+	minWake := before.Add(2*24*time.Hour - time.Minute)
+	if res2.WakeAt.Before(minWake) {
+		t.Fatalf("wait2 WakeAt too soon: got %v want around +2d", res2.WakeAt)
+	}
+	if res2.NextEdgeType != "" {
+		t.Fatalf("wait2 must not advance yet, edge=%q", res2.NextEdgeType)
+	}
+}

@@ -250,7 +250,7 @@ Email sends go through a **PostgreSQL-backed job queue** processed by a backgrou
 | `per_minute_limit` | 2 |
 | `daily_limit` | 50 |
 | `min_seconds_between_sends` | 30s |
-| Warmup | enabled: starts at 5/day, +5/day until target |
+| Warmup | usage-based: starts at plan floor; +increment only after using ~70% of that day’s cap |
 
 ### Retries
 

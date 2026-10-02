@@ -376,11 +376,11 @@
         <div>
             <h3 class="card-title mb-0">Sending warmup</h3>
             <p class="text-sm text-gray-500 mt-1">
-                {{if .CombinedLabel}}{{.CombinedLabel}}{{else if .SenderEmail}}{{.SenderEmail}}{{else}}Sending account{{end}}{{if and .Enabled (not .IsFullyWarmed)}} · ramping +{{.IncrementPerDay}}/day toward {{.TargetCap}}/day combined{{else if not .Enabled}} · fixed {{.TodayCap}}/day cap{{end}}
+                {{if .CombinedLabel}}{{.CombinedLabel}}{{else if .SenderEmail}}{{.SenderEmail}}{{else}}Sending account{{end}}{{if and .Enabled (not .IsFullyWarmed)}} · +{{.IncrementPerDay}}/day when you use ~70% of today’s cap (toward {{.TargetCap}}/day){{else if not .Enabled}} · fixed {{.TodayCap}}/day cap{{end}}
                 {{if gt .MailboxCount 1}} · <a href="/mailboxes" class="text-brand-600 font-medium">Manage seats</a>{{end}}
             </p>
             {{if and .Enabled (not .IsFullyWarmed)}}
-            <p class="text-xs text-amber-800 mt-2">Today’s real send room is <strong>{{.TodayRemaining}}</strong> across seats (warmup), not the full plan max yet.</p>
+            <p class="text-xs text-amber-800 mt-2">Today’s real send room is <strong>{{.TodayRemaining}}</strong> across seats (warmup). Idle days don’t raise the limit.</p>
             {{end}}
         </div>
         <div class="warmup-panel-actions">
@@ -406,13 +406,13 @@
         <div class="warmup-metric">
             <span class="warmup-metric-label">Daily limit</span>
             <span class="warmup-metric-value">{{.RampCap}}<span class="warmup-metric-of"> / {{.TargetCap}}</span></span>
-            <span class="warmup-metric-hint">{{if .IsFullyWarmed}}Full sending volume{{else if .Enabled}}Ramping up{{else}}No ramp active{{end}}</span>
+            <span class="warmup-metric-hint">{{if .IsFullyWarmed}}Full sending volume{{else if .Enabled}}Ramping on usage{{else}}No ramp active{{end}}</span>
         </div>
         {{if and .Enabled (not .IsFullyWarmed)}}
         <div class="warmup-metric">
-            <span class="warmup-metric-label">Full volume in</span>
+            <span class="warmup-metric-label">If you keep warming</span>
             <span class="warmup-metric-value">{{if gt .DaysRemaining 0}}~{{.DaysRemaining}}d{{else}}Soon{{end}}</span>
-            <span class="warmup-metric-hint">Day {{.DaysElapsed}} of {{.RampDaysTotal}}</span>
+            <span class="warmup-metric-hint">{{.DaysElapsed}} earned day{{if ne .DaysElapsed 1}}s{{end}} · {{.RampDaysTotal}} steps to full</span>
         </div>
         {{end}}
     </div>

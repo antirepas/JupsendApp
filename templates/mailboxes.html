@@ -76,7 +76,7 @@
     {{if gt .combinedWarmup.MailboxCount 1}}({{.combinedWarmup.MailboxCount}} mailboxes){{end}}
     {{if ge .combinedWarmup.TodayRemaining 1}} · {{.combinedWarmup.TodayRemaining}} remaining today{{end}}
     {{if and .combinedWarmup.Enabled (not .combinedWarmup.IsFullyWarmed)}}
-    <span class="block text-xs text-amber-800 mt-1">Warmup limits today’s volume below the full plan max ({{.combinedWarmup.TargetCap}}/day when fully warmed).</span>
+    <span class="block text-xs text-amber-800 mt-1">Warmup limits today’s volume ({{.combinedWarmup.TargetCap}}/day when fully warmed). Cap rises only when you use ~70% of a day’s limit — idle days don’t count.</span>
     {{end}}
   </p>
   {{end}}

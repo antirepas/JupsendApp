@@ -208,11 +208,9 @@ func pickNextNode(adj map[string][]model.WorkflowEdge, from, edgeType string) (s
 }
 
 func (e *Engine) ProcessDueInstances() {
-	if n, err := model.NudgeOverdueWaitInstances(200); err != nil {
-		log.Printf("workflow: nudge overdue waits: %v", err)
-	} else if n > 0 {
-		log.Printf("workflow: nudged %d overdue wait instance(s)", n)
-	}
+	// Only ClaimDueInstances (next_wake_at <= now). Do not nudge future waits using
+	// started_at / last-send heuristics — that skipped multi-step wait delays and
+	// blasted remaining follow-ups minutes apart after the first wait completed.
 	ids, err := model.ClaimDueInstances(50)
 	if err != nil {
 		log.Printf("workflow: claim error: %v", err)

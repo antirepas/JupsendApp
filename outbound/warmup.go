@@ -3,7 +3,6 @@ package outbound
 import (
 	"fmt"
 	"math"
-	"time"
 
 	"emailtracker.com/model"
 )
@@ -53,48 +52,7 @@ func scheduleDailyCap(account model.SMTPAccount) int {
 	if !account.WarmupEnabled {
 		return account.DailyLimit
 	}
-	target := account.WarmupTargetDailyCap
-	if target == 0 {
-		target = account.DailyLimit
-	}
-	startCap := account.WarmupDailyCap
-	if startCap == 0 {
-		startCap = model.DefaultWarmupDailyCap
-	}
-	increment := account.WarmupIncrementPerDay
-	if increment == 0 {
-		increment = model.DefaultWarmupIncrementPerDay
-	}
-	started := account.WarmupStartedAt
-	if started == nil {
-		// Defensive: treat as day 0 so we still enforce the start cap (EnsureWarmupStartedAt should stamp).
-		return minInt(target, startCap)
-	}
-	days := warmupCalendarDaysElapsed(*started, time.Now())
-	cap := startCap + days*increment
-	if cap > target {
-		cap = target
-	}
-	if account.DailyLimit > 0 && cap > account.DailyLimit {
-		cap = account.DailyLimit
-	}
-	return cap
-}
-
-// warmupCalendarDaysElapsed counts whole UTC calendar days since warmup started.
-// Using Hours()/24 kept the same ramp day across midnight until the start-time
-// anniversary (e.g. started Mon 15:00 still "day 0" Tue morning), so daily volume
-// looked stuck for a full calendar day.
-func warmupCalendarDaysElapsed(started, now time.Time) int {
-	s := started.UTC()
-	n := now.UTC()
-	startDay := time.Date(s.Year(), s.Month(), s.Day(), 0, 0, 0, 0, time.UTC)
-	nowDay := time.Date(n.Year(), n.Month(), n.Day(), 0, 0, 0, 0, time.UTC)
-	days := int(nowDay.Sub(startDay) / (24 * time.Hour))
-	if days < 0 {
-		return 0
-	}
-	return days
+	return model.EffectiveWarmupCurrentCap(account)
 }
 
 // ComputeWarmupProgress builds dashboard warmup metrics from an SMTP account.
@@ -156,11 +114,14 @@ func ComputeWarmupProgress(account model.SMTPAccount, hasAccount bool) WarmupPro
 	if p.TargetCap > p.StartCap {
 		p.RampDaysTotal = int(math.Ceil(float64(p.TargetCap-p.StartCap) / float64(p.IncrementPerDay)))
 	}
-	if account.WarmupStartedAt != nil {
-		p.DaysElapsed = warmupCalendarDaysElapsed(*account.WarmupStartedAt, time.Now())
+	p.DaysElapsed = account.WarmupEarnedDays
+	if p.DaysElapsed < 0 {
+		p.DaysElapsed = 0
 	}
-	p.DaysRemaining = p.RampDaysTotal - p.DaysElapsed
-	if p.DaysRemaining < 0 {
+	// Remaining steps if every future day earns a promotion.
+	if p.RampCap < p.TargetCap && p.IncrementPerDay > 0 {
+		p.DaysRemaining = int(math.Ceil(float64(p.TargetCap-p.RampCap) / float64(p.IncrementPerDay)))
+	} else {
 		p.DaysRemaining = 0
 	}
 	if p.IsFullyWarmed {
@@ -260,11 +221,4 @@ func ComputeCombinedWarmupProgress(accounts []model.SMTPAccount) WarmupProgress 
 		p.RampDaysTotal = maxRampDays
 	}
 	return p
-}
-
-func minInt(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }

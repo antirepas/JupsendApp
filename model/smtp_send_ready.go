@@ -23,11 +23,44 @@ func (a SMTPAccount) IsSendReady() bool {
 }
 
 func EnsureDailyCounterReset(accountID int64) error {
+	if db.DB == nil || accountID <= 0 {
+		return nil
+	}
+	acc, err := GetSMTPAccount(accountID)
+	if err != nil {
+		return err
+	}
 	today := time.Now().Format("2006-01-02")
-	_, err := db.Exec(`
-		UPDATE smtp_accounts SET sends_today = 0, sends_today_reset_at = ?
-		WHERE id = ? AND (sends_today_reset_at IS NULL OR sends_today_reset_at::date < CURRENT_DATE)
-	`, today, accountID)
+	if acc.SendsTodayResetAt != nil && acc.SendsTodayResetAt.Format("2006-01-02") == today {
+		return nil
+	}
+
+	currentCap := EffectiveWarmupCurrentCap(acc)
+	earnedDays := acc.WarmupEarnedDays
+	if acc.WarmupEnabled {
+		next, promoted := NextWarmupCapAfterDay(
+			currentCap,
+			acc.SendsToday,
+			WarmupIncrement(acc),
+			WarmupTargetCap(acc),
+			acc.DailyLimit,
+		)
+		currentCap = next
+		if promoted {
+			earnedDays++
+		}
+	}
+
+	_, err = db.Exec(`
+		UPDATE smtp_accounts SET
+			sends_today = 0,
+			sends_today_reset_at = ?,
+			warmup_current_cap = ?,
+			warmup_earned_days = ?,
+			updated_at = ?
+		WHERE id = ?
+		  AND (sends_today_reset_at IS NULL OR sends_today_reset_at::date < CURRENT_DATE)
+	`, today, currentCap, earnedDays, time.Now(), accountID)
 	return err
 }
 

@@ -43,12 +43,9 @@ func TestEffectiveDailyCap(t *testing.T) {
 		WarmupDailyCap:        5,
 		WarmupTargetDailyCap:  50,
 		WarmupIncrementPerDay: 5,
+		WarmupCurrentCap:      15,
 		DailyLimit:            50,
 	}
-	// Anchor to calendar midnights so the test is stable regardless of wall-clock time of day.
-	today := time.Now().UTC()
-	start := time.Date(today.Year(), today.Month(), today.Day(), 12, 0, 0, 0, time.UTC).Add(-48 * time.Hour)
-	acc.WarmupStartedAt = &start
 	cap := EffectiveDailyCap(acc)
 	if cap != 15 {
 		t.Fatalf("expected 15 got %d", cap)

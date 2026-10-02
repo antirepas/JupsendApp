@@ -215,11 +215,24 @@ func ApplyPlanLimitsToUser(userID int64, tier PlanTier) error {
 				WHEN ? = 0 THEN NULL
 				ELSE warmup_started_at
 			END,
+			warmup_current_cap=CASE
+				WHEN ? = 1 AND (COALESCE(warmup_enabled, 0) = 0 OR COALESCE(warmup_current_cap, 0) = 0) THEN ?
+				WHEN ? = 0 THEN 0
+				ELSE warmup_current_cap
+			END,
+			warmup_earned_days=CASE
+				WHEN ? = 1 AND COALESCE(warmup_enabled, 0) = 0 THEN 0
+				WHEN ? = 0 THEN 0
+				ELSE warmup_earned_days
+			END,
 			updated_at=?
 		WHERE user_id=? AND COALESCE(mailbox_source,'') <> ?
 	`, spec.DailyEmailCap, spec.PerMinuteLimit, spec.MinSecondsBetweenSends,
 		warmupEnabledInt, spec.WarmupDailyCap, spec.WarmupTargetDailyCap, spec.WarmupIncrementPerDay,
-		warmupEnabledInt, warmupStartedAt, warmupEnabledInt, now, userID, MailboxSourceShared); err != nil {
+		warmupEnabledInt, warmupStartedAt, warmupEnabledInt,
+		warmupEnabledInt, spec.WarmupDailyCap, warmupEnabledInt,
+		warmupEnabledInt, warmupEnabledInt,
+		now, userID, MailboxSourceShared); err != nil {
 		return err
 	}
 
@@ -234,6 +247,8 @@ func ApplyPlanLimitsToUser(userID int64, tier PlanTier) error {
 				warmup_target_daily_cap=0,
 				warmup_increment_per_day=0,
 				warmup_started_at=NULL,
+				warmup_current_cap=0,
+				warmup_earned_days=0,
 				status='active',
 				is_default=1,
 				updated_at=?

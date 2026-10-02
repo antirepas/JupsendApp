@@ -267,6 +267,8 @@ func runSchema() {
 			warmup_target_daily_cap INTEGER NOT NULL DEFAULT 50,
 			warmup_increment_per_day INTEGER NOT NULL DEFAULT 20,
 			warmup_started_at TIMESTAMPTZ,
+			warmup_current_cap INTEGER NOT NULL DEFAULT 0,
+			warmup_earned_days INTEGER NOT NULL DEFAULT 0,
 			sends_today INTEGER NOT NULL DEFAULT 0,
 			sends_today_reset_at DATE,
 			last_send_at TIMESTAMPTZ,

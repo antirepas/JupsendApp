@@ -418,13 +418,20 @@ func UpdateMailboxWarmupSettings(userID, mailboxID int64, enabled bool, dailyLim
 		if acc.WarmupTargetDailyCap <= 0 {
 			acc.WarmupTargetDailyCap = acc.DailyLimit
 		}
-		// Start (or restart) the ramp clock when turning warmup on, or when it was never stamped.
+		// Start (or restart) the ramp when turning warmup on, or when it was never stamped.
 		if !wasEnabled || acc.WarmupStartedAt == nil {
 			now := time.Now()
 			acc.WarmupStartedAt = &now
+			acc.WarmupCurrentCap = WarmupStartCap(acc)
+			acc.WarmupEarnedDays = 0
+		}
+		if acc.WarmupCurrentCap <= 0 {
+			acc.WarmupCurrentCap = WarmupStartCap(acc)
 		}
 	} else {
 		acc.WarmupStartedAt = nil
+		acc.WarmupCurrentCap = 0
+		acc.WarmupEarnedDays = 0
 	}
 	return UpdateSMTPAccount(acc)
 }

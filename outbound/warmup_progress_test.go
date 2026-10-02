@@ -15,6 +15,8 @@ func TestComputeWarmupProgressFullyWarmed(t *testing.T) {
 		WarmupDailyCap:        5,
 		WarmupTargetDailyCap:  50,
 		WarmupIncrementPerDay: 5,
+		WarmupCurrentCap:      50,
+		WarmupEarnedDays:      9,
 		DailyLimit:            50,
 		WarmupStartedAt:       &start,
 		SendsToday:            12,
@@ -38,13 +40,14 @@ func TestComputeWarmupProgressFullyWarmed(t *testing.T) {
 }
 
 func TestComputeWarmupProgressMidRamp(t *testing.T) {
-	today := time.Now().UTC()
-	start := time.Date(today.Year(), today.Month(), today.Day(), 12, 0, 0, 0, time.UTC).Add(-48 * time.Hour)
+	start := time.Now().Add(-48 * time.Hour)
 	acc := model.SMTPAccount{
 		WarmupEnabled:         true,
 		WarmupDailyCap:        5,
 		WarmupTargetDailyCap:  50,
 		WarmupIncrementPerDay: 5,
+		WarmupCurrentCap:      15,
+		WarmupEarnedDays:      2,
 		DailyLimit:            50,
 		WarmupStartedAt:       &start,
 		SendsToday:            3,
@@ -57,10 +60,13 @@ func TestComputeWarmupProgressMidRamp(t *testing.T) {
 		t.Fatalf("remaining %d", p.TodayRemaining)
 	}
 	if p.DaysElapsed != 2 {
-		t.Fatalf("days elapsed %d", p.DaysElapsed)
+		t.Fatalf("earned days %d", p.DaysElapsed)
 	}
 	if p.RampDaysTotal != 9 {
 		t.Fatalf("ramp days %d", p.RampDaysTotal)
+	}
+	if p.DaysRemaining != 7 { // (50-15)/5
+		t.Fatalf("days remaining %d want 7", p.DaysRemaining)
 	}
 	wantPct := float64(15-5) / float64(50-5) * 100
 	if mathAbs(p.OverallPct-wantPct) > 0.1 {
@@ -68,24 +74,25 @@ func TestComputeWarmupProgressMidRamp(t *testing.T) {
 	}
 }
 
-func TestScheduleDailyCapRampsWithStartedAt(t *testing.T) {
+func TestScheduleDailyCapUsesCurrentCapNotCalendar(t *testing.T) {
 	today := time.Now().UTC()
-	start := time.Date(today.Year(), today.Month(), today.Day(), 12, 0, 0, 0, time.UTC).Add(-3 * 24 * time.Hour)
+	start := time.Date(today.Year(), today.Month(), today.Day(), 12, 0, 0, 0, time.UTC).Add(-30 * 24 * time.Hour)
 	acc := model.SMTPAccount{
 		WarmupEnabled:         true,
 		WarmupDailyCap:        20,
 		WarmupTargetDailyCap:  100,
 		WarmupIncrementPerDay: 20,
+		WarmupCurrentCap:      40, // only one earned step despite 30 calendar days
 		DailyLimit:            250,
 		WarmupStartedAt:       &start,
 	}
 	cap := scheduleDailyCap(acc)
-	if cap != 80 { // 20 + 3*20
-		t.Fatalf("cap=%d want 80", cap)
+	if cap != 40 {
+		t.Fatalf("cap=%d want 40 (usage-based, not calendar)", cap)
 	}
 }
 
-func TestScheduleDailyCapNilStartedStaysAtStart(t *testing.T) {
+func TestScheduleDailyCapNilCurrentUsesStart(t *testing.T) {
 	acc := model.SMTPAccount{
 		WarmupEnabled:         true,
 		WarmupDailyCap:        20,
@@ -99,19 +106,21 @@ func TestScheduleDailyCapNilStartedStaysAtStart(t *testing.T) {
 	}
 }
 
-func TestWarmupCalendarDaysElapsedCrossesMidnight(t *testing.T) {
-	// Started yesterday afternoon; "now" is this morning — calendar day 1, not hour-based day 0.
-	started := time.Date(2026, 8, 11, 15, 0, 0, 0, time.UTC)
-	now := time.Date(2026, 8, 12, 9, 0, 0, 0, time.UTC)
-	if got := warmupCalendarDaysElapsed(started, now); got != 1 {
-		t.Fatalf("days=%d want 1 (calendar), Hours/24 would be 0", got)
+func TestIdleMailboxDoesNotAutoWarm(t *testing.T) {
+	// Calendar time alone must not raise the cap.
+	start := time.Now().Add(-14 * 24 * time.Hour)
+	acc := model.SMTPAccount{
+		WarmupEnabled:         true,
+		WarmupDailyCap:        20,
+		WarmupCurrentCap:      20,
+		WarmupTargetDailyCap:  100,
+		WarmupIncrementPerDay: 20,
+		DailyLimit:            250,
+		WarmupStartedAt:       &start,
+		SendsToday:            0,
 	}
-	if got := warmupCalendarDaysElapsed(started, started); got != 0 {
-		t.Fatalf("same day days=%d want 0", got)
-	}
-	twoDaysLater := time.Date(2026, 8, 13, 1, 0, 0, 0, time.UTC)
-	if got := warmupCalendarDaysElapsed(started, twoDaysLater); got != 2 {
-		t.Fatalf("days=%d want 2", got)
+	if got := EffectiveDailyCap(acc); got != 20 {
+		t.Fatalf("idle after 14d: cap=%d want 20", got)
 	}
 }
 

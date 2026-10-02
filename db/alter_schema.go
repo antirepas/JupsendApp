@@ -191,6 +191,26 @@ func runAlterSchema() {
 			smtp_account_id BIGINT NOT NULL REFERENCES smtp_accounts(id) ON DELETE CASCADE,
 			PRIMARY KEY (campaign_id, smtp_account_id)
 		)`,
+		// Usage-based warmup: persist earned cap; seed from former calendar ramp once.
+		`ALTER TABLE smtp_accounts ADD COLUMN IF NOT EXISTS warmup_current_cap INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE smtp_accounts ADD COLUMN IF NOT EXISTS warmup_earned_days INTEGER NOT NULL DEFAULT 0`,
+		`UPDATE smtp_accounts SET
+			warmup_current_cap = LEAST(
+				CASE
+					WHEN COALESCE(warmup_target_daily_cap, 0) > 0 THEN warmup_target_daily_cap
+					WHEN COALESCE(daily_limit, 0) > 0 THEN daily_limit
+					ELSE 50
+				END,
+				CASE WHEN COALESCE(warmup_daily_cap, 0) > 0 THEN warmup_daily_cap ELSE 20 END
+					+ GREATEST(0, (CURRENT_DATE - COALESCE(warmup_started_at::date, CURRENT_DATE)))
+						* CASE WHEN COALESCE(warmup_increment_per_day, 0) > 0 THEN warmup_increment_per_day ELSE 20 END
+			),
+			warmup_earned_days = GREATEST(0, (CURRENT_DATE - COALESCE(warmup_started_at::date, CURRENT_DATE)))
+		WHERE COALESCE(warmup_enabled, 0) = 1
+		  AND COALESCE(warmup_current_cap, 0) = 0
+		  AND warmup_started_at IS NOT NULL`,
+		`UPDATE smtp_accounts SET warmup_current_cap = CASE WHEN COALESCE(warmup_daily_cap, 0) > 0 THEN warmup_daily_cap ELSE 20 END
+		WHERE COALESCE(warmup_enabled, 0) = 1 AND COALESCE(warmup_current_cap, 0) = 0`,
 	}
 	for _, stmt := range alters {
 		if _, err := DB.Exec(stmt); err != nil {
