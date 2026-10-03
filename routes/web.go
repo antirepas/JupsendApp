@@ -225,21 +225,57 @@ func Dashboard(ctx *gin.Context) {
 	})
 }
 
+func templatesFolderQuery(ctx *gin.Context) string {
+	f := strings.TrimSpace(ctx.Query("folder"))
+	if f == "" {
+		f = strings.TrimSpace(ctx.PostForm("folder"))
+	}
+	if f == "" {
+		return "all"
+	}
+	return f
+}
+
+func templatesListRedirect(folder, success, errMsg string) string {
+	q := url.Values{}
+	if folder != "" && folder != "all" {
+		q.Set("folder", folder)
+	}
+	if success != "" {
+		q.Set("success", success)
+	}
+	if errMsg != "" {
+		q.Set("error", errMsg)
+	}
+	if len(q) == 0 {
+		return "/templates"
+	}
+	return "/templates?" + q.Encode()
+}
+
 func ListTemplatesPage(ctx *gin.Context) {
 	userID := mustUserID(ctx)
-	templates, err := model.ListTemplates(userID)
+	folder := templatesFolderQuery(ctx)
+	templates, err := model.ListTemplatesFiltered(userID, folder)
 	if err != nil {
 		log.Print(err)
-		ctx.HTML(http.StatusInternalServerError, "error.html", gin.H{"title": "Error", "active": "templates", "error": "Failed to load templates"})
+		ctx.Redirect(http.StatusFound, templatesListRedirect("all", "", "Folder not found"))
 		return
 	}
+	folders, _ := model.ListTemplateFolders(userID)
+	allCount, unfiledCount, _ := model.CountTemplatesForUser(userID)
 	ctx.HTML(http.StatusOK, "templates_list.html", gin.H{
-		"title":     "Templates",
-		"active":    "templates",
-		"templates": templates,
-		"playbook":  playbookTemplates(),
-		"success":   ctx.Query("success"),
-		"error":     ctx.Query("error"),
+		"title":         "Templates",
+		"active":        "templates",
+		"templates":     templates,
+		"folders":       folders,
+		"folder":        folder,
+		"allCount":      allCount,
+		"unfiledCount":  unfiledCount,
+		"showFolderCol": folder == "all",
+		"playbook":      playbookTemplates(),
+		"success":       ctx.Query("success"),
+		"error":         ctx.Query("error"),
 	})
 }
 
@@ -248,6 +284,15 @@ func NewTemplatePage(ctx *gin.Context) {
 	senderEmail, defaultSampleJSON := templateBuilderContext(userID)
 	contacts, _ := model.ListContacts(userID)
 	lists, _ := model.ListContactLists(userID)
+	folders, _ := model.ListTemplateFolders(userID)
+	defaultFolderID := int64(0)
+	if f := templatesFolderQuery(ctx); f != "all" && f != "unfiled" {
+		if id, err := strconv.ParseInt(f, 10, 64); err == nil && id > 0 {
+			if _, err := model.GetTemplateFolderForUser(id, userID); err == nil {
+				defaultFolderID = id
+			}
+		}
+	}
 	ctx.HTML(http.StatusOK, "templates_form.html", gin.H{
 		"title":             "New Template",
 		"active":            "templates",
@@ -257,6 +302,9 @@ func NewTemplatePage(ctx *gin.Context) {
 		"aiEnabled":         ai.Enabled(),
 		"contacts":          contacts,
 		"lists":             lists,
+		"folders":           folders,
+		"selectedFolderID":  defaultFolderID,
+		"folder":            templatesFolderQuery(ctx),
 	})
 }
 
@@ -265,9 +313,10 @@ func CreateTemplate(ctx *gin.Context) {
 	name := ctx.PostForm("name")
 	subject := ctx.PostForm("subject")
 	body := ctx.PostForm("body")
+	folderID := model.ParseFolderIDForm(ctx.PostForm("folder_id"))
 	variables := util.ExtractTemplateVariables(subject, body)
 
-	t := model.Template{Name: name, Subject: subject, Body: body}
+	t := model.Template{Name: name, Subject: subject, Body: body, FolderID: folderID}
 	tv := make([]model.TemplateVariable, len(variables))
 	for i, v := range variables {
 		tv[i] = model.TemplateVariable{Key: v}
@@ -279,7 +328,13 @@ func CreateTemplate(ctx *gin.Context) {
 		ctx.HTML(http.StatusInternalServerError, "error.html", gin.H{"title": "Error", "active": "templates", "error": "Failed to save template"})
 		return
 	}
-	ctx.Redirect(http.StatusFound, "/templates?success=Template+created")
+	redirFolder := "all"
+	if folderID > 0 {
+		redirFolder = strconv.FormatInt(folderID, 10)
+	} else if templatesFolderQuery(ctx) == "unfiled" {
+		redirFolder = "unfiled"
+	}
+	ctx.Redirect(http.StatusFound, templatesListRedirect(redirFolder, "Template created", ""))
 }
 
 func EditTemplatePage(ctx *gin.Context) {
@@ -300,6 +355,7 @@ func EditTemplatePage(ctx *gin.Context) {
 	senderEmail, defaultSampleJSON := templateBuilderContext(userID)
 	contacts, _ := model.ListContacts(userID)
 	lists, _ := model.ListContactLists(userID)
+	folders, _ := model.ListTemplateFolders(userID)
 	ctx.HTML(http.StatusOK, "templates_form.html", gin.H{
 		"title":             "Edit Template",
 		"active":            "templates",
@@ -310,6 +366,9 @@ func EditTemplatePage(ctx *gin.Context) {
 		"aiEnabled":         ai.Enabled(),
 		"contacts":          contacts,
 		"lists":             lists,
+		"folders":           folders,
+		"selectedFolderID":  t.FolderID,
+		"folder":            templatesFolderQuery(ctx),
 	})
 }
 
@@ -324,15 +383,59 @@ func UpdateTemplate(ctx *gin.Context) {
 	name := ctx.PostForm("name")
 	subject := ctx.PostForm("subject")
 	body := ctx.PostForm("body")
+	folderID := model.ParseFolderIDForm(ctx.PostForm("folder_id"))
 	variables := util.ExtractTemplateVariables(subject, body)
 
-	err = model.UpdateTemplate(id, userID, name, subject, body, variables)
+	err = model.UpdateTemplate(id, userID, name, subject, body, variables, folderID)
 	if err != nil {
 		log.Print(err)
 		ctx.HTML(http.StatusInternalServerError, "error.html", gin.H{"title": "Error", "active": "templates", "error": "Failed to update template"})
 		return
 	}
-	ctx.Redirect(http.StatusFound, "/templates?success=Template+updated")
+	redirFolder := "all"
+	if folderID > 0 {
+		redirFolder = strconv.FormatInt(folderID, 10)
+	}
+	ctx.Redirect(http.StatusFound, templatesListRedirect(redirFolder, "Template updated", ""))
+}
+
+func CreateTemplateFolder(ctx *gin.Context) {
+	userID := mustUserID(ctx)
+	name := ctx.PostForm("name")
+	id, err := model.CreateTemplateFolder(userID, name)
+	if err != nil {
+		ctx.Redirect(http.StatusFound, templatesListRedirect(templatesFolderQuery(ctx), "", err.Error()))
+		return
+	}
+	ctx.Redirect(http.StatusFound, templatesListRedirect(strconv.FormatInt(id, 10), "Folder created", ""))
+}
+
+func RenameTemplateFolder(ctx *gin.Context) {
+	userID := mustUserID(ctx)
+	id, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
+	if err != nil {
+		ctx.Redirect(http.StatusFound, templatesListRedirect("all", "", "Invalid folder"))
+		return
+	}
+	if err := model.RenameTemplateFolder(id, userID, ctx.PostForm("name")); err != nil {
+		ctx.Redirect(http.StatusFound, templatesListRedirect(strconv.FormatInt(id, 10), "", err.Error()))
+		return
+	}
+	ctx.Redirect(http.StatusFound, templatesListRedirect(strconv.FormatInt(id, 10), "Folder renamed", ""))
+}
+
+func DeleteTemplateFolder(ctx *gin.Context) {
+	userID := mustUserID(ctx)
+	id, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
+	if err != nil {
+		ctx.Redirect(http.StatusFound, templatesListRedirect("all", "", "Invalid folder"))
+		return
+	}
+	if err := model.DeleteTemplateFolder(id, userID); err != nil {
+		ctx.Redirect(http.StatusFound, templatesListRedirect(strconv.FormatInt(id, 10), "", "Could not delete folder"))
+		return
+	}
+	ctx.Redirect(http.StatusFound, templatesListRedirect("unfiled", "Folder deleted — templates moved to Unfiled", ""))
 }
 
 func InterestedContactsPage(ctx *gin.Context) {

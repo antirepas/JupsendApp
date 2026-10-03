@@ -22,12 +22,22 @@ func runSchema() {
 			created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 		)`,
 
+		`CREATE TABLE IF NOT EXISTS template_folders (
+			id BIGSERIAL PRIMARY KEY,
+			user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			name TEXT NOT NULL,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_template_folders_user_name
+			ON template_folders (user_id, lower(trim(name)))`,
+
 		`CREATE TABLE IF NOT EXISTS template (
 			id BIGSERIAL PRIMARY KEY,
 			user_id BIGINT REFERENCES users(id),
 			name TEXT,
 			subject TEXT,
-			body TEXT
+			body TEXT,
+			folder_id BIGINT REFERENCES template_folders(id) ON DELETE SET NULL
 		)`,
 
 		`CREATE TABLE IF NOT EXISTS template_variables (

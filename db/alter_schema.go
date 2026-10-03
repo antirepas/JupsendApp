@@ -211,6 +211,15 @@ func runAlterSchema() {
 		  AND warmup_started_at IS NOT NULL`,
 		`UPDATE smtp_accounts SET warmup_current_cap = CASE WHEN COALESCE(warmup_daily_cap, 0) > 0 THEN warmup_daily_cap ELSE 20 END
 		WHERE COALESCE(warmup_enabled, 0) = 1 AND COALESCE(warmup_current_cap, 0) = 0`,
+		`CREATE TABLE IF NOT EXISTS template_folders (
+			id BIGSERIAL PRIMARY KEY,
+			user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			name TEXT NOT NULL,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_template_folders_user_name
+			ON template_folders (user_id, lower(trim(name)))`,
+		`ALTER TABLE template ADD COLUMN IF NOT EXISTS folder_id BIGINT REFERENCES template_folders(id) ON DELETE SET NULL`,
 	}
 	for _, stmt := range alters {
 		if _, err := DB.Exec(stmt); err != nil {

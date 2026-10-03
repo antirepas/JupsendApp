@@ -10,51 +10,99 @@
 <div class="flex items-center justify-between mb-8">
     <div>
         <h2 class="text-2xl font-bold text-slate-900">Templates</h2>
-        <p class="text-slate-500 mt-1">Manage your email templates</p>
+        <p class="text-slate-500 mt-1">Organize templates into folders</p>
     </div>
-    <a href="/templates/new" class="btn-primary">New Template</a>
+    <a href="/templates/new{{if and .folder (ne .folder "all")}}?folder={{.folder}}{{end}}" class="btn-primary">New Template</a>
 </div>
 
 {{if .success}}<div class="alert-success mb-6">{{.success}}</div>{{end}}
 {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
 
-<div class="card overflow-hidden">
-    {{if .templates}}
-    <table class="data-table">
-        <thead>
-            <tr>
-                <th>Name</th>
-                <th>Subject</th>
-                <th>Variables</th>
-                <th class="text-right">Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {{range .templates}}
-            <tr>
-                <td class="font-medium">{{.Name}}</td>
-                <td class="text-slate-600">{{.Subject}}</td>
-                <td>
-                    {{if .Variables}}
-                    {{range .Variables}}<span class="badge badge-gray mr-1">{{.}}</span>{{end}}
-                    {{else}}<span class="text-slate-400">—</span>{{end}}
-                </td>
-                <td class="text-right space-x-3">
-                    <a href="/templates/{{.ID}}/edit" class="text-brand-600 text-sm font-medium">Edit</a>
-                    <form method="POST" action="/templates/{{.ID}}/delete" class="inline" onsubmit="return confirm('Delete this template?');">
-                        <button type="submit" class="text-red-600 text-sm font-medium">Delete</button>
-                    </form>
-                </td>
-            </tr>
+<div class="flex flex-col lg:flex-row gap-6">
+    <aside class="lg:w-56 shrink-0 space-y-3">
+        <nav class="card p-2 space-y-0.5">
+            <a href="/templates" class="tab-btn block w-full text-left {{if eq .folder "all"}}active{{end}}">
+                All <span class="text-slate-400 font-normal">({{.allCount}})</span>
+            </a>
+            <a href="/templates?folder=unfiled" class="tab-btn block w-full text-left {{if eq .folder "unfiled"}}active{{end}}">
+                Unfiled <span class="text-slate-400 font-normal">({{.unfiledCount}})</span>
+            </a>
+            {{range .folders}}
+            <a href="/templates?folder={{.ID}}" class="tab-btn block w-full text-left {{if eq (printf "%d" .ID) $.folder}}active{{end}}">
+                {{.Name}} <span class="text-slate-400 font-normal">({{.TemplateCount}})</span>
+            </a>
             {{end}}
-        </tbody>
-    </table>
-    {{else}}
-    <div class="empty-state">
-        <p>No templates yet.</p>
-        <a href="/templates/new" class="btn-primary mt-4">Create your first template</a>
+        </nav>
+
+        <form method="POST" action="/templates/folders" class="card p-3 space-y-2">
+            <label class="form-label" for="new-folder-name">New folder</label>
+            <input type="text" id="new-folder-name" name="name" class="form-input text-sm" placeholder="Folder name" required maxlength="120">
+            <button type="submit" class="btn-secondary btn-sm w-full">Create</button>
+        </form>
+
+        {{if and .folder (ne .folder "all") (ne .folder "unfiled")}}
+        <div class="card p-3 space-y-3">
+            <form method="POST" action="/templates/folders/{{.folder}}/rename" class="space-y-2">
+                <label class="form-label" for="rename-folder-name">Rename folder</label>
+                <input type="text" id="rename-folder-name" name="name" class="form-input text-sm" required maxlength="120"
+                    value="{{range .folders}}{{if eq (printf "%d" .ID) $.folder}}{{.Name}}{{end}}{{end}}">
+                <button type="submit" class="btn-secondary btn-sm w-full">Rename</button>
+            </form>
+            <form method="POST" action="/templates/folders/{{.folder}}/delete" onsubmit="return confirm('Delete this folder? Templates will move to Unfiled.');">
+                <button type="submit" class="text-red-600 text-sm font-medium w-full text-left">Delete folder</button>
+            </form>
+        </div>
+        {{end}}
+    </aside>
+
+    <div class="flex-1 min-w-0">
+        <div class="card overflow-hidden">
+            {{if .templates}}
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Subject</th>
+                        {{if .showFolderCol}}<th>Folder</th>{{end}}
+                        <th>Variables</th>
+                        <th class="text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range .templates}}
+                    <tr>
+                        <td class="font-medium">{{.Name}}</td>
+                        <td class="text-slate-600">{{.Subject}}</td>
+                        {{if $.showFolderCol}}
+                        <td>
+                            {{if .FolderName}}<span class="badge badge-gray">{{.FolderName}}</span>
+                            {{else}}<span class="text-slate-400">Unfiled</span>{{end}}
+                        </td>
+                        {{end}}
+                        <td>
+                            {{if .Variables}}
+                            {{range .Variables}}<span class="badge badge-gray mr-1">{{.}}</span>{{end}}
+                            {{else}}<span class="text-slate-400">—</span>{{end}}
+                        </td>
+                        <td class="text-right space-x-3">
+                            <a href="/templates/{{.ID}}/edit{{if and $.folder (ne $.folder "all")}}?folder={{$.folder}}{{end}}" class="text-brand-600 text-sm font-medium">Edit</a>
+                            <form method="POST" action="/templates/{{.ID}}/delete" class="inline" onsubmit="return confirm('Delete this template?');">
+                                <input type="hidden" name="folder" value="{{$.folder}}">
+                                <button type="submit" class="text-red-600 text-sm font-medium">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+            {{else}}
+            <div class="empty-state">
+                <p>{{if eq .folder "unfiled"}}No unfiled templates.{{else if eq .folder "all"}}No templates yet.{{else}}No templates in this folder.{{end}}</p>
+                <a href="/templates/new{{if and .folder (ne .folder "all")}}?folder={{.folder}}{{end}}" class="btn-primary mt-4">{{if eq .folder "all"}}Create your first template{{else}}Add a template{{end}}</a>
+            </div>
+            {{end}}
+        </div>
     </div>
-    {{end}}
 </div>
 {{template "page_playbook" .}}
 </div>
