@@ -85,7 +85,33 @@ func RedirectWorkflowsToLibrary(ctx *gin.Context) {
 }
 
 func RedirectContactsToLibrary(ctx *gin.Context) {
+	tab := ctx.DefaultQuery("tab", "all")
+	// Keep the import hub reachable — Library replaced the contacts index.
+	if tab == "import" {
+		ListContactsPage(ctx)
+		return
+	}
+	if tab == "suppressions" {
+		ctx.Redirect(http.StatusFound, "/contacts/suppressions")
+		return
+	}
 	ctx.Redirect(http.StatusFound, "/library")
+}
+
+// contactImportRedirectBase returns a path that already contains "?" for enqueueContactImport.
+func contactImportRedirectBase(ctx *gin.Context) string {
+	ret := strings.TrimSpace(ctx.PostForm("return_to"))
+	if ret != "" && strings.HasPrefix(ret, "/") && !strings.HasPrefix(ret, "//") {
+		if strings.Contains(ret, "?") {
+			return ret
+		}
+		return ret + "?"
+	}
+	listID, _ := strconv.ParseInt(ctx.PostForm("list_id"), 10, 64)
+	if listID > 0 {
+		return "/library/sheets/" + strconv.FormatInt(listID, 10) + "?"
+	}
+	return "/contacts?tab=import"
 }
 
 type libraryOpsBody struct {

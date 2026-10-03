@@ -128,9 +128,10 @@ func PreviewContactsPaste(ctx *gin.Context) {
 
 func UploadContacts(ctx *gin.Context) {
 	userID := mustUserID(ctx)
+	base := contactImportRedirectBase(ctx)
 	vars, err := templateVarsFromForm(ctx, userID)
 	if err != nil {
-		ctx.Redirect(http.StatusFound, "/contacts?tab=import&error=Invalid+template+selected")
+		ctx.Redirect(http.StatusFound, base+"&error=Invalid+template+selected")
 		return
 	}
 
@@ -138,13 +139,13 @@ func UploadContacts(ctx *gin.Context) {
 
 	file, err := ctx.FormFile("file")
 	if err != nil {
-		ctx.Redirect(http.StatusFound, "/contacts?tab=import&error=No+file+uploaded")
+		ctx.Redirect(http.StatusFound, base+"&error=No+file+uploaded")
 		return
 	}
 
 	src, err := file.Open()
 	if err != nil {
-		ctx.Redirect(http.StatusFound, "/contacts?tab=import&error=Could+not+read+uploaded+file")
+		ctx.Redirect(http.StatusFound, base+"&error=Could+not+read+uploaded+file")
 		return
 	}
 	defer src.Close()
@@ -157,7 +158,7 @@ func UploadContacts(ctx *gin.Context) {
 		rows, err = util.ParseContactsUpload(src, file.Filename, vars)
 	}
 	if err != nil {
-		ctx.Redirect(http.StatusFound, "/contacts?tab=import&error="+url.QueryEscape(err.Error()))
+		ctx.Redirect(http.StatusFound, base+"&error="+url.QueryEscape(err.Error()))
 		return
 	}
 
@@ -167,7 +168,7 @@ func UploadContacts(ctx *gin.Context) {
 	}
 
 	parsed := parseImportRowsFromExcel(rows, importKeys)
-	redir, _ := enqueueContactImport(userID, model.ImportKindContactsUpload, parsed, listID, importKeys, "/contacts?tab=import")
+	redir, _ := enqueueContactImport(userID, model.ImportKindContactsUpload, parsed, listID, importKeys, base)
 	ctx.Redirect(http.StatusFound, redir)
 }
 

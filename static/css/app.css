@@ -3968,6 +3968,18 @@ g.wf-edge-hovering .wf-edge-delete-btn {
     cursor: pointer;
 }
 .lib-fm-new-menu button:hover { background: #F1F5F9; color: #0F172A; }
+.lib-fm-new-menu-link {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 0.45rem 0.65rem;
+    border-radius: 0.35rem;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: #334155;
+    text-decoration: none;
+}
+.lib-fm-new-menu-link:hover { background: #F1F5F9; color: #0F172A; }
 .lib-fm-cols {
     grid-template-columns: 2.75rem minmax(9rem, 1.2fr) 6.5rem minmax(8rem, 1.2fr) !important;
 }
@@ -4083,6 +4095,27 @@ g.wf-edge-hovering .wf-edge-delete-btn {
     font-weight: 500;
 }
 .lib-sheet-toast.is-error { background: #B91C1C; }
+.lib-sheet-import {
+    padding: 0.75rem 1rem 0;
+}
+.lib-sheet-import.hidden { display: none; }
+.lib-sheet-import-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+    gap: 0.75rem;
+}
+.lib-sheet-import-card {
+    background: #fff;
+    border: 1px solid #E2E8F0;
+    border-radius: 0.75rem;
+    padding: 1rem 1.1rem;
+}
+.lib-sheet-empty-cell {
+    text-align: center;
+    padding: 2.5rem 1rem !important;
+    color: #64748B;
+    white-space: normal !important;
+}
 @media (max-width: 900px) {
     .tpl-fm-body { flex-direction: column; min-height: 0; }
     .tpl-fm-sidebar {

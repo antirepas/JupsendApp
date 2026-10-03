@@ -11,9 +11,10 @@
         <div>
             <a href="/library" class="text-sm text-brand-600 font-medium">← Library</a>
             <h2 class="lib-sheet-title">{{.list.Name}}</h2>
-            <p class="lib-sheet-sub">{{.total}} row{{if ne .total 1}}s{{end}} · click a cell to edit · Ctrl/⌘V to paste TSV</p>
+            <p class="lib-sheet-sub">{{.total}} row{{if ne .total 1}}s{{end}} · click a cell to edit · Import below or Ctrl/⌘V</p>
         </div>
         <div class="lib-sheet-actions">
+            <button type="button" class="btn-primary btn-sm" id="lib-sheet-toggle-import">Import contacts</button>
             <button type="button" class="btn-secondary btn-sm" id="lib-sheet-add-row">Add row</button>
             <button type="button" class="btn-secondary btn-sm" id="lib-sheet-del-rows" disabled>Remove selected</button>
             <a href="/contacts/lists/{{.list.ID}}" class="btn-secondary btn-sm">Classic view</a>
@@ -26,6 +27,57 @@
     {{if .success}}<div class="alert-success mx-4 mt-3">{{.success}}</div>{{end}}
     {{if .error}}<div class="alert-error mx-4 mt-3">{{.error}}</div>{{end}}
     <div class="lib-sheet-toast" id="lib-sheet-toast" hidden></div>
+
+    <div class="lib-sheet-import {{if or .success .error .importOpen}}{{else}}hidden{{end}}" id="lib-sheet-import">
+        <div class="lib-sheet-import-grid">
+            <div class="lib-sheet-import-card">
+                <h3 class="card-title mb-1">Paste from Excel / Sheets</h3>
+                <p class="text-sm text-slate-500 mb-3">Include a header row with <strong>email</strong>. Extra columns become variables on this sheet.</p>
+                <form method="POST" action="/contacts/paste" class="space-y-3" id="paste-import-form">
+                    <input type="hidden" name="list_id" value="{{.list.ID}}">
+                    <input type="hidden" name="return_to" value="/library/sheets/{{.list.ID}}">
+                    <input type="hidden" name="column_map" id="paste-column-map" value="">
+                    <div>
+                        <label class="form-label">Template (optional column guide)</label>
+                        <select name="template_id" id="paste-template" class="form-input">
+                            <option value="">Auto-detect</option>
+                            {{range .templates}}
+                            <option value="{{.ID}}">{{.Name}}</option>
+                            {{end}}
+                        </select>
+                    </div>
+                    <textarea name="paste" rows="5" class="form-input font-mono text-sm" placeholder="email,name,company&#10;john@acme.com,John,Acme" required></textarea>
+                    <button type="submit" class="btn-primary">Import pasted contacts</button>
+                </form>
+            </div>
+            <div class="lib-sheet-import-card">
+                <h3 class="card-title mb-1">Upload spreadsheet</h3>
+                <p class="text-sm text-slate-500 mb-3">.xlsx, .xls, or .csv — map columns after you choose a file.</p>
+                <form method="POST" action="/contacts/upload" enctype="multipart/form-data" class="space-y-3" id="excel-import-form">
+                    <input type="hidden" name="list_id" value="{{.list.ID}}">
+                    <input type="hidden" name="return_to" value="/library/sheets/{{.list.ID}}">
+                    <input type="hidden" name="column_map" id="excel-column-map" value="">
+                    <div>
+                        <label class="form-label">Template (optional)</label>
+                        <select name="template_id" id="import-template" class="form-input">
+                            <option value="">Auto-detect</option>
+                            {{range .templates}}
+                            <option value="{{.ID}}">{{.Name}}</option>
+                            {{end}}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label">File</label>
+                        <input type="file" name="file" id="import-file" class="form-input" accept=".xlsx,.xls,.csv" required>
+                    </div>
+                    <a href="/contacts/upload/sample" class="text-sm text-brand-600 font-medium">Download sample spreadsheet</a>
+                    <div>
+                        <button type="submit" class="btn-primary">Choose file &amp; map columns</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
 
     <div class="lib-sheet-scroll">
         <table class="lib-sheet-table" id="lib-sheet-table">
@@ -49,11 +101,19 @@
                     {{end}}
                     <td class="lib-sheet-link"><a href="/contacts/{{$row.ID}}" class="text-brand-600 text-xs font-medium">View</a></td>
                 </tr>
+                {{else}}
+                <tr class="lib-sheet-empty-row">
+                    <td colspan="20" class="lib-sheet-empty-cell">
+                        No contacts yet. <button type="button" class="text-brand-600 font-medium" id="lib-sheet-empty-import">Import contacts</button>
+                        or add a row.
+                    </td>
+                </tr>
                 {{end}}
             </tbody>
         </table>
     </div>
 </div>
+{{template "contact_import_map_modal.html" .}}
 <script src="{{assetURL "/static/js/library-sheet.js"}}" defer></script>
 </main>
 </div>

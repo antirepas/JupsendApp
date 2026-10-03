@@ -244,7 +244,7 @@ func RegisterRoutes(server *gin.Engine) {
 		authd.POST("/contacts/validate", ValidateContactsWeb)
 		authd.POST("/contacts/paste", PasteContactsQuick)
 		authd.POST("/contacts/paste/preview", PreviewContactsPaste)
-		authd.GET("/contacts/paste", func(c *gin.Context) { c.Redirect(http.StatusFound, "/contacts") })
+		authd.GET("/contacts/paste", func(c *gin.Context) { c.Redirect(http.StatusFound, "/contacts?tab=import") })
 		authd.GET("/contacts/upload/sample/:id", DownloadContactSample)
 		authd.GET("/contacts/upload/sample", DownloadContactSample)
 		authd.POST("/contacts/upload/preview", PreviewContactsUpload)

@@ -17,6 +17,7 @@
     paste: "",
     templateId: "",
     listId: "",
+    returnTo: "",
   };
 
   function escapeHtml(s) {
@@ -43,6 +44,7 @@
       paste: opts.paste || "",
       templateId: opts.templateId || "",
       listId: opts.listId || "",
+      returnTo: opts.returnTo || "",
     };
     renderRows();
     metaEl.textContent = state.headers.length
@@ -178,8 +180,9 @@
       fd.append("column_map", JSON.stringify(map));
       if (state.templateId) fd.append("template_id", state.templateId);
       if (state.listId) fd.append("list_id", state.listId);
+      if (state.returnTo) fd.append("return_to", state.returnTo);
       const res = await fetch("/contacts/upload", { method: "POST", body: fd, credentials: "same-origin", redirect: "follow" });
-      window.location.href = res.url || "/contacts?tab=import";
+      window.location.href = res.url || state.returnTo || "/contacts?tab=import";
       return;
     }
 
@@ -188,8 +191,9 @@
     fd.append("column_map", JSON.stringify(map));
     if (state.templateId) fd.append("template_id", state.templateId);
     if (state.listId) fd.append("list_id", state.listId);
+    if (state.returnTo) fd.append("return_to", state.returnTo);
     const res = await fetch("/contacts/paste", { method: "POST", body: fd, credentials: "same-origin", redirect: "follow" });
-    window.location.href = res.url || "/contacts?tab=import";
+    window.location.href = res.url || state.returnTo || "/contacts?tab=import";
   }
 
   modal.querySelectorAll("[data-import-map-dismiss]").forEach((el) => {
@@ -215,12 +219,14 @@
       alert(data.error || "Could not read file");
       return;
     }
-    const listSel = document.querySelector("#excel-import-form select[name=list_id]");
+    const listSel = document.querySelector("#excel-import-form [name=list_id]");
+    const returnTo = document.querySelector("#excel-import-form [name=return_to]");
     openModal(data, {
       mode: "file",
       file,
       templateId: tpl?.value || "",
       listId: listSel?.value || "",
+      returnTo: returnTo?.value || "",
       templateVars: data.template_vars || selectedTemplateVars(tpl),
     });
   }
@@ -251,12 +257,14 @@
       const res = await fetch("/contacts/paste/preview", { method: "POST", body: fd, credentials: "same-origin" });
       const data = await res.json();
       if (res.ok && data.headered) {
-        const listSel = pasteForm.querySelector("select[name=list_id]");
+        const listSel = pasteForm.querySelector("[name=list_id]");
+        const returnTo = pasteForm.querySelector("[name=return_to]");
         openModal(data, {
           mode: "paste",
           paste,
           templateId: tpl?.value || "",
           listId: listSel?.value || "",
+          returnTo: returnTo?.value || "",
           templateVars: data.template_vars || selectedTemplateVars(tpl),
         });
         return;

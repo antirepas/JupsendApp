@@ -31,15 +31,19 @@ func LibrarySheetPage(ctx *gin.Context) {
 		ctx.HTML(http.StatusInternalServerError, "error.html", gin.H{"title": "Error", "active": "library", "error": "Failed to load sheet"})
 		return
 	}
+	templates, _ := model.ListTemplatePickerItems(userID)
+	importOpen := ctx.Query("import") == "1"
 	ctx.HTML(http.StatusOK, "library_sheet.html", gin.H{
-		"title":    list.Name,
-		"active":   "library",
-		"list":     list,
-		"schema":   schema,
-		"rows":     page.Items,
-		"total":    page.Total,
-		"success":  ctx.Query("success"),
-		"error":    ctx.Query("error"),
+		"title":      list.Name,
+		"active":     "library",
+		"list":       list,
+		"schema":     schema,
+		"rows":       page.Items,
+		"total":      page.Total,
+		"templates":  templates,
+		"importOpen": importOpen,
+		"success":    ctx.Query("success"),
+		"error":      ctx.Query("error"),
 	})
 }
 

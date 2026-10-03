@@ -513,8 +513,8 @@ func ListContactsPage(ctx *gin.Context) {
 	hasNext := page < contactPage.TotalPages
 
 	ctx.HTML(http.StatusOK, "contacts_list.html", gin.H{
-		"title":            "Contacts",
-		"active":           "contacts",
+		"title":            "Import contacts",
+		"active":           "library",
 		"tab":              tab,
 		"contacts":         contactPage.Items,
 		"allContacts":      allContacts,
@@ -600,10 +600,11 @@ func PasteContactsQuick(ctx *gin.Context) {
 
 	colMap := parseColumnMapForm(ctx)
 	var parsed []model.ImportContactRow
+	base := contactImportRedirectBase(ctx)
 	if len(colMap) > 0 {
 		utilRows, err := util.ParseContactPasteWithMap(paste, colMap)
 		if err != nil {
-			ctx.Redirect(http.StatusFound, "/contacts?tab=import&error="+url.QueryEscape(err.Error()))
+			ctx.Redirect(http.StatusFound, base+"&error="+url.QueryEscape(err.Error()))
 			return
 		}
 		parsed = parseImportRowsFromExcel(utilRows, nil)
@@ -616,7 +617,7 @@ func PasteContactsQuick(ctx *gin.Context) {
 		importKeys = keysFromImportRowsParsed(parsed)
 	}
 
-	redir, _ := enqueueContactImport(userID, model.ImportKindContactsPaste, parsed, listID, importKeys, "/contacts?tab=import")
+	redir, _ := enqueueContactImport(userID, model.ImportKindContactsPaste, parsed, listID, importKeys, base)
 	ctx.Redirect(http.StatusFound, redir)
 }
 

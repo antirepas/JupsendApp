@@ -9,20 +9,19 @@
 <div class="max-w-6xl mx-auto p-8">
 <div class="flex items-center justify-between mb-6">
     <div>
-        <h2 class="text-2xl font-bold text-charcoal">Contacts</h2>
-        <p class="text-gray-500 mt-1 text-sm">Manage recipients, lists, and imports</p>
+        <h2 class="text-2xl font-bold text-charcoal">Import contacts</h2>
+        <p class="text-gray-500 mt-1 text-sm">Paste or upload into a contact sheet in your Library</p>
     </div>
-    <a href="/contacts/new" class="btn-primary">New contact</a>
+    <a href="/library" class="btn-secondary">← Library</a>
 </div>
 
 {{if .success}}<div class="alert-success mb-6">{{.success}}</div>{{end}}
 {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
 
 <div class="flex gap-1 border-b border-gray-200 mb-6" id="contacts-tabs">
-    <a href="/contacts?tab=all" class="tab-btn {{if or (eq .tab "all") (eq .tab "")}}active{{end}}">All contacts</a>
+    <a href="/library" class="tab-btn">Library</a>
     <a href="/contacts?tab=import" class="tab-btn {{if eq .tab "import"}}active{{end}}">Import</a>
-    <a href="/contacts?tab=lists" class="tab-btn {{if eq .tab "lists"}}active{{end}}">Lists</a>
-    <a href="/contacts?tab=suppressions" class="tab-btn {{if eq .tab "suppressions"}}active{{end}}">Suppressions</a>
+    <a href="/contacts/suppressions" class="tab-btn">Suppressions</a>
 </div>
 
 {{if or (eq .tab "all") (eq .tab "")}}
@@ -230,12 +229,12 @@
             <div>
                 <label class="form-label">Add to list (optional)</label>
                 <select name="list_id" class="form-input">
-                    <option value="">No list</option>
+                    <option value="">No list (import only)</option>
                     {{range .lists}}
                     <option value="{{.ID}}">{{.Name}}</option>
                     {{end}}
                 </select>
-                <p class="form-hint">List members must share the same variable names.</p>
+                <p class="form-hint">Lists are contact sheets in Library. Prefer importing from a sheet so rows land there.</p>
             </div>
         </div>
         <div id="import-preview" class="hidden rounded-lg border border-gray-200 bg-gray-50 p-4">

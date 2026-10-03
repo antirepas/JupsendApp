@@ -121,6 +121,31 @@
     });
   }
 
+  function showImport() {
+    var panel = document.getElementById("lib-sheet-import");
+    if (!panel) return;
+    panel.classList.remove("hidden");
+    var ta = panel.querySelector("textarea[name=paste]");
+    if (ta) ta.focus();
+  }
+  var importToggle = document.getElementById("lib-sheet-toggle-import");
+  if (importToggle) {
+    importToggle.addEventListener("click", function () {
+      var panel = document.getElementById("lib-sheet-import");
+      if (!panel) return;
+      if (panel.classList.contains("hidden")) showImport();
+      else panel.classList.add("hidden");
+    });
+  }
+  var emptyImport = document.getElementById("lib-sheet-empty-import");
+  if (emptyImport) emptyImport.addEventListener("click", showImport);
+
+  // Auto-open import when flash messages are present (after import redirect).
+  if (root.querySelector(".alert-success, .alert-error")) {
+    var panel = document.getElementById("lib-sheet-import");
+    if (panel) panel.classList.remove("hidden");
+  }
+
   if (delBtn) {
     delBtn.addEventListener("click", function () {
       var ids = selectedIDs();
