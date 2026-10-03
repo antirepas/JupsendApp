@@ -287,7 +287,6 @@ func ListTemplatesPage(ctx *gin.Context) {
 		"allCount":      allCount,
 		"unfiledCount":  unfiledCount,
 		"showFolderCol": folder == "all",
-		"playbook":      playbookTemplates(),
 		"success":       ctx.Query("success"),
 		"error":         ctx.Query("error"),
 	})

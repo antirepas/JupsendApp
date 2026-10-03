@@ -3770,7 +3770,7 @@ g.wf-edge-hovering .wf-edge-delete-btn {
 .tpl-fm-list-head,
 .tpl-fm-row {
     display: grid;
-    grid-template-columns: 2rem minmax(10rem, 1.2fr) minmax(8rem, 1.4fr) minmax(6rem, 0.9fr);
+    grid-template-columns: 2.75rem minmax(10rem, 1.2fr) minmax(8rem, 1.4fr) minmax(6rem, 0.9fr);
     gap: 0.75rem;
     align-items: center;
     padding: 0.55rem 0.65rem;
@@ -3791,7 +3791,7 @@ g.wf-edge-hovering .wf-edge-delete-btn {
 }
 .tpl-fm-list:has(.tpl-fm-col-folder) .tpl-fm-list-head,
 .tpl-fm-list:has(.tpl-fm-col-folder) .tpl-fm-row {
-    grid-template-columns: 2rem minmax(9rem, 1fr) minmax(8rem, 1.2fr) minmax(5rem, 0.7fr) minmax(6rem, 0.9fr);
+    grid-template-columns: 2.75rem minmax(9rem, 1fr) minmax(8rem, 1.2fr) minmax(5rem, 0.7fr) minmax(6rem, 0.9fr);
 }
 .tpl-fm-row {
     cursor: default;
@@ -3852,11 +3852,28 @@ g.wf-edge-hovering .wf-edge-delete-btn {
     white-space: nowrap;
 }
 .tpl-fm-muted { color: #CBD5E1; }
+.tpl-fm-col-check {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    align-self: stretch;
+    margin: -0.35rem 0;
+    min-height: 2.25rem;
+    cursor: pointer;
+    border-radius: 0.35rem;
+}
+.tpl-fm-col-check:hover {
+    background: rgba(15, 23, 42, 0.04);
+}
+.tpl-fm-row.is-selected .tpl-fm-col-check:hover {
+    background: rgba(16, 185, 129, 0.12);
+}
 .tpl-fm-col-check input {
-    width: 0.95rem;
-    height: 0.95rem;
+    width: 1.1rem;
+    height: 1.1rem;
     accent-color: #10B981;
     cursor: pointer;
+    pointer-events: none; /* whole cell handles clicks */
 }
 .tpl-fm-rename-input {
     width: 100%;
@@ -3935,7 +3952,7 @@ g.wf-edge-hovering .wf-edge-delete-btn {
     .tpl-fm-row,
     .tpl-fm-list:has(.tpl-fm-col-folder) .tpl-fm-list-head,
     .tpl-fm-list:has(.tpl-fm-col-folder) .tpl-fm-row {
-        grid-template-columns: 2rem 1fr;
+        grid-template-columns: 2.75rem 1fr;
     }
     .tpl-fm-col-subject,
     .tpl-fm-col-folder,

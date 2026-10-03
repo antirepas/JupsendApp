@@ -12,7 +12,8 @@
   var clipboardEl = document.getElementById("tpl-fm-clipboard");
   var selectAll = document.getElementById("tpl-fm-select-all");
   var selected = new Set();
-  var lastIndex = -1;
+  var lastIndex = -1; // selection anchor
+  var focusIndex = -1; // keyboard / range end
   var renaming = false;
 
   function rows() {
@@ -354,44 +355,76 @@
       });
   }
 
-  // Selection
+  // Selection — checkbox column always toggles; Ctrl/⌘ click toggles; Shift extends.
+  // Native checkbox click is prevented so it can't fight our selected Set.
   if (list) {
     list.addEventListener("mousedown", function (e) {
+      if (e.button !== 0) return;
       var row = e.target.closest(".tpl-fm-row");
       if (!row || e.target.closest(".tpl-fm-rename-input")) return;
       var id = row.getAttribute("data-id");
       var idx = rows().indexOf(row);
-      var isCheck = e.target.classList.contains("tpl-fm-check");
+      var checkCol = e.target.closest(".tpl-fm-col-check");
+
+      if (checkCol) {
+        e.preventDefault();
+        if (e.shiftKey && lastIndex >= 0) {
+          selectRange(lastIndex, idx);
+          focusIndex = idx;
+        } else {
+          toggleSelect(id);
+          lastIndex = idx;
+          focusIndex = idx;
+        }
+        return;
+      }
+
       if (e.shiftKey && lastIndex >= 0) {
         e.preventDefault();
         selectRange(lastIndex, idx);
-      } else if (e.metaKey || e.ctrlKey || isCheck) {
-        if (isCheck) e.stopPropagation();
+        focusIndex = idx;
+        return;
+      }
+      if (e.metaKey || e.ctrlKey) {
+        e.preventDefault();
         toggleSelect(id);
         lastIndex = idx;
-      } else {
-        selectOnly(id);
-        lastIndex = idx;
+        focusIndex = idx;
+        return;
       }
+      // Keep multi-selection when grabbing an already-selected row (for drag).
+      if (selected.has(id) && selected.size > 1) {
+        focusIndex = idx;
+        return;
+      }
+      selectOnly(id);
+      lastIndex = idx;
+      focusIndex = idx;
     });
 
     list.addEventListener("dblclick", function (e) {
       var row = e.target.closest(".tpl-fm-row");
-      if (!row || e.target.closest("input")) return;
+      if (!row || e.target.closest(".tpl-fm-col-check") || e.target.closest("input")) return;
       selectOnly(row.getAttribute("data-id"));
       doOpen();
     });
   }
 
   if (selectAll) {
-    selectAll.addEventListener("change", function () {
-      if (selectAll.checked) {
+    selectAll.addEventListener("click", function (e) {
+      e.preventDefault();
+      var all = rows();
+      if (selected.size === all.length && all.length > 0) {
         selected.clear();
-        rows().forEach(function (r) {
-          selected.add(r.getAttribute("data-id"));
-        });
       } else {
         selected.clear();
+        all.forEach(function (r) {
+          selected.add(r.getAttribute("data-id"));
+        });
+        if (all.length) {
+          lastIndex = 0;
+          focusIndex = all.length - 1;
+        }
       }
       updateChrome();
     });
@@ -589,7 +622,36 @@
       rows().forEach(function (r) {
         selected.add(r.getAttribute("data-id"));
       });
+      if (rows().length) lastIndex = 0;
       updateChrome();
+    } else if (e.key === " " || e.key === "Spacebar") {
+      var spaceIdx = focusIndex >= 0 ? focusIndex : lastIndex;
+      if (spaceIdx >= 0 && rows()[spaceIdx]) {
+        e.preventDefault();
+        toggleSelect(rows()[spaceIdx].getAttribute("data-id"));
+        lastIndex = spaceIdx;
+        focusIndex = spaceIdx;
+      }
+    } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      var allRows = rows();
+      if (!allRows.length) return;
+      e.preventDefault();
+      var cur = focusIndex >= 0 ? focusIndex : lastIndex >= 0 ? lastIndex : -1;
+      var next =
+        e.key === "ArrowDown"
+          ? Math.min(allRows.length - 1, cur + 1)
+          : Math.max(0, cur < 0 ? 0 : cur - 1);
+      if (e.shiftKey) {
+        if (lastIndex < 0) lastIndex = next;
+        selectRange(lastIndex, next);
+        focusIndex = next;
+        allRows[next].focus({ preventScroll: false });
+      } else {
+        selectOnly(allRows[next].getAttribute("data-id"));
+        lastIndex = next;
+        focusIndex = next;
+        allRows[next].focus({ preventScroll: false });
+      }
     } else if (e.key === "F2") {
       e.preventDefault();
       startRename();
