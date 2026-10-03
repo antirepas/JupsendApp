@@ -343,6 +343,7 @@ func ListContactsInListPage(listID, userID int64, f ListMembersFilter) (ListMemb
 			row.RepliedAt = &t
 		}
 		row.Suppressed = suppressed
+		row.Variables = map[string]string{}
 		ids = append(ids, row.ID)
 		out.Items = append(out.Items, row)
 	}

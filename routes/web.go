@@ -308,7 +308,7 @@ func NewTemplatePage(ctx *gin.Context) {
 	}
 	ctx.HTML(http.StatusOK, "templates_form.html", gin.H{
 		"title":             "New Template",
-		"active":            "templates",
+		"active":            "library",
 		"isNew":             true,
 		"senderEmail":       senderEmail,
 		"defaultSampleJSON": defaultSampleJSON,
@@ -347,7 +347,7 @@ func CreateTemplate(ctx *gin.Context) {
 	} else if templatesFolderQuery(ctx) == "unfiled" {
 		redirFolder = "unfiled"
 	}
-	ctx.Redirect(http.StatusFound, templatesListRedirect(redirFolder, "Template created", ""))
+	ctx.Redirect(http.StatusFound, libraryListRedirect(redirFolder, "Template created", ""))
 }
 
 func EditTemplatePage(ctx *gin.Context) {
@@ -371,7 +371,7 @@ func EditTemplatePage(ctx *gin.Context) {
 	folders, _ := model.ListTemplateFolders(userID)
 	ctx.HTML(http.StatusOK, "templates_form.html", gin.H{
 		"title":             "Edit Template",
-		"active":            "templates",
+		"active":            "library",
 		"isNew":             false,
 		"template":          t,
 		"senderEmail":       senderEmail,
@@ -409,7 +409,7 @@ func UpdateTemplate(ctx *gin.Context) {
 	if folderID > 0 {
 		redirFolder = strconv.FormatInt(folderID, 10)
 	}
-	ctx.Redirect(http.StatusFound, templatesListRedirect(redirFolder, "Template updated", ""))
+	ctx.Redirect(http.StatusFound, libraryListRedirect(redirFolder, "Template updated", ""))
 }
 
 func CreateTemplateFolder(ctx *gin.Context) {

@@ -22,14 +22,14 @@ func runSchema() {
 			created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 		)`,
 
-		`CREATE TABLE IF NOT EXISTS template_folders (
+		`CREATE TABLE IF NOT EXISTS library_folders (
 			id BIGSERIAL PRIMARY KEY,
 			user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 			name TEXT NOT NULL,
 			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 		)`,
-		`CREATE UNIQUE INDEX IF NOT EXISTS idx_template_folders_user_name
-			ON template_folders (user_id, lower(trim(name)))`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_library_folders_user_name
+			ON library_folders (user_id, lower(trim(name)))`,
 
 		`CREATE TABLE IF NOT EXISTS template (
 			id BIGSERIAL PRIMARY KEY,
@@ -37,7 +37,7 @@ func runSchema() {
 			name TEXT,
 			subject TEXT,
 			body TEXT,
-			folder_id BIGINT REFERENCES template_folders(id) ON DELETE SET NULL
+			folder_id BIGINT REFERENCES library_folders(id) ON DELETE SET NULL
 		)`,
 
 		`CREATE TABLE IF NOT EXISTS template_variables (
@@ -57,6 +57,7 @@ func runSchema() {
 			id BIGSERIAL PRIMARY KEY,
 			user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 			name TEXT NOT NULL,
+			folder_id BIGINT REFERENCES library_folders(id) ON DELETE SET NULL,
 			created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 		)`,
 
@@ -171,6 +172,7 @@ func runSchema() {
 			description TEXT DEFAULT '',
 			current_version_id BIGINT,
 			status TEXT NOT NULL DEFAULT 'active',
+			folder_id BIGINT REFERENCES library_folders(id) ON DELETE SET NULL,
 			created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 		)`,

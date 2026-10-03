@@ -1,0 +1,62 @@
+{{define "library_sheet.html"}}
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>{{template "head" .}}</head>
+<body class="h-full bg-ivory text-charcoal">
+<div class="flex h-full">
+{{template "sidebar" .}}
+<main class="flex-1 overflow-hidden flex flex-col min-h-0">
+<div class="lib-sheet" id="lib-sheet" data-list-id="{{.list.ID}}">
+    <header class="lib-sheet-header">
+        <div>
+            <a href="/library" class="text-sm text-brand-600 font-medium">← Library</a>
+            <h2 class="lib-sheet-title">{{.list.Name}}</h2>
+            <p class="lib-sheet-sub">{{.total}} row{{if ne .total 1}}s{{end}} · click a cell to edit · Ctrl/⌘V to paste TSV</p>
+        </div>
+        <div class="lib-sheet-actions">
+            <button type="button" class="btn-secondary btn-sm" id="lib-sheet-add-row">Add row</button>
+            <button type="button" class="btn-secondary btn-sm" id="lib-sheet-del-rows" disabled>Remove selected</button>
+            <a href="/contacts/lists/{{.list.ID}}" class="btn-secondary btn-sm">Classic view</a>
+            <form method="POST" action="/contacts/lists/{{.list.ID}}/verify" class="inline" onsubmit="return confirm('Verify emails? Uses 1 AI credit each.');">
+                <input type="hidden" name="only_unverified" value="1">
+                <button type="submit" class="btn-secondary btn-sm">Verify emails</button>
+            </form>
+        </div>
+    </header>
+    {{if .success}}<div class="alert-success mx-4 mt-3">{{.success}}</div>{{end}}
+    {{if .error}}<div class="alert-error mx-4 mt-3">{{.error}}</div>{{end}}
+    <div class="lib-sheet-toast" id="lib-sheet-toast" hidden></div>
+
+    <div class="lib-sheet-scroll">
+        <table class="lib-sheet-table" id="lib-sheet-table">
+            <thead>
+                <tr>
+                    <th class="lib-sheet-check"><input type="checkbox" id="lib-sheet-select-all" aria-label="Select all"></th>
+                    <th data-col="email">email</th>
+                    {{range .schema}}
+                    <th data-col="{{.}}">{{.}}</th>
+                    {{end}}
+                    <th class="lib-sheet-link"></th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range $row := .rows}}
+                <tr data-contact-id="{{$row.ID}}">
+                    <td class="lib-sheet-check"><input type="checkbox" class="lib-sheet-row-check"></td>
+                    <td class="lib-sheet-cell" data-col="email" tabindex="0">{{$row.Email}}</td>
+                    {{range $.schema}}
+                    <td class="lib-sheet-cell" data-col="{{.}}" tabindex="0">{{index $row.Variables .}}</td>
+                    {{end}}
+                    <td class="lib-sheet-link"><a href="/contacts/{{$row.ID}}" class="text-brand-600 text-xs font-medium">View</a></td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+</div>
+<script src="{{assetURL "/static/js/library-sheet.js"}}" defer></script>
+</main>
+</div>
+</body>
+</html>
+{{end}}

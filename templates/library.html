@@ -1,0 +1,134 @@
+{{define "library.html"}}
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>{{template "head" .}}</head>
+<body class="h-full bg-ivory text-charcoal">
+<div class="flex h-full">
+{{template "sidebar" .}}
+<main class="flex-1 overflow-y-auto flex flex-col min-h-0">
+<div class="tpl-fm" id="lib-fm"
+     data-folder="{{.folder}}"
+     data-folder-title="{{.folderTitle}}"
+     tabindex="0">
+
+    <header class="tpl-fm-header">
+        <div class="tpl-fm-header-text">
+            <h2 class="tpl-fm-title">Library</h2>
+            <p class="tpl-fm-sub">Templates, workflows, and contact sheets in one place. Checkboxes or Ctrl/⌘-click to multi-select · Drag into folders · Ctrl/⌘C X V · F2 rename</p>
+        </div>
+        <div class="tpl-fm-header-actions">
+            <button type="button" class="btn-secondary btn-sm" id="lib-fm-new-folder">New folder</button>
+            <div class="lib-fm-new-menu-wrap">
+                <button type="button" class="btn-primary btn-sm" id="lib-fm-new-toggle">New ▾</button>
+                <div class="lib-fm-new-menu" id="lib-fm-new-menu" hidden>
+                    <button type="button" data-new="template">Template</button>
+                    <button type="button" data-new="workflow">Workflow</button>
+                    <button type="button" data-new="contacts">Contact sheet</button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    {{if .success}}<div class="alert-success tpl-fm-flash">{{.success}}</div>{{end}}
+    {{if .error}}<div class="alert-error tpl-fm-flash">{{.error}}</div>{{end}}
+    <div class="tpl-fm-toast" id="lib-fm-toast" hidden></div>
+
+    <div class="tpl-fm-toolbar" role="toolbar">
+        <button type="button" class="tpl-fm-tool" data-action="cut" disabled>Cut</button>
+        <button type="button" class="tpl-fm-tool" data-action="copy" disabled>Copy</button>
+        <button type="button" class="tpl-fm-tool" data-action="paste" disabled>Paste</button>
+        <span class="tpl-fm-tool-sep"></span>
+        <button type="button" class="tpl-fm-tool" data-action="rename" disabled>Rename</button>
+        <button type="button" class="tpl-fm-tool tpl-fm-tool-danger" data-action="delete" disabled>Delete</button>
+        <span class="tpl-fm-tool-sep"></span>
+        <button type="button" class="tpl-fm-tool" data-action="open" disabled>Open</button>
+        <span class="tpl-fm-selection" id="lib-fm-selection">Nothing selected</span>
+        <span class="tpl-fm-clipboard" id="lib-fm-clipboard" hidden></span>
+    </div>
+
+    <div class="tpl-fm-body">
+        <aside class="tpl-fm-sidebar" aria-label="Folders">
+            <div class="tpl-fm-sidebar-label">Folders</div>
+            <nav class="tpl-fm-nav">
+                <a href="/library" class="tpl-fm-nav-item {{if eq .folder "all"}}is-active{{end}}" data-drop="all" data-folder-key="all">
+                    <span class="tpl-fm-nav-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h5l2 2h11v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg></span>
+                    <span class="tpl-fm-nav-name">All</span>
+                    <span class="tpl-fm-nav-count">{{.allCount}}</span>
+                </a>
+                <a href="/library?folder=unfiled" class="tpl-fm-nav-item {{if eq .folder "unfiled"}}is-active{{end}}" data-drop="unfiled" data-folder-key="unfiled">
+                    <span class="tpl-fm-nav-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 8h8M8 12h8M8 16h5"/></svg></span>
+                    <span class="tpl-fm-nav-name">Unfiled</span>
+                    <span class="tpl-fm-nav-count">{{.unfiledCount}}</span>
+                </a>
+                {{range .folders}}
+                <a href="/library?folder={{.ID}}" class="tpl-fm-nav-item {{if eq (printf "%d" .ID) $.folder}}is-active{{end}}"
+                   data-drop="{{.ID}}" data-folder-key="{{.ID}}" data-folder-id="{{.ID}}" data-folder-name="{{.Name}}">
+                    <span class="tpl-fm-nav-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h5l2 2h11v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg></span>
+                    <span class="tpl-fm-nav-name" data-rename-label>{{.Name}}</span>
+                    <span class="tpl-fm-nav-count">{{.ItemCount}}</span>
+                </a>
+                {{end}}
+            </nav>
+        </aside>
+
+        <section class="tpl-fm-main">
+            <div class="tpl-fm-breadcrumb">
+                <span class="tpl-fm-crumb-root">Library</span>
+                <span class="tpl-fm-crumb-sep">/</span>
+                <span class="tpl-fm-crumb-current">{{.folderTitle}}</span>
+                <span class="tpl-fm-crumb-meta">{{len .items}} item{{if ne (len .items) 1}}s{{end}}</span>
+            </div>
+
+            <div class="tpl-fm-list" id="lib-fm-list" role="listbox" aria-multiselectable="true">
+                {{if .items}}
+                <div class="tpl-fm-list-head lib-fm-cols">
+                    <span class="tpl-fm-col-check"><input type="checkbox" id="lib-fm-select-all" title="Select all" aria-label="Select all"></span>
+                    <span class="tpl-fm-col-name">Name</span>
+                    <span class="lib-fm-col-kind">Type</span>
+                    <span class="tpl-fm-col-subject">Details</span>
+                    {{if .showFolderCol}}<span class="tpl-fm-col-folder">Folder</span>{{end}}
+                </div>
+                {{range .items}}
+                <div class="tpl-fm-row lib-fm-cols"
+                     role="option" tabindex="0" draggable="true"
+                     data-id="{{.ID}}" data-kind="{{.Kind}}" data-name="{{.Name}}" data-folder-id="{{.FolderID}}"
+                     aria-selected="false">
+                    <span class="tpl-fm-col-check"><input type="checkbox" class="tpl-fm-check" tabindex="-1" aria-label="Select {{.Name}}"></span>
+                    <span class="tpl-fm-col-name">
+                        <span class="tpl-fm-file-icon" aria-hidden="true">
+                            {{if eq .Kind "workflow"}}
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                            {{else if eq .Kind "contacts"}}
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                            {{else}}
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+                            {{end}}
+                        </span>
+                        <span class="tpl-fm-name" data-rename-label>{{.Name}}</span>
+                    </span>
+                    <span class="lib-fm-col-kind"><span class="lib-fm-kind lib-fm-kind-{{.Kind}}">{{if eq .Kind "contacts"}}Contacts{{else if eq .Kind "workflow"}}Workflow{{else}}Template{{end}}</span></span>
+                    <span class="tpl-fm-col-subject">{{.Subtitle}}</span>
+                    {{if $.showFolderCol}}
+                    <span class="tpl-fm-col-folder">
+                        {{if .FolderName}}<span class="tpl-fm-pill">{{.FolderName}}</span>{{else}}<span class="tpl-fm-muted">Unfiled</span>{{end}}
+                    </span>
+                    {{end}}
+                </div>
+                {{end}}
+                {{else}}
+                <div class="tpl-fm-empty">
+                    <p>{{if eq .folder "unfiled"}}Nothing unfiled.{{else if or (eq .folder "all") (eq .folder "")}}Your library is empty.{{else}}This folder is empty.{{end}}</p>
+                    <p class="tpl-fm-empty-hint">Create a template, workflow, or contact sheet — or paste with Ctrl/⌘V.</p>
+                </div>
+                {{end}}
+            </div>
+        </section>
+    </div>
+</div>
+
+<script src="{{assetURL "/static/js/library-fm.js"}}" defer></script>
+</main>
+</div>
+</body>
+</html>
+{{end}}

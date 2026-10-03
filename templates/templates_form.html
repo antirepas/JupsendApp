@@ -10,7 +10,7 @@
 <main class="flex-1 overflow-y-auto">
 <div class="max-w-7xl mx-auto p-8">
 <div class="mb-6">
-    <a href="/templates{{if and .folder (ne .folder "all")}}?folder={{.folder}}{{end}}" class="text-sm text-brand-600 font-medium">← Templates</a>
+    <a href="/library{{if and .folder (ne .folder "all")}}?folder={{.folder}}{{end}}" class="text-sm text-brand-600 font-medium">← Library</a>
     <h2 class="text-2xl font-bold text-slate-900 mt-2">{{if .isNew}}New template{{else}}Edit template{{end}}</h2>
     <p class="text-slate-500 mt-1">Write the email your prospects will see. Use <code class="text-xs bg-slate-100 px-1 rounded">{{"{{variable}}"}}</code> for personalization.</p>
 </div>
@@ -78,7 +78,7 @@
             </div>
             <div class="flex gap-3 pt-4 border-t border-slate-100 mt-4">
                 <button type="submit" class="btn-primary">{{if .isNew}}Create template{{else}}Save changes{{end}}</button>
-                <a href="/templates{{if and .folder (ne .folder "all")}}?folder={{.folder}}{{end}}" class="btn-secondary">Cancel</a>
+                <a href="/library{{if and .folder (ne .folder "all")}}?folder={{.folder}}{{end}}" class="btn-secondary">Cancel</a>
             </div>
         </div>
     </div>

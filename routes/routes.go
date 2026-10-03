@@ -35,6 +35,8 @@ func RegisterRoutes(server *gin.Engine) {
 		"templates/settings.html",
 		"templates/billing.html",
 		"templates/dashboard.html",
+		"templates/library.html",
+		"templates/library_sheet.html",
 		"templates/templates_list.html",
 		"templates/templates_form.html",
 		"templates/contacts_list.html",
@@ -177,7 +179,21 @@ func RegisterRoutes(server *gin.Engine) {
 		authd.GET("/", Dashboard)
 		authd.GET("/test-pixel", TestTrackingPixel)
 
-		authd.GET("/templates", ListTemplatesPage)
+		authd.GET("/library", ListLibraryPage)
+		authd.POST("/library/ops/move", LibraryOpsMove)
+		authd.POST("/library/ops/copy", LibraryOpsCopy)
+		authd.POST("/library/ops/rename", LibraryOpsRename)
+		authd.POST("/library/ops/delete", LibraryOpsDelete)
+		authd.POST("/library/ops/folders", LibraryOpsCreateFolder)
+		authd.POST("/library/ops/sheets", LibraryOpsCreateSheet)
+		authd.POST("/library/ops/workflows", LibraryOpsCreateWorkflow)
+		authd.GET("/library/sheets/:id", LibrarySheetPage)
+		authd.POST("/library/sheets/:id/cell", LibrarySheetSaveCell)
+		authd.POST("/library/sheets/:id/paste", LibrarySheetPaste)
+		authd.POST("/library/sheets/:id/rows", LibrarySheetAddRow)
+		authd.POST("/library/sheets/:id/rows/delete", LibrarySheetDeleteRows)
+
+		authd.GET("/templates", RedirectTemplatesToLibrary)
 		authd.GET("/templates/new", NewTemplatePage)
 		authd.POST("/templates/preview", PreviewTemplate)
 		authd.POST("/templates/lint", TemplateLint)
@@ -200,7 +216,7 @@ func RegisterRoutes(server *gin.Engine) {
 		authd.POST("/templates/:id", UpdateTemplate)
 		authd.POST("/templates/:id/delete", DeleteTemplate)
 
-		authd.GET("/contacts", ListContactsPage)
+		authd.GET("/contacts", RedirectContactsToLibrary)
 		authd.GET("/contacts/interested", InterestedContactsPage)
 		authd.GET("/contacts/new", NewContactPage)
 		authd.GET("/contacts/suppressions", ListSuppressionsPage)
@@ -249,7 +265,7 @@ func RegisterRoutes(server *gin.Engine) {
 		authd.POST("/suppressions", AddSuppressionWeb)
 		authd.POST("/suppressions/:contact_id/remove", RemoveSuppressionWeb)
 
-		authd.GET("/workflows", ListWorkflowsPage)
+		authd.GET("/workflows", RedirectWorkflowsToLibrary)
 		authd.GET("/workflows/new", NewWorkflowPage)
 		authd.POST("/workflows", CreateWorkflowWeb)
 		authd.POST("/workflows/from-playbook", CreateWorkflowFromPlaybookWeb)

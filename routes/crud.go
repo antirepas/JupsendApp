@@ -19,15 +19,15 @@ func DeleteTemplate(ctx *gin.Context) {
 	}
 	id, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
 	if err != nil {
-		ctx.Redirect(http.StatusFound, templatesListRedirect(folder, "", "Invalid template"))
+		ctx.Redirect(http.StatusFound, libraryListRedirect(folder, "", "Invalid template"))
 		return
 	}
 	if err := model.DeleteTemplate(id, mustUserID(ctx)); err != nil {
 		log.Print(err)
-		ctx.Redirect(http.StatusFound, templatesListRedirect(folder, "", "Failed to delete"))
+		ctx.Redirect(http.StatusFound, libraryListRedirect(folder, "", "Failed to delete"))
 		return
 	}
-	ctx.Redirect(http.StatusFound, templatesListRedirect(folder, "Template deleted", ""))
+	ctx.Redirect(http.StatusFound, libraryListRedirect(folder, "Template deleted", ""))
 }
 
 func DeleteContact(ctx *gin.Context) {

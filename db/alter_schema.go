@@ -220,12 +220,24 @@ func runAlterSchema() {
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_template_folders_user_name
 			ON template_folders (user_id, lower(trim(name)))`,
 		`ALTER TABLE template ADD COLUMN IF NOT EXISTS folder_id BIGINT REFERENCES template_folders(id) ON DELETE SET NULL`,
+		`CREATE TABLE IF NOT EXISTS library_folders (
+			id BIGSERIAL PRIMARY KEY,
+			user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			name TEXT NOT NULL,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_library_folders_user_name
+			ON library_folders (user_id, lower(trim(name)))`,
+		`ALTER TABLE workflows ADD COLUMN IF NOT EXISTS folder_id BIGINT REFERENCES library_folders(id) ON DELETE SET NULL`,
+		`ALTER TABLE contact_lists ADD COLUMN IF NOT EXISTS folder_id BIGINT REFERENCES library_folders(id) ON DELETE SET NULL`,
 	}
 	for _, stmt := range alters {
 		if _, err := DB.Exec(stmt); err != nil {
 			log.Printf("alter schema note: %v", err)
 		}
 	}
+
+	migrateTemplateFoldersToLibrary()
 
 	// Allow multiple smtp_accounts per user (InboxKit mailboxes).
 	_, _ = DB.Exec(`DROP INDEX IF EXISTS idx_smtp_accounts_user`)
@@ -238,4 +250,65 @@ func runAlterSchema() {
 	`)
 	_, _ = DB.Exec(`UPDATE outreach_mailboxes SET email = lower(email) WHERE email <> lower(email)`)
 	_, _ = DB.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_outreach_mailboxes_user_email ON outreach_mailboxes(user_id, email)`)
+}
+
+// migrateTemplateFoldersToLibrary copies template_folders → library_folders and re-points template.folder_id.
+func migrateTemplateFoldersToLibrary() {
+	var exists int
+	if err := DB.QueryRow(`
+		SELECT COUNT(*) FROM information_schema.tables
+		WHERE table_schema = 'public' AND table_name = 'template_folders'
+	`).Scan(&exists); err != nil || exists == 0 {
+		// Ensure template.folder_id references library_folders on greenfield-ish DBs.
+		_, _ = DB.Exec(`ALTER TABLE template DROP CONSTRAINT IF EXISTS template_folder_id_fkey`)
+		_, _ = DB.Exec(`
+			DO $$ BEGIN
+				ALTER TABLE template
+					ADD CONSTRAINT template_folder_id_fkey
+					FOREIGN KEY (folder_id) REFERENCES library_folders(id) ON DELETE SET NULL;
+			EXCEPTION WHEN duplicate_object THEN NULL;
+			END $$
+		`)
+		return
+	}
+
+	_, err := DB.Exec(`
+		INSERT INTO library_folders (id, user_id, name, created_at)
+		SELECT id, user_id, name, created_at FROM template_folders
+		ON CONFLICT (id) DO NOTHING
+	`)
+	if err != nil {
+		log.Printf("alter schema note: migrate library_folders: %v", err)
+		return
+	}
+	_, _ = DB.Exec(`
+		SELECT setval(pg_get_serial_sequence('library_folders', 'id'),
+			GREATEST((SELECT COALESCE(MAX(id), 1) FROM library_folders), 1))
+	`)
+
+	_, _ = DB.Exec(`ALTER TABLE template DROP CONSTRAINT IF EXISTS template_folder_id_fkey`)
+	// Also drop any other FK on template.folder_id pointing at template_folders.
+	_, _ = DB.Exec(`
+		DO $$
+		DECLARE r RECORD;
+		BEGIN
+			FOR r IN (
+				SELECT c.conname
+				FROM pg_constraint c
+				JOIN pg_class t ON c.conrelid = t.oid
+				WHERE t.relname = 'template' AND c.contype = 'f'
+				  AND pg_get_constraintdef(c.oid) ILIKE '%folder_id%'
+			) LOOP
+				EXECUTE format('ALTER TABLE template DROP CONSTRAINT IF EXISTS %I', r.conname);
+			END LOOP;
+		END $$
+	`)
+	_, _ = DB.Exec(`
+		DO $$ BEGIN
+			ALTER TABLE template
+				ADD CONSTRAINT template_folder_id_fkey
+				FOREIGN KEY (folder_id) REFERENCES library_folders(id) ON DELETE SET NULL;
+		EXCEPTION WHEN duplicate_object THEN NULL;
+		END $$
+	`)
 }
