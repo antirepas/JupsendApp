@@ -345,7 +345,6 @@ func runSchema() {
 		`CREATE INDEX IF NOT EXISTS idx_contact_list_members_contact ON contact_list_members(contact_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_email_sends_user_contact_sent ON email_sends(user_id, contact_id, sent_at)`,
 		`CREATE INDEX IF NOT EXISTS idx_conversation_messages_contact ON conversation_messages(user_id, contact_id, occurred_at)`,
-		`CREATE INDEX IF NOT EXISTS idx_conversation_messages_unread ON conversation_messages(user_id, contact_id) WHERE direction = 'inbound' AND read_at IS NULL`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_conversation_messages_user_msgid ON conversation_messages(user_id, message_id) WHERE message_id IS NOT NULL AND message_id <> ''`,
 
 		`CREATE TABLE IF NOT EXISTS outreach_domains (
