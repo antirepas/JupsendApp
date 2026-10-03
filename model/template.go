@@ -125,7 +125,7 @@ func ListTemplatesFiltered(userID int64, folderFilter string) ([]TemplateListIte
 	query := `
 		SELECT t.id, t.name, t.subject, COALESCE(t.folder_id, 0), COALESCE(f.name, '')
 		FROM template t
-		LEFT JOIN template_folders f ON f.id = t.folder_id
+		LEFT JOIN library_folders f ON f.id = t.folder_id
 		WHERE t.user_id = ?`
 	args := []interface{}{userID}
 	switch {
