@@ -264,12 +264,26 @@ func ListTemplatesPage(ctx *gin.Context) {
 	}
 	folders, _ := model.ListTemplateFolders(userID)
 	allCount, unfiledCount, _ := model.CountTemplatesForUser(userID)
+	folderTitle := "All templates"
+	switch folder {
+	case "unfiled":
+		folderTitle = "Unfiled"
+	case "all", "":
+		folderTitle = "All templates"
+	default:
+		if id, err := strconv.ParseInt(folder, 10, 64); err == nil {
+			if f, err := model.GetTemplateFolderForUser(id, userID); err == nil {
+				folderTitle = f.Name
+			}
+		}
+	}
 	ctx.HTML(http.StatusOK, "templates_list.html", gin.H{
 		"title":         "Templates",
 		"active":        "templates",
 		"templates":     templates,
 		"folders":       folders,
 		"folder":        folder,
+		"folderTitle":   folderTitle,
 		"allCount":      allCount,
 		"unfiledCount":  unfiledCount,
 		"showFolderCol": folder == "all",

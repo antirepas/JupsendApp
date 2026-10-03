@@ -136,3 +136,106 @@ func assertTemplateFolderOwned(folderID, userID int64) error {
 	}
 	return nil
 }
+
+// MoveTemplatesToFolder sets folder_id for owned templates. folderID 0 = Unfiled.
+func MoveTemplatesToFolder(userID int64, ids []int64, folderID int64) (int, error) {
+	if err := assertTemplateFolderOwned(folderID, userID); err != nil {
+		return 0, err
+	}
+	var folderArg interface{}
+	if folderID > 0 {
+		folderArg = folderID
+	}
+	n := 0
+	for _, id := range ids {
+		if id <= 0 {
+			continue
+		}
+		if _, err := GetTemplateForUser(id, userID); err != nil {
+			continue
+		}
+		if _, err := db.Exec(`UPDATE template SET folder_id = ? WHERE id = ? AND user_id = ?`, folderArg, id, userID); err != nil {
+			return n, err
+		}
+		n++
+	}
+	return n, nil
+}
+
+// CopyTemplatesToFolder duplicates templates into folderID (0 = Unfiled).
+func CopyTemplatesToFolder(userID int64, ids []int64, folderID int64) (int, error) {
+	if err := assertTemplateFolderOwned(folderID, userID); err != nil {
+		return 0, err
+	}
+	n := 0
+	for _, id := range ids {
+		if id <= 0 {
+			continue
+		}
+		t, varKeys, err := GetTemplateByID(id, userID)
+		if err != nil {
+			continue
+		}
+		copy := Template{
+			Name:     uniqueTemplateCopyName(userID, t.Name),
+			Subject:  t.Subject,
+			Body:     t.Body,
+			FolderID: folderID,
+		}
+		vars := make([]TemplateVariable, len(varKeys))
+		for i, k := range varKeys {
+			vars[i] = TemplateVariable{Key: k}
+		}
+		if _, err := copy.SaveTemplate(userID, vars); err != nil {
+			return n, err
+		}
+		n++
+	}
+	return n, nil
+}
+
+func RenameTemplate(id, userID int64, name string) error {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return fmt.Errorf("name required")
+	}
+	if len(name) > 200 {
+		name = name[:200]
+	}
+	if _, err := GetTemplateForUser(id, userID); err != nil {
+		return err
+	}
+	_, err := db.Exec(`UPDATE template SET name = ? WHERE id = ? AND user_id = ?`, name, id, userID)
+	return err
+}
+
+func DeleteTemplates(userID int64, ids []int64) (int, error) {
+	n := 0
+	for _, id := range ids {
+		if id <= 0 {
+			continue
+		}
+		if err := DeleteTemplate(id, userID); err != nil {
+			continue
+		}
+		n++
+	}
+	return n, nil
+}
+
+func uniqueTemplateCopyName(userID int64, base string) string {
+	base = strings.TrimSpace(base)
+	if base == "" {
+		base = "Template"
+	}
+	candidate := base + " (copy)"
+	for i := 2; i < 100; i++ {
+		var n int
+		_ = db.QueryRow(`SELECT COUNT(*) FROM template WHERE user_id = ? AND name = ?`, userID, candidate).Scan(&n)
+		if n == 0 {
+			return candidate
+		}
+		candidate = fmt.Sprintf("%s (copy %d)", base, i)
+	}
+	return fmt.Sprintf("%s (copy %d)", base, time.Now().Unix()%10000)
+}

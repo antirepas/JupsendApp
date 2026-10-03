@@ -109,3 +109,57 @@ func TestParseFolderIDForm(t *testing.T) {
 		t.Fatal("parse 42")
 	}
 }
+
+func TestMoveCopyRenameTemplates(t *testing.T) {
+	db.OpenTestDB(t)
+	email := fmt.Sprintf("tpl-ops-%d@example.com", time.Now().UnixNano())
+	userID, err := CreateUser(email, "hash", "http://localhost")
+	if err != nil {
+		t.Fatal(err)
+	}
+	folderID, err := CreateTemplateFolder(userID, "Ops")
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := Template{Name: "Alpha", Subject: "s", Body: "b"}
+	aid, err := a.SaveTemplate(userID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := Template{Name: "Beta", Subject: "s", Body: "b"}
+	bid, err := b.SaveTemplate(userID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	n, err := MoveTemplatesToFolder(userID, []int64{aid, bid}, folderID)
+	if err != nil || n != 2 {
+		t.Fatalf("move n=%d err=%v", n, err)
+	}
+	got, _ := GetTemplate(aid)
+	if got.FolderID != folderID {
+		t.Fatalf("folder_id=%d", got.FolderID)
+	}
+
+	n, err = CopyTemplatesToFolder(userID, []int64{aid}, 0)
+	if err != nil || n != 1 {
+		t.Fatalf("copy n=%d err=%v", n, err)
+	}
+	unfiled, err := ListTemplatesFiltered(userID, "unfiled")
+	if err != nil || len(unfiled) != 1 || unfiled[0].Name != "Alpha (copy)" {
+		t.Fatalf("unfiled=%+v err=%v", unfiled, err)
+	}
+
+	if err := RenameTemplate(aid, userID, "Alpha Renamed"); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = GetTemplate(aid)
+	if got.Name != "Alpha Renamed" {
+		t.Fatalf("name=%q", got.Name)
+	}
+
+	n, err = DeleteTemplates(userID, []int64{bid})
+	if err != nil || n != 1 {
+		t.Fatalf("delete n=%d err=%v", n, err)
+	}
+}
