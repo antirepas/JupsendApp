@@ -2,17 +2,17 @@
 <!DOCTYPE html>
 <html lang="en" class="h-full">
 <head>{{template "head" .}}</head>
-<body class="h-full bg-ivory text-charcoal">
-<div class="flex h-full">
-{{template "sidebar" .}}
-<main class="flex-1 overflow-y-auto">
-<div class="setup-shell p-6 sm:p-8">
-  <div class="setup-hero">
-    <div class="setup-kicker">Buy · paid add-on</div>
-    <h1 class="setup-title">Buy mailboxes</h1>
-    <p class="setup-lead">Purchase extra seats on a ready jupsend domain. To use credentials you already have, <a class="text-brand-600 font-medium" href="/mailboxes?attach=1">add an external mailbox</a> instead.{{if .whopOK}} Checkout is via Whop.{{end}}</p>
+{{template "page_shell_start" .}}
+<div class="app-page">
+<header class="app-page-header">
+  <div class="app-page-header-text">
+    <a href="/mailboxes" class="app-page-back">← Mailboxes</a>
+    <h2 class="app-page-title">Buy mailboxes</h2>
+    <p class="app-page-sub">Purchase extra seats on a ready jupsend domain. To use credentials you already have, <a class="text-brand-600 font-medium" href="/mailboxes?attach=1">add an external mailbox</a> instead.{{if .whopOK}} Checkout is via Whop.{{end}}</p>
   </div>
-
+</header>
+<div class="app-page-body app-page-body--narrow">
+<div class="setup-shell">
   {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
 
   {{if .domains}}
@@ -147,8 +147,9 @@
   </div>
   {{end}}
 </div>
-</main>
 </div>
+</div>
+{{template "page_shell_end" .}}
 </body>
 </html>
 {{end}}

@@ -2,10 +2,9 @@
 <!DOCTYPE html>
 <html lang="en" class="h-full">
 <head>{{template "head" .}}</head>
-<body class="h-full bg-ivory text-charcoal">
-<div class="flex h-full">
-{{template "sidebar" .}}
-<main class="flex-1 overflow-y-auto">
+{{template "page_shell_start" .}}
+<div class="app-page">
+<div class="app-page-body">
 <div class="setup-shell p-6 sm:p-8">
   <div class="setup-hero">
     <div class="setup-kicker">Sending setup</div>
@@ -231,8 +230,9 @@
   </form>
   {{end}}
 </div>
-</main>
 </div>
+</div>
+{{template "page_shell_end" .}}
 <script>
 (function () {
   function domainValue() {

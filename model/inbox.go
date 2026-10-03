@@ -16,6 +16,7 @@ const (
 	InboxFolderInterested = "interested"
 	InboxFolderOpened     = "opened"
 	InboxFolderClicked    = "clicked"
+	InboxFolderSent       = "sent"
 )
 
 // InboxThread is one contact-level conversation row in the unified inbox.
@@ -62,6 +63,7 @@ type InboxFolderCounts struct {
 	Interested int
 	Opened     int
 	Clicked    int
+	Sent       int
 }
 
 // NormalizeInboxFolder returns a known inbox folder key.
@@ -75,6 +77,8 @@ func NormalizeInboxFolder(folder string) string {
 		return InboxFolderOpened
 	case InboxFolderClicked:
 		return InboxFolderClicked
+	case InboxFolderSent, "sends":
+		return InboxFolderSent
 	default:
 		return InboxFolderAll
 	}
@@ -117,6 +121,7 @@ func (c InboxFolderCounts) Map() map[string]int {
 		InboxFolderInterested: c.Interested,
 		InboxFolderOpened:     c.Opened,
 		InboxFolderClicked:    c.Clicked,
+		InboxFolderSent:       c.Sent,
 	}
 }
 
@@ -164,6 +169,13 @@ func CountInboxFolders(userID int64) InboxFolderCounts {
 			WHERE cm.user_id = es.user_id AND cm.contact_id = es.contact_id
 		  )
 	`, userID).Scan(&c.Clicked)
+	_ = db.QueryRow(`
+		SELECT COUNT(*)::int
+		FROM email_sends es
+		LEFT JOIN send_jobs sj ON sj.id = es.send_job_id
+		WHERE es.user_id = ?
+		  AND NOT `+cancelledSendSQL("es", "sj")+`
+	`, userID).Scan(&c.Sent)
 	return c
 }
 

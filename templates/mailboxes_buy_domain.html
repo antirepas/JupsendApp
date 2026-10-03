@@ -2,20 +2,21 @@
 <!DOCTYPE html>
 <html lang="en" class="h-full">
 <head>{{template "head" .}}</head>
-<body class="h-full bg-ivory text-charcoal">
-<div class="flex h-full">
-{{template "sidebar" .}}
-<main class="flex-1 overflow-y-auto">
-<div class="setup-shell p-6 sm:p-8">
-  <div class="setup-hero">
-    <div class="setup-kicker">Buy · paid add-on</div>
-    <h1 class="setup-title">Buy an outreach domain</h1>
-    <p class="setup-lead">Register a <strong>new</strong> domain through jupsend. To link a domain you already own, <a class="text-brand-600 font-medium" href="/onboarding/domain?path=add-domain&amp;new=1">add a domain</a> instead.</p>
-    <div class="setup-steps">
-      <span class="setup-step {{if not .results}}is-active{{else}}is-done{{end}}"><span class="setup-step-num">1</span> Search</span>
-      <span class="setup-step {{if .results}}is-active{{end}}"><span class="setup-step-num">2</span> Seats</span>
-      <span class="setup-step"><span class="setup-step-num">3</span> Checkout</span>
-    </div>
+{{template "page_shell_start" .}}
+<div class="app-page">
+<header class="app-page-header">
+  <div class="app-page-header-text">
+    <a href="/mailboxes" class="app-page-back">← Mailboxes</a>
+    <h2 class="app-page-title">Buy an outreach domain</h2>
+    <p class="app-page-sub">Register a <strong>new</strong> domain through jupsend. To link a domain you already own, <a class="text-brand-600 font-medium" href="/onboarding/domain?path=add-domain&amp;new=1">add a domain</a> instead.</p>
+  </div>
+</header>
+<div class="app-page-body app-page-body--narrow">
+<div class="setup-shell">
+  <div class="setup-steps mb-6">
+    <span class="setup-step {{if not .results}}is-active{{else}}is-done{{end}}"><span class="setup-step-num">1</span> Search</span>
+    <span class="setup-step {{if .results}}is-active{{end}}"><span class="setup-step-num">2</span> Seats</span>
+    <span class="setup-step"><span class="setup-step-num">3</span> Checkout</span>
   </div>
 
   {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
@@ -80,11 +81,12 @@
   {{end}}
 
   {{if not .results}}
-  <p class="setup-footnote"><a href="/mailboxes">← Back to mailboxes</a> · or <a href="/onboarding/domain?new=1">connect a domain you own</a></p>
+  <p class="setup-footnote">Or <a href="/onboarding/domain?new=1">connect a domain you own</a></p>
   {{end}}
 </div>
-</main>
 </div>
+</div>
+{{template "page_shell_end" .}}
 <script>
 (function () {
   function domainValue() {

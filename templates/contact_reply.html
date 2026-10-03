@@ -4,16 +4,16 @@
 <head>{{template "head" .}}
 <link href="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.snow.css" rel="stylesheet">
 </head>
-<body class="h-full bg-ivory text-charcoal">
-<div class="flex h-full">
-{{template "sidebar" .}}
-<main class="flex-1 overflow-y-auto">
-<div class="max-w-7xl mx-auto p-8">
-<div class="mb-6">
-    <a href="/contacts/{{.contact.ID}}#conversation" class="text-sm text-brand-600 font-medium">← Back to conversation</a>
-    <h2 class="text-2xl font-bold text-slate-900 mt-2">Reply to {{.contact.Email}}</h2>
-    <p class="text-slate-500 mt-1">Write like a template — use <code class="text-xs bg-slate-100 px-1 rounded">{{"{{variable}}"}}</code>, preview with this lead’s data, then send from the same mailbox.</p>
-</div>
+{{template "page_shell_start" .}}
+<div class="app-page">
+<header class="app-page-header">
+    <div class="app-page-header-text">
+        <a href="/contacts/{{.contact.ID}}#conversation" class="app-page-back">← Back to conversation</a>
+        <h2 class="app-page-title">Reply to {{.contact.Email}}</h2>
+        <p class="app-page-sub">Write like a template — use <code class="text-xs bg-slate-100 px-1 rounded">{{"{{variable}}"}}</code>, preview with this lead’s data, then send from the same mailbox.</p>
+    </div>
+</header>
+<div class="app-page-body app-page-body--wide">
 
 {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
 
@@ -175,8 +175,8 @@
 </div>
 <script type="application/json" id="template-default-sample">{{.defaultSampleJSON}}</script>
 </div>
-</main>
 </div>
+{{template "page_shell_end" .}}
 <script src="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.js"></script>
 <script src="{{assetURL "/static/js/template-editor.js"}}"></script>
 <script>

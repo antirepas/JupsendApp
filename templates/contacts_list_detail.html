@@ -2,19 +2,15 @@
 <!DOCTYPE html>
 <html lang="en" class="h-full">
 <head>{{template "head" .}}</head>
-<body class="h-full bg-ivory text-charcoal">
-<div class="flex h-full">
-{{template "sidebar" .}}
-<main class="flex-1 overflow-y-auto">
-<div class="max-w-6xl mx-auto p-8">
-
-<div class="flex flex-wrap items-start justify-between gap-4 mb-6">
-    <div>
-        <a href="/library" class="text-sm text-brand-600 font-medium">← Library</a>
-        <h2 class="text-2xl font-bold text-charcoal mt-2">{{.list.Name}}</h2>
-        <p class="text-gray-500 mt-1 text-sm">Segment by engagement or variables, then save or split into new lists.</p>
+{{template "page_shell_start" .}}
+<div class="app-page">
+<header class="app-page-header">
+    <div class="app-page-header-text">
+        <a href="/library" class="app-page-back">← Library</a>
+        <h2 class="app-page-title">{{.list.Name}}</h2>
+        <p class="app-page-sub">Segment by engagement or variables, then save or split into new lists.</p>
     </div>
-    <div class="flex flex-wrap gap-2">
+    <div class="app-page-actions">
         <a href="/library/sheets/{{.list.ID}}?import=1" class="btn-secondary">Import contacts</a>
         <form method="POST" action="/contacts/lists/{{.list.ID}}/verify" onsubmit="return confirm('Verify unverified emails in this list? Uses 1 AI credit per email submitted.');">
             <input type="hidden" name="only_unverified" value="1">
@@ -22,7 +18,8 @@
         </form>
         <button type="button" class="btn-primary" data-open-panel="segment">Split / save segment</button>
     </div>
-</div>
+</header>
+<div class="app-page-body app-page-body--wide">
 
 {{if .success}}<div class="alert-success mb-6">{{.success}}</div>{{end}}
 {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
@@ -306,8 +303,8 @@
 </form>
 
 </div>
-</main>
 </div>
+{{template "page_shell_end" .}}
 <script>
 (function () {
     const all = document.getElementById('select-all-page');

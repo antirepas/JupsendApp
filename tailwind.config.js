@@ -9,7 +9,7 @@ module.exports = {
           light: "#1F2937",
         },
         ivory: {
-          DEFAULT: "#FAFAF8",
+          DEFAULT: "#F8FAFC",
         },
         emerald: {
           DEFAULT: "#10B981",

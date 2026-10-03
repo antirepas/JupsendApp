@@ -2,19 +2,18 @@
 <!DOCTYPE html>
 <html lang="en" class="h-full">
 <head>{{template "head" .}}</head>
-<body class="h-full bg-ivory text-charcoal">
-<div class="flex h-full">
-{{template "sidebar" .}}
-<main class="flex-1 overflow-y-auto">
-<div class="max-w-6xl mx-auto p-8">
-<div class="flex items-center justify-between mb-8">
-    <div>
-        <h2 class="text-2xl font-bold text-slate-900">Campaigns</h2>
-        <p class="text-slate-500 mt-1">One-time sends or automated follow-ups for a contact list</p>
-    </div>
+{{template "page_shell_start" .}}
+<div class="app-page">
+<header class="app-page-header">
+  <div class="app-page-header-text">
+    <h2 class="app-page-title">Campaigns</h2>
+    <p class="app-page-sub">One-time sends or automated follow-ups for a contact list</p>
+  </div>
+  <div class="app-page-actions">
     <a href="/campaigns/new" class="btn-primary">New Campaign</a>
-</div>
-
+  </div>
+</header>
+<div class="app-page-body app-page-body--wide">
 {{if .success}}<div class="alert-success mb-6">{{.success}}</div>{{end}}
 {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
 
@@ -73,8 +72,8 @@
 </div>
 {{template "page_playbook" .}}
 </div>
-</main>
 </div>
+{{template "page_shell_end" .}}
 </body>
 </html>
 {{end}}

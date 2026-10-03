@@ -1,0 +1,82 @@
+{{define "inbox_compose.html"}}
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>{{template "head" .}}</head>
+{{template "page_shell_start" .}}
+<div class="app-page">
+<header class="app-page-header">
+    <div class="app-page-header-text">
+        <a href="/inbox?folder=sent" class="app-page-back">← Back to Sent</a>
+        <h2 class="app-page-title">New email</h2>
+        <p class="app-page-sub">One-off send from a mailbox. Verify the address, then pick a template.</p>
+    </div>
+</header>
+<div class="app-page-body app-page-body--narrow">
+
+    {{if .gmailSendBlocked}}
+    <div class="alert-error mb-6">{{.gmailSendBlocked}} <a href="/settings" class="underline font-medium">Open Settings</a></div>
+    {{end}}
+    {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
+    {{if .success}}<div class="alert-success mb-6">{{.success}}</div>{{end}}
+
+    <form id="inbox-compose-form" method="POST" action="/inbox/compose" class="card space-y-5" data-verify-url="/inbox/compose/verify">
+        <div>
+            <label class="form-label" for="smtp_account_id">Send from</label>
+            <select name="smtp_account_id" id="smtp_account_id" class="form-input" required {{if not .mailboxes}}disabled{{end}}>
+                {{if not .mailboxes}}
+                <option value="">No ready mailboxes</option>
+                {{else}}
+                <option value="">Select a mailbox…</option>
+                {{range .mailboxes}}
+                <option value="{{.ID}}" {{if eq $.preselectedMailboxID .ID}}selected{{end}}>{{.Label}}</option>
+                {{end}}
+                {{end}}
+            </select>
+            <p class="form-hint mt-1">Manage seats under <a href="/mailboxes" class="text-brand-600 font-medium">Mailboxes</a>.</p>
+        </div>
+
+        <div>
+            <label class="form-label" for="compose-email">To</label>
+            <div class="inbox-compose-to">
+                <input type="email" name="email" id="compose-email" class="form-input" list="compose-contacts" value="{{.preselectedEmail}}" placeholder="name@company.com" required autocomplete="email">
+                <input type="hidden" name="contact_id" id="compose-contact-id" value="{{if .preselectedContactID}}{{.preselectedContactID}}{{end}}">
+                <button type="button" class="btn-secondary" id="compose-verify-btn">Verify</button>
+            </div>
+            <datalist id="compose-contacts">
+                {{range .contacts}}
+                <option value="{{.Email}}" data-id="{{.ID}}"></option>
+                {{end}}
+            </datalist>
+            <p class="form-hint mt-1">Type any address or pick an existing contact. Verify before sending.</p>
+            <div id="compose-verify-result" class="inbox-compose-verify {{if .verifyStatus}}is-{{.verifyStatus}}{{end}}" {{if not .verifyStatus}}hidden{{end}}>
+                {{if .verifyStatus}}
+                Status: <strong>{{.verifyStatus}}</strong>{{if .verifyReason}} — {{.verifyReason}}{{end}}
+                {{end}}
+            </div>
+        </div>
+
+        <div>
+            <label class="form-label" for="template_id">Template</label>
+            <select name="template_id" id="template_id" class="form-input" required>
+                <option value="">Select a template…</option>
+                {{range .templates}}
+                <option value="{{.ID}}">{{.Name}} — {{.Subject}}</option>
+                {{end}}
+            </select>
+            {{if not .templates}}
+            <p class="text-sm text-amber-600 mt-2">You need a <a href="/templates/new" class="underline">template</a> first.</p>
+            {{end}}
+        </div>
+
+        <div class="flex flex-wrap gap-3 pt-1">
+            <button type="submit" class="btn-primary" id="compose-send-btn" {{if or (not .mailboxes) (not .templates)}}disabled{{end}}>Send email</button>
+            <a href="/inbox?folder=sent" class="btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+</div>
+{{template "page_shell_end" .}}
+<script src="{{assetURL "/static/js/inbox-compose.js"}}" defer></script>
+</body>
+</html>
+{{end}}

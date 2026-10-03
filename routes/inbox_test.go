@@ -30,6 +30,27 @@ func TestInterestedContactsRedirectToInbox(t *testing.T) {
 	}
 }
 
+func TestSendsPageRedirectToInbox(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.GET("/sends", SendsPageRedirect)
+	router.GET("/sends/new", NewSendRedirect)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/sends", nil)
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusFound || w.Header().Get("Location") != "/inbox?folder=sent" {
+		t.Fatalf("sends -> %d %q", w.Code, w.Header().Get("Location"))
+	}
+
+	w2 := httptest.NewRecorder()
+	req2 := httptest.NewRequest(http.MethodGet, "/sends/new?contact_id=9", nil)
+	router.ServeHTTP(w2, req2)
+	if w2.Code != http.StatusFound || w2.Header().Get("Location") != "/inbox/compose?contact_id=9" {
+		t.Fatalf("sends/new -> %d %q", w2.Code, w2.Header().Get("Location"))
+	}
+}
+
 func TestInboxMarkReadEndpoint(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db.OpenTestDB(t)

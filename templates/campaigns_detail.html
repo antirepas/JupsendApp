@@ -2,48 +2,45 @@
 <!DOCTYPE html>
 <html lang="en" class="h-full">
 <head>{{template "head" .}}</head>
-<body class="h-full bg-ivory text-charcoal">
-<div class="flex h-full">
-{{template "sidebar" .}}
-<main class="flex-1 overflow-y-auto">
-<div class="max-w-7xl mx-auto p-8">
-<div class="flex items-center justify-between mb-6">
-    <div>
-        <a href="/campaigns" class="text-sm text-brand-600 font-medium">← Campaigns</a>
-        <h2 class="text-2xl font-bold text-slate-900 mt-2">{{.campaign.Name}}</h2>
-        <p class="text-slate-500 mt-1">
-            {{.campaign.ContactCount}} contacts ·
-            {{if .isWorkflow}}<span class="badge badge-violet">Workflow</span>{{if .isWorkflowAB}}<span class="badge badge-violet ml-1">A/B first email</span>{{end}}{{else}}<span class="badge badge-blue">One-time</span>{{end}}
-            <span class="badge {{if eq .campaign.DisplayStatus "sent"}}badge-green{{else if eq .campaign.DisplayStatus "stopped"}}badge-gray{{else if eq .campaign.DisplayStatus "scheduled"}}badge-amber{{else if eq .campaign.DisplayStatus "sending"}}badge-blue{{else}}badge-gray{{end}} ml-1">{{.campaign.DisplayStatus}}</span>
-            {{if .campaign.ScheduledAt}}<span class="text-sm text-slate-500 ml-2">· {{if .isWorkflow}}starts{{else}}sends{{end}} {{.campaign.ScheduledAt.Format "Jan 2, 2006 15:04"}}</span>{{end}}
-        </p>
-    </div>
-    <div class="flex gap-3 items-center flex-wrap justify-end">
-        <a href="/campaigns/{{.campaign.ID}}/sop" class="btn-secondary" title="Download a full SOP of this campaign’s strategy, workflow, and templates">Export SOP</a>
-        <a href="/campaigns/{{.campaign.ID}}/analytics" class="btn-secondary">{{if .isWorkflowAB}}Analytics{{else if .isWorkflow}}Workflow analytics{{else}}Campaign analytics{{end}}</a>
-        {{if and .isWorkflow .workflowTestReady}}
-        <form method="POST" action="/campaigns/{{.campaign.ID}}/test-workflow" onsubmit="return confirm('Send all workflow emails to your account email now? Waits are skipped.');">
-            <button type="submit" class="btn-secondary">Send test to my email</button>
-        </form>
-        {{end}}
-        {{if .canStop}}
-        <form method="POST" action="/campaigns/{{.campaign.ID}}/stop" onsubmit="return confirm('Stop this campaign? Queued emails will not be sent.');">
-            <button type="submit" class="btn-secondary text-red-600">Stop campaign</button>
-        </form>
-        {{end}}
-        <form method="POST" action="/campaigns/{{.campaign.ID}}/delete" onsubmit="return confirm('Delete this campaign?');">
-            <button type="submit" class="btn-secondary text-red-600">Delete</button>
-        </form>
-        {{if gt .campaign.ContactCount 0}}
-        {{if and (ne .campaign.DisplayStatus "sent") (ne .campaign.DisplayStatus "stopped") (ne .campaign.DisplayStatus "sending")}}
-        <form method="POST" action="/campaigns/{{.campaign.ID}}/send" onsubmit="return confirm('{{if .isWorkflow}}Start workflow for{{else}}Send to{{end}} all {{.campaign.ContactCount}} contacts now?');">
-            <button type="submit" class="btn-primary">{{if .isWorkflow}}Start workflow{{else}}Send now{{end}}</button>
-        </form>
-        {{end}}
-        {{end}}
-    </div>
-</div>
-
+{{template "page_shell_start" .}}
+<div class="app-page">
+<header class="app-page-header">
+  <div class="app-page-header-text">
+    <a href="/campaigns" class="app-page-back">← Campaigns</a>
+    <h2 class="app-page-title">{{.campaign.Name}}</h2>
+    <p class="app-page-sub">
+      {{.campaign.ContactCount}} contacts ·
+      {{if .isWorkflow}}<span class="badge badge-violet">Workflow</span>{{if .isWorkflowAB}}<span class="badge badge-violet ml-1">A/B first email</span>{{end}}{{else}}<span class="badge badge-blue">One-time</span>{{end}}
+      <span class="badge {{if eq .campaign.DisplayStatus "sent"}}badge-green{{else if eq .campaign.DisplayStatus "stopped"}}badge-gray{{else if eq .campaign.DisplayStatus "scheduled"}}badge-amber{{else if eq .campaign.DisplayStatus "sending"}}badge-blue{{else}}badge-gray{{end}} ml-1">{{.campaign.DisplayStatus}}</span>
+      {{if .campaign.ScheduledAt}}<span class="text-sm text-slate-500 ml-2">· {{if .isWorkflow}}starts{{else}}sends{{end}} {{.campaign.ScheduledAt.Format "Jan 2, 2006 15:04"}}</span>{{end}}
+    </p>
+  </div>
+  <div class="app-page-actions">
+    <a href="/campaigns/{{.campaign.ID}}/sop" class="btn-secondary" title="Download a full SOP of this campaign’s strategy, workflow, and templates">Export SOP</a>
+    <a href="/campaigns/{{.campaign.ID}}/analytics" class="btn-secondary">{{if .isWorkflowAB}}Analytics{{else if .isWorkflow}}Workflow analytics{{else}}Campaign analytics{{end}}</a>
+    {{if and .isWorkflow .workflowTestReady}}
+    <form method="POST" action="/campaigns/{{.campaign.ID}}/test-workflow" onsubmit="return confirm('Send all workflow emails to your account email now? Waits are skipped.');">
+      <button type="submit" class="btn-secondary">Send test to my email</button>
+    </form>
+    {{end}}
+    {{if .canStop}}
+    <form method="POST" action="/campaigns/{{.campaign.ID}}/stop" onsubmit="return confirm('Stop this campaign? Queued emails will not be sent.');">
+      <button type="submit" class="btn-secondary text-red-600">Stop campaign</button>
+    </form>
+    {{end}}
+    <form method="POST" action="/campaigns/{{.campaign.ID}}/delete" onsubmit="return confirm('Delete this campaign?');">
+      <button type="submit" class="btn-secondary text-red-600">Delete</button>
+    </form>
+    {{if gt .campaign.ContactCount 0}}
+    {{if and (ne .campaign.DisplayStatus "sent") (ne .campaign.DisplayStatus "stopped") (ne .campaign.DisplayStatus "sending")}}
+    <form method="POST" action="/campaigns/{{.campaign.ID}}/send" onsubmit="return confirm('{{if .isWorkflow}}Start workflow for{{else}}Send to{{end}} all {{.campaign.ContactCount}} contacts now?');">
+      <button type="submit" class="btn-primary">{{if .isWorkflow}}Start workflow{{else}}Send now{{end}}</button>
+    </form>
+    {{end}}
+    {{end}}
+  </div>
+</header>
+<div class="app-page-body app-page-body--wide">
 {{if .success}}<div class="alert-success mb-6">{{.success}}</div>{{end}}
 {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
 
@@ -696,8 +693,8 @@
     {{end}}
 </div>
 </div>
-</main>
 </div>
+{{template "page_shell_end" .}}
 <script>
 document.querySelectorAll('.preview-toggle').forEach(btn => {
     btn.addEventListener('click', () => {

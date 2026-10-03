@@ -2,22 +2,22 @@
 <!DOCTYPE html>
 <html lang="en" class="h-full">
 <head>{{template "head" .}}</head>
-<body class="h-full bg-ivory text-charcoal">
-<div class="flex h-full">
-{{template "sidebar" .}}
-<main class="flex-1 overflow-y-auto">
-<div class="max-w-7xl mx-auto p-8">
-<div class="flex items-center justify-between mb-8 flex-wrap gap-4">
-    <div>
-        <a href="/campaigns/{{.analytics.CampaignID}}" class="text-sm text-brand-600 font-medium">← {{.analytics.CampaignName}}</a>
-        <h2 class="text-2xl font-bold text-slate-900 mt-2">Workflow analytics</h2>
-        <p class="text-slate-500 mt-1">
+{{template "page_shell_start" .}}
+<div class="app-page">
+<header class="app-page-header">
+    <div class="app-page-header-text">
+        <a href="/campaigns/{{.analytics.CampaignID}}" class="app-page-back">← {{.analytics.CampaignName}}</a>
+        <h2 class="app-page-title">Workflow analytics</h2>
+        <p class="app-page-sub">
             <span class="badge badge-violet">Workflow</span>
             {{.analytics.WorkflowName}} · Created {{.analytics.CreatedAt.Format "Jan 2, 2006"}}
         </p>
     </div>
-    <span class="badge {{if eq .analytics.Status "sent"}}badge-green{{else if eq .analytics.Status "scheduled"}}badge-amber{{else}}badge-gray{{end}}">{{.analytics.Status}}</span>
-</div>
+    <div class="app-page-actions">
+        <span class="badge {{if eq .analytics.Status "sent"}}badge-green{{else if eq .analytics.Status "scheduled"}}badge-amber{{else}}badge-gray{{end}}">{{.analytics.Status}}</span>
+    </div>
+</header>
+<div class="app-page-body app-page-body--wide">
 
 {{with .analytics.Overview}}
 <div class="workflow-stats-grid">
@@ -324,7 +324,9 @@
     </div>
     {{end}}
 </div>
-
+</div>
+</div>
+{{template "page_shell_end" .}}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
 const showPixel = {{if .analytics.ShowPixelMetrics}}true{{else}}false{{end}};
@@ -375,9 +377,6 @@ new Chart(document.getElementById('hourlyChart'), {
     options: { responsive: true, plugins: { legend: { position: 'bottom' } }, scales: { y: { beginAtZero: true } } }
 });
 </script>
-</div>
-</main>
-</div>
 </body>
 </html>
 {{end}}

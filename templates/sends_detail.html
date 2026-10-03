@@ -2,16 +2,16 @@
 <!DOCTYPE html>
 <html lang="en" class="h-full">
 <head>{{template "head" .}}</head>
-<body class="h-full bg-ivory text-charcoal">
-<div class="flex h-full">
-{{template "sidebar" .}}
-<main class="flex-1 overflow-y-auto">
-<div class="max-w-6xl mx-auto p-8">
-<div class="mb-8">
-    <a href="/sends" class="text-sm text-brand-600 hover:text-brand-700 font-medium">← Back to sends</a>
-    <h2 class="text-2xl font-bold text-slate-900 mt-2">Send Detail</h2>
-    <p class="text-slate-500 mt-1">#{{.send.ID}} — {{.send.ContactEmail}}</p>
-</div>
+{{template "page_shell_start" .}}
+<div class="app-page">
+<header class="app-page-header">
+    <div class="app-page-header-text">
+        <a href="/inbox?folder=sent&amp;send={{.send.ID}}&amp;contact={{.send.ContactID}}" class="app-page-back">← Back to Inbox</a>
+        <h2 class="app-page-title">Send Detail</h2>
+        <p class="app-page-sub">#{{.send.ID}} — {{.send.ContactEmail}}</p>
+    </div>
+</header>
+<div class="app-page-body app-page-body--wide">
 
 {{if .success}}
 <div class="alert-success mb-6">{{.success}}</div>
@@ -121,8 +121,8 @@
     {{end}}
 </div>
 </div>
-</main>
 </div>
+{{template "page_shell_end" .}}
 </body>
 </html>
 {{end}}

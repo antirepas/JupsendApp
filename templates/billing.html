@@ -2,14 +2,16 @@
 <!DOCTYPE html>
 <html lang="en" class="h-full">
 <head>{{template "head" .}}</head>
-<body class="h-full bg-ivory text-charcoal">
-<div class="flex h-full">
-{{template "sidebar" .}}
-<main class="flex-1 overflow-y-auto">
-<div class="max-w-4xl mx-auto p-8">
-<a href="/settings" class="text-sm text-brand-600 font-medium">← Settings</a>
-<h2 class="text-2xl font-bold text-charcoal mb-2 mt-2">Billing</h2>
-<p class="text-gray-500 text-sm mb-6">View your plan, switch tiers, or cancel your subscription.</p>
+{{template "page_shell_start" .}}
+<div class="app-page">
+<header class="app-page-header">
+  <div class="app-page-header-text">
+    <a href="/settings" class="app-page-back">← Settings</a>
+    <h2 class="app-page-title">Billing</h2>
+    <p class="app-page-sub">View your plan, switch tiers, or cancel your subscription.</p>
+  </div>
+</header>
+<div class="app-page-body app-page-body--narrow">
 {{if .success}}<div class="alert-success mb-6">{{.success}}</div>{{end}}
 {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
 
@@ -124,8 +126,8 @@
 {{end}}
 
 </div>
-</main>
 </div>
+{{template "page_shell_end" .}}
 </body>
 </html>
 {{end}}

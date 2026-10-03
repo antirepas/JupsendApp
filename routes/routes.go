@@ -18,6 +18,8 @@ func RegisterRoutes(server *gin.Engine) {
 	server.LoadHTMLFiles(
 		"templates/partials/head.html",
 		"templates/partials/sidebar.html",
+		"templates/partials/page_shell_start.html",
+		"templates/partials/page_shell_end.html",
 		"templates/partials/reply_pro_note.html",
 		"templates/partials/campaign_deliverability.html",
 		"templates/partials/workflow_archive_modal.html",
@@ -39,6 +41,7 @@ func RegisterRoutes(server *gin.Engine) {
 		"templates/library.html",
 		"templates/library_sheet.html",
 		"templates/inbox.html",
+		"templates/inbox_compose.html",
 		"templates/templates_list.html",
 		"templates/templates_form.html",
 		"templates/contacts_list.html",
@@ -219,6 +222,9 @@ func RegisterRoutes(server *gin.Engine) {
 		authd.POST("/templates/:id/delete", DeleteTemplate)
 
 		authd.GET("/inbox", InboxPage)
+		authd.GET("/inbox/compose", InboxComposePage)
+		authd.POST("/inbox/compose", InboxComposeSend)
+		authd.POST("/inbox/compose/verify", InboxComposeVerify)
 		authd.GET("/inbox/threads/:contactId", InboxThreadPage)
 		authd.GET("/inbox/threads/:contactId/pane", InboxThreadPane)
 		authd.POST("/inbox/threads/:contactId/read", InboxMarkRead)
@@ -309,9 +315,9 @@ func RegisterRoutes(server *gin.Engine) {
 		authd.POST("/campaigns/:id/test-workflow", TestCampaignWorkflowWeb)
 		authd.POST("/campaigns/:id/stop", StopCampaign)
 
-		authd.GET("/sends", ListSendsPage)
-		authd.GET("/sends/new", NewSendPage)
-		authd.POST("/sends", CreateSend)
+		authd.GET("/sends", SendsPageRedirect)
+		authd.GET("/sends/new", NewSendRedirect)
+		authd.POST("/sends", InboxComposeSend)
 		authd.POST("/sends/clear-cancelled", ClearCancelledSendsWeb)
 		authd.POST("/sends/:id/delete", DeleteSendWeb)
 		authd.GET("/sends/:id", SendDetailPage)

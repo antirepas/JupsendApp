@@ -2,10 +2,7 @@
 <!DOCTYPE html>
 <html lang="en" class="h-full">
 <head>{{template "head" .}}</head>
-<body class="h-full bg-ivory text-charcoal">
-<div class="flex h-full">
-{{template "sidebar" .}}
-<main class="flex-1 overflow-y-auto flex flex-col min-h-0">
+{{template "page_shell_start" .}}
 <div class="tpl-fm" id="tpl-fm"
      data-folder="{{.folder}}"
      data-folder-title="{{.folderTitle}}"
@@ -134,8 +131,7 @@
 </div>
 
 <script src="{{assetURL "/static/js/templates-fm.js"}}" defer></script>
-</main>
-</div>
+{{template "page_shell_end" .}}
 </body>
 </html>
 {{end}}

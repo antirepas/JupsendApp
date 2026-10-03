@@ -2,27 +2,18 @@
 <!DOCTYPE html>
 <html lang="en" class="h-full">
 <head>{{template "head" .}}</head>
-<body class="h-full bg-ivory text-charcoal">
-<div class="flex h-full">
-{{template "sidebar" .}}
-<main class="flex-1 overflow-y-auto">
-<div class="max-w-7xl mx-auto p-6">
-{{if .success}}<div class="alert-success mb-4">{{.success}}</div>{{end}}
-{{if eq .workflow.Status "archived"}}
-<div class="alert-error mb-4">This workflow is archived. In-flight contacts still run, but you cannot edit or use it for new campaigns.</div>
-{{else if .hasLivePublished}}
-<div class="mb-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">Editing a draft. Campaigns still use the last published version until you Publish again.</div>
-{{end}}
-<div class="flex items-center justify-between mb-4">
-    <div>
-        <a href="/workflows" class="text-sm text-brand-600">← Workflows</a>
-        <h2 class="text-2xl font-bold text-slate-900 mt-1">{{.workflow.Name}}</h2>
-        <p class="text-sm text-slate-500 mt-1">Drag nodes on the canvas. Drag the dot below a node to another node to connect. Hover a line and click × to remove it. Link each condition to the email it should check.</p>
+{{template "page_shell_start" .}}
+<div class="app-page app-page--workspace">
+<header class="app-page-header">
+    <div class="app-page-header-text">
+        <a href="/workflows" class="app-page-back">← Workflows</a>
+        <h2 class="app-page-title">{{.workflow.Name}}</h2>
+        <p class="app-page-sub">Drag nodes on the canvas. Drag the dot below a node to another node to connect. Hover a line and click × to remove it. Link each condition to the email it should check.</p>
         {{if ne .workflow.Status "archived"}}
         <p class="text-xs text-slate-500 mt-1"><span class="font-medium text-slate-700">Save</span> keeps a draft. <span class="font-medium text-slate-700">Publish</span> makes it available for new campaigns.</p>
         {{end}}
     </div>
-    <div class="flex gap-2 items-center">
+    <div class="app-page-actions">
         {{if ne .workflow.Status "archived"}}
         <span class="text-xs font-medium uppercase tracking-wide px-2 py-1 rounded bg-slate-100 text-slate-600">Draft</span>
         <button type="button" class="btn-secondary text-red-600" data-archive-workflow data-workflow-id="{{.workflow.ID}}" data-workflow-name="{{.workflow.Name}}">Archive</button>
@@ -33,10 +24,17 @@
         <a href="/workflows/{{.workflow.ID}}/analytics" class="btn-secondary">Analytics</a>
         {{end}}
     </div>
-</div>
-<div id="builder-msg" class="mb-4 hidden"></div>
+</header>
+<div class="app-page-body">
+{{if .success}}<div class="alert-success mb-4 mx-5 mt-4">{{.success}}</div>{{end}}
+{{if eq .workflow.Status "archived"}}
+<div class="alert-error mb-4 mx-5 mt-4">This workflow is archived. In-flight contacts still run, but you cannot edit or use it for new campaigns.</div>
+{{else if .hasLivePublished}}
+<div class="mb-4 mx-5 mt-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">Editing a draft. Campaigns still use the last published version until you Publish again.</div>
+{{end}}
+<div id="builder-msg" class="mb-4 mx-5 hidden"></div>
 
-<div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
+<div class="grid grid-cols-1 lg:grid-cols-4 gap-4 px-5 pb-5 flex-1 min-h-0">
     <div class="card lg:col-span-1">
         <h3 class="font-semibold mb-2">Node palette</h3>
         <p class="text-xs text-slate-500 mb-3">Drag onto canvas or click to add</p>
@@ -54,15 +52,15 @@
             <button type="button" id="btn-delete-node" class="btn-secondary text-red-600 text-sm mt-4 w-full">Delete node</button>
         </div>
     </div>
-    <div class="card lg:col-span-3 p-0 overflow-hidden" style="min-height: 560px;">
-        <div id="canvas-wrap" class="workflow-canvas-wrap">
+    <div class="card lg:col-span-3 p-0 overflow-hidden flex flex-col min-h-0" style="min-height: 560px;">
+        <div id="canvas-wrap" class="workflow-canvas-wrap flex-1">
             <svg id="edge-svg" class="workflow-edge-svg"></svg>
             <div id="canvas" class="workflow-canvas"></div>
         </div>
     </div>
 </div>
 
-<div class="card mt-4">
+<div class="card mx-5 mb-5">
     <h3 class="font-semibold mb-1">Connections</h3>
     <p class="text-xs text-slate-500 mb-4">Click a line on the canvas to edit it. Hover a line and click × to delete it. You can also drag from the <span class="font-medium">blue dot</span> under a node to the <span class="font-medium">green dot</span> on another node.</p>
 
@@ -112,8 +110,8 @@
     </div>
 </div>
 </div>
-</main>
 </div>
+{{template "page_shell_end" .}}
 <script>
 const WORKFLOW_ID = {{.workflow.ID}};
 let VERSION_ID = {{.versionID}};

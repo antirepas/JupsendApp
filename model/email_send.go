@@ -2,7 +2,9 @@ package model
 
 import (
 	"database/sql"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"emailtracker.com/db"
 )
@@ -37,6 +39,33 @@ type EmailSendListItem struct {
 	RenderedHTML    string
 	RenderedText    string
 	SMTPAccountID   int64
+}
+
+// DisplaySubject prefers the rendered subject for list UIs.
+func (i EmailSendListItem) DisplaySubject() string {
+	if s := strings.TrimSpace(i.RenderedSubject); s != "" {
+		return s
+	}
+	if s := strings.TrimSpace(i.TemplateSubject); s != "" {
+		return s
+	}
+	if s := strings.TrimSpace(i.TemplateName); s != "" {
+		return s
+	}
+	return "(no subject)"
+}
+
+// Initial is the avatar letter for inbox send rows.
+func (i EmailSendListItem) Initial() string {
+	email := strings.TrimSpace(i.ContactEmail)
+	if email == "" {
+		return "?"
+	}
+	r, _ := utf8.DecodeRuneInString(email)
+	if r == utf8.RuneError {
+		return "?"
+	}
+	return strings.ToUpper(string(r))
 }
 
 type EmailSendDetail struct {

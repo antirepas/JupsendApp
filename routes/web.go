@@ -1168,31 +1168,31 @@ func ClearCancelledSendsWeb(ctx *gin.Context) {
 	n, err := model.ClearCancelledSends(userID)
 	if err != nil {
 		log.Print(err)
-		ctx.Redirect(http.StatusFound, "/sends?error="+url.QueryEscape("Could not clear cancelled sends"))
+		ctx.Redirect(http.StatusFound, "/inbox?folder=sent&error="+url.QueryEscape("Could not clear cancelled sends"))
 		return
 	}
 	msg := fmt.Sprintf("Deleted %d cancelled sends", n)
-	ctx.Redirect(http.StatusFound, "/sends?success="+url.QueryEscape(msg))
+	ctx.Redirect(http.StatusFound, "/inbox?folder=sent&success="+url.QueryEscape(msg))
 }
 
 func DeleteSendWeb(ctx *gin.Context) {
 	userID := mustUserID(ctx)
 	id, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
 	if err != nil {
-		ctx.Redirect(http.StatusFound, "/sends?error=Invalid+send")
+		ctx.Redirect(http.StatusFound, "/inbox?folder=sent&error=Invalid+send")
 		return
 	}
 	ok, err := model.DeleteEmailSendForUser(userID, id)
 	if err != nil {
 		log.Print(err)
-		ctx.Redirect(http.StatusFound, "/sends?error="+url.QueryEscape("Could not delete send"))
+		ctx.Redirect(http.StatusFound, "/inbox?folder=sent&error="+url.QueryEscape("Could not delete send"))
 		return
 	}
 	if !ok {
-		ctx.Redirect(http.StatusFound, "/sends?error="+url.QueryEscape("Send not found or already delivered (delivered sends cannot be deleted)"))
+		ctx.Redirect(http.StatusFound, "/inbox?folder=sent&error="+url.QueryEscape("Send not found or already delivered (delivered sends cannot be deleted)"))
 		return
 	}
-	ctx.Redirect(http.StatusFound, "/sends?success="+url.QueryEscape("Send deleted"))
+	ctx.Redirect(http.StatusFound, "/inbox?folder=sent&success="+url.QueryEscape("Send deleted"))
 }
 
 func NewSendPage(ctx *gin.Context) {
@@ -1287,14 +1287,14 @@ func CreateSend(ctx *gin.Context) {
 func SendDetailPage(ctx *gin.Context) {
 	id, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
 	if err != nil {
-		ctx.HTML(http.StatusBadRequest, "error.html", gin.H{"title": "Error", "active": "sends", "error": "Invalid send ID"})
+		ctx.HTML(http.StatusBadRequest, "error.html", gin.H{"title": "Error", "active": "inbox", "error": "Invalid send ID"})
 		return
 	}
 
 	detail, err := model.GetEmailSendDetailForUser(id, mustUserID(ctx))
 	if err != nil {
 		log.Print(err)
-		ctx.HTML(http.StatusNotFound, "error.html", gin.H{"title": "Error", "active": "sends", "error": "Send not found"})
+		ctx.HTML(http.StatusNotFound, "error.html", gin.H{"title": "Error", "active": "inbox", "error": "Send not found"})
 		return
 	}
 
@@ -1327,11 +1327,12 @@ func SendDetailPage(ctx *gin.Context) {
 
 	ctx.HTML(http.StatusOK, "sends_detail.html", gin.H{
 		"title":              "Send Detail",
-		"active":             "sends",
+		"active":             "inbox",
 		"send":               detail,
 		"renderedBody":       renderedBody,
 		"renderedBodySrcDoc": renderedBodySrcDoc,
 		"success":            ctx.Query("success"),
+		"inboxUnread":        model.CountInboxUnread(mustUserID(ctx)),
 	})
 }
 

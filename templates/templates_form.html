@@ -4,55 +4,39 @@
 <head>{{template "head" .}}
 <link href="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.snow.css" rel="stylesheet">
 </head>
-<body class="h-full bg-ivory text-charcoal">
-<div class="flex h-full">
-{{template "sidebar" .}}
-<main class="flex-1 overflow-y-auto">
-<div class="max-w-7xl mx-auto p-8">
-<div class="mb-6">
-    <a href="/library{{if and .folder (ne .folder "all")}}?folder={{.folder}}{{end}}" class="text-sm text-brand-600 font-medium">← Library</a>
-    <h2 class="text-2xl font-bold text-slate-900 mt-2">{{if .isNew}}New template{{else}}Edit template{{end}}</h2>
-    <p class="text-slate-500 mt-1">Write the email your prospects will see. Use <code class="text-xs bg-slate-100 px-1 rounded">{{"{{variable}}"}}</code> for personalization.</p>
-</div>
-
-<form id="template-form" method="POST" action="{{if .isNew}}/templates{{else}}/templates/{{.template.ID}}{{end}}" class="template-builder-grid" data-ai-enabled="{{if .aiEnabled}}true{{else}}false{{end}}">
+{{template "page_shell_start" .}}
+<div class="app-page app-page--workspace">
+<form id="template-form" method="POST" action="{{if .isNew}}/templates{{else}}/templates/{{.template.ID}}{{end}}" class="template-builder-grid template-workspace" data-ai-enabled="{{if .aiEnabled}}true{{else}}false{{end}}">
     {{if and .folder (ne .folder "all")}}<input type="hidden" name="folder" value="{{.folder}}">{{end}}
-    <div class="template-editor-column space-y-5">
-        <div class="card">
-            <div>
-                <label class="form-label" for="template-name">Name</label>
-                <input type="text" id="template-name" name="name" class="form-input" value="{{if .template}}{{.template.Name}}{{end}}" required placeholder="Welcome email">
-                <p class="form-hint">Internal label — contacts never see this.</p>
-            </div>
-            <div class="mt-4">
-                <label class="form-label" for="template-folder">Folder</label>
-                <select id="template-folder" name="folder_id" class="form-input">
-                    <option value="0" {{if not .selectedFolderID}}selected{{end}}>Unfiled</option>
-                    {{range .folders}}
-                    <option value="{{.ID}}" {{if eq .ID $.selectedFolderID}}selected{{end}}>{{.Name}}</option>
-                    {{end}}
-                </select>
-            </div>
-            <div class="mt-4">
-                <label class="form-label" for="template-subject">Subject</label>
-                <input type="text" id="template-subject" name="subject" class="form-input" value="{{if .template}}{{.template.Subject}}{{end}}" required placeholder="Quick question for {{"{{name}}"}}">
-                <div id="template-subject-nudges" class="template-subject-nudges" hidden></div>
-            </div>
-            <div class="mt-4">
-                <label class="form-label">Body</label>
-                <div class="template-toolbar-wrap">
-                    <div id="template-editor"></div>
+
+    <header class="app-page-header" style="grid-column: 1 / -1;">
+        <div class="template-header-meta">
+            <a href="/library{{if and .folder (ne .folder "all")}}?folder={{.folder}}{{end}}" class="app-page-back">← Library</a>
+            <input type="text" id="template-name" name="name" class="form-input template-header-name" value="{{if .template}}{{.template.Name}}{{end}}" required placeholder="Template name">
+            <select id="template-folder" name="folder_id" class="form-input template-header-folder" aria-label="Folder">
+                <option value="0" {{if not .selectedFolderID}}selected{{end}}>Unfiled</option>
+                {{range .folders}}
+                <option value="{{.ID}}" {{if eq .ID $.selectedFolderID}}selected{{end}}>{{.Name}}</option>
+                {{end}}
+            </select>
+        </div>
+        <div class="app-page-actions">
+            <a href="/library{{if and .folder (ne .folder "all")}}?folder={{.folder}}{{end}}" class="btn-secondary">Cancel</a>
+            <button type="submit" class="btn-primary">{{if .isNew}}Create template{{else}}Save{{end}}</button>
+        </div>
+    </header>
+
+    <div class="template-editor-column">
+        <div class="template-editor-pane">
+            <div class="template-editor-fields">
+                <div>
+                    <label class="form-label" for="template-subject">Subject</label>
+                    <input type="text" id="template-subject" name="subject" class="form-input" value="{{if .template}}{{.template.Subject}}{{end}}" required placeholder="Quick question for {{"{{name}}"}}">
+                    <div id="template-subject-nudges" class="template-subject-nudges" hidden></div>
                 </div>
-                <textarea id="template-body" name="body" class="hidden" required>{{if .template}}{{.template.Body}}{{end}}</textarea>
-                <div id="template-starters" class="template-starters" hidden></div>
-            </div>
-            <div class="mt-4">
-                <label class="form-label">Variables</label>
-                <div id="template-var-chips" class="template-var-chips"></div>
-                <p class="form-hint mt-1">See <a href="#template-syntax-guide" class="text-brand-600 font-medium">syntax guide below</a> for filters and conditionals.</p>
-                <div class="mt-4 pt-4 border-t border-slate-100">
-                    <label class="form-label" for="template-source-columns">Browse contact or list columns</label>
-                    <select id="template-source-columns" class="form-input text-sm max-w-md">
+                <div>
+                    <label class="form-label" for="template-source-columns">Browse columns</label>
+                    <select id="template-source-columns" class="form-input text-sm">
                         <option value="">—</option>
                         <optgroup label="Contacts">
                             {{range .contacts}}
@@ -65,10 +49,25 @@
                             {{end}}
                         </optgroup>
                     </select>
-                    <p class="form-hint mt-1">See which columns exist on a contact or list — does not change the live preview.</p>
-                    <div id="template-source-vars" class="template-source-vars" hidden></div>
                 </div>
             </div>
+
+            <div class="template-editor-body">
+                <label class="form-label">Body</label>
+                <div class="template-toolbar-wrap">
+                    <div id="template-editor"></div>
+                </div>
+                <textarea id="template-body" name="body" class="hidden" required>{{if .template}}{{.template.Body}}{{end}}</textarea>
+                <div id="template-starters" class="template-starters" hidden></div>
+            </div>
+
+            <div>
+                <label class="form-label">Variables</label>
+                <div id="template-var-chips" class="template-var-chips"></div>
+                <p class="form-hint mt-1">Click to insert. Open the syntax guide for filters and conditionals.</p>
+                <div id="template-source-vars" class="template-source-vars" hidden></div>
+            </div>
+
             <div id="template-tone-banner" class="template-tone-banner" hidden>
                 <p class="template-tone-banner-text"></p>
                 <div class="template-tone-banner-actions">
@@ -76,17 +75,76 @@
                     <button type="button" class="btn-secondary btn-sm" data-tone-action="soften">Soften</button>
                 </div>
             </div>
-            <div class="flex gap-3 pt-4 border-t border-slate-100 mt-4">
-                <button type="submit" class="btn-primary">{{if .isNew}}Create template{{else}}Save changes{{end}}</button>
-                <a href="/library{{if and .folder (ne .folder "all")}}?folder={{.folder}}{{end}}" class="btn-secondary">Cancel</a>
-            </div>
         </div>
+
+        <details id="template-syntax-guide" class="template-syntax-drawer template-syntax-guide">
+            <summary>Variable syntax guide</summary>
+            <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div class="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                    <h4 class="text-sm font-semibold text-slate-800 mb-1">Basics</h4>
+                    <p class="text-xs text-slate-500 mb-2">Simple personalization from contact data.</p>
+                    <code class="syntax-example text-xs block bg-white border border-slate-200 rounded px-2 py-1 font-mono">{{"{{name}}"}}, {{"{{company}}"}}</code>
+                    <button type="button" class="btn-secondary btn-sm mt-2 syntax-copy" data-copy="{{"{{name}}"}}">Copy</button>
+                </div>
+                <div class="rounded-lg border border-emerald-200 bg-emerald-50/50 p-3">
+                    <h4 class="text-sm font-semibold text-slate-800 mb-1">Mailbox (sender)</h4>
+                    <p class="text-xs text-slate-500 mb-2">Filled from whichever mailbox sends — use for signatures when seats rotate.</p>
+                    <code class="syntax-example text-xs block bg-white border border-slate-200 rounded px-2 py-1 font-mono">Best regards, {{"{{@name}}"}}</code>
+                    <button type="button" class="btn-secondary btn-sm mt-2 syntax-copy" data-copy="Best regards, {{"{{@name}}"}}">Copy</button>
+                    <code class="syntax-example text-xs block bg-white border border-slate-200 rounded px-2 py-1 font-mono mt-2">{{"{{@first_name}}"}}, {{"{{@email}}"}}</code>
+                    <button type="button" class="btn-secondary btn-sm mt-2 syntax-copy" data-copy="{{"{{@first_name}}"}}">Copy</button>
+                </div>
+                <div class="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                    <h4 class="text-sm font-semibold text-slate-800 mb-1">Formatting</h4>
+                    <p class="text-xs text-slate-500 mb-2">First name, title case, and fallback when empty.</p>
+                    <code class="syntax-example text-xs block bg-white border border-slate-200 rounded px-2 py-1 font-mono">{{"{{name|first|default:there}}"}}</code>
+                    <button type="button" class="btn-secondary btn-sm mt-2 syntax-copy" data-copy="{{"{{name|first|default:there}}"}}">Copy</button>
+                    <code class="syntax-example text-xs block bg-white border border-slate-200 rounded px-2 py-1 font-mono mt-2">{{"{{company|title}}"}}</code>
+                    <button type="button" class="btn-secondary btn-sm mt-2 syntax-copy" data-copy="{{"{{company|title}}"}}">Copy</button>
+                </div>
+                <div class="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                    <h4 class="text-sm font-semibold text-slate-800 mb-1">Required &amp; fallback</h4>
+                    <p class="text-xs text-slate-500 mb-2">Missing required values skip that contact at send.</p>
+                    <code class="syntax-example text-xs block bg-white border border-slate-200 rounded px-2 py-1 font-mono">{{"{{company|required}}"}}</code>
+                    <button type="button" class="btn-secondary btn-sm mt-2 syntax-copy" data-copy="{{"{{company|required}}"}}">Copy</button>
+                    <code class="syntax-example text-xs block bg-white border border-slate-200 rounded px-2 py-1 font-mono mt-2">{{"{{role|default:your team}}"}}</code>
+                    <button type="button" class="btn-secondary btn-sm mt-2 syntax-copy" data-copy="{{"{{role|default:your team}}"}}">Copy</button>
+                </div>
+                <div class="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                    <h4 class="text-sm font-semibold text-slate-800 mb-1">Optional blocks</h4>
+                    <p class="text-xs text-slate-500 mb-2">Hide a paragraph when the variable is empty.</p>
+                    <code class="syntax-example text-xs block bg-white border border-slate-200 rounded px-2 py-1 font-mono whitespace-pre-wrap">{% if description %}I noticed {{"{{description}}"}}.{% endif %}</code>
+                    <button type="button" class="btn-secondary btn-sm mt-2 syntax-copy" data-copy="{% if description %}I noticed {{"{{description}}"}}.{% endif %}">Copy</button>
+                </div>
+                <div class="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                    <h4 class="text-sm font-semibold text-slate-800 mb-1">Links &amp; truncate</h4>
+                    <code class="syntax-example text-xs block bg-white border border-slate-200 rounded px-2 py-1 font-mono">{{"{{landing|url}}"}}</code>
+                    <button type="button" class="btn-secondary btn-sm mt-2 syntax-copy" data-copy="{{"{{landing|url}}"}}">Copy</button>
+                    <code class="syntax-example text-xs block bg-white border border-slate-200 rounded px-2 py-1 font-mono mt-2">{{"{{bio|truncate:30}}"}}</code>
+                    <button type="button" class="btn-secondary btn-sm mt-2 syntax-copy" data-copy="{{"{{bio|truncate:30}}"}}">Copy</button>
+                </div>
+                {{if .aiEnabled}}
+                <div class="rounded-lg border border-slate-200 bg-slate-50 p-3 md:col-span-2">
+                    <h4 class="text-sm font-semibold text-slate-800 mb-1">AI (uses credits at send)</h4>
+                    <code class="syntax-example text-xs block bg-white border border-slate-200 rounded px-2 py-1 font-mono">{{"{{~description}}"}}</code>
+                    <button type="button" class="btn-secondary btn-sm mt-2 syntax-copy" data-copy="{{"{{~description}}"}}">Copy</button>
+                    <code class="syntax-example text-xs block bg-white border border-slate-200 rounded px-2 py-1 font-mono mt-2">{{"{{bio|summarize:30}}"}}</code>
+                    <button type="button" class="btn-secondary btn-sm mt-2 syntax-copy" data-copy="{{"{{bio|summarize:30}}"}}">Copy</button>
+                </div>
+                {{else}}
+                <div class="rounded-lg border border-slate-200 bg-slate-50 p-3 md:col-span-2">
+                    <h4 class="text-sm font-semibold text-slate-800 mb-1">AI filters</h4>
+                    <p class="text-xs text-slate-400">AI not configured — {{"{{~var}}"}} and {{"{{var|summarize:N}}"}} require OpenAI.</p>
+                </div>
+                {{end}}
+            </div>
+        </details>
     </div>
 
     <div class="template-preview-column">
-        <div class="template-preview-panel card">
-            <h3 class="card-title">Live preview</h3>
-            <p class="text-sm text-slate-500 mb-4">How this email appears in a prospect's inbox.</p>
+        <div class="template-preview-panel">
+            <h3 class="app-page-title" style="font-size:1rem;margin-bottom:0.25rem;">Live preview</h3>
+            <p class="app-page-sub mb-3">How this email appears in a prospect's inbox.</p>
             <div class="template-inbox-mock">
                 <div class="template-inbox-row">
                     <span class="template-inbox-label">From</span>
@@ -100,7 +158,7 @@
             <iframe id="preview-frame" class="template-preview-frame" title="Email preview" sandbox=""></iframe>
             <div id="preview-ai-notice" class="hidden text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-3" role="status"></div>
             <div id="template-lint-sidebar" class="template-lint-sidebar" aria-live="polite"></div>
-            <div class="mt-4 pt-4 border-t border-slate-100">
+            <div class="mt-4 pt-4 border-t border-slate-200">
                 <label class="form-label" for="template-preview-contact">Preview as contact</label>
                 <select id="template-preview-contact" class="form-input text-sm mb-3">
                     <option value="">— Default sample values —</option>
@@ -108,7 +166,7 @@
                     <option value="{{.ID}}">{{.Email}}</option>
                     {{end}}
                 </select>
-                <p class="form-hint mb-3">Pick a contact to preview with their real variables. Default sample values are demo-only and will not match a live send.</p>
+                <p class="form-hint mb-3">Pick a contact to preview with their real variables.</p>
                 <p class="form-label mb-2">Preview sample data</p>
                 <div id="template-sample-fields" class="template-sample-fields"></div>
                 {{if .aiEnabled}}
@@ -122,75 +180,6 @@
     </div>
 </form>
 
-<details id="template-syntax-guide" class="card mt-8 template-syntax-guide">
-    <summary class="card-title cursor-pointer select-none">Variable syntax guide</summary>
-    <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div class="rounded-lg border border-slate-200 bg-slate-50 p-4">
-            <h4 class="text-sm font-semibold text-slate-800 mb-1">Basics</h4>
-            <p class="text-xs text-slate-500 mb-2">Simple personalization from contact data.</p>
-            <code class="syntax-example text-xs block bg-white border border-slate-200 rounded px-2 py-1 font-mono">{{"{{name}}"}}, {{"{{company}}"}}</code>
-            <button type="button" class="btn-secondary btn-sm mt-2 syntax-copy" data-copy="{{"{{name}}"}}">Copy</button>
-        </div>
-        <div class="rounded-lg border border-emerald-200 bg-emerald-50/50 p-4">
-            <h4 class="text-sm font-semibold text-slate-800 mb-1">Mailbox (sender)</h4>
-            <p class="text-xs text-slate-500 mb-2">Filled from whichever mailbox sends — use for signatures when seats rotate. Not a contact field.</p>
-            <code class="syntax-example text-xs block bg-white border border-slate-200 rounded px-2 py-1 font-mono">Best regards, {{"{{@name}}"}}</code>
-            <button type="button" class="btn-secondary btn-sm mt-2 syntax-copy" data-copy="Best regards, {{"{{@name}}"}}">Copy</button>
-            <code class="syntax-example text-xs block bg-white border border-slate-200 rounded px-2 py-1 font-mono mt-2">{{"{{@first_name}}"}}, {{"{{@email}}"}}</code>
-            <button type="button" class="btn-secondary btn-sm mt-2 syntax-copy" data-copy="{{"{{@first_name}}"}}">Copy</button>
-        </div>
-        <div class="rounded-lg border border-slate-200 bg-slate-50 p-4">
-            <h4 class="text-sm font-semibold text-slate-800 mb-1">Formatting</h4>
-            <p class="text-xs text-slate-500 mb-2">First name, title case, and fallback when empty.</p>
-            <code class="syntax-example text-xs block bg-white border border-slate-200 rounded px-2 py-1 font-mono">{{"{{name|first|default:there}}"}}</code>
-            <button type="button" class="btn-secondary btn-sm mt-2 syntax-copy" data-copy="{{"{{name|first|default:there}}"}}">Copy</button>
-            <code class="syntax-example text-xs block bg-white border border-slate-200 rounded px-2 py-1 font-mono mt-2">{{"{{company|title}}"}}</code>
-            <button type="button" class="btn-secondary btn-sm mt-2 syntax-copy" data-copy="{{"{{company|title}}"}}">Copy</button>
-        </div>
-        <div class="rounded-lg border border-slate-200 bg-slate-50 p-4">
-            <h4 class="text-sm font-semibold text-slate-800 mb-1">Required &amp; fallback</h4>
-            <p class="text-xs text-slate-500 mb-2">Missing required values skip that contact at send.</p>
-            <code class="syntax-example text-xs block bg-white border border-slate-200 rounded px-2 py-1 font-mono">{{"{{company|required}}"}}</code>
-            <button type="button" class="btn-secondary btn-sm mt-2 syntax-copy" data-copy="{{"{{company|required}}"}}">Copy</button>
-            <code class="syntax-example text-xs block bg-white border border-slate-200 rounded px-2 py-1 font-mono mt-2">{{"{{role|default:your team}}"}}</code>
-            <button type="button" class="btn-secondary btn-sm mt-2 syntax-copy" data-copy="{{"{{role|default:your team}}"}}">Copy</button>
-        </div>
-        <div class="rounded-lg border border-slate-200 bg-slate-50 p-4">
-            <h4 class="text-sm font-semibold text-slate-800 mb-1">Optional blocks</h4>
-            <p class="text-xs text-slate-500 mb-2">Hide a paragraph when the variable is empty.</p>
-            <code class="syntax-example text-xs block bg-white border border-slate-200 rounded px-2 py-1 font-mono whitespace-pre-wrap">{% if description %}I noticed {{"{{description}}"}}.{% endif %}</code>
-            <button type="button" class="btn-secondary btn-sm mt-2 syntax-copy" data-copy="{% if description %}I noticed {{"{{description}}"}}.{% endif %}">Copy</button>
-        </div>
-        <div class="rounded-lg border border-slate-200 bg-slate-50 p-4">
-            <h4 class="text-sm font-semibold text-slate-800 mb-1">Links</h4>
-            <p class="text-xs text-slate-500 mb-2">Validate and wrap URLs as clickable links in the body.</p>
-            <code class="syntax-example text-xs block bg-white border border-slate-200 rounded px-2 py-1 font-mono">{{"{{landing|url}}"}}</code>
-            <button type="button" class="btn-secondary btn-sm mt-2 syntax-copy" data-copy="{{"{{landing|url}}"}}">Copy</button>
-        </div>
-        <div class="rounded-lg border border-slate-200 bg-slate-50 p-4">
-            <h4 class="text-sm font-semibold text-slate-800 mb-1">Truncate</h4>
-            <p class="text-xs text-slate-500 mb-2">Limit text to a word count (deterministic).</p>
-            <code class="syntax-example text-xs block bg-white border border-slate-200 rounded px-2 py-1 font-mono">{{"{{bio|truncate:30}}"}}</code>
-            <button type="button" class="btn-secondary btn-sm mt-2 syntax-copy" data-copy="{{"{{bio|truncate:30}}"}}">Copy</button>
-        </div>
-        {{if .aiEnabled}}
-        <div class="rounded-lg border border-slate-200 bg-slate-50 p-4 md:col-span-2">
-            <h4 class="text-sm font-semibold text-slate-800 mb-1">AI (uses credits at send)</h4>
-            <p class="text-xs text-slate-500 mb-2">Fit text into a sentence grammatically, or summarize to N words.</p>
-            <code class="syntax-example text-xs block bg-white border border-slate-200 rounded px-2 py-1 font-mono">{{"{{~description}}"}}</code>
-            <button type="button" class="btn-secondary btn-sm mt-2 syntax-copy" data-copy="{{"{{~description}}"}}">Copy</button>
-            <code class="syntax-example text-xs block bg-white border border-slate-200 rounded px-2 py-1 font-mono mt-2">{{"{{bio|summarize:30}}"}}</code>
-            <button type="button" class="btn-secondary btn-sm mt-2 syntax-copy" data-copy="{{"{{bio|summarize:30}}"}}">Copy</button>
-        </div>
-        {{else}}
-        <div class="rounded-lg border border-slate-200 bg-slate-50 p-4 md:col-span-2">
-            <h4 class="text-sm font-semibold text-slate-800 mb-1">AI filters</h4>
-            <p class="text-xs text-slate-400">AI not configured — {{"{{~var}}"}} and {{"{{var|summarize:N}}"}} require OpenAI.</p>
-        </div>
-        {{end}}
-    </div>
-</details>
-
 <div id="template-selection-popover" class="template-ai-popover" hidden>
     <button type="button" data-ai-action="shorten">Shorten</button>
     <button type="button" data-ai-action="soften">Soften</button>
@@ -199,8 +188,7 @@
 </div>
 <script type="application/json" id="template-default-sample">{{.defaultSampleJSON}}</script>
 </div>
-</main>
-</div>
+{{template "page_shell_end" .}}
 <script src="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.js"></script>
 <script src="{{assetURL "/static/js/template-editor.js"}}"></script>
 </body>

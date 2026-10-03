@@ -2,10 +2,7 @@
 <!DOCTYPE html>
 <html lang="en" class="h-full">
 <head>{{template "head" .}}</head>
-<body class="h-full bg-ivory text-charcoal">
-<div class="flex h-full">
-{{template "sidebar" .}}
-<main class="flex-1 overflow-hidden flex flex-col min-h-0">
+{{template "page_shell_start" .}}
 <div class="lib-sheet" id="lib-sheet" data-list-id="{{.list.ID}}">
     <header class="lib-sheet-header">
         <div>
@@ -115,8 +112,7 @@
 </div>
 {{template "contact_import_map_modal.html" .}}
 <script src="{{assetURL "/static/js/library-sheet.js"}}" defer></script>
-</main>
-</div>
+{{template "page_shell_end" .}}
 </body>
 </html>
 {{end}}

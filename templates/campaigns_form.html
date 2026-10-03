@@ -2,16 +2,16 @@
 <!DOCTYPE html>
 <html lang="en" class="h-full">
 <head>{{template "head" .}}</head>
-<body class="h-full bg-ivory text-charcoal">
-<div class="flex h-full">
-{{template "sidebar" .}}
-<main class="flex-1 overflow-y-auto">
-<div class="max-w-3xl mx-auto p-8">
-<div class="mb-8">
-    <h2 class="text-2xl font-bold text-slate-900">New Campaign</h2>
-    <p class="text-slate-500 mt-1">Send once, run a workflow, or A/B test the first workflow email</p>
-</div>
-
+{{template "page_shell_start" .}}
+<div class="app-page">
+<header class="app-page-header">
+  <div class="app-page-header-text">
+    <a href="/campaigns" class="app-page-back">← Campaigns</a>
+    <h2 class="app-page-title">New Campaign</h2>
+    <p class="app-page-sub">Send once, run a workflow, or A/B test the first workflow email</p>
+  </div>
+</header>
+<div class="app-page-body app-page-body--narrow">
 {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
 
 <div class="card">
@@ -232,8 +232,8 @@
     </form>
 </div>
 </div>
-</main>
 </div>
+{{template "page_shell_end" .}}
 <script>
 const bulkCard = document.getElementById('card-bulk');
 const wfCard = document.getElementById('card-workflow');

@@ -2,13 +2,15 @@
 <!DOCTYPE html>
 <html lang="en" class="h-full">
 <head>{{template "head" .}}</head>
-<body class="h-full bg-ivory text-charcoal">
-<div class="flex h-full">
-{{template "sidebar" .}}
-<main class="flex-1 overflow-y-auto">
-<div class="max-w-4xl mx-auto p-8">
-  <h2 class="text-2xl font-bold text-charcoal mb-1">Guides</h2>
-  <p class="text-gray-500 text-sm mb-8">Deep playbooks for running outbound outreach in jupsend. Optional — reopen anytime from Help.</p>
+{{template "page_shell_start" .}}
+<div class="app-page">
+<header class="app-page-header">
+  <div class="app-page-header-text">
+    <h2 class="app-page-title">Guides</h2>
+    <p class="app-page-sub">Deep playbooks for running outbound outreach in jupsend. Optional — reopen anytime from Help.</p>
+  </div>
+</header>
+<div class="app-page-body app-page-body--narrow">
 
   <div class="card mb-8 flex flex-wrap items-center justify-between gap-4">
     <div>
@@ -111,8 +113,8 @@
     </a>
   </div>
 </div>
-</main>
 </div>
+{{template "page_shell_end" .}}
 </body>
 </html>
 {{end}}

@@ -2,15 +2,15 @@
 <!DOCTYPE html>
 <html lang="en" class="h-full">
 <head>{{template "head" .}}</head>
-<body class="h-full bg-ivory text-charcoal">
-<div class="flex h-full">
-{{template "sidebar" .}}
-<main class="flex-1 overflow-y-auto">
-<div class="max-w-6xl mx-auto p-8">
-<div class="mb-8">
-    <h2 class="text-2xl font-bold text-slate-900">Send Email</h2>
-    <p class="text-slate-500 mt-1">One-off send to a contact. Pick the mailbox that should appear as From.</p>
-</div>
+{{template "page_shell_start" .}}
+<div class="app-page">
+<header class="app-page-header">
+    <div class="app-page-header-text">
+        <h2 class="app-page-title">Send Email</h2>
+        <p class="app-page-sub">One-off send to a contact. Pick the mailbox that should appear as From.</p>
+    </div>
+</header>
+<div class="app-page-body app-page-body--narrow">
 
 {{if .gmailSendBlocked}}
 <div class="alert-error mb-6">{{.gmailSendBlocked}} <a href="/settings" class="underline font-medium">Open Settings</a></div>
@@ -72,8 +72,8 @@
     {{end}}
 </div>
 </div>
-</main>
 </div>
+{{template "page_shell_end" .}}
 </body>
 </html>
 {{end}}
