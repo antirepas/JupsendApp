@@ -55,6 +55,10 @@ var (
 	OpenAIAPIKey          string
 	OpenAIModel           string
 	OpenAIFallbackModel   string
+	// ApifyToken authenticates Apify Actor runs (email verification).
+	ApifyToken string
+	// ApifyEmailVerifierActor is the Actor id for bulk email verification.
+	ApifyEmailVerifierActor string
 	// ManualInboxKitFulfillment queues domain/mailbox buys for ~2h manual InboxKit funding
 	// instead of charging the InboxKit wallet immediately. Default true; set
 	// MANUAL_INBOXKIT_FULFILLMENT=0 to buy instantly.
@@ -116,7 +120,14 @@ func reloadFromEnv() {
 	OpenAIAPIKey = strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
 	OpenAIModel = envOr("OPENAI_MODEL", "gpt-5-nano")
 	OpenAIFallbackModel = strings.TrimSpace(os.Getenv("OPENAI_FALLBACK_MODEL"))
+	ApifyToken = strings.TrimSpace(os.Getenv("APIFY_TOKEN"))
+	ApifyEmailVerifierActor = strings.TrimSpace(envOr("APIFY_EMAIL_VERIFIER_ACTOR", "account56~email-verifier"))
 	ManualInboxKitFulfillment = envBoolDefaultTrue("MANUAL_INBOXKIT_FULFILLMENT")
+}
+
+// ApifyConfigured reports whether email verification via Apify can run.
+func ApifyConfigured() bool {
+	return ApifyToken != ""
 }
 
 func envBoolDefaultTrue(key string) bool {

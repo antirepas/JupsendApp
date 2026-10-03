@@ -403,6 +403,8 @@ go test ./...
 | `ADMIN_OUTREACH_DOMAIN` | InboxKit domain auto-linked for admins on Mailboxes (e.g. `tryjupsend.com`) | — |
 | `ADMIN_OUTREACH_MAILBOXES` | Admin seats on that domain: `hello,sales` or `Alex:Smith:hello` | — |
 | `TEST_DATABASE_URL` | Postgres URL for integration tests | same as local compose test DB |
+| `APIFY_TOKEN` | Apify API token for list/campaign email verification | — |
+| `APIFY_EMAIL_VERIFIER_ACTOR` | Apify Actor id for email verification | `account56~email-verifier` |
 | `OUTBOUND_WORKER_INTERVAL` | Outbound worker seconds | `8` |
 | `IMAP_POLL_INTERVAL` | IMAP bounce poll seconds | `180` |
 | `OUTBOUND_BATCH_SIZE` | Jobs per worker batch | `10` |

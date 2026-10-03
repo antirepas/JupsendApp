@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"emailtracker.com/apify"
 	"emailtracker.com/model"
 	"emailtracker.com/outbound"
 	"emailtracker.com/util"
@@ -1083,6 +1084,40 @@ func DownloadCampaignSOP(ctx *gin.Context) {
 	ctx.Header("Content-Type", "text/markdown; charset=utf-8")
 	ctx.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
 	ctx.Data(http.StatusOK, "text/markdown; charset=utf-8", []byte(md))
+}
+
+func VerifyCampaignContacts(ctx *gin.Context) {
+	userID := mustUserID(ctx)
+	campaignID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
+	if err != nil {
+		ctx.Redirect(http.StatusFound, "/campaigns?error=Invalid+campaign")
+		return
+	}
+	base := "/campaigns/" + strconv.FormatInt(campaignID, 10)
+	if _, err := model.GetCampaignForUser(campaignID, userID); err != nil {
+		ctx.Redirect(http.StatusFound, "/campaigns?error=Campaign+not+found")
+		return
+	}
+	if !apify.Configured() {
+		ctx.Redirect(http.StatusFound, base+"?error="+url.QueryEscape("Email verification is not configured (APIFY_TOKEN)"))
+		return
+	}
+	ids, err := model.GetCampaignContactIDs(campaignID)
+	if err != nil {
+		ctx.Redirect(http.StatusFound, base+"?error="+url.QueryEscape("Could not load contacts"))
+		return
+	}
+	onlyUnverified := ctx.PostForm("only_unverified") != "0"
+	sum, err := model.VerifyContactsForUser(userID, ids, onlyUnverified, emailVerifyFn)
+	if err != nil {
+		msg := err.Error()
+		if sum.Submitted > 0 {
+			msg = sum.FlashMessage() + " — " + msg
+		}
+		ctx.Redirect(http.StatusFound, base+"?error="+url.QueryEscape(msg))
+		return
+	}
+	ctx.Redirect(http.StatusFound, base+"?success="+url.QueryEscape(sum.FlashMessage()))
 }
 
 func parseContactIDs(ctx *gin.Context) []int64 {

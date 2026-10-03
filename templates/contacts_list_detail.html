@@ -16,6 +16,10 @@
     </div>
     <div class="flex flex-wrap gap-2">
         <a href="/contacts?tab=import" class="btn-secondary">Import contacts</a>
+        <form method="POST" action="/contacts/lists/{{.list.ID}}/verify" onsubmit="return confirm('Verify unverified emails in this list? Uses 1 AI credit per email submitted.');">
+            <input type="hidden" name="only_unverified" value="1">
+            <button type="submit" class="btn-secondary">Verify emails</button>
+        </form>
         <button type="button" class="btn-primary" data-open-panel="segment">Split / save segment</button>
     </div>
 </div>
@@ -242,6 +246,10 @@
                 <td><input form="list-bulk-form" type="checkbox" name="contact_ids" value="{{$row.ID}}" class="list-member-cb"></td>
                 <td class="font-medium">
                     <a href="/contacts/{{$row.ID}}" class="text-brand-600 hover:underline">{{$row.Email}}</a>
+                    {{if eq $row.EmailStatus "valid"}}<span class="badge badge-green ml-1">valid</span>
+                    {{else if eq $row.EmailStatus "invalid"}}<span class="badge badge-red ml-1">invalid</span>
+                    {{else if eq $row.EmailStatus "risky"}}<span class="badge badge-amber ml-1">risky</span>
+                    {{else if and $row.EmailStatus (ne $row.EmailStatus "unknown")}}<span class="badge badge-gray ml-1">{{$row.EmailStatus}}</span>{{end}}
                     {{if $row.Suppressed}}<span class="badge badge-red ml-1">suppressed</span>{{end}}
                     {{if $row.RepliedAt}}<span class="badge badge-green ml-1">replied</span>{{end}}
                 </td>

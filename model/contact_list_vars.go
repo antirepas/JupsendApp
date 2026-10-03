@@ -15,6 +15,7 @@ import (
 type ListContactRow struct {
 	ID               int64
 	Email            string
+	EmailStatus      string
 	Variables        map[string]string
 	LastCampaignID   int64
 	LastCampaignName string
@@ -315,7 +316,7 @@ func ListContactsInListPage(listID, userID int64, f ListMembersFilter) (ListMemb
 	}
 	offset := (f.Page - 1) * f.PageSize
 	sqlQuery := `
-		SELECT c.id, c.email, c.replied_at,
+		SELECT c.id, c.email, COALESCE(c.email_status, 'unknown'), c.replied_at,
 			EXISTS(SELECT 1 FROM contact_suppressions s WHERE s.contact_id = c.id) AS suppressed
 		FROM contact_list_members m
 		INNER JOIN contact c ON c.id = m.contact_id
@@ -334,7 +335,7 @@ func ListContactsInListPage(listID, userID int64, f ListMembersFilter) (ListMemb
 		var row ListContactRow
 		var replied sql.NullTime
 		var suppressed bool
-		if err := memberRows.Scan(&row.ID, &row.Email, &replied, &suppressed); err != nil {
+		if err := memberRows.Scan(&row.ID, &row.Email, &row.EmailStatus, &replied, &suppressed); err != nil {
 			return out, err
 		}
 		if replied.Valid {

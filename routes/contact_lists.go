@@ -6,10 +6,14 @@ import (
 	"strconv"
 	"strings"
 
+	"emailtracker.com/apify"
 	"emailtracker.com/model"
 	"emailtracker.com/outbound"
 	"github.com/gin-gonic/gin"
 )
+
+// emailVerifyFn is the Apify (or test stub) verifier used by list/campaign verify handlers.
+var emailVerifyFn model.EmailVerifyFunc = apify.VerifyEmails
 
 func CreateContactList(c *gin.Context) {
 	userID := mustUserID(c)
@@ -306,6 +310,36 @@ func DeleteListMemberContact(c *gin.Context) {
 		return
 	}
 	c.Redirect(http.StatusFound, "/contacts/lists/"+strconv.FormatInt(listID, 10)+"?success=Lead+deleted")
+}
+
+func VerifyContactList(c *gin.Context) {
+	userID := mustUserID(c)
+	listID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.Redirect(http.StatusFound, "/contacts?tab=lists&error=Invalid+list")
+		return
+	}
+	base := "/contacts/lists/" + strconv.FormatInt(listID, 10)
+	if !apify.Configured() {
+		c.Redirect(http.StatusFound, base+"?error="+url.QueryEscape("Email verification is not configured (APIFY_TOKEN)"))
+		return
+	}
+	ids, err := model.ListContactIDsInList(listID, userID)
+	if err != nil {
+		c.Redirect(http.StatusFound, base+"?error="+url.QueryEscape("List not found"))
+		return
+	}
+	onlyUnverified := c.PostForm("only_unverified") != "0"
+	sum, err := model.VerifyContactsForUser(userID, ids, onlyUnverified, emailVerifyFn)
+	if err != nil {
+		msg := err.Error()
+		if sum.Submitted > 0 {
+			msg = sum.FlashMessage() + " — " + msg
+		}
+		c.Redirect(http.StatusFound, base+"?error="+url.QueryEscape(msg))
+		return
+	}
+	c.Redirect(http.StatusFound, base+"?success="+url.QueryEscape(sum.FlashMessage()))
 }
 
 func AddCampaignList(c *gin.Context) {

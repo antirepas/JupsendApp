@@ -554,7 +554,15 @@
 {{end}}
 
 <div class="card mb-6">
-    <h3 class="card-title">Add contacts</h3>
+    <div class="flex flex-wrap items-start justify-between gap-3 mb-3">
+        <h3 class="card-title mb-0">Add contacts</h3>
+        {{if gt .campaign.ContactCount 0}}
+        <form method="POST" action="/campaigns/{{.campaign.ID}}/verify-contacts" onsubmit="return confirm('Verify unverified campaign contacts? Uses 1 AI credit per email submitted.');">
+            <input type="hidden" name="only_unverified" value="1">
+            <button type="submit" class="btn-secondary text-sm">Verify campaign contacts</button>
+        </form>
+        {{end}}
+    </div>
     <div class="flex gap-1 border-b border-gray-200 mb-4" id="contact-tabs">
         <button type="button" class="tab-btn {{if ne .addTab "select"}}active{{end}}" data-tab="list">From list</button>
         <button type="button" class="tab-btn {{if eq .addTab "select"}}active{{end}}" data-tab="select">Select existing</button>
