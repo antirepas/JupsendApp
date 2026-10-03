@@ -1,0 +1,113 @@
+{{define "inbox_pane"}}
+{{if .selected}}
+<div class="inbox-pane">
+    <header class="inbox-pane-head">
+        <div class="inbox-pane-head-main">
+            <p class="inbox-pane-from">{{.selected.Contact.Email}}</p>
+            <h3 class="inbox-pane-subject">{{.selected.Subject}}</h3>
+        </div>
+        <div class="inbox-pane-head-side">
+            <div class="inbox-pane-stats" aria-label="Engagement">
+                <span class="inbox-stat"><strong>{{.selected.OpenCount}}</strong> opens</span>
+                <span class="inbox-stat"><strong>{{.selected.ClickCount}}</strong> clicks</span>
+                {{if and .selected.Sentiment (ne .selected.Sentiment "pending")}}
+                <span class="inbox-stat inbox-stat-{{.selected.Sentiment}}">{{.selected.Sentiment}}</span>
+                {{end}}
+            </div>
+            <a href="/contacts/{{.selected.Contact.ID}}" class="inbox-pane-link">Contact</a>
+        </div>
+    </header>
+
+    {{if .selected.RecentEvents}}
+    <details class="inbox-engage-details">
+        <summary>Recent opens &amp; clicks</summary>
+        <ul class="inbox-engage-list">
+            {{range .selected.RecentEvents}}
+            <li>
+                <span class="inbox-chip {{if eq .Type "click"}}inbox-chip-click{{else}}inbox-chip-open{{end}}">{{.Type}}</span>
+                <time>{{.At.Format "Jan 2, 15:04"}}</time>
+                {{if .Campaign}}<span class="inbox-engage-camp">{{.Campaign}}</span>{{end}}
+                {{if .URL}}<span class="inbox-engage-url" title="{{.URL}}">{{.URL}}</span>{{end}}
+            </li>
+            {{end}}
+        </ul>
+    </details>
+    {{end}}
+
+    {{if .selected.NeedsRecovery}}
+    <div class="inbox-recover">
+        <p>We have their reply signal, but the full message body isn’t here yet.</p>
+        <form method="POST" action="/contacts/{{.selected.Contact.ID}}/recover-reply">
+            <button type="submit" class="btn-primary text-sm">Recover from mailbox</button>
+        </form>
+    </div>
+    {{end}}
+
+    <div class="inbox-messages" id="inbox-messages">
+        {{if .selected.Messages}}
+        {{range .selected.Messages}}
+        <article class="inbox-msg {{if .IsInbound}}inbox-msg--in{{else}}inbox-msg--out{{end}}">
+            <header class="inbox-msg-head">
+                <span class="inbox-msg-who">{{if .IsInbound}}Them{{else}}You{{end}}</span>
+                <time class="inbox-msg-time" datetime="{{.OccurredAt.Format "2006-01-02T15:04:05Z07:00"}}">{{.OccurredAt.Format "Jan 2 · 15:04"}}</time>
+                {{if and .IsInbound .ReplySentiment (ne .ReplySentiment "pending")}}
+                <span class="inbox-msg-sent inbox-msg-sent-{{.ReplySentiment}}">{{.ReplySentiment}}</span>
+                {{end}}
+            </header>
+            {{if and .Subject (ne .Subject $.selected.Subject)}}
+            <p class="inbox-msg-subj">{{.Subject}}</p>
+            {{end}}
+            {{if .InboxPlainBody}}
+            <div class="inbox-msg-text">{{.InboxPlainBody}}</div>
+            {{else if or .BodyHTML .BodyText}}
+            <iframe class="inbox-msg-frame" title="Message" sandbox="allow-same-origin" srcdoc="{{.DisplaySrcDoc}}" loading="lazy"></iframe>
+            {{else}}
+            <p class="inbox-msg-empty">No message body</p>
+            {{end}}
+            {{if .IsInbound}}
+            <form method="POST" action="/contacts/{{$.selected.Contact.ID}}/messages/{{.ID}}/sentiment" class="inbox-msg-tone">
+                <span class="inbox-msg-tone-label">Mark</span>
+                <button name="sentiment" value="positive" type="submit">Positive</button>
+                <button name="sentiment" value="neutral" type="submit">Neutral</button>
+                <button name="sentiment" value="negative" type="submit">Negative</button>
+            </form>
+            {{end}}
+        </article>
+        {{end}}
+        {{else}}
+        <div class="inbox-empty inbox-empty-thread">
+            <p class="inbox-empty-title">No messages yet</p>
+            <p class="inbox-empty-sub">Replies show up here after IMAP syncs your mailbox.</p>
+        </div>
+        {{end}}
+    </div>
+
+    <footer class="inbox-composer">
+        {{if .selected.CanReply}}
+        <form method="POST" action="/inbox/threads/{{.selected.Contact.ID}}/reply" class="inbox-composer-form">
+            <input type="hidden" name="folder" value="{{.folder}}">
+            <div class="inbox-composer-meta">
+                {{if .replyFrom}}<span>From <strong>{{.replyFrom}}</strong></span>{{end}}
+                <a href="/contacts/{{.selected.Contact.ID}}/reply">Open full editor</a>
+            </div>
+            <input type="text" id="inbox-reply-subject" name="subject" class="inbox-composer-subject" value="{{.replySubject}}" required aria-label="Subject" placeholder="Subject">
+            <textarea id="inbox-reply-body" name="body_text" class="inbox-composer-body" rows="5" required placeholder="Write your reply…" aria-label="Reply"></textarea>
+            <div class="inbox-composer-actions">
+                <button type="submit" class="btn-primary">Send reply</button>
+            </div>
+        </form>
+        {{else}}
+        <div class="inbox-composer-locked">
+            <p>Reply opens after their first reply is detected, or when a send used a known mailbox.</p>
+            <a href="/contacts/{{.selected.Contact.ID}}" class="btn-secondary text-sm">Open contact</a>
+        </div>
+        {{end}}
+    </footer>
+</div>
+{{else}}
+<div class="inbox-empty inbox-empty-pane">
+    <p class="inbox-empty-title">Select a conversation</p>
+    <p class="inbox-empty-sub">Pick a thread to read the exchange and reply from here.</p>
+</div>
+{{end}}
+{{end}}

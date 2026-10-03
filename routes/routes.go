@@ -22,6 +22,7 @@ func RegisterRoutes(server *gin.Engine) {
 		"templates/partials/campaign_deliverability.html",
 		"templates/partials/workflow_archive_modal.html",
 		"templates/partials/contact_import_map_modal.html",
+		"templates/partials/inbox_pane.html",
 		"templates/auth_login.html",
 		"templates/auth_signup.html",
 		"templates/pricing_plan.html",
@@ -219,6 +220,7 @@ func RegisterRoutes(server *gin.Engine) {
 
 		authd.GET("/inbox", InboxPage)
 		authd.GET("/inbox/threads/:contactId", InboxThreadPage)
+		authd.GET("/inbox/threads/:contactId/pane", InboxThreadPane)
 		authd.POST("/inbox/threads/:contactId/read", InboxMarkRead)
 		authd.POST("/inbox/threads/:contactId/reply", InboxReplyWeb)
 

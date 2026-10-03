@@ -641,6 +641,16 @@ func (m ConversationMessage) DisplaySrcDoc() string {
 	return string(m.DisplayHTML())
 }
 
+// InboxPlainBody returns plain text suitable for the inbox reading pane.
+// Empty means the caller should fall back to HTML display.
+func (m ConversationMessage) InboxPlainBody() string {
+	text := strings.TrimSpace(m.BodyText)
+	if text == "" || IsStubInboundBody(m.BodyText, m.BodyHTML) {
+		return ""
+	}
+	return text
+}
+
 // sanitizeHTMLForDisplay strips scripts/styles/tracking for safe embedding
 // (kept in model to avoid util↔model import cycle).
 func sanitizeHTMLForDisplay(s string) string {

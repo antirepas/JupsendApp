@@ -1,6 +1,7 @@
 package model
 
 import (
+	"database/sql"
 	"fmt"
 	"strings"
 	"time"
@@ -33,11 +34,11 @@ type InboxThread struct {
 
 // InboxEngagementEvent is a recent open/click shown in the reading pane.
 type InboxEngagementEvent struct {
-	Type      string // open | click
-	At        time.Time
-	URL       string
-	Subject   string
-	Campaign  string
+	Type     string // open | click
+	At       time.Time
+	URL      string
+	Subject  string
+	Campaign string
 }
 
 // InboxThreadDetail is the reading-pane payload for one contact.
@@ -52,6 +53,15 @@ type InboxThreadDetail struct {
 	Unread        bool
 	Sentiment     string
 	Subject       string
+}
+
+// InboxFolderCounts holds sidebar folder tallies without scanning full thread lists.
+type InboxFolderCounts struct {
+	All        int
+	Unread     int
+	Interested int
+	Opened     int
+	Clicked    int
 }
 
 // NormalizeInboxFolder returns a known inbox folder key.
@@ -70,11 +80,8 @@ func NormalizeInboxFolder(folder string) string {
 	}
 }
 
-func inboxSnippet(bodyText, bodyHTML string, maxRunes int) string {
+func inboxSnippet(bodyText string, maxRunes int) string {
 	s := strings.TrimSpace(bodyText)
-	if s == "" {
-		s = strings.TrimSpace(stripTagsApprox(bodyHTML))
-	}
 	s = strings.Join(strings.Fields(s), " ")
 	if maxRunes <= 0 {
 		maxRunes = 120
@@ -84,25 +91,6 @@ func inboxSnippet(bodyText, bodyHTML string, maxRunes int) string {
 	}
 	runes := []rune(s)
 	return string(runes[:maxRunes]) + "…"
-}
-
-func stripTagsApprox(html string) string {
-	if html == "" {
-		return ""
-	}
-	var b strings.Builder
-	inTag := false
-	for _, r := range html {
-		switch {
-		case r == '<':
-			inTag = true
-		case r == '>':
-			inTag = false
-		case !inTag:
-			b.WriteRune(r)
-		}
-	}
-	return b.String()
 }
 
 func contactInitial(email string) string {
@@ -122,67 +110,217 @@ func (t InboxThread) Initial() string {
 	return contactInitial(t.Email)
 }
 
+func (c InboxFolderCounts) Map() map[string]int {
+	return map[string]int{
+		InboxFolderAll:        c.All,
+		InboxFolderUnread:     c.Unread,
+		InboxFolderInterested: c.Interested,
+		InboxFolderOpened:     c.Opened,
+		InboxFolderClicked:    c.Clicked,
+	}
+}
+
+// CountInboxFolders returns cheap folder tallies.
+func CountInboxFolders(userID int64) InboxFolderCounts {
+	var c InboxFolderCounts
+	c.Unread = CountInboxUnread(userID)
+	_ = db.QueryRow(`
+		SELECT COUNT(DISTINCT contact_id)::int
+		FROM conversation_messages
+		WHERE user_id = ? AND direction = 'inbound'
+	`, userID).Scan(&c.All)
+	_ = db.QueryRow(`
+		SELECT COUNT(*)::int FROM (
+			SELECT DISTINCT ON (contact_id) reply_sentiment
+			FROM conversation_messages
+			WHERE user_id = ? AND direction = 'inbound'
+			ORDER BY contact_id, occurred_at DESC, id DESC
+		) last_in
+		WHERE lower(trim(reply_sentiment)) IN ('positive', 'pos', 'interested', 'yes', 'neutral')
+	`, userID).Scan(&c.Interested)
+	_ = db.QueryRow(`
+		SELECT COUNT(DISTINCT es.contact_id)::int
+		FROM email_sends es
+		WHERE es.user_id = ?
+		  AND EXISTS (
+			SELECT 1 FROM email_events ee
+			WHERE ee.email_send_id = es.id AND `+HumanOpenPredicate+`
+		  )
+		  AND EXISTS (
+			SELECT 1 FROM conversation_messages cm
+			WHERE cm.user_id = es.user_id AND cm.contact_id = es.contact_id
+		  )
+	`, userID).Scan(&c.Opened)
+	_ = db.QueryRow(`
+		SELECT COUNT(DISTINCT es.contact_id)::int
+		FROM email_sends es
+		WHERE es.user_id = ?
+		  AND EXISTS (
+			SELECT 1 FROM email_events ee
+			WHERE ee.email_send_id = es.id AND ee.event_type = 'click'
+		  )
+		  AND EXISTS (
+			SELECT 1 FROM conversation_messages cm
+			WHERE cm.user_id = es.user_id AND cm.contact_id = es.contact_id
+		  )
+	`, userID).Scan(&c.Clicked)
+	return c
+}
+
+func inboxNeedsEngFilter(folder string) bool {
+	return folder == InboxFolderOpened || folder == InboxFolderClicked
+}
+
+func attachInboxEngagement(userID int64, threads []InboxThread) {
+	if len(threads) == 0 {
+		return
+	}
+	ids := make([]interface{}, 0, len(threads)+1)
+	ids = append(ids, userID)
+	placeholders := make([]string, 0, len(threads))
+	index := map[int64]int{}
+	for i, t := range threads {
+		ids = append(ids, t.ContactID)
+		placeholders = append(placeholders, "?")
+		index[t.ContactID] = i
+	}
+	rows, err := db.Query(`
+		SELECT es.contact_id,
+			COUNT(*) FILTER (WHERE `+HumanOpenPredicate+`)::int,
+			COUNT(*) FILTER (WHERE ee.event_type = 'click')::int
+		FROM email_sends es
+		INNER JOIN email_events ee ON ee.email_send_id = es.id
+		WHERE es.user_id = ?
+		  AND es.contact_id IN (`+strings.Join(placeholders, ",")+`)
+		  AND (ee.event_type = 'click' OR (`+HumanOpenPredicate+`))
+		GROUP BY es.contact_id
+	`, ids...)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var contactID int64
+		var opens, clicks int
+		if rows.Scan(&contactID, &opens, &clicks) != nil {
+			continue
+		}
+		if i, ok := index[contactID]; ok {
+			threads[i].OpenCount = opens
+			threads[i].ClickCount = clicks
+		}
+	}
+}
+
 // ListInboxThreads returns contact-level threads newest-first for the given folder.
 func ListInboxThreads(userID int64, folder, query string, limit int) ([]InboxThread, error) {
 	folder = NormalizeInboxFolder(folder)
 	if limit <= 0 {
-		limit = 200
+		limit = 100
 	}
-	if limit > 500 {
-		limit = 500
+	if limit > 200 {
+		limit = 200
 	}
 	query = strings.TrimSpace(query)
 
-	rows, err := db.Query(`
+	whereExtra := ""
+	args := []interface{}{userID, userID, userID} // latest, inbound_last, flags
+	engJoin := ""
+	engSelectOpens := "0"
+	engSelectClicks := "0"
+	if inboxNeedsEngFilter(folder) {
+		engJoin = `
+		LEFT JOIN (
+			SELECT
+				es.contact_id,
+				COUNT(*) FILTER (WHERE ` + HumanOpenPredicate + `)::int AS open_count,
+				COUNT(*) FILTER (WHERE ee.event_type = 'click')::int AS click_count
+			FROM email_sends es
+			INNER JOIN email_events ee ON ee.email_send_id = es.id
+			WHERE es.user_id = ?
+			  AND (ee.event_type = 'click' OR (` + HumanOpenPredicate + `))
+			GROUP BY es.contact_id
+		) e ON e.contact_id = latest.contact_id`
+		engSelectOpens = "COALESCE(e.open_count, 0)"
+		engSelectClicks = "COALESCE(e.click_count, 0)"
+	}
+
+	switch folder {
+	case InboxFolderAll:
+		whereExtra = ` AND f.has_reply`
+	case InboxFolderUnread:
+		whereExtra = ` AND f.has_reply AND f.unread`
+	case InboxFolderInterested:
+		whereExtra = ` AND f.has_reply AND lower(trim(COALESCE(i.reply_sentiment,''))) IN ('positive','pos','interested','yes','neutral')`
+	case InboxFolderOpened:
+		whereExtra = ` AND COALESCE(e.open_count, 0) > 0`
+	case InboxFolderClicked:
+		whereExtra = ` AND COALESCE(e.click_count, 0) > 0`
+	}
+
+	// contact.user_id placeholder
+	args = append(args, userID)
+	if inboxNeedsEngFilter(folder) {
+		args = append(args, userID)
+	}
+	if query != "" {
+		whereExtra += ` AND (c.email ILIKE ? OR COALESCE(latest.subject,'') ILIKE ?)`
+		like := "%" + query + "%"
+		args = append(args, like, like)
+	}
+	args = append(args, limit)
+
+	sqlText := `
+		WITH latest AS (
+			SELECT DISTINCT ON (contact_id)
+				contact_id,
+				subject,
+				LEFT(COALESCE(body_text, ''), 400) AS body_text,
+				occurred_at
+			FROM conversation_messages
+			WHERE user_id = ?
+			ORDER BY contact_id, occurred_at DESC, id DESC
+		),
+		inbound_last AS (
+			SELECT DISTINCT ON (contact_id)
+				contact_id,
+				reply_sentiment
+			FROM conversation_messages
+			WHERE user_id = ? AND direction = 'inbound'
+			ORDER BY contact_id, occurred_at DESC, id DESC
+		),
+		flags AS (
+			SELECT
+				contact_id,
+				BOOL_OR(direction = 'inbound') AS has_reply,
+				BOOL_OR(direction = 'inbound' AND read_at IS NULL) AS unread
+			FROM conversation_messages
+			WHERE user_id = ?
+			GROUP BY contact_id
+		)
 		SELECT
 			c.id,
 			COALESCE(c.email, ''),
 			COALESCE(latest.subject, ''),
 			COALESCE(latest.body_text, ''),
-			COALESCE(latest.body_html, ''),
 			latest.occurred_at,
-			COALESCE(inbound_sent.reply_sentiment, ''),
-			EXISTS (
-				SELECT 1 FROM conversation_messages u
-				WHERE u.user_id = ? AND u.contact_id = c.id
-				  AND u.direction = 'inbound' AND u.read_at IS NULL
-			) AS unread,
-			EXISTS (
-				SELECT 1 FROM conversation_messages r
-				WHERE r.user_id = ? AND r.contact_id = c.id AND r.direction = 'inbound'
-			) AS has_reply,
-			COALESCE((
-				SELECT COUNT(*)::int FROM email_events ee
-				INNER JOIN email_sends es ON es.id = ee.email_send_id
-				WHERE es.user_id = ? AND es.contact_id = c.id AND `+HumanOpenPredicate+`
-			), 0) AS open_count,
-			COALESCE((
-				SELECT COUNT(*)::int FROM email_events ee
-				INNER JOIN email_sends es ON es.id = ee.email_send_id
-				WHERE es.user_id = ? AND es.contact_id = c.id AND ee.event_type = 'click'
-			), 0) AS click_count
-		FROM contact c
-		INNER JOIN LATERAL (
-			SELECT subject, body_text, body_html, occurred_at
-			FROM conversation_messages cm
-			WHERE cm.user_id = ? AND cm.contact_id = c.id
-			ORDER BY cm.occurred_at DESC, cm.id DESC
-			LIMIT 1
-		) latest ON TRUE
-		LEFT JOIN LATERAL (
-			SELECT reply_sentiment
-			FROM conversation_messages cm
-			WHERE cm.user_id = ? AND cm.contact_id = c.id AND cm.direction = 'inbound'
-			ORDER BY cm.occurred_at DESC, cm.id DESC
-			LIMIT 1
-		) inbound_sent ON TRUE
-		WHERE c.user_id = ?
-		  AND EXISTS (
-			SELECT 1 FROM conversation_messages cm0
-			WHERE cm0.user_id = ? AND cm0.contact_id = c.id
-		  )
+			COALESCE(i.reply_sentiment, ''),
+			COALESCE(f.unread, FALSE),
+			COALESCE(f.has_reply, FALSE),
+			` + engSelectOpens + `,
+			` + engSelectClicks + `
+		FROM latest
+		INNER JOIN contact c ON c.id = latest.contact_id AND c.user_id = ?
+		INNER JOIN flags f ON f.contact_id = latest.contact_id
+		LEFT JOIN inbound_last i ON i.contact_id = latest.contact_id
+		` + engJoin + `
+		WHERE TRUE
+		` + whereExtra + `
 		ORDER BY latest.occurred_at DESC, c.id DESC
-	`, userID, userID, userID, userID, userID, userID, userID, userID)
+		LIMIT ?
+	`
+
+	rows, err := db.Query(sqlText, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -191,62 +329,27 @@ func ListInboxThreads(userID int64, folder, query string, limit int) ([]InboxThr
 	out := make([]InboxThread, 0, 64)
 	for rows.Next() {
 		var t InboxThread
-		var bodyText, bodyHTML string
-		var lastAt time.Time
+		var bodyText string
 		if err := rows.Scan(
-			&t.ContactID, &t.Email, &t.Subject, &bodyText, &bodyHTML, &lastAt,
+			&t.ContactID, &t.Email, &t.Subject, &bodyText, &t.LastAt,
 			&t.Sentiment, &t.Unread, &t.HasReply, &t.OpenCount, &t.ClickCount,
 		); err != nil {
 			return nil, err
 		}
-		t.LastAt = lastAt
 		t.Sentiment = NormalizeReplySentiment(t.Sentiment)
-		t.Snippet = inboxSnippet(bodyText, bodyHTML, 120)
+		t.Snippet = inboxSnippet(bodyText, 120)
 		if t.Subject == "" {
 			t.Subject = "(no subject)"
 		}
-
-		if query != "" {
-			q := strings.ToLower(query)
-			hay := strings.ToLower(t.Email + " " + t.Subject + " " + t.Snippet)
-			if !strings.Contains(hay, q) {
-				continue
-			}
-		}
-
-		switch folder {
-		case InboxFolderAll:
-			if !t.HasReply {
-				continue
-			}
-		case InboxFolderUnread:
-			if !t.Unread || !t.HasReply {
-				continue
-			}
-		case InboxFolderInterested:
-			if !t.HasReply {
-				continue
-			}
-			s := NormalizeReplySentiment(t.Sentiment)
-			if s != ReplySentimentPositive && s != ReplySentimentNeutral {
-				continue
-			}
-		case InboxFolderOpened:
-			if t.OpenCount <= 0 {
-				continue
-			}
-		case InboxFolderClicked:
-			if t.ClickCount <= 0 {
-				continue
-			}
-		}
-
 		out = append(out, t)
-		if len(out) >= limit {
-			break
-		}
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if !inboxNeedsEngFilter(folder) {
+		attachInboxEngagement(userID, out)
+	}
+	return out, nil
 }
 
 // CountInboxUnread returns contacts with at least one unread inbound message.
@@ -265,9 +368,6 @@ func MarkInboxThreadRead(userID, contactID int64) error {
 	if userID <= 0 || contactID <= 0 {
 		return fmt.Errorf("invalid ids")
 	}
-	if _, _, err := GetContactForUser(contactID, userID); err != nil {
-		return err
-	}
 	_, err := db.Exec(`
 		UPDATE conversation_messages
 		SET read_at = CURRENT_TIMESTAMP
@@ -279,28 +379,27 @@ func MarkInboxThreadRead(userID, contactID int64) error {
 func contactEngagementCounts(userID, contactID int64) (opens, clicks int) {
 	_ = db.QueryRow(`
 		SELECT
-			COALESCE((
-				SELECT COUNT(*)::int FROM email_events ee
-				INNER JOIN email_sends es ON es.id = ee.email_send_id
-				WHERE es.user_id = ? AND es.contact_id = ? AND `+HumanOpenPredicate+`
-			), 0),
-			COALESCE((
-				SELECT COUNT(*)::int FROM email_events ee
-				INNER JOIN email_sends es ON es.id = ee.email_send_id
-				WHERE es.user_id = ? AND es.contact_id = ? AND ee.event_type = 'click'
-			), 0)
-	`, userID, contactID, userID, contactID).Scan(&opens, &clicks)
+			COUNT(*) FILTER (WHERE `+HumanOpenPredicate+`)::int,
+			COUNT(*) FILTER (WHERE ee.event_type = 'click')::int
+		FROM email_events ee
+		INNER JOIN email_sends es ON es.id = ee.email_send_id
+		WHERE es.user_id = ? AND es.contact_id = ?
+		  AND (ee.event_type = 'click' OR (`+HumanOpenPredicate+`))
+	`, userID, contactID).Scan(&opens, &clicks)
 	return
 }
 
 func listInboxEngagementEvents(userID, contactID int64, limit int) ([]InboxEngagementEvent, error) {
 	if limit <= 0 {
-		limit = 20
+		limit = 12
+	}
+	if limit > 25 {
+		limit = 25
 	}
 	rows, err := db.Query(`
 		SELECT ee.event_type, ee.created_at,
 			COALESCE(tl.original_url, ''),
-			COALESCE(es.rendered_subject, t.subject, ''),
+			COALESCE(NULLIF(es.rendered_subject, ''), COALESCE(t.subject, '')),
 			COALESCE(camp.name, '')
 		FROM email_events ee
 		INNER JOIN email_sends es ON es.id = ee.email_send_id
@@ -331,6 +430,16 @@ func listInboxEngagementEvents(userID, contactID int64, limit int) ([]InboxEngag
 	return out, rows.Err()
 }
 
+func contactRepliedAt(userID, contactID int64) *time.Time {
+	var replied sql.NullTime
+	_ = db.QueryRow(`SELECT replied_at FROM contact WHERE id = ? AND user_id = ?`, contactID, userID).Scan(&replied)
+	if !replied.Valid {
+		return nil
+	}
+	t := replied.Time
+	return &t
+}
+
 // GetInboxThread loads conversation + engagement for a contact and marks inbound read.
 func GetInboxThread(userID, contactID int64) (*InboxThreadDetail, error) {
 	contact, _, err := GetContactForUser(contactID, userID)
@@ -338,45 +447,33 @@ func GetInboxThread(userID, contactID int64) (*InboxThreadDetail, error) {
 		return nil, err
 	}
 	EnsureInboundFromReplyEvents(userID, contactID)
-	msgs, err := ListContactConversation(userID, contactID, 200)
+	msgs, err := ListContactConversation(userID, contactID, 80)
 	if err != nil {
 		return nil, err
 	}
 	opens, clicks := contactEngagementCounts(userID, contactID)
-	events, _ := listInboxEngagementEvents(userID, contactID, 25)
+	events, _ := listInboxEngagementEvents(userID, contactID, 12)
 
-	unread := false
 	sentiment := ""
 	subject := ""
 	var lastInboundAt time.Time
 	for _, m := range msgs {
-		if m.Direction == ConversationInbound {
-			if subject == "" && strings.TrimSpace(m.Subject) != "" {
+		if m.Direction != ConversationInbound {
+			continue
+		}
+		if m.OccurredAt.After(lastInboundAt) {
+			lastInboundAt = m.OccurredAt
+			sentiment = m.ReplySentiment
+			if strings.TrimSpace(m.Subject) != "" {
 				subject = m.Subject
 			}
-			if m.OccurredAt.After(lastInboundAt) {
-				lastInboundAt = m.OccurredAt
-				sentiment = m.ReplySentiment
-				if strings.TrimSpace(m.Subject) != "" {
-					subject = m.Subject
-				}
-			}
+		} else if subject == "" && strings.TrimSpace(m.Subject) != "" {
+			subject = m.Subject
 		}
 	}
-	_ = db.QueryRow(`
-		SELECT EXISTS (
-			SELECT 1 FROM conversation_messages
-			WHERE user_id = ? AND contact_id = ? AND direction = 'inbound' AND read_at IS NULL
-		)
-	`, userID, contactID).Scan(&unread)
 
-	if err := MarkInboxThreadRead(userID, contactID); err != nil {
-		return nil, err
-	}
-	unread = false
+	_ = MarkInboxThreadRead(userID, contactID)
 
-	summary, _ := GetContactSummary(userID, contactID)
-	repliedAt := summary.RepliedAt
 	detail := &InboxThreadDetail{
 		Contact:       contact,
 		Messages:      msgs,
@@ -384,8 +481,8 @@ func GetInboxThread(userID, contactID int64) (*InboxThreadDetail, error) {
 		ClickCount:    clicks,
 		RecentEvents:  events,
 		NeedsRecovery: ContactNeedsInboundBody(userID, contactID),
-		CanReply:      CanReplyInApp(userID, contactID, repliedAt),
-		Unread:        unread,
+		CanReply:      CanReplyInApp(userID, contactID, contactRepliedAt(userID, contactID)),
+		Unread:        false,
 		Sentiment:     NormalizeReplySentiment(sentiment),
 		Subject:       subject,
 	}
