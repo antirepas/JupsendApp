@@ -4,7 +4,6 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-	"strings"
 
 	"emailtracker.com/model"
 	"github.com/gin-gonic/gin"
@@ -18,43 +17,39 @@ func InterestedBulkAddList(c *gin.Context) {
 	if campaign == "" {
 		campaign = c.PostForm("campaign")
 	}
-	base := "/contacts/interested"
+	base := "/inbox?folder=interested"
 	if campaign != "" {
-		base += "?campaign=" + url.QueryEscape(campaign)
-	}
-	sep := "?"
-	if strings.Contains(base, "?") {
-		sep = "&"
+		base += "&campaign=" + url.QueryEscape(campaign)
 	}
 	if listID <= 0 || len(ids) == 0 {
-		c.Redirect(http.StatusFound, base+sep+"error="+url.QueryEscape("Select contacts and a list"))
+		c.Redirect(http.StatusFound, base+"&error="+url.QueryEscape("Select contacts and a list"))
 		return
 	}
 	if err := model.AddContactsToList(listID, userID, ids); err != nil {
-		c.Redirect(http.StatusFound, base+sep+"error="+url.QueryEscape(err.Error()))
+		c.Redirect(http.StatusFound, base+"&error="+url.QueryEscape(err.Error()))
 		return
 	}
-	c.Redirect(http.StatusFound, base+sep+"success="+url.QueryEscape("Added "+strconv.Itoa(len(ids))+" contacts to list"))
+	c.Redirect(http.StatusFound, base+"&success="+url.QueryEscape("Added "+strconv.Itoa(len(ids))+" contacts to list"))
 }
 
 func InterestedBulkSuppress(c *gin.Context) {
 	userID := mustUserID(c)
 	ids := parseContactIDs(c)
 	if len(ids) == 0 {
-		c.Redirect(http.StatusFound, "/contacts/interested?error="+url.QueryEscape("Select contacts to suppress"))
+		c.Redirect(http.StatusFound, "/inbox?folder=interested&error="+url.QueryEscape("Select contacts to suppress"))
 		return
 	}
 	n, _ := model.BulkSuppressContacts(userID, ids, "manual")
-	c.Redirect(http.StatusFound, "/contacts/interested?success="+url.QueryEscape("Suppressed "+strconv.Itoa(n)+" contacts"))
+	c.Redirect(http.StatusFound, "/inbox?folder=interested&success="+url.QueryEscape("Suppressed "+strconv.Itoa(n)+" contacts"))
 }
 
 func InterestedBulkDismiss(c *gin.Context) {
 	userID := mustUserID(c)
 	ids := parseContactIDs(c)
 	if len(ids) == 0 {
-		c.Redirect(http.StatusFound, "/contacts/interested?error="+url.QueryEscape("Select contacts to dismiss"))
+		c.Redirect(http.StatusFound, "/inbox?folder=interested&error="+url.QueryEscape("Select contacts to dismiss"))
 		return
 	}
 	n, _ := model.DismissInterestedContacts(userID, ids)
-	c.Redirect(http.StatusFound, "/contacts/interested?success="+url.QueryEscape("Dismissed "+strconv.Itoa(n)+" from queue"))
+	c.Redirect(http.StatusFound, "/inbox?folder=interested&success="+url.QueryEscape("Dismissed "+strconv.Itoa(n)+" from queue"))
 }

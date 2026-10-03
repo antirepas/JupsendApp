@@ -37,6 +37,7 @@ func RegisterRoutes(server *gin.Engine) {
 		"templates/dashboard.html",
 		"templates/library.html",
 		"templates/library_sheet.html",
+		"templates/inbox.html",
 		"templates/templates_list.html",
 		"templates/templates_form.html",
 		"templates/contacts_list.html",
@@ -216,8 +217,13 @@ func RegisterRoutes(server *gin.Engine) {
 		authd.POST("/templates/:id", UpdateTemplate)
 		authd.POST("/templates/:id/delete", DeleteTemplate)
 
+		authd.GET("/inbox", InboxPage)
+		authd.GET("/inbox/threads/:contactId", InboxThreadPage)
+		authd.POST("/inbox/threads/:contactId/read", InboxMarkRead)
+		authd.POST("/inbox/threads/:contactId/reply", InboxReplyWeb)
+
 		authd.GET("/contacts", RedirectContactsToLibrary)
-		authd.GET("/contacts/interested", InterestedContactsPage)
+		authd.GET("/contacts/interested", InterestedContactsRedirect)
 		authd.GET("/contacts/new", NewContactPage)
 		authd.GET("/contacts/suppressions", ListSuppressionsPage)
 		authd.POST("/contacts/suppressions", AddSuppressionWeb)

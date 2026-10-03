@@ -37,6 +37,7 @@ func Dashboard(ctx *gin.Context) {
 		benchmark         model.AccountBenchmark
 		recentExperiments []model.RecentExperiment
 		repliesThisMonth  int
+		inboxUnread       int
 		interestedCount   int
 		acc               model.SMTPAccount
 		readyAccounts     []model.SMTPAccount
@@ -44,7 +45,7 @@ func Dashboard(ctx *gin.Context) {
 	)
 
 	var wg sync.WaitGroup
-	wg.Add(10)
+	wg.Add(11)
 	go func() {
 		defer wg.Done()
 		stats, statsErr = model.GetDashboardStats(userID)
@@ -76,6 +77,10 @@ func Dashboard(ctx *gin.Context) {
 	go func() {
 		defer wg.Done()
 		repliesThisMonth = model.CountRepliesThisMonth(userID)
+	}()
+	go func() {
+		defer wg.Done()
+		inboxUnread = model.CountInboxUnread(userID)
 	}()
 	go func() {
 		defer wg.Done()
@@ -213,6 +218,7 @@ func Dashboard(ctx *gin.Context) {
 		"benchmark":           benchmark,
 		"recentExperiments":   recentExperiments,
 		"goalProgress":        goalProgress,
+		"inboxUnread":         inboxUnread,
 		"interestedCount":     interestedCount,
 		"gmailConnected":      acc.IsGoogleOAuth(),
 		"mailboxReady":        mailboxReady,
