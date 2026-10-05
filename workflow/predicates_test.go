@@ -56,7 +56,7 @@ func TestEvaluateConditionBySendNode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	instID, err := model.CreateWorkflowInstance(w.CurrentVersionID, contactID, campaignID, "send1")
+	instID, _, err := model.CreateWorkflowInstance(w.CurrentVersionID, contactID, campaignID, "send1", "{}")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,7 +192,7 @@ func setupPredicateFixture(t *testing.T) (userID, instID, sendID int64) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	instID, err = model.CreateWorkflowInstance(w.CurrentVersionID, contactID, campaignID, "cond1")
+	instID, _, err = model.CreateWorkflowInstance(w.CurrentVersionID, contactID, campaignID, "cond1", "{}")
 	if err != nil {
 		t.Fatal(err)
 	}

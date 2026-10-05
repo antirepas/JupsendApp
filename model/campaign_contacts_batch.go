@@ -121,7 +121,7 @@ func contactVariableMap(vars []ContactVariables) map[string]string {
 
 func contactHasVariable(vars []ContactVariables, key string) bool {
 	for _, v := range vars {
-		if v.Key == key && strings.TrimSpace(v.Value) != "" {
+		if strings.EqualFold(v.Key, key) && strings.TrimSpace(v.Value) != "" {
 			return true
 		}
 	}

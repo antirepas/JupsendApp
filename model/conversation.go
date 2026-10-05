@@ -632,7 +632,11 @@ func (m ConversationMessage) DisplayHTML() htmltemplate.HTML {
 	if m.BodyText == "" {
 		return ""
 	}
-	return htmltemplate.HTML("<p>" + html.EscapeString(m.BodyText) + "</p>")
+	escaped := html.EscapeString(m.BodyText)
+	escaped = strings.ReplaceAll(escaped, "\r\n", "\n")
+	escaped = strings.ReplaceAll(escaped, "\r", "\n")
+	escaped = strings.ReplaceAll(escaped, "\n", "<br>")
+	return htmltemplate.HTML("<p>" + escaped + "</p>")
 }
 
 // DisplaySrcDoc returns sanitized HTML for an iframe srcdoc attribute (string so the
@@ -644,6 +648,11 @@ func (m ConversationMessage) DisplaySrcDoc() string {
 // InboxPlainBody returns plain text suitable for the inbox reading pane.
 // Empty means the caller should fall back to HTML display.
 func (m ConversationMessage) InboxPlainBody() string {
+	// Prefer sanitized HTML when available so paragraphs/line breaks survive.
+	// BodyText is often StripHTML()'d without newlines and would collapse to one paragraph.
+	if strings.TrimSpace(m.BodyHTML) != "" && !IsStubInboundBody(m.BodyText, m.BodyHTML) {
+		return ""
+	}
 	text := strings.TrimSpace(m.BodyText)
 	if text == "" || IsStubInboundBody(m.BodyText, m.BodyHTML) {
 		return ""

@@ -33,11 +33,27 @@ func runDueScheduledCampaigns() {
 		if err != nil {
 			continue
 		}
-		result, err := launchCampaign(campaign.UserID, id)
-		if err != nil {
-			log.Printf("scheduler: campaign %d: %v", id, err)
+		if campaign.IsSending {
 			continue
 		}
-		log.Printf("scheduler: campaign %d launched (%d queued, %d skipped)", id, result.Queued, result.Skipped)
+		if err := model.MarkCampaignSending(id); err != nil {
+			log.Printf("scheduler: campaign %d mark sending: %v", id, err)
+			continue
+		}
+		go func(userID, campaignID int64) {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("scheduler: campaign %d panic: %v", campaignID, r)
+					_ = model.ClearCampaignSending(campaignID)
+				}
+			}()
+			result, err := launchCampaign(userID, campaignID)
+			if err != nil {
+				log.Printf("scheduler: campaign %d: %v", campaignID, err)
+				_ = model.ClearCampaignSending(campaignID)
+				return
+			}
+			log.Printf("scheduler: campaign %d launched (%d queued, %d skipped)", campaignID, result.Queued, result.Skipped)
+		}(campaign.UserID, id)
 	}
 }

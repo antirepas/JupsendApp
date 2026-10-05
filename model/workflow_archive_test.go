@@ -54,7 +54,7 @@ func TestArchiveWorkflowCancelsQueuedJobs(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	instID, _ := CreateWorkflowInstance(vid, cid, 0, "start")
+	instID, _, _ := CreateWorkflowInstance(vid, cid, 0, "start", "{}")
 	jobID, _ := CreateSendJob(SendJob{
 		UserID:             userID,
 		ContactID:          cid,

@@ -64,6 +64,21 @@ func EnqueueSend(input EnqueueInput) (int64, int64, error) {
 		return 0, 0, fmt.Errorf("contact has invalid email")
 	}
 
+	// Block personalization gaps before queueing (especially workflow steps).
+	if input.TemplateID > 0 {
+		tmpl, err := model.GetTemplate(input.TemplateID)
+		if err != nil {
+			return 0, 0, fmt.Errorf("template: %w", err)
+		}
+		_, contactVars, err := model.GetContact(input.ContactID)
+		if err != nil {
+			return 0, 0, fmt.Errorf("contact: %w", err)
+		}
+		if missing := util.MissingContactVarsForTemplates(contactVars, tmpl.Subject, tmpl.Body); len(missing) > 0 {
+			return 0, 0, fmt.Errorf("missing template variables: %s", strings.Join(missing, ", "))
+		}
+	}
+
 	// Pin mailbox: explicit one-off choice, else sticky resolution for the contact.
 	pinID := int64(0)
 	if input.SMTPAccountID > 0 {
@@ -189,6 +204,8 @@ func enqueueSkipReason(err error) string {
 		return model.SkipReasonSuppressed
 	case strings.Contains(msg, "invalid email"):
 		return model.SkipReasonInvalidEmail
+	case strings.Contains(msg, "missing template variables"):
+		return "missing_vars"
 	case strings.Contains(msg, "gmail"), strings.Contains(msg, "connect gmail"), strings.Contains(msg, "sending profile"):
 		return "gmail_not_ready"
 	default:

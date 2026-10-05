@@ -445,13 +445,15 @@ func loadContactVariablesMap(contactIDs []int64, keys []string) (map[int64]map[s
 		args = append(args, id)
 	}
 	keyPH := make([]string, len(keys))
+	want := make(map[string]string, len(keys)) // lower -> requested key
 	for i, k := range keys {
 		keyPH[i] = "?"
-		args = append(args, k)
+		args = append(args, strings.ToLower(k))
+		want[strings.ToLower(k)] = k
 	}
 	rows, err := db.Query(`
 		SELECT contact_id, key, value FROM contact_variables
-		WHERE contact_id IN (`+strings.Join(idPH, ",")+`) AND key IN (`+strings.Join(keyPH, ",")+`)
+		WHERE contact_id IN (`+strings.Join(idPH, ",")+`) AND LOWER(key) IN (`+strings.Join(keyPH, ",")+`)
 	`, args...)
 	if err != nil {
 		return out, err
@@ -467,6 +469,9 @@ func loadContactVariablesMap(contactIDs []int64, keys []string) (map[int64]map[s
 			out[cid] = map[string]string{}
 		}
 		out[cid][key] = val
+		if canon, ok := want[strings.ToLower(key)]; ok {
+			out[cid][canon] = val
+		}
 	}
 	return out, nil
 }

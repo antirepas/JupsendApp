@@ -66,7 +66,7 @@ func TestSendEmailExecutorClaimPreventsDuplicate(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = model.SaveCampaignWorkflowTemplates(campID, map[string]int64{"send1": templateID})
-	instID, err := model.CreateWorkflowInstance(vid, contactID, campID, "send1")
+	instID, _, err := model.CreateWorkflowInstance(vid, contactID, campID, "send1", "{}")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +138,7 @@ func TestTryBeginExecutionOnlyOnce(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	instID, err := model.CreateWorkflowInstance(vid, contactID, 0, "send1")
+	instID, _, err := model.CreateWorkflowInstance(vid, contactID, 0, "send1", "{}")
 	if err != nil {
 		t.Fatal(err)
 	}

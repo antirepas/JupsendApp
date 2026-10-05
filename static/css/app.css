@@ -2392,15 +2392,18 @@ g.wf-edge-hovering .wf-edge-delete-btn {
 .template-workspace {
     display: grid;
     grid-template-columns: 1fr;
-    grid-template-rows: auto 1fr;
+    grid-template-rows: auto minmax(16rem, 1fr) minmax(14rem, auto);
     flex: 1;
     min-height: 0;
     height: 100%;
+    overflow-y: auto;
 }
 
 @media (min-width: 1024px) {
     .template-workspace {
         grid-template-columns: minmax(0, 1.15fr) minmax(20rem, 0.85fr);
+        grid-template-rows: auto minmax(0, 1fr);
+        overflow: hidden;
     }
 }
 
@@ -2494,13 +2497,14 @@ g.wf-edge-hovering .wf-edge-delete-btn {
     border-radius: 0 0 var(--app-radius-sm) var(--app-radius-sm);
     background: var(--app-surface);
     flex: 1;
-    min-height: 12rem;
+    min-height: 16rem;
+    height: 100%;
     font-family: inherit;
     font-size: 0.9375rem;
 }
 
 .template-toolbar-wrap .ql-editor {
-    min-height: 12rem;
+    min-height: 14rem;
     line-height: 1.6;
 }
 

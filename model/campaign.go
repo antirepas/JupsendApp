@@ -615,6 +615,11 @@ func MarkCampaignSending(id int64) error {
 	return err
 }
 
+func ClearCampaignSending(id int64) error {
+	_, err := db.Exec(`UPDATE campaigns SET is_sending = 0 WHERE id = ? AND status = 'draft'`, id)
+	return err
+}
+
 func ScheduleCampaign(id int64, at time.Time) error {
 	result, err := db.Exec(
 		`UPDATE campaigns SET scheduled_at = ? WHERE id = ? AND status = 'draft'`,

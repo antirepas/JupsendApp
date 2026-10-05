@@ -48,7 +48,7 @@ func TestEngineForksOnMultipleDefaultEdges(t *testing.T) {
 	_ = db.QueryRow(`INSERT INTO contact (email, user_id) VALUES ('fork@example.com', ?) RETURNING id`, userID).Scan(&contactID)
 
 	entry, _ := model.GetEntryNodeKey(vid)
-	rootID, err := model.CreateWorkflowInstance(vid, contactID, campaignID, entry)
+	rootID, _, err := model.CreateWorkflowInstance(vid, contactID, campaignID, entry, "{}")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +98,7 @@ func TestReplyCancelsForkSiblings(t *testing.T) {
 
 	campaignID, _ := model.CreateCampaign(userID, "c", 1, 0, "workflow", vid, "", "")
 
-	rootID, _ := model.CreateWorkflowInstance(vid, contactID, campaignID, "start")
+	rootID, _, _ := model.CreateWorkflowInstance(vid, contactID, campaignID, "start", "{}")
 	forkID, _ := model.CreateForkedWorkflowInstance(vid, contactID, campaignID, rootID, "wait_b", "{}", 10)
 
 	if err := model.CancelActiveInstancesForContact(contactID); err != nil {

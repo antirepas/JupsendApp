@@ -111,7 +111,8 @@ func lintFilters(text string, issues *[]TemplateLintIssue) {
 			}
 		}
 		for _, f := range ref.Filters {
-			if !KnownFilters[f.Name] {
+			fname := strings.ToLower(strings.TrimSpace(f.Name))
+			if !KnownFilters[fname] {
 				*issues = append(*issues, TemplateLintIssue{
 					Level:   "warn",
 					Code:    "unknown_filter",
@@ -119,7 +120,7 @@ func lintFilters(text string, issues *[]TemplateLintIssue) {
 					Source:  "rule",
 				})
 			}
-			if f.Name == "required" && !ref.Mailbox && !seenRequired[ref.Name] {
+			if fname == "required" && !ref.Mailbox && !seenRequired[ref.Name] {
 				seenRequired[ref.Name] = true
 				*issues = append(*issues, TemplateLintIssue{
 					Level:   "info",
@@ -128,7 +129,7 @@ func lintFilters(text string, issues *[]TemplateLintIssue) {
 					Source:  "rule",
 				})
 			}
-			if f.Name == "raw" {
+			if fname == "raw" {
 				*issues = append(*issues, TemplateLintIssue{
 					Level:   "warn",
 					Code:    "raw_html",

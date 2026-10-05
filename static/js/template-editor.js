@@ -1,6 +1,13 @@
 (function () {
     const form = document.getElementById('template-form');
-    if (!form || typeof Quill === 'undefined') return;
+    if (!form) return;
+    if (typeof Quill === 'undefined') {
+        const editorEl = document.getElementById('template-editor');
+        if (editorEl) {
+            editorEl.innerHTML = '<p class="text-sm text-red-600 p-3">Editor failed to load. Refresh the page, or check your network connection.</p>';
+        }
+        return;
+    }
 
     const aiEnabled = form.dataset.aiEnabled === 'true';
     const subjectInput = document.getElementById('template-subject');
@@ -327,11 +334,13 @@
         if (!previewAINotice) return;
         if (!message) {
             previewAINotice.hidden = true;
+            previewAINotice.classList.add('hidden');
             previewAINotice.textContent = '';
             return;
         }
         previewAINotice.textContent = message;
         previewAINotice.hidden = false;
+        previewAINotice.classList.remove('hidden');
     }
 
     async function refreshPreview() {

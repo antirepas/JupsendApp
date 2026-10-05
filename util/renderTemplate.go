@@ -148,7 +148,7 @@ func RenderTemplate(tBody string, contactVars []model.ContactVariables, opts Ren
 
 func hasFilter(filters []Filter, name string) bool {
 	for _, f := range filters {
-		if f.Name == name {
+		if strings.EqualFold(f.Name, name) {
 			return true
 		}
 	}

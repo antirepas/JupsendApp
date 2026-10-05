@@ -45,7 +45,7 @@ func ApplyAIFilters(ctx context.Context, value string, ref VarRef, fullText stri
 	result := value
 	ranSummarize := false
 	for _, f := range ref.Filters {
-		if f.Name == "summarize" {
+		if strings.EqualFold(f.Name, "summarize") {
 			ranSummarize = true
 			if !aiCreditsAvailable(userID, creditsCheck) {
 				log.Printf("template ai: credits exhausted for user %d", userID)
@@ -108,7 +108,7 @@ func wantsAIFit(ref VarRef) bool {
 
 func hasFilterNamed(filters []Filter, name string) bool {
 	for _, f := range filters {
-		if f.Name == name {
+		if strings.EqualFold(f.Name, name) {
 			return true
 		}
 	}
@@ -118,7 +118,7 @@ func hasFilterNamed(filters []Filter, name string) bool {
 func deterministicAIFallback(value string, ref VarRef) string {
 	result := value
 	for _, f := range ref.Filters {
-		if f.Name == "summarize" {
+		if strings.EqualFold(f.Name, "summarize") {
 			result = filterTruncate(result, f.Arg)
 		}
 	}

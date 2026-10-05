@@ -65,12 +65,12 @@ func TestGetCampaignWorkflowOverview(t *testing.T) {
 	}
 
 	// active at send
-	inst1, err := CreateWorkflowInstance(vid, contactIDs[0], campaignID, "send")
+	inst1, _, err := CreateWorkflowInstance(vid, contactIDs[0], campaignID, "send", "{}")
 	if err != nil {
 		t.Fatal(err)
 	}
 	// waiting at wait
-	inst2, err := CreateWorkflowInstance(vid, contactIDs[1], campaignID, "wait")
+	inst2, _, err := CreateWorkflowInstance(vid, contactIDs[1], campaignID, "wait", "{}")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +79,7 @@ func TestGetCampaignWorkflowOverview(t *testing.T) {
 		t.Fatal(err)
 	}
 	// completed at end
-	inst3, err := CreateWorkflowInstance(vid, contactIDs[2], campaignID, "end")
+	inst3, _, err := CreateWorkflowInstance(vid, contactIDs[2], campaignID, "end", "{}")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,7 +88,7 @@ func TestGetCampaignWorkflowOverview(t *testing.T) {
 		t.Fatal(err)
 	}
 	// cancelled
-	inst4, err := CreateWorkflowInstance(vid, contactIDs[3], campaignID, "send")
+	inst4, _, err := CreateWorkflowInstance(vid, contactIDs[3], campaignID, "send", "{}")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -16,7 +16,7 @@ func isEmptyValue(s string) bool {
 func ApplyFilters(raw string, filters []Filter, bodyMode bool) (value string, required bool, rawHTML bool) {
 	value = strings.TrimSpace(raw)
 	for _, f := range filters {
-		switch f.Name {
+		switch strings.ToLower(strings.TrimSpace(f.Name)) {
 		case "first":
 			value = filterFirst(value)
 		case "title":
@@ -111,30 +111,28 @@ func filterURL(s string, bodyMode bool) string {
 
 // ValueForIfBlock resolves whether an if-block should show (after default filter only).
 func ValueForIfBlock(varName string, varMap map[string]string, refs []VarRef) bool {
-	raw := varMap[varName]
+	raw := lookupContactVar(varMap, varName)
 	// Apply only default filters for if-block visibility
 	for _, ref := range refs {
-		if ref.Name != varName {
+		if !strings.EqualFold(ref.Name, varName) {
 			continue
 		}
 		for _, f := range ref.Filters {
-			if f.Name == "default" && isEmptyValue(raw) {
+			if strings.EqualFold(f.Name, "default") && isEmptyValue(raw) {
 				raw = f.Arg
 			}
 		}
 	}
-	// Also check if any ref for this var has default when raw from map is empty
 	val := strings.TrimSpace(raw)
 	if val != "" {
 		return true
 	}
-	// Global default from any occurrence
 	for _, ref := range refs {
-		if ref.Name != varName {
+		if !strings.EqualFold(ref.Name, varName) {
 			continue
 		}
 		for _, f := range ref.Filters {
-			if f.Name == "default" && strings.TrimSpace(f.Arg) != "" {
+			if strings.EqualFold(f.Name, "default") && strings.TrimSpace(f.Arg) != "" {
 				return true
 			}
 		}

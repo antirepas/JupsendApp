@@ -101,7 +101,7 @@ func TestGetSendIDForInstanceNode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	instID, err := CreateWorkflowInstance(w.CurrentVersionID, contactID, campaignID, "send1")
+	instID, _, err := CreateWorkflowInstance(w.CurrentVersionID, contactID, campaignID, "send1", "{}")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"emailtracker.com/model"
+	"emailtracker.com/util"
 )
 
 var registry = map[string]NodeExecutor{}
@@ -86,6 +87,24 @@ func (SendEmailExecutor) Execute(ctx ExecutionContext) (NodeResult, error) {
 	openTrack := boolCfg(cfg, "open_tracking", false)
 	clickTrack := boolCfg(cfg, "click_tracking", false)
 
+	tmpl, err := model.GetTemplate(templateID)
+	if err != nil {
+		model.AbortStartedExecution(execKey)
+		return NodeResult{Failed: true, ErrorMessage: "template not found"}, nil
+	}
+	_, contactVars, err := model.GetContact(ctx.Instance.ContactID)
+	if err != nil {
+		model.AbortStartedExecution(execKey)
+		return NodeResult{Failed: true, ErrorMessage: "contact not found"}, nil
+	}
+	if missing := util.MissingContactVarsForTemplates(contactVars, tmpl.Subject, tmpl.Body); len(missing) > 0 {
+		model.AbortStartedExecution(execKey)
+		return NodeResult{
+			Failed:       true,
+			ErrorMessage: "missing template variables: " + strings.Join(missing, ", "),
+		}, nil
+	}
+
 	sendID, err := ctx.Mailer.SendWorkflowEmail(templateID, ctx.Instance.ContactID, campaignID, variant, ctx.Instance.ID, openTrack, clickTrack)
 	if err != nil {
 		model.AbortStartedExecution(execKey)
@@ -109,7 +128,12 @@ func (WaitExecutor) Type() string { return "action_wait" }
 
 func (WaitExecutor) Execute(ctx ExecutionContext) (NodeResult, error) {
 	// Resume after a due wake: do not schedule another full wait (that used to loop forever).
+	// Never advance while next_wake_at is still in the future.
 	if ctx.Instance.Status == "waiting" {
+		if ctx.Instance.NextWakeAt != nil && ctx.Instance.NextWakeAt.After(time.Now()) {
+			wake := *ctx.Instance.NextWakeAt
+			return NodeResult{WakeAt: &wake}, nil
+		}
 		execKey := fmt.Sprintf("%d:%s:wait-done", ctx.Instance.ID, ctx.Node.NodeKey)
 		_, _ = model.CreateExecution(ctx.Instance.ID, ctx.Node.NodeKey, execKey, "succeeded", `{"wait":"completed"}`, "")
 		return NodeResult{NextEdgeType: "default"}, nil

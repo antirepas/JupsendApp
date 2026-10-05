@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -27,7 +28,7 @@ type WorkflowInstance struct {
 	ContextJSON        string
 }
 
-func CreateWorkflowInstance(versionID, contactID, campaignID int64, entryNodeKey string) (int64, error) {
+func CreateWorkflowInstance(versionID, contactID, campaignID int64, entryNodeKey, contextJSON string) (id int64, created bool, err error) {
 	// One root instance per contact per campaign — prevents double-launch duplicates.
 	if campaignID > 0 {
 		var existing int64
@@ -38,8 +39,11 @@ func CreateWorkflowInstance(versionID, contactID, campaignID int64, entryNodeKey
 			ORDER BY id ASC LIMIT 1
 		`, campaignID, contactID).Scan(&existing)
 		if err == nil && existing > 0 {
-			return existing, nil
+			return existing, false, nil
 		}
+	}
+	if strings.TrimSpace(contextJSON) == "" {
+		contextJSON = "{}"
 	}
 	var camp interface{}
 	if campaignID > 0 {
@@ -48,11 +52,13 @@ func CreateWorkflowInstance(versionID, contactID, campaignID int64, entryNodeKey
 	row := db.QueryRow(`
 		INSERT INTO workflow_instances (
 			workflow_version_id, contact_id, campaign_id, current_node_key, status, context_json
-		) VALUES (?, ?, ?, ?, 'active', '{}') RETURNING id
-	`, versionID, contactID, camp, entryNodeKey)
-	var id int64
-	err := row.Scan(&id)
-	return id, err
+		) VALUES (?, ?, ?, ?, 'active', ?) RETURNING id
+	`, versionID, contactID, camp, entryNodeKey, contextJSON)
+	err = row.Scan(&id)
+	if err != nil {
+		return 0, false, err
+	}
+	return id, true, nil
 }
 
 func CreateForkedWorkflowInstance(versionID, contactID, campaignID int64, forkRootID int64, currentNodeKey string, contextJSON string, branchPriority int) (int64, error) {
@@ -489,8 +495,8 @@ func StartWorkflowForCampaign(campaignID, versionID int64, contactIDs []int64) (
 	}
 	started := 0
 	for _, cid := range contactIDs {
-		id, err := CreateWorkflowInstance(versionID, cid, campaignID, entry)
-		if err != nil {
+		id, created, err := CreateWorkflowInstance(versionID, cid, campaignID, entry, "{}")
+		if err != nil || !created {
 			continue
 		}
 		v, _ := GetWorkflowVersion(versionID)

@@ -705,23 +705,57 @@ func SendCampaign(ctx *gin.Context) {
 		ctx.Redirect(http.StatusFound, "/campaigns?error=Invalid+campaign")
 		return
 	}
-
-	result, err := launchCampaign(mustUserID(ctx), campaignID)
+	userID := mustUserID(ctx)
+	campaign, err := model.GetCampaignForUser(campaignID, userID)
 	if err != nil {
-		log.Print(err)
+		ctx.Redirect(http.StatusFound, "/campaigns?error=Campaign+not+found")
+		return
+	}
+	if campaign.Status == "sent" {
+		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error="+url.QueryEscape("campaign already sent"))
+		return
+	}
+	if campaign.Status == "stopped" {
+		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error="+url.QueryEscape("campaign was stopped"))
+		return
+	}
+	if campaign.IsSending {
+		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?success="+url.QueryEscape("Campaign is already launching in the background"))
+		return
+	}
+	if _, err := model.ListSendReadyAccountsForCampaign(userID, campaignID); err != nil {
 		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error="+url.QueryEscape(err.Error()))
 		return
 	}
-
-	msg := fmt.Sprintf("Campaign queued: %d emails", result.Queued)
-	if result.Skipped > 0 {
-		if b := model.FormatSkipBreakdown(result.SkippedReasons); b != "" {
-			msg += fmt.Sprintf(", %d skipped (%s)", result.Skipped, b)
-		} else {
-			msg += fmt.Sprintf(", %d skipped", result.Skipped)
+	if (campaign.ExecutionMode == "workflow" || campaign.ExecutionMode == "workflow_ab") && campaign.WorkflowVersionID > 0 {
+		if err := model.ValidateCampaignWorkflowReady(campaign); err != nil {
+			ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error="+url.QueryEscape(err.Error()))
+			return
 		}
 	}
-	ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?success="+url.QueryEscape(msg))
+	if err := model.MarkCampaignSending(campaignID); err != nil {
+		log.Print(err)
+		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error="+url.QueryEscape("Could not start campaign"))
+		return
+	}
+
+	go func(userID, campaignID int64) {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("campaign %d launch panic: %v", campaignID, r)
+				_ = model.ClearCampaignSending(campaignID)
+			}
+		}()
+		result, err := launchCampaign(userID, campaignID)
+		if err != nil {
+			log.Printf("campaign %d launch failed: %v", campaignID, err)
+			_ = model.ClearCampaignSending(campaignID)
+			return
+		}
+		log.Printf("campaign %d launch done: queued=%d skipped=%d", campaignID, result.Queued, result.Skipped)
+	}(userID, campaignID)
+
+	ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?success="+url.QueryEscape("Launch started — emails queue in the background. Refresh to see progress."))
 }
 
 // TestCampaignWorkflowWeb queues every mapped workflow email to the signed-in user's address (no waits).
@@ -917,9 +951,7 @@ func executeCampaignSend(userID, campaignID int64) (outbound.EnqueueResult, erro
 	if campaign.Status == "stopped" {
 		return outbound.EnqueueResult{}, fmt.Errorf("campaign was stopped")
 	}
-	if campaign.IsSending {
-		return outbound.EnqueueResult{}, fmt.Errorf("campaign is already sending")
-	}
+	// IsSending may already be set by SendCampaign / scheduler before background launch.
 
 	contactIDs, err := model.GetCampaignContactIDs(campaignID)
 	if err != nil || len(contactIDs) == 0 {
@@ -993,25 +1025,28 @@ func startWorkflowCampaign(campaignID int64, campaign model.Campaign) (sent, fai
 	}
 
 	hasAB := campaign.ExecutionMode == "workflow_ab" && campaign.TemplateBID > 0
+	v, _ := model.GetWorkflowVersion(campaign.WorkflowVersionID)
+
 	for i, cid := range contactIDs {
-		instID, err := model.CreateWorkflowInstance(campaign.WorkflowVersionID, cid, campaignID, entry)
-		if err != nil {
-			failed++
-			continue
-		}
-		inst, _ := model.GetWorkflowInstance(instID)
-		ctxMap := model.GetInstanceContext(&inst)
 		variant := "A"
 		if hasAB && i%2 == 1 {
 			variant = "B"
 		}
+		ctxJSON := "{}"
 		if hasAB {
-			ctxMap["variant"] = variant
+			ctxJSON = fmt.Sprintf(`{"variant":%q}`, variant)
 		}
-		_ = model.SetInstanceContext(&inst, ctxMap)
-		_ = model.UpdateInstanceState(inst)
 
-		v, _ := model.GetWorkflowVersion(campaign.WorkflowVersionID)
+		instID, created, err := model.CreateWorkflowInstance(campaign.WorkflowVersionID, cid, campaignID, entry, ctxJSON)
+		if err != nil {
+			failed++
+			continue
+		}
+		if !created {
+			// Already mid-flight — never rewrite variant or node progress.
+			continue
+		}
+
 		_, _ = model.InsertContactEvent(model.ContactEventInput{
 			ContactID:          cid,
 			CampaignID:         campaignID,
@@ -1020,16 +1055,15 @@ func startWorkflowCampaign(campaignID int64, campaign model.Campaign) (sent, fai
 			EventType:          "WORKFLOW_STARTED",
 		})
 
-		if eng := workflow.GetEngine(); eng != nil {
-			if ok, _ := model.ClaimInstance(instID); ok {
-				_ = eng.ProcessInstance(instID)
-			}
-		}
 		sent++
 	}
 
 	if err := model.MarkCampaignSent(campaignID); err != nil {
 		return sent, failed, err
+	}
+	// Process a first batch immediately; the scheduler drains the rest.
+	if eng := workflow.GetEngine(); eng != nil {
+		go eng.ProcessDueInstances()
 	}
 	return sent, failed, nil
 }
