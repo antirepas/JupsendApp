@@ -61,6 +61,8 @@ type WorkflowCampaignContactRowView struct {
 	SendID         int64
 	Replied        bool
 	Sent           bool
+	Variables      []ContactVariableCell
+	MissingVars    []string
 }
 
 // WorkflowGraphNodeView carries page context into recursive wf_graph_node template calls.
@@ -120,6 +122,7 @@ func buildWorkflowCampaignContactRows(
 	userID int64,
 	contactIDs []int64,
 	indexBase int, // 0-based offset of first ID in the full filtered list
+	templateVars []string,
 ) []WorkflowCampaignContactRowView {
 	if len(contactIDs) == 0 {
 		return nil
@@ -136,6 +139,7 @@ func buildWorkflowCampaignContactRows(
 	replied := model.CampaignRepliedContactSetForIDs(campaign.ID, contactIDs)
 	labels := model.NodeLabelMapForVersion(campaign.WorkflowVersionID)
 	pathLabels := model.GetCampaignLastPathLabelsForUI(campaign.ID, campaign.WorkflowVersionID)
+	contactData, _ := model.GetCampaignContactDataMapForIDs(contactIDs)
 
 	var rows []WorkflowCampaignContactRowView
 	for i, cid := range contactIDs {
@@ -169,9 +173,41 @@ func buildWorkflowCampaignContactRows(
 				row.HasStarted = true
 			}
 		}
+		data := contactData[cid]
+		row.Variables, row.MissingVars = contactVarCells(data.Variables, templateVars)
 		rows = append(rows, row)
 	}
 	return rows
+}
+
+func contactVarCells(vars []model.ContactVariables, keys []string) ([]ContactVariableCell, []string) {
+	varMap := make(map[string]string, len(vars))
+	for _, v := range vars {
+		varMap[v.Key] = v.Value
+	}
+	var cells []ContactVariableCell
+	var missing []string
+	for _, key := range keys {
+		val := lookupVarFold(varMap, key)
+		missingVal := strings.TrimSpace(val) == ""
+		if missingVal {
+			missing = append(missing, key)
+		}
+		cells = append(cells, ContactVariableCell{Key: key, Value: val, Missing: missingVal})
+	}
+	return cells, missing
+}
+
+func lookupVarFold(m map[string]string, name string) string {
+	if v, ok := m[name]; ok {
+		return v
+	}
+	for k, v := range m {
+		if strings.EqualFold(k, name) {
+			return v
+		}
+	}
+	return ""
 }
 
 func workflowBranchLabel(inst model.WorkflowInstance) string {
@@ -248,21 +284,7 @@ func buildCampaignContactRows(
 			tplVars = bVars
 		}
 
-		varMap := make(map[string]string, len(data.Variables))
-		for _, v := range data.Variables {
-			varMap[v.Key] = v.Value
-		}
-
-		var cells []ContactVariableCell
-		var missing []string
-		for _, key := range tplVars {
-			val := varMap[key]
-			missingVal := strings.TrimSpace(val) == ""
-			if missingVal {
-				missing = append(missing, key)
-			}
-			cells = append(cells, ContactVariableCell{Key: key, Value: val, Missing: missingVal})
-		}
+		cells, missing := contactVarCells(data.Variables, tplVars)
 
 		subject, body, _, _ := util.RenderEmail(tpl.Subject, tpl.Body, data.Variables, util.RenderOptions{
 			ForPreview:  true,

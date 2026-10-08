@@ -25,6 +25,8 @@ type campaignDetailPageData struct {
 	MemberPage          memberListPage
 	MemberTotal         int
 	MissingVarsCount    int
+	VarCoverage         []model.CampaignVarCoverage
+	ReadyContactCount   int
 }
 
 type campaignMemberLoadOpts struct {
@@ -122,13 +124,26 @@ func loadCampaignDetailPageData(userID int64, detail model.CampaignDetail, picke
 		return data, err
 	}
 
+	if isWorkflow {
+		ids := []int64{detail.TemplateAID, detail.TemplateBID}
+		for _, tid := range data.StepMappings {
+			ids = append(ids, tid)
+		}
+		data.MergedVars, _ = model.MergeTemplateVariables(userID, ids)
+	}
+
 	memberFilter := model.CampaignMemberFilter{
 		Query:      memberOpts.Query,
 		Engagement: memberOpts.Engagement,
 		Page:       memberOpts.Page,
 		PageSize:   memberOpts.PageSize,
 	}
-	if !isWorkflow {
+	if isWorkflow {
+		memberFilter.MergedVars = data.MergedVars
+		if memberOpts.Engagement != "missing_vars" && !model.HasActiveCampaignListImport(userID, detail.ID) {
+			data.MissingVarsCount, _ = model.CountCampaignContactsMissingAnyVars(detail.ID, data.MergedVars)
+		}
+	} else {
 		_, aVars, _ := model.GetTemplateByID(detail.TemplateAID, userID)
 		var bVars []string
 		hasB := detail.TemplateBID > 0
@@ -145,6 +160,13 @@ func loadCampaignDetailPageData(userID int64, detail model.CampaignDetail, picke
 			}
 		}
 	}
+	if len(data.MergedVars) > 0 && !model.HasActiveCampaignListImport(userID, detail.ID) {
+		data.VarCoverage, _ = model.CampaignVariableCoverage(detail.ID, data.MergedVars)
+		data.ReadyContactCount = detail.ContactCount - data.MissingVarsCount
+		if data.ReadyContactCount < 0 {
+			data.ReadyContactCount = 0
+		}
+	}
 
 	memberPage, err := model.ListCampaignMemberPage(detail.ID, memberFilter)
 	if err != nil {
@@ -156,8 +178,9 @@ func loadCampaignDetailPageData(userID int64, detail model.CampaignDetail, picke
 
 	g2, _ := errgroup.WithContext(context.Background())
 	if isWorkflow {
+		mergedVars := data.MergedVars
 		g2.Go(func() error {
-			data.WorkflowContactRows = buildWorkflowCampaignContactRows(campaign, userID, memberPage.ContactIDs, indexBase)
+			data.WorkflowContactRows = buildWorkflowCampaignContactRows(campaign, userID, memberPage.ContactIDs, indexBase, mergedVars)
 			return nil
 		})
 		if detail.ExecutionMode == "workflow_ab" {
@@ -172,6 +195,9 @@ func loadCampaignDetailPageData(userID int64, detail model.CampaignDetail, picke
 				}
 				return nil
 			})
+		}
+		if memberOpts.Engagement == "missing_vars" {
+			data.MissingVarsCount = memberPage.Total
 		}
 	} else {
 		g2.Go(func() error {

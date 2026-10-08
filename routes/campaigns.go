@@ -437,7 +437,10 @@ func CampaignDetailPage(ctx *gin.Context) {
 		pageData["memberPage"] = pageExtras.MemberPage
 		pageData["memberQ"] = memberQ
 		pageData["memberFilter"] = memberFilter
-		pageData["missingVarsCount"] = 0
+		pageData["missingVarsCount"] = pageExtras.MissingVarsCount
+		pageData["mergedVars"] = pageExtras.MergedVars
+		pageData["varCoverage"] = pageExtras.VarCoverage
+		pageData["readyContactCount"] = pageExtras.ReadyContactCount
 		if detail.ExecutionMode == "workflow_ab" {
 			pageData["templateA"] = pageExtras.TemplateA
 			pageData["templateB"] = pageExtras.TemplateB
@@ -455,6 +458,8 @@ func CampaignDetailPage(ctx *gin.Context) {
 		pageData["memberFilter"] = memberFilter
 		pageData["missingVarsCount"] = pageExtras.MissingVarsCount
 		pageData["mergedVars"] = pageExtras.MergedVars
+		pageData["varCoverage"] = pageExtras.VarCoverage
+		pageData["readyContactCount"] = pageExtras.ReadyContactCount
 	}
 
 	ctx.HTML(http.StatusOK, "campaigns_detail.html", pageData)
@@ -602,29 +607,36 @@ func RemoveCampaignContactsMissingVars(ctx *gin.Context) {
 		ctx.Redirect(http.StatusFound, "/campaigns?error=Campaign+not+found")
 		return
 	}
-	if (campaign.ExecutionMode == "workflow" || campaign.ExecutionMode == "workflow_ab") && campaign.WorkflowVersionID > 0 {
-		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error="+url.QueryEscape("Missing-variable cleanup is for A/B template campaigns"))
-		return
-	}
 	ids, err := model.GetCampaignContactIDs(campaignID)
 	if err != nil {
 		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error=Could+not+load+contacts")
 		return
 	}
-	_, aVars, _ := model.GetTemplateByID(campaign.TemplateAID, userID)
-	var bVars []string
-	hasB := campaign.TemplateBID > 0
-	if hasB {
-		_, bVars, _ = model.GetTemplateByID(campaign.TemplateBID, userID)
+	filter := model.CampaignMemberFilter{
+		Engagement: "missing_vars",
+		Page:       1,
+		PageSize:   len(ids) + 1,
 	}
-	missingPage, err := model.ListCampaignMemberPage(campaignID, model.CampaignMemberFilter{
-		Engagement:    "missing_vars",
-		Page:          1,
-		PageSize:      len(ids) + 1,
-		HasB:          hasB,
-		TemplateAVars: aVars,
-		TemplateBVars: bVars,
-	})
+	if (campaign.ExecutionMode == "workflow" || campaign.ExecutionMode == "workflow_ab") && campaign.WorkflowVersionID > 0 {
+		tids := []int64{campaign.TemplateAID, campaign.TemplateBID}
+		if mappings, mErr := model.GetCampaignWorkflowTemplates(campaignID); mErr == nil {
+			for _, tid := range mappings {
+				tids = append(tids, tid)
+			}
+		}
+		filter.MergedVars, _ = model.MergeTemplateVariables(userID, tids)
+	} else {
+		_, aVars, _ := model.GetTemplateByID(campaign.TemplateAID, userID)
+		var bVars []string
+		hasB := campaign.TemplateBID > 0
+		if hasB {
+			_, bVars, _ = model.GetTemplateByID(campaign.TemplateBID, userID)
+		}
+		filter.HasB = hasB
+		filter.TemplateAVars = aVars
+		filter.TemplateBVars = bVars
+	}
+	missingPage, err := model.ListCampaignMemberPage(campaignID, filter)
 	if err != nil {
 		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error=Could+not+scan+contacts")
 		return

@@ -679,13 +679,125 @@ func MergeTemplateVariables(userID int64, templateIDs []int64) ([]string, error)
 			return nil, err
 		}
 		for _, key := range v {
-			if !seen[key] {
-				seen[key] = true
-				vars = append(vars, key)
+			canon := strings.ToLower(strings.TrimSpace(key))
+			if canon == "" || seen[canon] {
+				continue
 			}
+			seen[canon] = true
+			vars = append(vars, key)
 		}
 	}
 	return vars, nil
+}
+
+// CampaignVarCoverage is how many campaign contacts have a non-empty value for a template variable.
+type CampaignVarCoverage struct {
+	Key     string
+	Filled  int
+	Total   int
+	Missing int
+	Pct     int // 0–100 filled share
+}
+
+// CampaignVariableCoverage returns fill rates for template keys across campaign contacts (case-insensitive keys).
+func CampaignVariableCoverage(campaignID int64, keys []string) ([]CampaignVarCoverage, error) {
+	out := make([]CampaignVarCoverage, 0, len(keys))
+	if campaignID <= 0 || len(keys) == 0 {
+		return out, nil
+	}
+	var total int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM campaign_contacts WHERE campaign_id = ?`, campaignID).Scan(&total); err != nil {
+		return nil, err
+	}
+	filled := make(map[string]int, len(keys))
+	canonKeys := make([]string, 0, len(keys))
+	display := make(map[string]string, len(keys))
+	for _, k := range keys {
+		c := strings.ToLower(strings.TrimSpace(k))
+		if c == "" {
+			continue
+		}
+		if _, ok := display[c]; ok {
+			continue
+		}
+		display[c] = k
+		canonKeys = append(canonKeys, c)
+	}
+	if total == 0 || len(canonKeys) == 0 {
+		for _, c := range canonKeys {
+			out = append(out, CampaignVarCoverage{Key: display[c], Filled: 0, Total: total, Missing: total, Pct: 0})
+		}
+		return out, nil
+	}
+
+	ph := make([]string, len(canonKeys))
+	args := make([]interface{}, 0, 1+len(canonKeys))
+	args = append(args, campaignID)
+	for i, c := range canonKeys {
+		ph[i] = "?"
+		args = append(args, c)
+	}
+	rows, err := db.Query(`
+		SELECT LOWER(cv.key) AS k, COUNT(DISTINCT cc.contact_id)
+		FROM campaign_contacts cc
+		INNER JOIN contact_variables cv ON cv.contact_id = cc.contact_id
+		WHERE cc.campaign_id = ?
+		  AND LOWER(cv.key) IN (`+strings.Join(ph, ",")+`)
+		  AND TRIM(COALESCE(cv.value, '')) <> ''
+		GROUP BY LOWER(cv.key)
+	`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var k string
+		var n int
+		if rows.Scan(&k, &n) != nil {
+			continue
+		}
+		filled[k] = n
+	}
+	for _, c := range canonKeys {
+		n := filled[c]
+		pct := 0
+		if total > 0 {
+			pct = (n * 100) / total
+		}
+		out = append(out, CampaignVarCoverage{
+			Key:     display[c],
+			Filled:  n,
+			Total:   total,
+			Missing: total - n,
+			Pct:     pct,
+		})
+	}
+	return out, nil
+}
+
+// CountCampaignContactsMissingAnyVars counts contacts missing any of the given keys.
+func CountCampaignContactsMissingAnyVars(campaignID int64, keys []string) (int, error) {
+	if len(keys) == 0 {
+		return 0, nil
+	}
+	ids, err := GetCampaignContactIDs(campaignID)
+	if err != nil {
+		return 0, err
+	}
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	dataMap, err := GetCampaignContactDataMap(campaignID)
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	for _, id := range ids {
+		if contactMissingAnyVar(dataMap[id].Variables, keys) {
+			n++
+		}
+	}
+	return n, nil
 }
 
 func DeleteCampaign(id, userID int64) error {

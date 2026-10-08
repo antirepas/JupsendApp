@@ -17,6 +17,8 @@ type CampaignMemberFilter struct {
 	HasB          bool
 	TemplateAVars []string
 	TemplateBVars []string
+	// MergedVars: when set (workflows), a contact is missing if any of these keys is empty.
+	MergedVars []string
 }
 
 // CampaignMemberPage is one page of campaign contact IDs.
@@ -155,15 +157,19 @@ func listCampaignMembersMissingVarsPage(campaignID int64, emailQ string, f Campa
 	}
 	aVars := f.TemplateAVars
 	bVars := f.TemplateBVars
+	merged := f.MergedVars
 	var missing []int64
 	for i, id := range ids {
 		data := dataMap[id]
 		if emailQ != "" && !strings.Contains(strings.ToLower(data.Email), emailQ) {
 			continue
 		}
-		keys := aVars
-		if f.HasB && i%2 == 1 && len(bVars) > 0 {
-			keys = bVars
+		keys := merged
+		if len(keys) == 0 {
+			keys = aVars
+			if f.HasB && i%2 == 1 && len(bVars) > 0 {
+				keys = bVars
+			}
 		}
 		if contactMissingAnyVar(data.Variables, keys) {
 			missing = append(missing, id)
