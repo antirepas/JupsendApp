@@ -3,10 +3,32 @@ package outbound
 import (
 	"fmt"
 	"strings"
+	"sync/atomic"
+	"time"
 
 	"emailtracker.com/model"
 	"emailtracker.com/util"
 )
+
+// bulkEnqueueDepth pauses the outbound worker while a large campaign is being
+// queued so HTTP page loads can still get DB connections (avoids proxy 502s).
+var bulkEnqueueDepth atomic.Int32
+
+// BeginBulkEnqueue pauses the send worker until EndBulkEnqueue.
+func BeginBulkEnqueue() {
+	bulkEnqueueDepth.Add(1)
+}
+
+// EndBulkEnqueue resumes the send worker and wakes it once all bulk ops finish.
+func EndBulkEnqueue() {
+	if bulkEnqueueDepth.Add(-1) == 0 {
+		NotifyWorker()
+	}
+}
+
+func bulkEnqueueActive() bool {
+	return bulkEnqueueDepth.Load() > 0
+}
 
 type EnqueueResult struct {
 	Queued          int
@@ -33,13 +55,19 @@ type EnqueueInput struct {
 	// SubjectPrefix is prepended to the rendered subject at send time (e.g. "[Test]").
 	// Encoded on the send job only so email_sends keeps a clean variant label.
 	SubjectPrefix string
+	// SkipNotify avoids waking the worker on every row during bulk campaign enqueue.
+	SkipNotify bool
+	// AccountPrechecked skips the per-row "send ready" lookup when the caller already validated.
+	AccountPrechecked bool
 }
 
 const testSubjectJobVariantPrefix = "test|"
 
 func EnqueueSend(input EnqueueInput) (int64, int64, error) {
-	if _, err := model.GetSendReadyAccountForUser(input.UserID); err != nil {
-		return 0, 0, err
+	if !input.AccountPrechecked {
+		if _, err := model.GetSendReadyAccountForUser(input.UserID); err != nil {
+			return 0, 0, err
+		}
 	}
 
 	if input.WorkflowInstanceID > 0 && input.TemplateID > 0 {
@@ -137,7 +165,9 @@ func EnqueueSend(input EnqueueInput) (int64, int64, error) {
 		return 0, 0, err
 	}
 
-	NotifyWorker()
+	if !input.SkipNotify && !bulkEnqueueActive() {
+		NotifyWorker()
+	}
 	return emailSendID, jobID, nil
 }
 
@@ -169,6 +199,10 @@ func EnqueueCampaignContacts(userID, campaignID int64, contactIDs []int64, templ
 	}
 	openTrack := model.CampaignOpenTrackingEnabled(campaignID)
 	clickTrack := model.CampaignClickTrackingEnabled(campaignID)
+
+	BeginBulkEnqueue()
+	defer EndBulkEnqueue()
+
 	for i, contactID := range allowed {
 		templateID, variant := templateForContact(contactID, i)
 		_, _, err := EnqueueSend(EnqueueInput{
@@ -180,6 +214,8 @@ func EnqueueCampaignContacts(userID, campaignID int64, contactIDs []int64, templ
 			TrackingExplicit:     true,
 			OpenTrackingEnabled:  openTrack,
 			ClickTrackingEnabled: clickTrack,
+			SkipNotify:           true,
+			AccountPrechecked:    true,
 		})
 		if err != nil {
 			result.Skipped++
@@ -190,6 +226,10 @@ func EnqueueCampaignContacts(userID, campaignID int64, contactIDs []int64, templ
 			continue
 		}
 		result.Queued++
+		// Yield so campaign-detail / other HTTP requests can borrow DB connections.
+		if result.Queued%25 == 0 {
+			time.Sleep(20 * time.Millisecond)
+		}
 	}
 	return result, nil
 }

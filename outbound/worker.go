@@ -45,6 +45,12 @@ func StartWorker() {
 }
 
 func runWorkerBatch() {
+	// Don't compete with a bulk campaign enqueue for the DB pool — that is what
+	// made campaign pages hang and return 502 while jobs were still being inserted.
+	if bulkEnqueueActive() {
+		return
+	}
+
 	nudgeDeferredJobsWithCapacity()
 
 	jobs := claimPendingJobs()

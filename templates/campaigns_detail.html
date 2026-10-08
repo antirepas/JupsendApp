@@ -1,7 +1,12 @@
 {{define "campaigns_detail.html"}}
 <!DOCTYPE html>
 <html lang="en" class="h-full">
-<head>{{template "head" .}}</head>
+<head>
+  {{template "head" .}}
+  {{if eq .campaign.DisplayStatus "sending"}}
+  <meta http-equiv="refresh" content="8">
+  {{end}}
+</head>
 {{template "page_shell_start" .}}
 <div class="app-page">
 <header class="app-page-header">
@@ -102,7 +107,12 @@
         Failed: <strong>{{.campaign.SendJobCounts.Failed}}</strong> ·
         Dead: <strong>{{.campaign.SendJobCounts.Dead}}</strong>
     </p>
-    <p class="text-xs text-slate-500">Jobs are processed by the background outbound worker. This page refreshes on reload.</p>
+    <p class="text-xs text-slate-500">Launch queues in the background so the app stays responsive. This page auto-refreshes every few seconds.</p>
+</div>
+{{else}}
+<div class="card mb-6 border-l-4 border-blue-500">
+    <h3 class="font-semibold text-slate-900 mb-2">Workflow launching</h3>
+    <p class="text-sm text-slate-600">Starting workflow runs for your contacts in the background. This page auto-refreshes every few seconds.</p>
 </div>
 {{end}}
 {{end}}

@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"database/sql"
 	"log"
 	"sync"
 	"time"
@@ -37,7 +38,10 @@ func runDueScheduledCampaigns() {
 			continue
 		}
 		if err := model.MarkCampaignSending(id); err != nil {
-			log.Printf("scheduler: campaign %d mark sending: %v", id, err)
+			// ErrNoRows = lost the race to another claim; skip quietly.
+			if err != sql.ErrNoRows {
+				log.Printf("scheduler: campaign %d mark sending: %v", id, err)
+			}
 			continue
 		}
 		go func(userID, campaignID int64) {

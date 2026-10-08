@@ -28,8 +28,10 @@ func Prepare() {
 		log.Fatal(err)
 	}
 
-	DB.SetMaxOpenConns(10)
-	DB.SetMaxIdleConns(5)
+	// Campaign launch enqueue + outbound workers + page loads share this pool.
+	// 10 was too low: large sends starved HTTP and proxies returned 502/503.
+	DB.SetMaxOpenConns(40)
+	DB.SetMaxIdleConns(20)
 	DB.SetConnMaxLifetime(30 * time.Minute)
 
 	if err := DB.Ping(); err != nil {

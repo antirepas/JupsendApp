@@ -75,16 +75,19 @@ func loadCampaignDetailPageData(userID int64, detail model.CampaignDetail, picke
 
 	g, _ := errgroup.WithContext(context.Background())
 
-	g.Go(func() error {
-		var err error
-		data.PickerPage, err = model.ListContactsFiltered(userID, pickerFilter)
-		return err
-	})
-	g.Go(func() error {
-		var err error
-		data.ContactLists, err = model.ListContactLists(userID)
-		return err
-	})
+	// While launching, skip contact pickers — they add DB load and aren't usable mid-send.
+	if !detail.IsSending {
+		g.Go(func() error {
+			var err error
+			data.PickerPage, err = model.ListContactsFiltered(userID, pickerFilter)
+			return err
+		})
+		g.Go(func() error {
+			var err error
+			data.ContactLists, err = model.ListContactLists(userID)
+			return err
+		})
+	}
 
 	if isWorkflow {
 		g.Go(func() error {
@@ -138,9 +141,13 @@ func loadCampaignDetailPageData(userID int64, detail model.CampaignDetail, picke
 		Page:       memberOpts.Page,
 		PageSize:   memberOpts.PageSize,
 	}
+	// Full-contact var scans compete with launch enqueue for the DB pool and are
+	// what turn "send" into a 2-minute 502. Skip them while the campaign is launching.
+	skipHeavyVarScans := detail.IsSending || model.HasActiveCampaignListImport(userID, detail.ID)
+
 	if isWorkflow {
 		memberFilter.MergedVars = data.MergedVars
-		if memberOpts.Engagement != "missing_vars" && !model.HasActiveCampaignListImport(userID, detail.ID) {
+		if memberOpts.Engagement != "missing_vars" && !skipHeavyVarScans {
 			data.MissingVarsCount, _ = model.CountCampaignContactsMissingAnyVars(detail.ID, data.MergedVars)
 		}
 	} else {
@@ -153,14 +160,11 @@ func loadCampaignDetailPageData(userID int64, detail model.CampaignDetail, picke
 		memberFilter.HasB = hasB
 		memberFilter.TemplateAVars = aVars
 		memberFilter.TemplateBVars = bVars
-		if memberOpts.Engagement != "missing_vars" {
-			// Skip full-scan count while a list snapshot is still importing (avoids proxy 502).
-			if !model.HasActiveCampaignListImport(userID, detail.ID) {
-				data.MissingVarsCount, _ = model.CountCampaignContactsMissingVars(detail.ID, aVars, bVars, hasB)
-			}
+		if memberOpts.Engagement != "missing_vars" && !skipHeavyVarScans {
+			data.MissingVarsCount, _ = model.CountCampaignContactsMissingVars(detail.ID, aVars, bVars, hasB)
 		}
 	}
-	if len(data.MergedVars) > 0 && !model.HasActiveCampaignListImport(userID, detail.ID) {
+	if len(data.MergedVars) > 0 && !skipHeavyVarScans {
 		data.VarCoverage, _ = model.CampaignVariableCoverage(detail.ID, data.MergedVars)
 		data.ReadyContactCount = detail.ContactCount - data.MissingVarsCount
 		if data.ReadyContactCount < 0 {

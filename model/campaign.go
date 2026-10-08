@@ -610,9 +610,21 @@ func MarkCampaignSent(id int64) error {
 	return err
 }
 
+// MarkCampaignSending atomically claims a draft campaign for launch.
+// Returns sql.ErrNoRows if the campaign is already sending, sent, or stopped.
 func MarkCampaignSending(id int64) error {
-	_, err := db.Exec(`UPDATE campaigns SET is_sending = 1 WHERE id = ?`, id)
-	return err
+	result, err := db.Exec(`
+		UPDATE campaigns SET is_sending = 1
+		WHERE id = ? AND status = 'draft' AND COALESCE(is_sending, 0) = 0
+	`, id)
+	if err != nil {
+		return err
+	}
+	n, _ := result.RowsAffected()
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
 }
 
 func ClearCampaignSending(id int64) error {

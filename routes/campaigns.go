@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"database/sql"
 	"fmt"
 	"log"
 	"net/http"
@@ -745,7 +746,12 @@ func SendCampaign(ctx *gin.Context) {
 			return
 		}
 	}
+	// Atomic claim — closes the double-click race that could enqueue jobs twice.
 	if err := model.MarkCampaignSending(campaignID); err != nil {
+		if err == sql.ErrNoRows {
+			ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?success="+url.QueryEscape("Campaign is already launching in the background"))
+			return
+		}
 		log.Print(err)
 		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error="+url.QueryEscape("Could not start campaign"))
 		return
@@ -992,9 +998,8 @@ func executeCampaignSend(userID, campaignID int64) (outbound.EnqueueResult, erro
 		return result, fmt.Errorf("all contacts skipped (%d contacts)", len(contactIDs))
 	}
 
-	if err := model.MarkCampaignSending(campaignID); err != nil {
-		return result, err
-	}
+	// is_sending was already claimed by SendCampaign / scheduler; leave it set
+	// until outbound.reconcileCampaign marks the campaign sent.
 	return result, nil
 }
 
@@ -1039,6 +1044,11 @@ func startWorkflowCampaign(campaignID int64, campaign model.Campaign) (sent, fai
 	hasAB := campaign.ExecutionMode == "workflow_ab" && campaign.TemplateBID > 0
 	v, _ := model.GetWorkflowVersion(campaign.WorkflowVersionID)
 
+	// Pause outbound worker while we create hundreds of instances so the
+	// post-launch campaign page can still load (avoids proxy 502s).
+	outbound.BeginBulkEnqueue()
+	defer outbound.EndBulkEnqueue()
+
 	for i, cid := range contactIDs {
 		variant := "A"
 		if hasAB && i%2 == 1 {
@@ -1068,12 +1078,15 @@ func startWorkflowCampaign(campaignID int64, campaign model.Campaign) (sent, fai
 		})
 
 		sent++
+		if sent%25 == 0 {
+			time.Sleep(20 * time.Millisecond)
+		}
 	}
 
 	if err := model.MarkCampaignSent(campaignID); err != nil {
 		return sent, failed, err
 	}
-	// Process a first batch immediately; the scheduler drains the rest.
+	// Process a first batch after enqueue finishes; the scheduler drains the rest.
 	if eng := workflow.GetEngine(); eng != nil {
 		go eng.ProcessDueInstances()
 	}
