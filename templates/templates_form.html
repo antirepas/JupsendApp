@@ -145,20 +145,8 @@
         <div class="template-preview-panel">
             <h3 class="app-page-title" style="font-size:1rem;margin-bottom:0.25rem;">Live preview</h3>
             <p class="app-page-sub mb-3">How this email appears in a prospect's inbox.</p>
-            <div class="template-inbox-mock">
-                <div class="template-inbox-row">
-                    <span class="template-inbox-label">From</span>
-                    <span class="template-inbox-value">{{.senderEmail}}</span>
-                </div>
-                <div class="template-inbox-row">
-                    <span class="template-inbox-label">Subject</span>
-                    <span class="template-inbox-value font-medium" id="preview-subject">{{if .template}}{{.template.Subject}}{{else}}(no subject){{end}}</span>
-                </div>
-            </div>
-            <iframe id="preview-frame" class="template-preview-frame" title="Email preview" sandbox=""></iframe>
-            <div id="preview-ai-notice" class="hidden text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-3" role="status"></div>
-            <div id="template-lint-sidebar" class="template-lint-sidebar" aria-live="polite"></div>
-            <div class="mt-4 pt-4 border-t border-slate-200">
+
+            <div class="template-preview-controls">
                 <label class="form-label" for="template-preview-contact">Preview as contact</label>
                 <select id="template-preview-contact" class="form-input text-sm mb-3">
                     <option value="">— Default sample values —</option>
@@ -176,6 +164,20 @@
                 </label>
                 {{end}}
             </div>
+
+            <div class="template-inbox-mock">
+                <div class="template-inbox-row">
+                    <span class="template-inbox-label">From</span>
+                    <span class="template-inbox-value">{{.senderEmail}}</span>
+                </div>
+                <div class="template-inbox-row">
+                    <span class="template-inbox-label">Subject</span>
+                    <span class="template-inbox-value font-medium" id="preview-subject">{{if .template}}{{.template.Subject}}{{else}}(no subject){{end}}</span>
+                </div>
+            </div>
+            <iframe id="preview-frame" class="template-preview-frame" title="Email preview" sandbox=""></iframe>
+            <div id="preview-ai-notice" class="hidden text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-3" role="status"></div>
+            <div id="template-lint-sidebar" class="template-lint-sidebar" aria-live="polite"></div>
         </div>
     </div>
 </form>
