@@ -74,7 +74,7 @@ func sortedUniqueKeys(keys []string) []string {
 	seen := map[string]bool{}
 	var out []string
 	for _, k := range keys {
-		k = strings.TrimSpace(k)
+		k = NormalizeVariableKey(k)
 		if k == "" || seen[k] {
 			continue
 		}
@@ -445,15 +445,17 @@ func loadContactVariablesMap(contactIDs []int64, keys []string) (map[int64]map[s
 		args = append(args, id)
 	}
 	keyPH := make([]string, len(keys))
-	want := make(map[string]string, len(keys)) // lower -> requested key
+	want := make(map[string]string, len(keys)) // normalized -> requested schema key
 	for i, k := range keys {
 		keyPH[i] = "?"
-		args = append(args, strings.ToLower(k))
-		want[strings.ToLower(k)] = k
+		canon := NormalizeVariableKey(k)
+		args = append(args, canon)
+		want[canon] = k
 	}
 	rows, err := db.Query(`
 		SELECT contact_id, key, value FROM contact_variables
-		WHERE contact_id IN (`+strings.Join(idPH, ",")+`) AND LOWER(key) IN (`+strings.Join(keyPH, ",")+`)
+		WHERE contact_id IN (`+strings.Join(idPH, ",")+`)
+		  AND LOWER(TRIM(BOTH FROM REPLACE(key, E'\uFEFF', ''))) IN (`+strings.Join(keyPH, ",")+`)
 	`, args...)
 	if err != nil {
 		return out, err
@@ -468,8 +470,10 @@ func loadContactVariablesMap(contactIDs []int64, keys []string) (map[int64]map[s
 		if out[cid] == nil {
 			out[cid] = map[string]string{}
 		}
+		norm := NormalizeVariableKey(key)
 		out[cid][key] = val
-		if canon, ok := want[strings.ToLower(key)]; ok {
+		out[cid][norm] = val
+		if canon, ok := want[norm]; ok {
 			out[cid][canon] = val
 		}
 	}

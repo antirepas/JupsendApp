@@ -12,23 +12,25 @@ import (
 func MissingContactVarsForTemplates(contactVars []model.ContactVariables, parts ...string) []string {
 	varMap := make(map[string]string, len(contactVars))
 	for _, cv := range contactVars {
-		varMap[cv.Key] = cv.Value
+		k := NormalizeVariableKey(cv.Key)
+		if k == "" {
+			continue
+		}
+		varMap[k] = cv.Value
 	}
 
 	defaults := map[string]bool{}
-	needed := map[string]string{} // lower -> display name
+	needed := map[string]bool{}
 	for _, part := range parts {
 		for _, ref := range ParseVarRefs(part) {
 			if ref.Mailbox {
 				continue
 			}
-			key := strings.ToLower(strings.TrimSpace(ref.Name))
+			key := NormalizeVariableKey(ref.Name)
 			if key == "" {
 				continue
 			}
-			if _, ok := needed[key]; !ok {
-				needed[key] = ref.Name
-			}
+			needed[key] = true
 			for _, f := range ref.Filters {
 				if strings.EqualFold(f.Name, "default") && strings.TrimSpace(f.Arg) != "" {
 					defaults[key] = true
@@ -38,14 +40,14 @@ func MissingContactVarsForTemplates(contactVars []model.ContactVariables, parts 
 	}
 
 	var missing []string
-	for key, display := range needed {
+	for key := range needed {
 		if defaults[key] {
 			continue
 		}
-		if strings.TrimSpace(lookupContactVar(varMap, display)) != "" {
+		if strings.TrimSpace(varMap[key]) != "" {
 			continue
 		}
-		missing = append(missing, display)
+		missing = append(missing, key)
 	}
 	return uniqueStrings(missing)
 }

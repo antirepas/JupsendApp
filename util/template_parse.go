@@ -103,18 +103,20 @@ func ExtractTemplateVariables(parts ...string) []string {
 	var keys []string
 	for _, part := range parts {
 		for _, ref := range ParseVarRefs(part) {
-			if ref.Mailbox || ref.Name == "" || seen[ref.Name] {
+			name := NormalizeVariableKey(ref.Name)
+			if ref.Mailbox || name == "" || seen[name] {
 				continue
 			}
-			seen[ref.Name] = true
-			keys = append(keys, ref.Name)
+			seen[name] = true
+			keys = append(keys, name)
 		}
 		for _, block := range ParseIfBlocks(part) {
-			if block.VarName == "" || seen[block.VarName] {
+			name := NormalizeVariableKey(block.VarName)
+			if name == "" || seen[name] {
 				continue
 			}
-			seen[block.VarName] = true
-			keys = append(keys, block.VarName)
+			seen[name] = true
+			keys = append(keys, name)
 		}
 	}
 	sort.Strings(keys)

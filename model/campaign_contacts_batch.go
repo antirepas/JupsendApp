@@ -114,14 +114,22 @@ func GetCampaignContactsBatched(campaignID int64) ([]CampaignContactItem, error)
 func contactVariableMap(vars []ContactVariables) map[string]string {
 	m := make(map[string]string, len(vars))
 	for _, v := range vars {
-		m[v.Key] = v.Value
+		k := NormalizeVariableKey(v.Key)
+		if k == "" {
+			continue
+		}
+		m[k] = v.Value
 	}
 	return m
 }
 
 func contactHasVariable(vars []ContactVariables, key string) bool {
+	want := NormalizeVariableKey(key)
+	if want == "" {
+		return false
+	}
 	for _, v := range vars {
-		if strings.EqualFold(v.Key, key) && strings.TrimSpace(v.Value) != "" {
+		if NormalizeVariableKey(v.Key) == want && strings.TrimSpace(v.Value) != "" {
 			return true
 		}
 	}

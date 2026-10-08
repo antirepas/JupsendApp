@@ -23,7 +23,7 @@ func UpdateSheetCell(userID, listID, contactID int64, column, value string) erro
 		return fmt.Errorf("contact not in sheet")
 	}
 
-	column = strings.TrimSpace(column)
+	column = NormalizeVariableKey(column)
 	value = strings.TrimSpace(value)
 	if column == "" || column == "email" {
 		email := strings.ToLower(value)
@@ -34,7 +34,12 @@ func UpdateSheetCell(userID, listID, contactID int64, column, value string) erro
 		return err
 	}
 
-	_, err = db.Exec(`DELETE FROM contact_variables WHERE contact_id = ? AND key = ?`, contactID, column)
+	// Drop any casing/BOM variants of this key before insert.
+	_, err = db.Exec(`
+		DELETE FROM contact_variables
+		WHERE contact_id = ?
+		  AND LOWER(TRIM(BOTH FROM REPLACE(key, E'\uFEFF', ''))) = ?
+	`, contactID, column)
 	if err != nil {
 		return err
 	}
@@ -52,7 +57,7 @@ func UpdateSheetCell(userID, listID, contactID int64, column, value string) erro
 	schema, _ := GetListVariableSchema(listID, userID)
 	found := false
 	for _, k := range schema {
-		if k == column {
+		if NormalizeVariableKey(k) == column {
 			found = true
 			break
 		}
@@ -99,8 +104,8 @@ func PasteSheetRows(userID, listID int64, headers []string, rows [][]string) (in
 	}
 	var schemaKeys []string
 	for i, h := range headers {
-		h = strings.TrimSpace(h)
-		if h == "" || i == emailIdx || strings.EqualFold(h, "email") {
+		h = NormalizeVariableKey(h)
+		if h == "" || i == emailIdx || h == "email" {
 			continue
 		}
 		schemaKeys = append(schemaKeys, h)
@@ -125,8 +130,8 @@ func PasteSheetRows(userID, listID int64, headers []string, rows [][]string) (in
 		}
 		var vars []ContactVariables
 		for i, h := range headers {
-			h = strings.TrimSpace(h)
-			if h == "" || i == emailIdx || strings.EqualFold(h, "email") {
+			h = NormalizeVariableKey(h)
+			if h == "" || i == emailIdx || h == "email" {
 				continue
 			}
 			val := ""
@@ -147,10 +152,14 @@ func PasteSheetRows(userID, listID int64, headers []string, rows [][]string) (in
 			if err == nil {
 				merged := map[string]string{}
 				for _, v := range existingVars {
-					merged[v.Key] = v.Value
+					if k := NormalizeVariableKey(v.Key); k != "" {
+						merged[k] = v.Value
+					}
 				}
 				for _, v := range vars {
-					merged[v.Key] = v.Value
+					if k := NormalizeVariableKey(v.Key); k != "" {
+						merged[k] = v.Value
+					}
 				}
 				var list []ContactVariables
 				for k, v := range merged {

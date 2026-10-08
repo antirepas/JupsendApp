@@ -1,6 +1,11 @@
 package db
 
-import "log"
+import (
+	"encoding/json"
+	"log"
+	"sort"
+	"strings"
+)
 
 func runAlterSchema() {
 	alters := []string{
@@ -252,6 +257,133 @@ func runAlterSchema() {
 	`)
 	_, _ = DB.Exec(`UPDATE outreach_mailboxes SET email = lower(email) WHERE email <> lower(email)`)
 	_, _ = DB.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_outreach_mailboxes_user_email ON outreach_mailboxes(user_id, email)`)
+
+	repairVariableKeysBOMAndCase()
+}
+
+// repairVariableKeysBOMAndCase strips UTF-8 BOM / normalizes casing on contact & template
+// variable keys. Excel/CSV imports often prefix the first header with U+FEFF, which
+// breaks matching against template {{fullname}} even with EqualFold.
+func repairVariableKeysBOMAndCase() {
+	// Prefer keeping an already-normalized row when both exist; copy value if needed, then drop dups.
+	_, err := DB.Exec(`
+		WITH norm AS (
+			SELECT id, contact_id, key, value,
+				LOWER(TRIM(BOTH FROM REPLACE(key, E'\uFEFF', ''))) AS canon
+			FROM contact_variables
+		),
+		dups AS (
+			SELECT n.id AS bom_id, keep.id AS keep_id, n.value AS bom_value, keep.value AS keep_value
+			FROM norm n
+			INNER JOIN contact_variables keep
+				ON keep.contact_id = n.contact_id
+				AND keep.key = n.canon
+				AND keep.id <> n.id
+			WHERE n.key <> n.canon AND n.canon <> ''
+		)
+		UPDATE contact_variables cv
+		SET value = CASE
+			WHEN TRIM(COALESCE(cv.value, '')) = '' AND TRIM(COALESCE(d.bom_value, '')) <> '' THEN d.bom_value
+			ELSE cv.value
+		END
+		FROM dups d
+		WHERE cv.id = d.keep_id
+	`)
+	if err != nil {
+		log.Printf("alter schema note: repair contact var values: %v", err)
+	}
+	_, err = DB.Exec(`
+		DELETE FROM contact_variables cv
+		USING contact_variables keep
+		WHERE cv.contact_id = keep.contact_id
+		  AND keep.key = LOWER(TRIM(BOTH FROM REPLACE(cv.key, E'\uFEFF', '')))
+		  AND cv.key <> keep.key
+		  AND keep.id <> cv.id
+	`)
+	if err != nil {
+		log.Printf("alter schema note: delete dup contact vars: %v", err)
+	}
+	_, err = DB.Exec(`
+		UPDATE contact_variables
+		SET key = LOWER(TRIM(BOTH FROM REPLACE(key, E'\uFEFF', '')))
+		WHERE key <> LOWER(TRIM(BOTH FROM REPLACE(key, E'\uFEFF', '')))
+		  AND LOWER(TRIM(BOTH FROM REPLACE(key, E'\uFEFF', ''))) <> ''
+	`)
+	if err != nil {
+		log.Printf("alter schema note: normalize contact var keys: %v", err)
+	}
+
+	_, err = DB.Exec(`
+		DELETE FROM template_variables tv
+		USING template_variables keep
+		WHERE tv.template_id = keep.template_id
+		  AND keep.key = LOWER(TRIM(BOTH FROM REPLACE(tv.key, E'\uFEFF', '')))
+		  AND tv.key <> keep.key
+		  AND keep.id <> tv.id
+	`)
+	if err != nil {
+		// template_variables may not have an id column — fall back below
+		log.Printf("alter schema note: delete dup template vars (may be ok): %v", err)
+	}
+	_, err = DB.Exec(`
+		UPDATE template_variables
+		SET key = LOWER(TRIM(BOTH FROM REPLACE(key, E'\uFEFF', '')))
+		WHERE key <> LOWER(TRIM(BOTH FROM REPLACE(key, E'\uFEFF', '')))
+		  AND LOWER(TRIM(BOTH FROM REPLACE(key, E'\uFEFF', ''))) <> ''
+	`)
+	if err != nil {
+		log.Printf("alter schema note: normalize template var keys: %v", err)
+	}
+
+	repairListVariableSchemas()
+}
+
+func repairListVariableSchemas() {
+	rows, err := DB.Query(`SELECT id, variable_schema FROM contact_lists WHERE COALESCE(variable_schema, '') <> ''`)
+	if err != nil {
+		log.Printf("alter schema note: list schemas: %v", err)
+		return
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int64
+		var raw string
+		if rows.Scan(&id, &raw) != nil {
+			continue
+		}
+		var keys []string
+		if json.Unmarshal([]byte(raw), &keys) != nil || len(keys) == 0 {
+			continue
+		}
+		seen := map[string]bool{}
+		var out []string
+		changed := false
+		for _, k := range keys {
+			canon := strings.ToLower(strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(k), "\ufeff")))
+			if canon == "" {
+				changed = true
+				continue
+			}
+			if canon != k {
+				changed = true
+			}
+			if seen[canon] {
+				changed = true
+				continue
+			}
+			seen[canon] = true
+			out = append(out, canon)
+		}
+		if !changed {
+			continue
+		}
+		sort.Strings(out)
+		encoded, err := json.Marshal(out)
+		if err != nil {
+			continue
+		}
+		_, _ = DB.Exec(`UPDATE contact_lists SET variable_schema = ? WHERE id = ?`, string(encoded), id)
+	}
 }
 
 // migrateTemplateFoldersToLibrary copies template_folders → library_folders and re-points template.folder_id.

@@ -12,11 +12,18 @@ import (
 )
 
 func lookupContactVar(varMap map[string]string, name string) string {
+	want := NormalizeVariableKey(name)
+	if want == "" {
+		return ""
+	}
 	if v, ok := varMap[name]; ok {
 		return v
 	}
+	if v, ok := varMap[want]; ok {
+		return v
+	}
 	for k, v := range varMap {
-		if strings.EqualFold(k, name) {
+		if NormalizeVariableKey(k) == want {
 			return v
 		}
 	}

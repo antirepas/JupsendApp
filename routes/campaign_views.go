@@ -183,31 +183,28 @@ func buildWorkflowCampaignContactRows(
 func contactVarCells(vars []model.ContactVariables, keys []string) ([]ContactVariableCell, []string) {
 	varMap := make(map[string]string, len(vars))
 	for _, v := range vars {
-		varMap[v.Key] = v.Value
+		k := util.NormalizeVariableKey(v.Key)
+		if k == "" {
+			continue
+		}
+		varMap[k] = v.Value
 	}
 	var cells []ContactVariableCell
 	var missing []string
 	for _, key := range keys {
-		val := lookupVarFold(varMap, key)
+		canon := util.NormalizeVariableKey(key)
+		val := varMap[canon]
 		missingVal := strings.TrimSpace(val) == ""
-		if missingVal {
-			missing = append(missing, key)
+		displayKey := key
+		if canon != "" {
+			displayKey = canon
 		}
-		cells = append(cells, ContactVariableCell{Key: key, Value: val, Missing: missingVal})
+		if missingVal {
+			missing = append(missing, displayKey)
+		}
+		cells = append(cells, ContactVariableCell{Key: displayKey, Value: val, Missing: missingVal})
 	}
 	return cells, missing
-}
-
-func lookupVarFold(m map[string]string, name string) string {
-	if v, ok := m[name]; ok {
-		return v
-	}
-	for k, v := range m {
-		if strings.EqualFold(k, name) {
-			return v
-		}
-	}
-	return ""
 }
 
 func workflowBranchLabel(inst model.WorkflowInstance) string {

@@ -201,23 +201,15 @@ func contactMissingAnyVar(vars []ContactVariables, keys []string) bool {
 	}
 	m := contactVariableMap(vars)
 	for _, k := range keys {
-		if strings.TrimSpace(lookupContactVarFold(m, k)) == "" {
+		canon := NormalizeVariableKey(k)
+		if canon == "" {
+			continue
+		}
+		if strings.TrimSpace(m[canon]) == "" {
 			return true
 		}
 	}
 	return false
-}
-
-func lookupContactVarFold(m map[string]string, name string) string {
-	if v, ok := m[name]; ok {
-		return v
-	}
-	for k, v := range m {
-		if strings.EqualFold(k, name) {
-			return v
-		}
-	}
-	return ""
 }
 
 // CountCampaignContactsMissingVars counts bulk-campaign contacts missing required template variables

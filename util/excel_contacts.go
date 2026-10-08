@@ -238,7 +238,9 @@ func ReadContactsUploadTable(reader io.Reader, filename string) (ContactUploadTa
 	headers := make([]string, len(rows[0]))
 	copy(headers, rows[0])
 	for i, h := range headers {
-		headers[i] = strings.TrimSpace(h)
+		// Strip UTF-8 BOM (Excel/CSV often prefixes the first header) but keep display casing
+		// for the column-mapping UI. Variable keys are normalized when values are saved.
+		headers[i] = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(h), "\ufeff"))
 	}
 	return ContactUploadTable{Headers: headers, DataRows: rows[1:]}, nil
 }
@@ -488,7 +490,7 @@ func mapHeaders(headerRow []string) map[string]int {
 }
 
 func normalizeHeader(s string) string {
-	return strings.ToLower(strings.TrimSpace(s))
+	return NormalizeVariableKey(s)
 }
 
 func cellValue(row []string, idx int) string {

@@ -679,12 +679,12 @@ func MergeTemplateVariables(userID int64, templateIDs []int64) ([]string, error)
 			return nil, err
 		}
 		for _, key := range v {
-			canon := strings.ToLower(strings.TrimSpace(key))
+			canon := NormalizeVariableKey(key)
 			if canon == "" || seen[canon] {
 				continue
 			}
 			seen[canon] = true
-			vars = append(vars, key)
+			vars = append(vars, canon)
 		}
 	}
 	return vars, nil
@@ -713,14 +713,14 @@ func CampaignVariableCoverage(campaignID int64, keys []string) ([]CampaignVarCov
 	canonKeys := make([]string, 0, len(keys))
 	display := make(map[string]string, len(keys))
 	for _, k := range keys {
-		c := strings.ToLower(strings.TrimSpace(k))
+		c := NormalizeVariableKey(k)
 		if c == "" {
 			continue
 		}
 		if _, ok := display[c]; ok {
 			continue
 		}
-		display[c] = k
+		display[c] = c
 		canonKeys = append(canonKeys, c)
 	}
 	if total == 0 || len(canonKeys) == 0 {
@@ -730,6 +730,7 @@ func CampaignVariableCoverage(campaignID int64, keys []string) ([]CampaignVarCov
 		return out, nil
 	}
 
+	// Match keys after stripping BOM + lowercasing (Excel/CSV often prefixes the first header with U+FEFF).
 	ph := make([]string, len(canonKeys))
 	args := make([]interface{}, 0, 1+len(canonKeys))
 	args = append(args, campaignID)
@@ -738,13 +739,14 @@ func CampaignVariableCoverage(campaignID int64, keys []string) ([]CampaignVarCov
 		args = append(args, c)
 	}
 	rows, err := db.Query(`
-		SELECT LOWER(cv.key) AS k, COUNT(DISTINCT cc.contact_id)
+		SELECT LOWER(TRIM(BOTH FROM REPLACE(cv.key, E'\uFEFF', ''))) AS k,
+		       COUNT(DISTINCT cc.contact_id)
 		FROM campaign_contacts cc
 		INNER JOIN contact_variables cv ON cv.contact_id = cc.contact_id
 		WHERE cc.campaign_id = ?
-		  AND LOWER(cv.key) IN (`+strings.Join(ph, ",")+`)
+		  AND LOWER(TRIM(BOTH FROM REPLACE(cv.key, E'\uFEFF', ''))) IN (`+strings.Join(ph, ",")+`)
 		  AND TRIM(COALESCE(cv.value, '')) <> ''
-		GROUP BY LOWER(cv.key)
+		GROUP BY LOWER(TRIM(BOTH FROM REPLACE(cv.key, E'\uFEFF', '')))
 	`, args...)
 	if err != nil {
 		return nil, err

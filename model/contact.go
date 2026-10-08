@@ -82,7 +82,11 @@ func (c *Contact) SaveContact(userID int64, variables []ContactVariables) (int64
 	}
 	query = `INSERT INTO contact_variables (key, value, contact_id) VALUES (?, ?, ?)`
 	for _, v := range variables {
-		_, err = db.Exec(query, v.Key, v.Value, contactID)
+		key := NormalizeVariableKey(v.Key)
+		if key == "" {
+			continue
+		}
+		_, err = db.Exec(query, key, v.Value, contactID)
 		if err != nil {
 			return 0, err
 		}
@@ -414,12 +418,13 @@ func UpdateContact(id, userID int64, email string, variables []ContactVariables)
 		return err
 	}
 	for _, v := range variables {
-		if v.Key == "" {
+		key := NormalizeVariableKey(v.Key)
+		if key == "" {
 			continue
 		}
 		_, err = db.Exec(
 			`INSERT INTO contact_variables (key, value, contact_id) VALUES (?, ?, ?)`,
-			v.Key, v.Value, id,
+			key, v.Value, id,
 		)
 		if err != nil {
 			return err
