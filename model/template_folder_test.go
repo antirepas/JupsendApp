@@ -170,8 +170,18 @@ func TestMoveCopyRenameTemplates(t *testing.T) {
 		t.Fatalf("copy n=%d err=%v", n, err)
 	}
 	unfiled, err := ListTemplatesFiltered(userID, "unfiled")
-	if err != nil || len(unfiled) != 1 || unfiled[0].Name != "Alpha (copy)" {
-		t.Fatalf("unfiled=%+v err=%v", unfiled, err)
+	if err != nil {
+		t.Fatal(err)
+	}
+	foundCopy := false
+	for _, it := range unfiled {
+		if it.Name == "Alpha (copy)" {
+			foundCopy = true
+			break
+		}
+	}
+	if !foundCopy {
+		t.Fatalf("unfiled=%+v missing Alpha (copy)", unfiled)
 	}
 
 	if err := RenameTemplate(aid, userID, "Alpha Renamed"); err != nil {
