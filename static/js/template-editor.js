@@ -88,7 +88,13 @@
 
     const initialBody = bodyHidden.value || '';
     if (initialBody) {
-        quill.clipboard.dangerouslyPasteHTML(initialBody);
+        try {
+            // Prefer clipboard.convert so semantic <ul>/<ol> round-trip as bullets/numbers.
+            const delta = quill.clipboard.convert({ html: initialBody });
+            quill.setContents(delta, 'silent');
+        } catch (_) {
+            quill.clipboard.dangerouslyPasteHTML(initialBody);
+        }
     }
 
     let toneCheckPassed = false;
@@ -116,17 +122,28 @@
         setTimeout(() => note.remove(), 5000);
     }
 
+    // Quill 2 stores lists as <ol><li data-list> + ql-ui spans that need editor CSS.
+    // Email clients don't have that CSS — export semantic <ul>/<ol> instead.
+    function exportHTML() {
+        if (typeof quill.getSemanticHTML === 'function') {
+            try {
+                return quill.getSemanticHTML();
+            } catch (_) { /* fall through */ }
+        }
+        return quill.root.innerHTML;
+    }
+
     function syncBody() {
-        bodyHidden.value = quill.root.innerHTML;
+        bodyHidden.value = exportHTML();
     }
 
     function isBodyEmpty() {
-        const html = quill.root.innerHTML.trim();
+        const html = exportHTML().trim();
         return !html || html === '<p><br></p>' || html === '<p></p>';
     }
 
     function extractVariables() {
-        const text = (subjectInput.value || '') + '\n' + quill.root.innerHTML;
+        const text = (subjectInput.value || '') + '\n' + exportHTML();
         const seen = new Set();
         const keys = [];
         let m;

@@ -3,6 +3,7 @@ package util
 import "strings"
 
 func WrapHTMLBody(body string) string {
+	body = NormalizeQuillHTML(body)
 	lower := strings.ToLower(body)
 	if strings.Contains(lower, "<html") {
 		return body

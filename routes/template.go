@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"emailtracker.com/model"
+	"emailtracker.com/util"
 	"github.com/gin-gonic/gin"
 )
 
@@ -19,6 +20,7 @@ func SaveTemplate(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"message": "could not get request body"})
 		return
 	}
+	st.T.Body = util.NormalizeQuillHTML(st.T.Body)
 	_, err = st.T.SaveTemplate(mustUserID(ctx), st.TV)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})

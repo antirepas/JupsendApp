@@ -331,7 +331,7 @@ func CreateTemplate(ctx *gin.Context) {
 	userID := mustUserID(ctx)
 	name := ctx.PostForm("name")
 	subject := ctx.PostForm("subject")
-	body := ctx.PostForm("body")
+	body := util.NormalizeQuillHTML(ctx.PostForm("body"))
 	folderID := model.ParseFolderIDForm(ctx.PostForm("folder_id"))
 	variables := util.ExtractTemplateVariables(subject, body)
 
@@ -401,7 +401,7 @@ func UpdateTemplate(ctx *gin.Context) {
 
 	name := ctx.PostForm("name")
 	subject := ctx.PostForm("subject")
-	body := ctx.PostForm("body")
+	body := util.NormalizeQuillHTML(ctx.PostForm("body"))
 	folderID := model.ParseFolderIDForm(ctx.PostForm("folder_id"))
 	variables := util.ExtractTemplateVariables(subject, body)
 
@@ -1012,7 +1012,7 @@ func ReplyContactWeb(ctx *gin.Context) {
 		return
 	}
 	subject := strings.TrimSpace(ctx.PostForm("subject"))
-	bodyHTML := strings.TrimSpace(ctx.PostForm("body"))
+	bodyHTML := strings.TrimSpace(util.NormalizeQuillHTML(ctx.PostForm("body")))
 	bodyText := strings.TrimSpace(util.StripHTML(bodyHTML))
 	replyToID, _ := strconv.ParseInt(ctx.PostForm("reply_to_id"), 10, 64)
 	_, err = outbound.SendManualReply(outbound.ManualReplyInput{
