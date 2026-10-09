@@ -301,8 +301,6 @@ func ListTemplatesPage(ctx *gin.Context) {
 func NewTemplatePage(ctx *gin.Context) {
 	userID := mustUserID(ctx)
 	senderEmail, defaultSampleJSON := templateBuilderContext(userID)
-	contacts, _ := model.ListContacts(userID)
-	lists, _ := model.ListContactLists(userID)
 	folders, _ := model.ListTemplateFolders(userID)
 	defaultFolderID := int64(0)
 	if f := templatesFolderQuery(ctx); f != "all" && f != "unfiled" {
@@ -312,19 +310,36 @@ func NewTemplatePage(ctx *gin.Context) {
 			}
 		}
 	}
-	ctx.HTML(http.StatusOK, "templates_form.html", gin.H{
-		"title":             "New Template",
-		"active":            "library",
-		"isNew":             true,
-		"senderEmail":       senderEmail,
-		"defaultSampleJSON": defaultSampleJSON,
-		"aiEnabled":         ai.Enabled(),
-		"contacts":          contacts,
-		"lists":             lists,
-		"folders":           folders,
-		"selectedFolderID":  defaultFolderID,
-		"folder":            templatesFolderQuery(ctx),
-	})
+	contacts, lists, previewFolderScoped := templatePreviewAudience(userID, defaultFolderID)
+	pageData := gin.H{
+		"title":                "New Template",
+		"active":               "library",
+		"isNew":                true,
+		"senderEmail":          senderEmail,
+		"defaultSampleJSON":    defaultSampleJSON,
+		"aiEnabled":            ai.Enabled(),
+		"contacts":             contacts,
+		"lists":                lists,
+		"folders":              folders,
+		"selectedFolderID":     defaultFolderID,
+		"folder":               templatesFolderQuery(ctx),
+		"previewFolderScoped":  previewFolderScoped,
+	}
+	if defaultFolderID > 0 {
+		mergeWorkspaceNav(pageData, resolveFolderCampaignNav(userID, defaultFolderID, "template", 0))
+	}
+	ctx.HTML(http.StatusOK, "templates_form.html", pageData)
+}
+
+func templatePreviewAudience(userID, folderID int64) (contacts []model.ContactListItem, lists []model.ContactList, scoped bool) {
+	if folderID > 0 {
+		contacts, _ = model.ListContactsInLibraryFolder(userID, folderID)
+		lists, _ = model.ListContactListsInLibraryFolder(userID, folderID)
+		return contacts, lists, true
+	}
+	contacts, _ = model.ListContacts(userID)
+	lists, _ = model.ListContactLists(userID)
+	return contacts, lists, false
 }
 
 func CreateTemplate(ctx *gin.Context) {
@@ -347,6 +362,7 @@ func CreateTemplate(ctx *gin.Context) {
 		ctx.HTML(http.StatusInternalServerError, "error.html", gin.H{"title": "Error", "active": "templates", "error": "Failed to save template"})
 		return
 	}
+	model.SyncDraftCampaignsForFolder(userID, folderID)
 	redirFolder := "all"
 	if folderID > 0 {
 		redirFolder = strconv.FormatInt(folderID, 10)
@@ -372,23 +388,27 @@ func EditTemplatePage(ctx *gin.Context) {
 	}
 
 	senderEmail, defaultSampleJSON := templateBuilderContext(userID)
-	contacts, _ := model.ListContacts(userID)
-	lists, _ := model.ListContactLists(userID)
 	folders, _ := model.ListTemplateFolders(userID)
-	ctx.HTML(http.StatusOK, "templates_form.html", gin.H{
-		"title":             "Edit Template",
-		"active":            "library",
-		"isNew":             false,
-		"template":          t,
-		"senderEmail":       senderEmail,
-		"defaultSampleJSON": defaultSampleJSON,
-		"aiEnabled":         ai.Enabled(),
-		"contacts":          contacts,
-		"lists":             lists,
-		"folders":           folders,
-		"selectedFolderID":  t.FolderID,
-		"folder":            templatesFolderQuery(ctx),
-	})
+	contacts, lists, previewFolderScoped := templatePreviewAudience(userID, t.FolderID)
+	pageData := gin.H{
+		"title":               "Edit Template",
+		"active":              "library",
+		"isNew":               false,
+		"template":            t,
+		"senderEmail":         senderEmail,
+		"defaultSampleJSON":   defaultSampleJSON,
+		"aiEnabled":           ai.Enabled(),
+		"contacts":            contacts,
+		"lists":               lists,
+		"folders":             folders,
+		"selectedFolderID":    t.FolderID,
+		"folder":              templatesFolderQuery(ctx),
+		"previewFolderScoped": previewFolderScoped,
+	}
+	if t.FolderID > 0 {
+		mergeWorkspaceNav(pageData, resolveFolderCampaignNav(userID, t.FolderID, model.LibraryKindTemplate, t.ID))
+	}
+	ctx.HTML(http.StatusOK, "templates_form.html", pageData)
 }
 
 func UpdateTemplate(ctx *gin.Context) {
@@ -411,6 +431,7 @@ func UpdateTemplate(ctx *gin.Context) {
 		ctx.HTML(http.StatusInternalServerError, "error.html", gin.H{"title": "Error", "active": "templates", "error": "Failed to update template"})
 		return
 	}
+	model.SyncDraftCampaignsForFolder(userID, folderID)
 	redirFolder := "all"
 	if folderID > 0 {
 		redirFolder = strconv.FormatInt(folderID, 10)

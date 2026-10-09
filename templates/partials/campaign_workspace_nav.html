@@ -1,0 +1,25 @@
+{{define "campaign_workspace_nav"}}
+{{if and .workspaceNav .workspaceNavItems}}
+<nav class="camp-ws-nav" aria-label="Campaign workspace">
+  {{if .workspacePrevURL}}
+  <a class="camp-ws-nav-arrow" href="{{.workspacePrevURL}}" title="Previous">←</a>
+  {{else}}
+  <span class="camp-ws-nav-arrow is-disabled" aria-disabled="true">←</span>
+  {{end}}
+  <div class="camp-ws-nav-center">
+    <span class="camp-ws-nav-label">{{.workspaceCurrentLabel}}</span>
+    <span class="camp-ws-nav-meta">{{.workspaceIndex}} / {{.workspaceTotal}}</span>
+  </div>
+  {{if .workspaceNextURL}}
+  <a class="camp-ws-nav-arrow" href="{{.workspaceNextURL}}" title="Next">→</a>
+  {{else}}
+  <span class="camp-ws-nav-arrow is-disabled" aria-disabled="true">→</span>
+  {{end}}
+</nav>
+{{if and .workspaceFolderID (gt .workspaceFolderID 0)}}
+<p class="camp-ws-nav-folder">
+  <a href="/library?folder={{.workspaceFolderID}}">Open campaign folder</a>
+</p>
+{{end}}
+{{end}}
+{{end}}

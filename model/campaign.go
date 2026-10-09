@@ -23,6 +23,7 @@ type Campaign struct {
 	ExecutionMode        string
 	WorkflowVersionID    int64
 	ContactListID        int64
+	LibraryFolderID      int64
 	ExperimentVariable   string
 	ExperimentHypothesis string
 	SuccessMetric        string
@@ -41,6 +42,7 @@ type CampaignListItem struct {
 	ExecutionMode     string
 	WorkflowName      string
 	WorkflowVersionID int64
+	LibraryFolderID   int64
 	Status            string
 	DisplayStatus     string
 	IsSending         bool
@@ -67,6 +69,7 @@ type CampaignDetail struct {
 	ExecutionMode        string
 	WorkflowVersionID    int64
 	ContactListID        int64
+	LibraryFolderID      int64
 	ExperimentVariable   string
 	ExperimentHypothesis string
 	OpenTrackingEnabled  bool
@@ -108,6 +111,10 @@ func scanScheduledAt(n sql.NullTime) *time.Time {
 }
 
 func CreateCampaign(userID int64, name string, templateAID, templateBID int64, executionMode string, workflowVersionID int64, experimentVariable, experimentHypothesis string) (int64, error) {
+	return CreateCampaignWithFolder(userID, name, templateAID, templateBID, executionMode, workflowVersionID, experimentVariable, experimentHypothesis, 0)
+}
+
+func CreateCampaignWithFolder(userID int64, name string, templateAID, templateBID int64, executionMode string, workflowVersionID int64, experimentVariable, experimentHypothesis string, libraryFolderID int64) (int64, error) {
 	var bID interface{}
 	if templateBID > 0 {
 		bID = templateBID
@@ -125,9 +132,13 @@ func CreateCampaign(userID int64, name string, templateAID, templateBID int64, e
 		expVar = experimentVariable
 		expHyp = experimentHypothesis
 	}
+	var folderArg interface{}
+	if libraryFolderID > 0 {
+		folderArg = libraryFolderID
+	}
 	row := db.QueryRow(
-		`INSERT INTO campaigns (name, template_a_id, template_b_id, execution_mode, workflow_version_id, user_id, experiment_variable, experiment_hypothesis, success_metric) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'reply') RETURNING id`,
-		name, templateAID, bID, executionMode, wfVer, userID, expVar, expHyp,
+		`INSERT INTO campaigns (name, template_a_id, template_b_id, execution_mode, workflow_version_id, user_id, experiment_variable, experiment_hypothesis, success_metric, library_folder_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'reply', ?) RETURNING id`,
+		name, templateAID, bID, executionMode, wfVer, userID, expVar, expHyp, folderArg,
 	)
 	var id int64
 	err := row.Scan(&id)
@@ -174,7 +185,8 @@ func ListCampaigns(userID int64) ([]CampaignListItem, error) {
 			COALESCE(c.execution_mode, 'bulk'), COALESCE(c.workflow_version_id, 0),
 			COALESCE(ta.name, ''), COALESCE(tb.name, ''),
 			COALESCE(w.name, ''),
-			COALESCE(cc.cnt, 0), COALESCE(c.is_sending, 0)
+			COALESCE(cc.cnt, 0), COALESCE(c.is_sending, 0),
+			COALESCE(c.library_folder_id, 0)
 		FROM campaigns c
 		LEFT JOIN template ta ON ta.id = c.template_a_id
 		LEFT JOIN template tb ON tb.id = c.template_b_id
@@ -200,7 +212,7 @@ func ListCampaigns(userID int64) ([]CampaignListItem, error) {
 		err := rows.Scan(&item.ID, &item.Name, &item.Status, &item.CreatedAt, &scheduled,
 			&item.ExecutionMode, &item.WorkflowVersionID,
 			&item.TemplateAName, &item.TemplateBName, &item.WorkflowName,
-			&item.ContactCount, &isSending)
+			&item.ContactCount, &isSending, &item.LibraryFolderID)
 		if err != nil {
 			return nil, err
 		}
@@ -219,7 +231,7 @@ func GetCampaign(id int64) (Campaign, error) {
 	row := db.QueryRow(`
 		SELECT id, COALESCE(user_id, 0), name, template_a_id, template_b_id, status, created_at, scheduled_at,
 			COALESCE(execution_mode, 'bulk'), COALESCE(workflow_version_id, 0), COALESCE(is_sending, 0),
-			COALESCE(contact_list_id, 0),
+			COALESCE(contact_list_id, 0), COALESCE(library_folder_id, 0),
 			COALESCE(experiment_variable, ''), COALESCE(experiment_hypothesis, ''), COALESCE(success_metric, 'reply'),
 			COALESCE(open_tracking_enabled, FALSE), COALESCE(click_tracking_enabled, FALSE), COALESCE(temperature_rules_json, ''),
 			COALESCE(stop_on_reply, TRUE), COALESCE(stop_on_hot, FALSE)
@@ -232,7 +244,7 @@ func GetCampaignForUser(id, userID int64) (Campaign, error) {
 	row := db.QueryRow(`
 		SELECT id, COALESCE(user_id, 0), name, template_a_id, template_b_id, status, created_at, scheduled_at,
 			COALESCE(execution_mode, 'bulk'), COALESCE(workflow_version_id, 0), COALESCE(is_sending, 0),
-			COALESCE(contact_list_id, 0),
+			COALESCE(contact_list_id, 0), COALESCE(library_folder_id, 0),
 			COALESCE(experiment_variable, ''), COALESCE(experiment_hypothesis, ''), COALESCE(success_metric, 'reply'),
 			COALESCE(open_tracking_enabled, FALSE), COALESCE(click_tracking_enabled, FALSE), COALESCE(temperature_rules_json, ''),
 			COALESCE(stop_on_reply, TRUE), COALESCE(stop_on_hot, FALSE)
@@ -247,8 +259,9 @@ func scanCampaignRow(row interface{ Scan(...interface{}) error }) (Campaign, err
 	var scheduled sql.NullTime
 	var isSending int
 	var listID sql.NullInt64
+	var folderID sql.NullInt64
 	err := row.Scan(&c.ID, &c.UserID, &c.Name, &c.TemplateAID, &bID, &c.Status, &c.CreatedAt, &scheduled,
-		&c.ExecutionMode, &c.WorkflowVersionID, &isSending, &listID,
+		&c.ExecutionMode, &c.WorkflowVersionID, &isSending, &listID, &folderID,
 		&c.ExperimentVariable, &c.ExperimentHypothesis, &c.SuccessMetric,
 		&c.OpenTrackingEnabled, &c.ClickTrackingEnabled,
 		&c.TemperatureRulesJSON, &c.StopOnReply, &c.StopOnHot)
@@ -260,6 +273,9 @@ func scanCampaignRow(row interface{ Scan(...interface{}) error }) (Campaign, err
 	}
 	if listID.Valid {
 		c.ContactListID = listID.Int64
+	}
+	if folderID.Valid {
+		c.LibraryFolderID = folderID.Int64
 	}
 	c.ScheduledAt = scanScheduledAt(scheduled)
 	c.IsSending = isSending == 1
@@ -420,6 +436,7 @@ func GetCampaignDetail(id, userID int64) (CampaignDetail, error) {
 		ExecutionMode:        c.ExecutionMode,
 		WorkflowVersionID:    c.WorkflowVersionID,
 		ContactListID:        c.ContactListID,
+		LibraryFolderID:      c.LibraryFolderID,
 		ExperimentVariable:   c.ExperimentVariable,
 		ExperimentHypothesis: c.ExperimentHypothesis,
 		OpenTrackingEnabled:  c.OpenTrackingEnabled,
@@ -429,6 +446,7 @@ func GetCampaignDetail(id, userID int64) (CampaignDetail, error) {
 		VariantA:             variantA,
 		VariantB:             variantB,
 	}
+	detail.LibraryFolderID = c.LibraryFolderID
 	detail.IsSending = c.IsSending
 	detail.SendJobCounts = jobCounts
 	detail.DisplayStatus = ComputeDisplayStatus(detail.Status, detail.ScheduledAt, detail.IsSending)
@@ -441,7 +459,8 @@ func GetCampaignListItemByID(id, userID int64) (CampaignListItem, error) {
 			COALESCE(c.execution_mode, 'bulk'), COALESCE(c.workflow_version_id, 0),
 			COALESCE(ta.name, ''), COALESCE(tb.name, ''),
 			COALESCE(w.name, ''),
-			COALESCE(cc.cnt, 0), COALESCE(c.is_sending, 0)
+			COALESCE(cc.cnt, 0), COALESCE(c.is_sending, 0),
+			COALESCE(c.library_folder_id, 0)
 		FROM campaigns c
 		LEFT JOIN template ta ON ta.id = c.template_a_id
 		LEFT JOIN template tb ON tb.id = c.template_b_id
@@ -459,7 +478,7 @@ func GetCampaignListItemByID(id, userID int64) (CampaignListItem, error) {
 		&item.ID, &item.Name, &item.Status, &item.CreatedAt, &scheduled,
 		&item.ExecutionMode, &item.WorkflowVersionID,
 		&item.TemplateAName, &item.TemplateBName, &item.WorkflowName,
-		&item.ContactCount, &isSending,
+		&item.ContactCount, &isSending, &item.LibraryFolderID,
 	)
 	if err != nil {
 		return CampaignListItem{}, err

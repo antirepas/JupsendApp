@@ -4011,7 +4011,7 @@ g.wf-edge-hovering .wf-edge-delete-btn {
 }
 .tpl-fm-breadcrumb {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     flex-wrap: wrap;
     gap: 0.35rem;
     padding: 0.75rem 1.25rem;
@@ -5035,3 +5035,66 @@ g.wf-edge-hovering .wf-edge-delete-btn {
     .inbox-pane-head { flex-direction: column; }
     .inbox-pane-head-side { align-items: flex-start; }
 }
+
+/* Campaign workspace carousel (Manage ↔ files in folder) */
+.camp-ws-nav {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    padding: 0.65rem 1rem;
+    margin: 0 0 0.75rem;
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-radius: 0.65rem;
+}
+.camp-ws-nav-arrow {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 999px;
+    border: 1px solid #CBD5E1;
+    background: #fff;
+    color: #0F172A;
+    font-size: 1.1rem;
+    line-height: 1;
+    text-decoration: none;
+    font-weight: 600;
+}
+.camp-ws-nav-arrow:hover {
+    border-color: #94A3B8;
+    background: #F1F5F9;
+}
+.camp-ws-nav-arrow.is-disabled {
+    opacity: 0.35;
+    pointer-events: none;
+}
+.camp-ws-nav-center {
+    text-align: center;
+    min-width: 10rem;
+}
+.camp-ws-nav-label {
+    display: block;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: #0F172A;
+}
+.camp-ws-nav-meta {
+    display: block;
+    font-size: 0.75rem;
+    color: #64748B;
+    margin-top: 0.1rem;
+}
+.camp-ws-nav-folder {
+    text-align: center;
+    margin: -0.35rem 0 0.85rem;
+    font-size: 0.8125rem;
+}
+.camp-ws-nav-folder a {
+    color: #2563EB;
+    font-weight: 500;
+    text-decoration: none;
+}
+.camp-ws-nav-folder a:hover { text-decoration: underline; }

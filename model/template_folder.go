@@ -97,6 +97,10 @@ func CreateLibraryFolder(userID int64, name string) (int64, error) {
 		}
 		return 0, err
 	}
+	if _, err := EnsureCampaignForLibraryFolder(userID, id, name); err != nil {
+		_, _ = db.Exec(`DELETE FROM library_folders WHERE id = ? AND user_id = ?`, id, userID)
+		return 0, fmt.Errorf("could not create campaign for folder: %w", err)
+	}
 	return id, nil
 }
 
@@ -122,6 +126,7 @@ func RenameLibraryFolder(folderID, userID int64, name string) error {
 		}
 		return err
 	}
+	_, _ = db.Exec(`UPDATE campaigns SET name = ? WHERE library_folder_id = ? AND user_id = ?`, name, folderID, userID)
 	return nil
 }
 
@@ -132,6 +137,11 @@ func RenameTemplateFolder(folderID, userID int64, name string) error {
 func DeleteLibraryFolder(folderID, userID int64) error {
 	if _, err := GetLibraryFolderForUser(folderID, userID); err != nil {
 		return err
+	}
+	if c, err := GetCampaignByLibraryFolder(folderID, userID); err == nil && c.ID > 0 {
+		if !CampaignDraftMutable(c) {
+			return fmt.Errorf("cannot delete this campaign folder while the campaign is %s — delete the campaign first", ComputeDisplayStatus(c.Status, c.ScheduledAt, c.IsSending))
+		}
 	}
 	res, err := db.Exec(`DELETE FROM library_folders WHERE id = ? AND user_id = ?`, folderID, userID)
 	if err != nil {

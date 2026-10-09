@@ -81,8 +81,9 @@ func WorkflowBuilderPage(ctx *gin.Context) {
 		pubID, _ := model.LatestPublishedVersionID(w.ID)
 		hasLivePublished = pubID > 0 && pubID != versionID
 	}
-	templates, _ := model.ListTemplates(mustUserID(ctx))
-	ctx.HTML(http.StatusOK, "workflows_builder.html", gin.H{
+	userID := mustUserID(ctx)
+	templates, _ := model.ListTemplates(userID)
+	pageData := gin.H{
 		"title":            w.Name,
 		"active":           "workflows",
 		"workflow":         w,
@@ -91,7 +92,12 @@ func WorkflowBuilderPage(ctx *gin.Context) {
 		"editingDraft":     true,
 		"templates":        templates,
 		"success":          ctx.Query("success"),
-	})
+	}
+	if w.FolderID > 0 {
+		model.SyncDraftCampaignsForFolder(userID, w.FolderID)
+		mergeWorkspaceNav(pageData, resolveFolderCampaignNav(userID, w.FolderID, model.LibraryKindWorkflow, w.ID))
+	}
+	ctx.HTML(http.StatusOK, "workflows_builder.html", pageData)
 }
 
 func WorkflowAnalyticsPage(ctx *gin.Context) {

@@ -7,10 +7,10 @@
 <header class="app-page-header">
   <div class="app-page-header-text">
     <h2 class="app-page-title">Campaigns</h2>
-    <p class="app-page-sub">One-time sends or automated follow-ups for a contact list</p>
+    <p class="app-page-sub">Folder-backed campaigns live in Library. Legacy campaigns without a folder still appear here.</p>
   </div>
   <div class="app-page-actions">
-    <a href="/campaigns/new" class="btn-primary">New Campaign</a>
+    <a href="/library?new_campaign=1" class="btn-primary">New Campaign</a>
   </div>
 </header>
 <div class="app-page-body app-page-body--wide">
@@ -54,6 +54,9 @@
                 </td>
                 <td class="text-right space-x-3">
                     <a href="/campaigns/{{.ID}}" class="text-brand-600 text-sm font-medium">Manage</a>
+                    {{if gt .LibraryFolderID 0}}
+                    <a href="/library?folder={{.LibraryFolderID}}" class="text-brand-600 text-sm font-medium">Folder</a>
+                    {{end}}
                     <a href="/campaigns/{{.ID}}/analytics" class="text-brand-600 text-sm font-medium">Analytics</a>
                     <form method="POST" action="/campaigns/{{.ID}}/delete" class="inline" onsubmit="return confirm('Delete this campaign?');">
                         <button type="submit" class="text-red-600 text-sm font-medium">Delete</button>
@@ -66,7 +69,7 @@
     {{else}}
     <div class="empty-state">
         <p>No campaigns yet.</p>
-        <a href="/campaigns/new" class="btn-primary mt-4">Create your first campaign</a>
+        <a href="/library?new_campaign=1" class="btn-primary mt-4">Create your first campaign</a>
     </div>
     {{end}}
 </div>

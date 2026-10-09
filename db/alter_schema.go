@@ -237,6 +237,8 @@ func runAlterSchema() {
 			ON library_folders (user_id, lower(trim(name)))`,
 		`ALTER TABLE workflows ADD COLUMN IF NOT EXISTS folder_id BIGINT REFERENCES library_folders(id) ON DELETE SET NULL`,
 		`ALTER TABLE contact_lists ADD COLUMN IF NOT EXISTS folder_id BIGINT REFERENCES library_folders(id) ON DELETE SET NULL`,
+		`ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS library_folder_id BIGINT REFERENCES library_folders(id) ON DELETE CASCADE`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_campaigns_library_folder_id ON campaigns (library_folder_id) WHERE library_folder_id IS NOT NULL`,
 	}
 	for _, stmt := range alters {
 		if _, err := DB.Exec(stmt); err != nil {
@@ -245,6 +247,7 @@ func runAlterSchema() {
 	}
 
 	migrateTemplateFoldersToLibrary()
+	migrateLibraryFoldersToCampaigns()
 
 	// Allow multiple smtp_accounts per user (InboxKit mailboxes).
 	_, _ = DB.Exec(`DROP INDEX IF EXISTS idx_smtp_accounts_user`)
@@ -383,6 +386,55 @@ func repairListVariableSchemas() {
 			continue
 		}
 		_, _ = DB.Exec(`UPDATE contact_lists SET variable_schema = ? WHERE id = ?`, string(encoded), id)
+	}
+}
+
+// migrateLibraryFoldersToCampaigns ensures every library folder has a linked draft campaign.
+func migrateLibraryFoldersToCampaigns() {
+	rows, err := DB.Query(`
+		SELECT f.id, f.user_id, f.name
+		FROM library_folders f
+		LEFT JOIN campaigns c ON c.library_folder_id = f.id
+		WHERE c.id IS NULL
+		ORDER BY f.id ASC
+	`)
+	if err != nil {
+		log.Printf("alter schema note: migrate library folders to campaigns: %v", err)
+		return
+	}
+	defer rows.Close()
+	type folderRow struct {
+		id, userID int64
+		name       string
+	}
+	var folders []folderRow
+	for rows.Next() {
+		var f folderRow
+		if err := rows.Scan(&f.id, &f.userID, &f.name); err != nil {
+			continue
+		}
+		folders = append(folders, f)
+	}
+	for _, f := range folders {
+		var tplID int64
+		err := DB.QueryRow(`SELECT id FROM template WHERE user_id = $1 ORDER BY id ASC LIMIT 1`, f.userID).Scan(&tplID)
+		if err != nil || tplID <= 0 {
+			err = DB.QueryRow(`
+				INSERT INTO template (user_id, name, subject, body, folder_id)
+				VALUES ($1, 'Email 1', '', '<p></p>', $2) RETURNING id
+			`, f.userID, f.id).Scan(&tplID)
+			if err != nil || tplID <= 0 {
+				log.Printf("alter schema note: stub template for folder %d: %v", f.id, err)
+				continue
+			}
+		}
+		_, err = DB.Exec(`
+			INSERT INTO campaigns (name, template_a_id, user_id, library_folder_id, execution_mode, status)
+			VALUES ($1, $2, $3, $4, 'bulk', 'draft')
+		`, f.name, tplID, f.userID, f.id)
+		if err != nil {
+			log.Printf("alter schema note: campaign for folder %d: %v", f.id, err)
+		}
 	}
 }
 

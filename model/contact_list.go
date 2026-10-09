@@ -15,12 +15,14 @@ type ContactList struct {
 	Name         string
 	MemberCount  int
 	CreatedAt    time.Time
+	FolderID     int64
 }
 
 func ListContactLists(userID int64) ([]ContactList, error) {
 	rows, err := db.Query(`
 		SELECT cl.id, cl.user_id, cl.name, cl.created_at,
-			(SELECT COUNT(*) FROM contact_list_members m WHERE m.list_id = cl.id)
+			(SELECT COUNT(*) FROM contact_list_members m WHERE m.list_id = cl.id),
+			COALESCE(cl.folder_id, 0)
 		FROM contact_lists cl
 		WHERE cl.user_id = ?
 		ORDER BY cl.name ASC
@@ -32,7 +34,7 @@ func ListContactLists(userID int64) ([]ContactList, error) {
 	var items []ContactList
 	for rows.Next() {
 		var item ContactList
-		if err := rows.Scan(&item.ID, &item.UserID, &item.Name, &item.CreatedAt, &item.MemberCount); err != nil {
+		if err := rows.Scan(&item.ID, &item.UserID, &item.Name, &item.CreatedAt, &item.MemberCount, &item.FolderID); err != nil {
 			return nil, err
 		}
 		items = append(items, item)
@@ -43,12 +45,13 @@ func ListContactLists(userID int64) ([]ContactList, error) {
 func GetContactListForUser(listID, userID int64) (ContactList, error) {
 	row := db.QueryRow(`
 		SELECT cl.id, cl.user_id, cl.name, cl.created_at,
-			(SELECT COUNT(*) FROM contact_list_members m WHERE m.list_id = cl.id)
+			(SELECT COUNT(*) FROM contact_list_members m WHERE m.list_id = cl.id),
+			COALESCE(cl.folder_id, 0)
 		FROM contact_lists cl
 		WHERE cl.id = ? AND cl.user_id = ?
 	`, listID, userID)
 	var item ContactList
-	err := row.Scan(&item.ID, &item.UserID, &item.Name, &item.CreatedAt, &item.MemberCount)
+	err := row.Scan(&item.ID, &item.UserID, &item.Name, &item.CreatedAt, &item.MemberCount, &item.FolderID)
 	return item, err
 }
 

@@ -69,12 +69,14 @@ func ListLibraryItems(userID int64, folderFilter string) ([]LibraryItem, error) 
 
 	var items []LibraryItem
 
+	campaignFolderView := folderFilter != "all" && folderFilter != "unfiled"
+
 	tRows, err := db.Query(`
 		SELECT t.id, t.name, COALESCE(t.subject, ''), COALESCE(t.folder_id, 0), COALESCE(f.name, ''), t.id
 		FROM template t
 		LEFT JOIN library_folders f ON f.id = t.folder_id
 		WHERE t.user_id = ?`+folderClauseT+`
-		ORDER BY t.id DESC
+		ORDER BY t.id ASC
 	`, argsT...)
 	if err != nil {
 		return nil, err
@@ -93,11 +95,11 @@ func ListLibraryItems(userID int64, folderFilter string) ([]LibraryItem, error) 
 	tRows.Close()
 
 	wRows, err := db.Query(`
-		SELECT w.id, w.name, w.status, COALESCE(w.folder_id, 0), COALESCE(f.name, ''), w.updated_at
+		SELECT w.id, w.name, w.status, COALESCE(w.folder_id, 0), COALESCE(f.name, ''), w.created_at
 		FROM workflows w
 		LEFT JOIN library_folders f ON f.id = w.folder_id
 		WHERE w.tenant_id = ? AND w.status = 'active'`+folderClauseW+`
-		ORDER BY w.updated_at DESC
+		ORDER BY w.created_at ASC, w.id ASC
 	`, argsW...)
 	if err != nil {
 		return nil, err
@@ -120,7 +122,7 @@ func ListLibraryItems(userID int64, folderFilter string) ([]LibraryItem, error) 
 		FROM contact_lists cl
 		LEFT JOIN library_folders f ON f.id = cl.folder_id
 		WHERE cl.user_id = ?`+folderClauseC+`
-		ORDER BY cl.created_at DESC
+		ORDER BY cl.created_at ASC, cl.id ASC
 	`, argsC...)
 	if err != nil {
 		return nil, err
@@ -138,15 +140,34 @@ func ListLibraryItems(userID int64, folderFilter string) ([]LibraryItem, error) 
 	}
 	cRows.Close()
 
-	sort.SliceStable(items, func(i, j int) bool {
-		if !items[i].UpdatedAt.Equal(items[j].UpdatedAt) {
-			return items[i].UpdatedAt.After(items[j].UpdatedAt)
+	if campaignFolderView {
+		// Campaign workspace order: templates → contact sheets → workflows (oldest first).
+		kindRank := map[string]int{
+			LibraryKindTemplate: 0,
+			LibraryKindContacts: 1,
+			LibraryKindWorkflow: 2,
 		}
-		if items[i].Kind != items[j].Kind {
-			return items[i].Kind < items[j].Kind
-		}
-		return items[i].ID > items[j].ID
-	})
+		sort.SliceStable(items, func(i, j int) bool {
+			ri, rj := kindRank[items[i].Kind], kindRank[items[j].Kind]
+			if ri != rj {
+				return ri < rj
+			}
+			if !items[i].UpdatedAt.Equal(items[j].UpdatedAt) {
+				return items[i].UpdatedAt.Before(items[j].UpdatedAt)
+			}
+			return items[i].ID < items[j].ID
+		})
+	} else {
+		sort.SliceStable(items, func(i, j int) bool {
+			if !items[i].UpdatedAt.Equal(items[j].UpdatedAt) {
+				return items[i].UpdatedAt.After(items[j].UpdatedAt)
+			}
+			if items[i].Kind != items[j].Kind {
+				return items[i].Kind < items[j].Kind
+			}
+			return items[i].ID > items[j].ID
+		})
+	}
 	return items, nil
 }
 

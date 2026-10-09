@@ -91,7 +91,8 @@ func runSchema() {
 			temperature_rules_json TEXT NOT NULL DEFAULT '',
 			stop_on_reply BOOLEAN NOT NULL DEFAULT TRUE,
 			stop_on_hot BOOLEAN NOT NULL DEFAULT FALSE,
-			contact_list_id BIGINT REFERENCES contact_lists(id) ON DELETE SET NULL
+			contact_list_id BIGINT REFERENCES contact_lists(id) ON DELETE SET NULL,
+			library_folder_id BIGINT UNIQUE REFERENCES library_folders(id) ON DELETE CASCADE
 		)`,
 
 		`CREATE TABLE IF NOT EXISTS campaign_contacts (

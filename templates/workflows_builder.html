@@ -4,9 +4,14 @@
 <head>{{template "head" .}}</head>
 {{template "page_shell_start" .}}
 <div class="app-page">
+{{template "campaign_workspace_nav" .}}
 <header class="app-page-header">
     <div class="app-page-header-text">
+        {{if and .workflow.FolderID (gt .workflow.FolderID 0)}}
+        <a href="/library?folder={{.workflow.FolderID}}" class="app-page-back">← Campaign folder</a>
+        {{else}}
         <a href="/library" class="app-page-back">← Library</a>
+        {{end}}
         <h2 class="app-page-title">{{.workflow.Name}}</h2>
         <p class="app-page-sub">Drag nodes on the canvas. Drag the dot below a node to another node to connect. Hover a line and click × to remove it. Link each condition to the email it should check.</p>
         {{if ne .workflow.Status "archived"}}

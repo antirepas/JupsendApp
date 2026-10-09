@@ -307,7 +307,7 @@
   }
 
   function newFolder() {
-    var name = prompt("Folder name");
+    var name = prompt("Campaign name");
     if (name == null) return;
     name = name.trim();
     if (!name) return;
@@ -316,7 +316,7 @@
         reloadTo(String(data.id));
       })
       .catch(function (err) {
-        toast(err.message || "Could not create folder", true);
+        toast(err.message || "Could not create campaign", true);
       });
   }
 
@@ -654,4 +654,15 @@
   });
 
   updateChrome();
+
+  // Deep-link from /campaigns/new → /library?new_campaign=1
+  try {
+    var params = new URLSearchParams(location.search || "");
+    if (params.get("new_campaign") === "1") {
+      params.delete("new_campaign");
+      var next = location.pathname + (params.toString() ? "?" + params.toString() : "");
+      history.replaceState({}, "", next);
+      newFolder();
+    }
+  } catch (_) { /* ignore */ }
 })();

@@ -33,7 +33,7 @@ func LibrarySheetPage(ctx *gin.Context) {
 	}
 	templates, _ := model.ListTemplatePickerItems(userID)
 	importOpen := ctx.Query("import") == "1"
-	ctx.HTML(http.StatusOK, "library_sheet.html", gin.H{
+	pageData := gin.H{
 		"title":      list.Name,
 		"active":     "library",
 		"list":       list,
@@ -44,7 +44,12 @@ func LibrarySheetPage(ctx *gin.Context) {
 		"importOpen": importOpen,
 		"success":    ctx.Query("success"),
 		"error":      ctx.Query("error"),
-	})
+	}
+	if list.FolderID > 0 {
+		model.SyncDraftCampaignsForFolder(userID, list.FolderID)
+		mergeWorkspaceNav(pageData, resolveFolderCampaignNav(userID, list.FolderID, model.LibraryKindContacts, list.ID))
+	}
+	ctx.HTML(http.StatusOK, "library_sheet.html", pageData)
 }
 
 type sheetCellBody struct {

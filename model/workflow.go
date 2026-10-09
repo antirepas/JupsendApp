@@ -15,6 +15,7 @@ type Workflow struct {
 	Description      string
 	CurrentVersionID int64
 	Status           string
+	FolderID         int64
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
 }
@@ -119,21 +120,21 @@ func CreateWorkflow(userID int64, name, description string) (int64, error) {
 
 func GetWorkflow(id int64) (Workflow, error) {
 	row := db.QueryRow(`
-		SELECT id, name, description, COALESCE(current_version_id, 0), status, created_at, updated_at
+		SELECT id, name, description, COALESCE(current_version_id, 0), status, COALESCE(folder_id, 0), created_at, updated_at
 		FROM workflows WHERE id = ?
 	`, id)
 	var w Workflow
-	err := row.Scan(&w.ID, &w.Name, &w.Description, &w.CurrentVersionID, &w.Status, &w.CreatedAt, &w.UpdatedAt)
+	err := row.Scan(&w.ID, &w.Name, &w.Description, &w.CurrentVersionID, &w.Status, &w.FolderID, &w.CreatedAt, &w.UpdatedAt)
 	return w, err
 }
 
 func GetWorkflowForUser(id, userID int64) (Workflow, error) {
 	row := db.QueryRow(`
-		SELECT id, name, description, COALESCE(current_version_id, 0), status, created_at, updated_at
+		SELECT id, name, description, COALESCE(current_version_id, 0), status, COALESCE(folder_id, 0), created_at, updated_at
 		FROM workflows WHERE id = ? AND tenant_id = ?
 	`, id, userID)
 	var w Workflow
-	err := row.Scan(&w.ID, &w.Name, &w.Description, &w.CurrentVersionID, &w.Status, &w.CreatedAt, &w.UpdatedAt)
+	err := row.Scan(&w.ID, &w.Name, &w.Description, &w.CurrentVersionID, &w.Status, &w.FolderID, &w.CreatedAt, &w.UpdatedAt)
 	return w, err
 }
 

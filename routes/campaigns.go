@@ -44,29 +44,8 @@ func ListCampaignsPage(ctx *gin.Context) {
 }
 
 func NewCampaignPage(ctx *gin.Context) {
-	userID := mustUserID(ctx)
-	templates, _ := model.ListTemplates(userID)
-	workflows, _ := model.GetPublishedWorkflows(userID)
-	var workflowOptions []WorkflowPickerItem
-	for _, w := range workflows {
-		workflowOptions = append(workflowOptions, WorkflowPickerItem{
-			ID:        w.ID,
-			Name:      w.Name,
-			VersionID: w.CurrentVersionID,
-			StepCount: model.CountWorkflowSteps(w.CurrentVersionID),
-		})
-	}
-	smtpSel, _ := model.GetCampaignSMTPSelection(userID, 0)
-	ctx.HTML(http.StatusOK, "campaigns_form.html", gin.H{
-		"title":        "New Campaign",
-		"active":       "campaigns",
-		"templates":    templates,
-		"workflows":    workflowOptions,
-		"smtpAccounts": smtpSel.Accounts,
-		"smtpOptions":  smtpSel.Options,
-		"smtpSelected": smtpSel.SelectedIDs,
-		"error":        ctx.Query("error"),
-	})
+	// Campaigns are created as library folders ("New campaign" in Library).
+	ctx.Redirect(http.StatusFound, "/library?new_campaign=1")
 }
 
 func CreateCampaign(ctx *gin.Context) {
@@ -328,6 +307,10 @@ func CampaignDetailPage(ctx *gin.Context) {
 		ctx.HTML(http.StatusNotFound, "error.html", gin.H{"title": "Error", "active": "campaigns", "error": "Campaign not found"})
 		return
 	}
+	_ = model.SyncCampaignFromFolder(userID, id)
+	if synced, err := model.GetCampaignDetail(id, userID); err == nil {
+		detail = synced
+	}
 
 	page, _ := strconv.Atoi(ctx.DefaultQuery("picker_page", "1"))
 	listID, _ := strconv.ParseInt(ctx.Query("picker_list"), 10, 64)
@@ -461,6 +444,10 @@ func CampaignDetailPage(ctx *gin.Context) {
 		pageData["mergedVars"] = pageExtras.MergedVars
 		pageData["varCoverage"] = pageExtras.VarCoverage
 		pageData["readyContactCount"] = pageExtras.ReadyContactCount
+	}
+
+	if detail.LibraryFolderID > 0 {
+		mergeWorkspaceNav(pageData, workspaceNavVars(userID, detail.LibraryFolderID, detail.ID, "manage", detail.ID))
 	}
 
 	ctx.HTML(http.StatusOK, "campaigns_detail.html", pageData)

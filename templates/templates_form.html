@@ -6,12 +6,13 @@
 </head>
 {{template "page_shell_start" .}}
 <div class="app-page app-page--workspace">
+{{template "campaign_workspace_nav" .}}
 <form id="template-form" method="POST" action="{{if .isNew}}/templates{{else}}/templates/{{.template.ID}}{{end}}" class="template-builder-grid template-workspace" data-ai-enabled="{{if .aiEnabled}}true{{else}}false{{end}}">
     {{if and .folder (ne .folder "all")}}<input type="hidden" name="folder" value="{{.folder}}">{{end}}
 
     <header class="app-page-header" style="grid-column: 1 / -1;">
         <div class="template-header-meta">
-            <a href="/library{{if and .folder (ne .folder "all")}}?folder={{.folder}}{{end}}" class="app-page-back">← Library</a>
+            <a href="/library{{if and .folder (ne .folder "all")}}?folder={{.folder}}{{else if and .selectedFolderID (gt .selectedFolderID 0)}}?folder={{.selectedFolderID}}{{end}}" class="app-page-back">← Library</a>
             <input type="text" id="template-name" name="name" class="form-input template-header-name" value="{{if .template}}{{.template.Name}}{{end}}" required placeholder="Template name">
             <select id="template-folder" name="folder_id" class="form-input template-header-folder" aria-label="Folder">
                 <option value="0" {{if not .selectedFolderID}}selected{{end}}>Unfiled</option>
@@ -154,7 +155,11 @@
                     <option value="{{.ID}}">{{.Email}}</option>
                     {{end}}
                 </select>
+                {{if .previewFolderScoped}}
+                <p class="form-hint mb-3">{{if .contacts}}Contacts from this campaign’s contact sheet.{{else}}Add a contact sheet to this campaign folder to preview with real contacts.{{end}}</p>
+                {{else}}
                 <p class="form-hint mb-3">Pick a contact to preview with their real variables.</p>
+                {{end}}
                 <p class="form-label mb-2">Preview sample data</p>
                 <div id="template-sample-fields" class="template-sample-fields"></div>
                 {{if .aiEnabled}}

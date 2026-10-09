@@ -49,6 +49,8 @@ func ListLibraryPage(ctx *gin.Context) {
 	folders, _ := model.ListLibraryFolders(userID)
 	allCount, unfiledCount, _ := model.CountLibraryItemsForUser(userID)
 	folderTitle := "All files"
+	var campaignID int64
+	isCampaignFolder := false
 	switch folder {
 	case "unfiled":
 		folderTitle = "Unfiled"
@@ -58,21 +60,29 @@ func ListLibraryPage(ctx *gin.Context) {
 		if id, err := strconv.ParseInt(folder, 10, 64); err == nil {
 			if f, err := model.GetLibraryFolderForUser(id, userID); err == nil {
 				folderTitle = f.Name
+				isCampaignFolder = true
+				if c, err := model.GetCampaignByLibraryFolder(id, userID); err == nil {
+					campaignID = c.ID
+				} else {
+					campaignID, _ = model.EnsureCampaignForLibraryFolder(userID, id, f.Name)
+				}
 			}
 		}
 	}
 	ctx.HTML(http.StatusOK, "library.html", gin.H{
-		"title":         "Library",
-		"active":        "library",
-		"items":         items,
-		"folders":       folders,
-		"folder":        folder,
-		"folderTitle":   folderTitle,
-		"allCount":      allCount,
-		"unfiledCount":  unfiledCount,
-		"showFolderCol": folder == "all",
-		"success":       ctx.Query("success"),
-		"error":         ctx.Query("error"),
+		"title":             "Library",
+		"active":            "library",
+		"items":             items,
+		"folders":           folders,
+		"folder":            folder,
+		"folderTitle":       folderTitle,
+		"allCount":          allCount,
+		"unfiledCount":      unfiledCount,
+		"showFolderCol":     folder == "all",
+		"isCampaignFolder":  isCampaignFolder,
+		"campaignID":        campaignID,
+		"success":           ctx.Query("success"),
+		"error":             ctx.Query("error"),
 	})
 }
 
@@ -134,6 +144,7 @@ func LibraryOpsMove(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"ok": false, "error": err.Error()})
 		return
 	}
+	model.SyncDraftCampaignsForFolder(userID, *body.FolderID)
 	ctx.JSON(http.StatusOK, gin.H{"ok": true, "count": n})
 }
 
@@ -149,6 +160,7 @@ func LibraryOpsCopy(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"ok": false, "error": err.Error()})
 		return
 	}
+	model.SyncDraftCampaignsForFolder(userID, *body.FolderID)
 	ctx.JSON(http.StatusOK, gin.H{"ok": true, "count": n})
 }
 
@@ -180,7 +192,11 @@ func LibraryOpsDelete(ctx *gin.Context) {
 			return
 		}
 		if err := model.DeleteLibraryFolder(body.ID, userID); err != nil {
-			ctx.JSON(http.StatusBadRequest, gin.H{"ok": false, "error": "could not delete folder"})
+			msg := err.Error()
+			if msg == "" {
+				msg = "could not delete folder"
+			}
+			ctx.JSON(http.StatusBadRequest, gin.H{"ok": false, "error": msg})
 			return
 		}
 		ctx.JSON(http.StatusOK, gin.H{"ok": true, "count": 1})
@@ -213,7 +229,11 @@ func LibraryOpsCreateFolder(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"ok": false, "error": err.Error()})
 		return
 	}
-	ctx.JSON(http.StatusOK, gin.H{"ok": true, "id": id, "name": strings.TrimSpace(body.Name)})
+	campaignID := int64(0)
+	if c, err := model.GetCampaignByLibraryFolder(id, userID); err == nil {
+		campaignID = c.ID
+	}
+	ctx.JSON(http.StatusOK, gin.H{"ok": true, "id": id, "name": strings.TrimSpace(body.Name), "campaign_id": campaignID})
 }
 
 func LibraryOpsCreateSheet(ctx *gin.Context) {
@@ -236,6 +256,7 @@ func LibraryOpsCreateSheet(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"ok": false, "error": err.Error()})
 		return
 	}
+	model.SyncDraftCampaignsForFolder(userID, folderID)
 	ctx.JSON(http.StatusOK, gin.H{"ok": true, "id": id})
 }
 
@@ -259,5 +280,6 @@ func LibraryOpsCreateWorkflow(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"ok": false, "error": err.Error()})
 		return
 	}
+	model.SyncDraftCampaignsForFolder(userID, folderID)
 	ctx.JSON(http.StatusOK, gin.H{"ok": true, "id": id})
 }

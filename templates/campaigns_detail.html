@@ -9,9 +9,14 @@
 </head>
 {{template "page_shell_start" .}}
 <div class="app-page">
+{{template "campaign_workspace_nav" .}}
 <header class="app-page-header">
   <div class="app-page-header-text">
+    {{if and .workspaceFolderID (gt .workspaceFolderID 0)}}
+    <a href="/library?folder={{.workspaceFolderID}}" class="app-page-back">← Campaign folder</a>
+    {{else}}
     <a href="/campaigns" class="app-page-back">← Campaigns</a>
+    {{end}}
     <h2 class="app-page-title">{{.campaign.Name}}</h2>
     <p class="app-page-sub">
       {{.campaign.ContactCount}} contacts ·

@@ -3,10 +3,15 @@
 <html lang="en" class="h-full">
 <head>{{template "head" .}}</head>
 {{template "page_shell_start" .}}
+{{template "campaign_workspace_nav" .}}
 <div class="lib-sheet" id="lib-sheet" data-list-id="{{.list.ID}}">
     <header class="lib-sheet-header">
         <div>
+            {{if and .list.FolderID (gt .list.FolderID 0)}}
+            <a href="/library?folder={{.list.FolderID}}" class="text-sm text-brand-600 font-medium">← Campaign folder</a>
+            {{else}}
             <a href="/library" class="text-sm text-brand-600 font-medium">← Library</a>
+            {{end}}
             <h2 class="lib-sheet-title">{{.list.Name}}</h2>
             <p class="lib-sheet-sub">{{.total}} row{{if ne .total 1}}s{{end}} · click a cell to edit · Import below or Ctrl/⌘V</p>
         </div>
