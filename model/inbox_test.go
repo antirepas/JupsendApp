@@ -162,3 +162,26 @@ func TestListInboxThreadsOpenClickAggregates(t *testing.T) {
 		t.Fatalf("GetInboxThread should mark read, unread=%d", CountInboxUnread(userID))
 	}
 }
+
+func TestGetInboxThreadUsesOutboundSubjectWhenNoReply(t *testing.T) {
+	db.OpenTestDB(t)
+	userID, _ := CreateUser(fmt.Sprintf("inbox-subj-%d@test.com", time.Now().UnixNano()), "hash", "http://localhost")
+	c := Contact{Email: "lead@arto-recruitment.nl"}
+	cid, _ := c.SaveContact(userID, nil)
+	_, err := InsertConversationMessage(ConversationMessageInput{
+		UserID: userID, ContactID: cid, Direction: ConversationOutbound,
+		FromEmail: "me@test.com", ToEmail: "lead@arto-recruitment.nl",
+		Subject: "Candidate follow-ups at Arto Recruitment",
+		BodyText: "I came across Arto Recruitment", OccurredAt: time.Now(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	detail, err := GetInboxThread(userID, cid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if detail.Subject != "Candidate follow-ups at Arto Recruitment" {
+		t.Fatalf("subject=%q", detail.Subject)
+	}
+}

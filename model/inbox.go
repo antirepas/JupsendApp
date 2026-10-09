@@ -467,21 +467,37 @@ func GetInboxThread(userID, contactID int64) (*InboxThreadDetail, error) {
 	events, _ := listInboxEngagementEvents(userID, contactID, 12)
 
 	sentiment := ""
-	subject := ""
+	inboundSubject := ""
+	outboundSubject := ""
 	var lastInboundAt time.Time
+	var lastOutboundAt time.Time
 	for _, m := range msgs {
-		if m.Direction != ConversationInbound {
+		subj := strings.TrimSpace(m.Subject)
+		if m.Direction == ConversationInbound {
+			if m.OccurredAt.After(lastInboundAt) {
+				lastInboundAt = m.OccurredAt
+				sentiment = m.ReplySentiment
+				if subj != "" {
+					inboundSubject = subj
+				}
+			} else if inboundSubject == "" && subj != "" {
+				inboundSubject = subj
+			}
 			continue
 		}
-		if m.OccurredAt.After(lastInboundAt) {
-			lastInboundAt = m.OccurredAt
-			sentiment = m.ReplySentiment
-			if strings.TrimSpace(m.Subject) != "" {
-				subject = m.Subject
-			}
-		} else if subject == "" && strings.TrimSpace(m.Subject) != "" {
-			subject = m.Subject
+		// Outbound: keep the latest non-empty subject so threads without a reply
+		// still show the campaign subject instead of "(no subject)".
+		if subj == "" {
+			continue
 		}
+		if outboundSubject == "" || m.OccurredAt.After(lastOutboundAt) {
+			lastOutboundAt = m.OccurredAt
+			outboundSubject = subj
+		}
+	}
+	subject := inboundSubject
+	if subject == "" {
+		subject = outboundSubject
 	}
 
 	_ = MarkInboxThreadRead(userID, contactID)

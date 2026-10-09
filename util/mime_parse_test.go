@@ -88,3 +88,16 @@ func TestBuildMultipartEmailThreadingHeaders(t *testing.T) {
 		t.Fatalf("missing Message-ID: %s", raw)
 	}
 }
+
+func TestBuildMultipartEmailEncodesNonASCIISubject(t *testing.T) {
+	raw := string(BuildMultipartEmail(
+		"me@test.com", "José Sender", "lead@example.com", "Job Application – Bar Staff", "body", "<p>body</p>",
+		SendMeta{},
+	))
+	if !strings.Contains(raw, "Subject: =?utf-8?") && !strings.Contains(raw, "Subject: =?UTF-8?") {
+		t.Fatalf("expected RFC 2047 subject encoding, got:\n%s", raw)
+	}
+	if !strings.Contains(raw, "From: =?utf-8?") && !strings.Contains(raw, "From: =?UTF-8?") {
+		t.Fatalf("expected RFC 2047 from-name encoding, got:\n%s", raw)
+	}
+}

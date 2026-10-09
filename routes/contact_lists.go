@@ -202,6 +202,29 @@ func SaveMatchingList(c *gin.Context) {
 	c.Redirect(http.StatusFound, "/contacts/lists/"+strconv.FormatInt(newID, 10)+"?success="+url.QueryEscape("Saved "+strconv.Itoa(count)+" contacts to new list"))
 }
 
+func ThinContactList(c *gin.Context) {
+	userID := mustUserID(c)
+	listID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.Redirect(http.StatusFound, "/contacts?tab=lists&error=Invalid+list")
+		return
+	}
+	percent, _ := strconv.Atoi(strings.TrimSpace(c.PostForm("percent")))
+	useFilter := c.PostForm("use_filter") == "1"
+	moveTo := strings.TrimSpace(c.PostForm("move_to_name"))
+	filter := listFilterFromRequest(c)
+	result, err := model.ThinContactList(userID, listID, percent, filter, useFilter, moveTo)
+	if err != nil {
+		c.Redirect(http.StatusFound, "/contacts/lists/"+strconv.FormatInt(listID, 10)+"?error="+url.QueryEscape(err.Error()))
+		return
+	}
+	msg := "Removed " + strconv.Itoa(result.RemovedCount) + " of " + strconv.Itoa(result.PoolCount) + " contacts (" + strconv.Itoa(percent) + "%)"
+	if result.MovedListID > 0 {
+		msg += ` — moved to "` + result.MovedListName + `"`
+	}
+	c.Redirect(http.StatusFound, "/contacts/lists/"+strconv.FormatInt(listID, 10)+"?success="+url.QueryEscape(msg))
+}
+
 func SetContactListSchema(c *gin.Context) {
 	userID := mustUserID(c)
 	listID, err := strconv.ParseInt(c.Param("id"), 10, 64)

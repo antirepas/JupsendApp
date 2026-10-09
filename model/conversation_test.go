@@ -372,6 +372,21 @@ func TestFollowUpSubject(t *testing.T) {
 	}
 }
 
+func TestEnsureOutboundSubject(t *testing.T) {
+	if got := EnsureOutboundSubject("Re:", "Scaling Acme without hiring", "FUP1"); got != "Re: Scaling Acme without hiring" {
+		t.Fatalf("got %q", got)
+	}
+	if got := EnsureOutboundSubject("[Test] Re:", "", "InfraDone2 FUP2"); got != "[Test] Re: InfraDone2 FUP2" {
+		t.Fatalf("got %q", got)
+	}
+	if got := EnsureOutboundSubject("Scaling Acme", "", "FUP"); got != "Scaling Acme" {
+		t.Fatalf("got %q", got)
+	}
+	if got := EnsureOutboundSubject("Re:", "", "Re:"); got != "Re: Follow-up" {
+		t.Fatalf("got %q", got)
+	}
+}
+
 func TestResolveOutboundThreadWorkflowFollowUp(t *testing.T) {
 	db.OpenTestDB(t)
 	userID, err := CreateUser("thread-wf@example.com", "hash", "http://localhost")

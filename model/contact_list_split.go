@@ -2,7 +2,10 @@ package model
 
 import (
 	"fmt"
+	"math"
+	"math/rand"
 	"strings"
+	"time"
 )
 
 // SplitListResult is the outcome of splitting a list into match / rest segments.
@@ -87,6 +90,84 @@ func SplitContactList(userID, listID int64, matchName, restName string, filter L
 		MatchCount:    len(matchIDs),
 		RestCount:     len(restIDs),
 	}
+	return out, nil
+}
+
+// ThinListResult is the outcome of randomly removing a percentage of list members.
+type ThinListResult struct {
+	RemovedCount  int
+	KeptCount     int
+	PoolCount     int
+	MovedListID   int64
+	MovedListName string
+}
+
+// ThinContactList randomly removes percent (1–99) of members from a list.
+// When useFilter is true, only the current filter pool is considered; otherwise the whole list.
+// If moveToName is set, removed contacts are copied into a new list before removal.
+func ThinContactList(userID, listID int64, percent int, filter ListMembersFilter, useFilter bool, moveToName string) (ThinListResult, error) {
+	var out ThinListResult
+	if _, err := GetContactListForUser(listID, userID); err != nil {
+		return out, err
+	}
+	if percent < 1 || percent > 99 {
+		return out, fmt.Errorf("percent must be between 1 and 99")
+	}
+
+	var pool []int64
+	var err error
+	if useFilter {
+		filter.Page = 1
+		filter.PageSize = 10000
+		pool, err = ListMemberIDsMatching(listID, userID, filter, 10000)
+	} else {
+		pool, err = ListMemberContactIDs(listID, userID)
+	}
+	if err != nil {
+		return out, err
+	}
+	out.PoolCount = len(pool)
+	if len(pool) == 0 {
+		return out, fmt.Errorf("no contacts to thin")
+	}
+
+	nRemove := int(math.Round(float64(len(pool)) * float64(percent) / 100.0))
+	if nRemove < 1 {
+		nRemove = 1
+	}
+	if nRemove >= len(pool) {
+		nRemove = len(pool) - 1
+		if nRemove < 1 {
+			return out, fmt.Errorf("list is too small to thin — need at least 2 contacts")
+		}
+	}
+
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+	rng.Shuffle(len(pool), func(i, j int) { pool[i], pool[j] = pool[j], pool[i] })
+	removeIDs := append([]int64(nil), pool[:nRemove]...)
+
+	moveToName = strings.TrimSpace(moveToName)
+	if moveToName != "" {
+		movedID, err := CreateContactList(userID, moveToName)
+		if err != nil {
+			return out, err
+		}
+		if schema, _ := GetListVariableSchema(listID, userID); len(schema) > 0 {
+			_ = SetListVariableSchema(movedID, userID, schema)
+		}
+		if err := AddContactsToList(movedID, userID, removeIDs); err != nil {
+			return out, err
+		}
+		out.MovedListID = movedID
+		out.MovedListName = moveToName
+	}
+
+	n, err := RemoveContactsFromList(listID, userID, removeIDs)
+	if err != nil {
+		return out, err
+	}
+	out.RemovedCount = n
+	out.KeptCount = out.PoolCount - n
 	return out, nil
 }
 

@@ -16,6 +16,7 @@
             <input type="hidden" name="only_unverified" value="1">
             <button type="submit" class="btn-secondary">Verify emails</button>
         </form>
+        <button type="button" class="btn-secondary" data-open-panel="thin">Thin list</button>
         <button type="button" class="btn-primary" data-open-panel="segment">Split / save segment</button>
     </div>
 </header>
@@ -169,6 +170,39 @@
     </form>
 </div>
 
+<div id="thin-panel" class="card mb-6 hidden">
+    <h3 class="card-title">Thin this list</h3>
+    <p class="text-sm text-gray-500 mb-4">
+        Randomly remove a percentage of prospects. Useful when a list is too large for one campaign.
+        List has <strong>{{.statsTotal}}</strong> member{{if ne .statsTotal 1}}s{{end}}{{if gt .memberPage.Total 0}} · current filter matches <strong>{{.memberPage.Total}}</strong>{{end}}.
+    </p>
+    <form method="POST" action="/contacts/lists/{{.list.ID}}/thin" class="space-y-4 max-w-xl"
+          onsubmit="var p=parseInt(this.percent.value,10)||0; var scope=this.use_filter.checked?'filtered contacts':'the whole list'; return confirm('Remove about '+p+'% of '+scope+' at random?');">
+        <input type="hidden" name="q" value="{{.filterQ}}">
+        <input type="hidden" name="engagement" value="{{.filterEngagement}}">
+        <input type="hidden" name="var_key" value="{{.filterVarKey}}">
+        <input type="hidden" name="var_op" value="{{.filterVarOp}}">
+        <input type="hidden" name="var_value" value="{{.filterVarValue}}">
+        <input type="hidden" name="sort" value="{{.filterSort}}">
+        <div class="flex flex-wrap gap-4 items-end">
+            <div class="w-28">
+                <label class="form-label">Remove %</label>
+                <input type="number" name="percent" class="form-input" min="1" max="99" value="30" required>
+            </div>
+            <label class="flex items-center gap-2 text-sm text-gray-600 pb-2">
+                <input type="checkbox" name="use_filter" value="1" {{if or .filterEngagement .filterVarKey .filterQ}}checked{{end}}>
+                Only from current filter
+            </label>
+        </div>
+        <div>
+            <label class="form-label">Move removed to new list <span class="text-gray-400 font-normal">(optional)</span></label>
+            <input type="text" name="move_to_name" class="form-input" placeholder="e.g. Holdout 30%">
+            <p class="text-xs text-gray-400 mt-1">Leave blank to only remove them from this list (contacts stay in your account).</p>
+        </div>
+        <button type="submit" class="btn-primary" {{if lt .statsTotal 2}}disabled{{end}}>Remove randomly</button>
+    </form>
+</div>
+
 <div id="segment-panel" class="card mb-6 {{if not .filterEngagement}}{{if not .filterVarKey}}hidden{{end}}{{end}}">
     <h3 class="card-title">Save or split this filter</h3>
     <p class="text-sm text-gray-500 mb-4">
@@ -315,9 +349,10 @@
             });
         });
     }
-    document.querySelectorAll('[data-open-panel="segment"]').forEach(function (btn) {
+    document.querySelectorAll('[data-open-panel]').forEach(function (btn) {
         btn.addEventListener('click', function () {
-            const panel = document.getElementById('segment-panel');
+            var name = btn.getAttribute('data-open-panel');
+            var panel = document.getElementById(name + '-panel');
             if (!panel) return;
             panel.classList.remove('hidden');
             panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });

@@ -262,13 +262,19 @@ func hydrateConversationFromSends(userID int64, msgs []ConversationMessage) {
 		if m.Direction != ConversationOutbound || m.EmailSendID <= 0 {
 			continue
 		}
-		var subj, htmlBody, textBody string
+		var subj, htmlBody, textBody, tmplSubj string
 		err := db.QueryRow(`
-			SELECT COALESCE(rendered_subject,''), COALESCE(rendered_html,''), COALESCE(rendered_text,'')
-			FROM email_sends WHERE id = ? AND user_id = ?
-		`, m.EmailSendID, userID).Scan(&subj, &htmlBody, &textBody)
+			SELECT COALESCE(es.rendered_subject,''), COALESCE(es.rendered_html,''), COALESCE(es.rendered_text,''),
+				COALESCE(t.subject,'')
+			FROM email_sends es
+			LEFT JOIN template t ON t.id = es.template_id
+			WHERE es.id = ? AND es.user_id = ?
+		`, m.EmailSendID, userID).Scan(&subj, &htmlBody, &textBody, &tmplSubj)
 		if err != nil {
 			continue
+		}
+		if subj == "" {
+			subj = tmplSubj
 		}
 		if subj == "" && htmlBody == "" && textBody == "" {
 			continue
@@ -858,6 +864,54 @@ func FollowUpSubject(rootSubject, currentSubject string) string {
 			return "Re: " + root
 		}
 	}
+}
+
+// IsBareReplySubject is true when the subject is empty or only Re:/Fwd: prefixes
+// (common for follow-up templates that rely on thread root to fill the real subject).
+func IsBareReplySubject(subject string) bool {
+	s := strings.TrimSpace(subject)
+	if strings.HasPrefix(strings.ToLower(s), "[test]") {
+		s = strings.TrimSpace(s[6:])
+	}
+	for s != "" {
+		lower := strings.ToLower(s)
+		switch {
+		case strings.HasPrefix(lower, "re:"):
+			s = strings.TrimSpace(s[3:])
+		case strings.HasPrefix(lower, "fwd:"):
+			s = strings.TrimSpace(s[4:])
+		case strings.HasPrefix(lower, "fw:"):
+			s = strings.TrimSpace(s[3:])
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// EnsureOutboundSubject avoids sending blank / bare "Re:" subjects that clients
+// display as "(no subject)". Prefers thread root, then a non-bare fallback.
+func EnsureOutboundSubject(subject, rootSubject, fallback string) string {
+	s := strings.TrimSpace(subject)
+	testPrefix := ""
+	if strings.HasPrefix(strings.ToLower(s), "[test]") {
+		testPrefix = "[Test] "
+		s = strings.TrimSpace(s[6:])
+	}
+	if !IsBareReplySubject(s) {
+		return strings.TrimSpace(testPrefix + s)
+	}
+	var out string
+	if root := strings.TrimSpace(rootSubject); root != "" && !IsBareReplySubject(root) {
+		out = FollowUpSubject(root, s)
+	} else {
+		fb := strings.TrimSpace(fallback)
+		if fb == "" || IsBareReplySubject(fb) {
+			fb = "Follow-up"
+		}
+		out = FollowUpSubject(fb, s)
+	}
+	return strings.TrimSpace(testPrefix + out)
 }
 
 func normalizeAngleAddr(id string) string {

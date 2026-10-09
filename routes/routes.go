@@ -246,6 +246,7 @@ func RegisterRoutes(server *gin.Engine) {
 		authd.POST("/contacts/lists/:id/schema", SetContactListSchema)
 		authd.POST("/contacts/lists/:id/split", SplitContactList)
 		authd.POST("/contacts/lists/:id/save-matching", SaveMatchingList)
+		authd.POST("/contacts/lists/:id/thin", ThinContactList)
 		authd.POST("/contacts/lists/:id/verify", VerifyContactList)
 		authd.GET("/contacts/lists/:id/variables", ListVariablesJSON)
 		authd.GET("/contacts/lists/:id", ContactListDetailPage)

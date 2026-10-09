@@ -1,7 +1,9 @@
 package model
 
 import (
+	"fmt"
 	"testing"
+	"time"
 
 	"emailtracker.com/db"
 )
@@ -50,6 +52,47 @@ func TestSplitContactListByVariable(t *testing.T) {
 	src, _ := GetContactListForUser(listID, userID)
 	if src.MemberCount != 3 {
 		t.Fatalf("source should keep members, got %d", src.MemberCount)
+	}
+}
+
+func TestThinContactListRemovesPercent(t *testing.T) {
+	db.OpenTestDB(t)
+	userID, err := CreateUser(fmt.Sprintf("thin-list-%d@example.com", time.Now().UnixNano()), "hash", "http://localhost")
+	if err != nil {
+		t.Fatal(err)
+	}
+	listID, err := CreateContactList(userID, "Thin source")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ids []int64
+	for i := 0; i < 10; i++ {
+		id, err := (&Contact{Email: fmt.Sprintf("thin-%d@example.com", i)}).SaveContact(userID, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, id)
+	}
+	if err := AddContactsToList(listID, userID, ids); err != nil {
+		t.Fatal(err)
+	}
+	result, err := ThinContactList(userID, listID, 30, ListMembersFilter{}, false, "Holdout")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.RemovedCount != 3 {
+		t.Fatalf("removed=%d want 3", result.RemovedCount)
+	}
+	if result.MovedListID == 0 {
+		t.Fatal("expected moved list")
+	}
+	left, _ := ListMemberContactIDs(listID, userID)
+	if len(left) != 7 {
+		t.Fatalf("left=%d want 7", len(left))
+	}
+	moved, _ := ListMemberContactIDs(result.MovedListID, userID)
+	if len(moved) != 3 {
+		t.Fatalf("moved=%d want 3", len(moved))
 	}
 }
 

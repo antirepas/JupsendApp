@@ -129,6 +129,9 @@ func executeJob(job model.SendJob, account model.SMTPAccount) error {
 		// Keep the sequence in one inbox thread (classic follow-up style).
 		newSubject = model.FollowUpSubject(thread.RootSubject, newSubject)
 	}
+	// Follow-up templates often store subject as bare "Re:" — fill from thread root
+	// or template name so clients don't show "(no subject)".
+	newSubject = model.EnsureOutboundSubject(newSubject, thread.RootSubject, template.Name)
 
 	meta := util.SendMeta{
 		MessageID:          messageID,
