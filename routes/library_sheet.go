@@ -46,7 +46,6 @@ func LibrarySheetPage(ctx *gin.Context) {
 		"error":      ctx.Query("error"),
 	}
 	if list.FolderID > 0 {
-		model.SyncDraftCampaignsForFolder(userID, list.FolderID)
 		mergeWorkspaceNav(pageData, resolveFolderCampaignNav(userID, list.FolderID, model.LibraryKindContacts, list.ID))
 	}
 	ctx.HTML(http.StatusOK, "library_sheet.html", pageData)

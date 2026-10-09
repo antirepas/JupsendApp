@@ -94,7 +94,6 @@ func WorkflowBuilderPage(ctx *gin.Context) {
 		"success":          ctx.Query("success"),
 	}
 	if w.FolderID > 0 {
-		model.SyncDraftCampaignsForFolder(userID, w.FolderID)
 		mergeWorkspaceNav(pageData, resolveFolderCampaignNav(userID, w.FolderID, model.LibraryKindWorkflow, w.ID))
 	}
 	ctx.HTML(http.StatusOK, "workflows_builder.html", pageData)

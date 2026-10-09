@@ -301,15 +301,14 @@ func CampaignDetailPage(ctx *gin.Context) {
 		return
 	}
 
+	if c, err := model.GetCampaignForUser(id, userID); err == nil && c.LibraryFolderID > 0 {
+		_ = model.SyncCampaignFromFolder(userID, id)
+	}
 	detail, err := model.GetCampaignDetail(id, userID)
 	if err != nil {
 		log.Print(err)
 		ctx.HTML(http.StatusNotFound, "error.html", gin.H{"title": "Error", "active": "campaigns", "error": "Campaign not found"})
 		return
-	}
-	_ = model.SyncCampaignFromFolder(userID, id)
-	if synced, err := model.GetCampaignDetail(id, userID); err == nil {
-		detail = synced
 	}
 
 	page, _ := strconv.Atoi(ctx.DefaultQuery("picker_page", "1"))

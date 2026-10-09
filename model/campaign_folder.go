@@ -68,6 +68,7 @@ func EnsureCampaignForLibraryFolder(userID, folderID int64, name string) (int64,
 		}
 		return 0, err
 	}
+	// Lightweight sync only when assets already exist; empty new folders skip the work.
 	_ = SyncCampaignFromFolder(userID, id)
 	return id, nil
 }
@@ -85,6 +86,9 @@ func ensurePlaceholderTemplate(userID, folderID int64) (int64, error) {
 
 // SyncCampaignFromFolder applies ordered folder defaults to a draft campaign.
 // 1st template → A, 2nd → B, 1st contact sheet → audience, 1st workflow → sequence.
+//
+// Contact membership is only re-snapshotted when the linked list changes — not on
+// every page load (full snapshots of large sheets were making Manage unusable).
 func SyncCampaignFromFolder(userID, campaignID int64) error {
 	c, err := GetCampaignForUser(campaignID, userID)
 	if err != nil {
@@ -117,8 +121,10 @@ func SyncCampaignFromFolder(userID, campaignID int64) error {
 			return err
 		}
 	}
-	if err := UpdateCampaignTemplates(campaignID, userID, templateA, templateB); err != nil {
-		return err
+	if templateA != c.TemplateAID || templateB != c.TemplateBID {
+		if err := UpdateCampaignTemplates(campaignID, userID, templateA, templateB); err != nil {
+			return err
+		}
 	}
 
 	mode := "bulk"
@@ -134,18 +140,21 @@ func SyncCampaignFromFolder(userID, campaignID int64) error {
 			}
 		}
 	}
-	if err := updateCampaignExecutionFromFolder(campaignID, userID, mode, wfVer); err != nil {
-		return err
+	if mode != c.ExecutionMode || wfVer != c.WorkflowVersionID {
+		if err := updateCampaignExecutionFromFolder(campaignID, userID, mode, wfVer); err != nil {
+			return err
+		}
 	}
 
 	if len(sheets) > 0 {
 		listID := sheets[0]
 		if c.ContactListID != listID {
 			_, _ = db.Exec(`DELETE FROM campaign_contacts WHERE campaign_id = ?`, campaignID)
+			if _, err := SnapshotListToCampaign(listID, campaignID, userID); err != nil {
+				return err
+			}
 		}
-		if _, err := SnapshotListToCampaign(listID, campaignID, userID); err != nil {
-			return err
-		}
+		// Same list already linked: skip re-inserting every member on each page view.
 	} else if c.ContactListID > 0 {
 		_ = SetCampaignContactList(campaignID, userID, 0)
 	}
@@ -154,6 +163,18 @@ func SyncCampaignFromFolder(userID, campaignID int64) error {
 		_ = syncWorkflowStepTemplatesFromFolder(campaignID, wfVer, templates, mode)
 	}
 	return nil
+}
+
+func campaignWorkflowMapsEqual(a, b map[string]int64) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k, v := range a {
+		if b[k] != v {
+			return false
+		}
+	}
+	return true
 }
 
 func updateCampaignExecutionFromFolder(campaignID, userID int64, mode string, workflowVersionID int64) error {
@@ -212,6 +233,9 @@ func syncWorkflowStepTemplatesFromFolder(campaignID, versionID int64, templateID
 				mappings[step.NodeKey] = templateIDs[len(templateIDs)-1]
 			}
 		}
+	}
+	if campaignWorkflowMapsEqual(existing, mappings) {
+		return nil
 	}
 	return SaveCampaignWorkflowTemplates(campaignID, mappings)
 }
@@ -298,14 +322,21 @@ func BuildCampaignWorkspaceNav(userID, folderID, campaignID int64) ([]WorkspaceN
 		Label: "Manage",
 		URL:   fmt.Sprintf("/campaigns/%d", campaignID),
 	}}
-	templates, sheets, workflows, err := listFolderAssetsOrdered(userID, folderID)
+
+	// Single pass with names — avoid N+1 GetTemplate/GetContactList/GetWorkflow.
+	tRows, err := db.Query(`
+		SELECT id, COALESCE(NULLIF(trim(name), ''), 'Template')
+		FROM template WHERE user_id = ? AND folder_id = ? ORDER BY id ASC
+	`, userID, folderID)
 	if err != nil {
 		return nil, err
 	}
-	for _, id := range templates {
-		name := "Template"
-		if t, err := GetTemplateForUser(id, userID); err == nil && strings.TrimSpace(t.Name) != "" {
-			name = t.Name
+	for tRows.Next() {
+		var id int64
+		var name string
+		if err := tRows.Scan(&id, &name); err != nil {
+			tRows.Close()
+			return nil, err
 		}
 		items = append(items, WorkspaceNavItem{
 			Kind:  LibraryKindTemplate,
@@ -314,10 +345,21 @@ func BuildCampaignWorkspaceNav(userID, folderID, campaignID int64) ([]WorkspaceN
 			URL:   fmt.Sprintf("/templates/%d/edit", id),
 		})
 	}
-	for _, id := range sheets {
-		name := "Contacts"
-		if list, err := GetContactListForUser(id, userID); err == nil && strings.TrimSpace(list.Name) != "" {
-			name = list.Name
+	tRows.Close()
+
+	cRows, err := db.Query(`
+		SELECT id, COALESCE(NULLIF(trim(name), ''), 'Contacts')
+		FROM contact_lists WHERE user_id = ? AND folder_id = ? ORDER BY created_at ASC, id ASC
+	`, userID, folderID)
+	if err != nil {
+		return nil, err
+	}
+	for cRows.Next() {
+		var id int64
+		var name string
+		if err := cRows.Scan(&id, &name); err != nil {
+			cRows.Close()
+			return nil, err
 		}
 		items = append(items, WorkspaceNavItem{
 			Kind:  LibraryKindContacts,
@@ -326,10 +368,21 @@ func BuildCampaignWorkspaceNav(userID, folderID, campaignID int64) ([]WorkspaceN
 			URL:   fmt.Sprintf("/library/sheets/%d", id),
 		})
 	}
-	for _, id := range workflows {
-		name := "Workflow"
-		if w, err := GetWorkflowForUser(id, userID); err == nil && strings.TrimSpace(w.Name) != "" {
-			name = w.Name
+	cRows.Close()
+
+	wRows, err := db.Query(`
+		SELECT id, COALESCE(NULLIF(trim(name), ''), 'Workflow')
+		FROM workflows WHERE tenant_id = ? AND folder_id = ? AND status = 'active' ORDER BY created_at ASC, id ASC
+	`, userID, folderID)
+	if err != nil {
+		return nil, err
+	}
+	for wRows.Next() {
+		var id int64
+		var name string
+		if err := wRows.Scan(&id, &name); err != nil {
+			wRows.Close()
+			return nil, err
 		}
 		items = append(items, WorkspaceNavItem{
 			Kind:  LibraryKindWorkflow,
@@ -338,6 +391,7 @@ func BuildCampaignWorkspaceNav(userID, folderID, campaignID int64) ([]WorkspaceN
 			URL:   fmt.Sprintf("/workflows/%d/edit", id),
 		})
 	}
+	wRows.Close()
 	return items, nil
 }
 

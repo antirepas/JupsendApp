@@ -64,6 +64,7 @@ func ListLibraryPage(ctx *gin.Context) {
 				if c, err := model.GetCampaignByLibraryFolder(id, userID); err == nil {
 					campaignID = c.ID
 				} else {
+					// Only create the missing campaign link; avoid syncing folder assets on every list view.
 					campaignID, _ = model.EnsureCampaignForLibraryFolder(userID, id, f.Name)
 				}
 			}
