@@ -73,11 +73,13 @@ func EnsureCampaignForLibraryFolder(userID, folderID int64, name string) (int64,
 }
 
 func ensurePlaceholderTemplate(userID, folderID int64) (int64, error) {
+	_ = folderID // campaign folder must not get a stub file — keep placeholders unfiled
 	id, err := FirstTemplateIDForUser(userID)
 	if err == nil && id > 0 {
 		return id, nil
 	}
-	t := Template{Name: "Email 1", Subject: "", Body: "<p></p>", FolderID: folderID}
+	// Unfiled stub so campaign.template_a_id stays NOT NULL without polluting the folder.
+	t := Template{Name: "Email 1", Subject: "", Body: "<p></p>", FolderID: 0}
 	return t.SaveTemplate(userID, nil)
 }
 

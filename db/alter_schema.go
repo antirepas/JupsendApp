@@ -419,10 +419,11 @@ func migrateLibraryFoldersToCampaigns() {
 		var tplID int64
 		err := DB.QueryRow(`SELECT id FROM template WHERE user_id = $1 ORDER BY id ASC LIMIT 1`, f.userID).Scan(&tplID)
 		if err != nil || tplID <= 0 {
+			// Keep stub unfiled so campaign folders are not polluted with a placeholder file.
 			err = DB.QueryRow(`
 				INSERT INTO template (user_id, name, subject, body, folder_id)
-				VALUES ($1, 'Email 1', '', '<p></p>', $2) RETURNING id
-			`, f.userID, f.id).Scan(&tplID)
+				VALUES ($1, 'Email 1', '', '<p></p>', NULL) RETURNING id
+			`, f.userID).Scan(&tplID)
 			if err != nil || tplID <= 0 {
 				log.Printf("alter schema note: stub template for folder %d: %v", f.id, err)
 				continue
