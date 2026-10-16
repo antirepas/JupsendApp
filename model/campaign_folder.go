@@ -84,11 +84,18 @@ func ensurePlaceholderTemplate(userID, folderID int64) (int64, error) {
 	return t.SaveTemplate(userID, nil)
 }
 
-// SyncCampaignFromFolder applies ordered folder defaults to a draft campaign.
-// 1st template → A, 2nd → B, 1st contact sheet → audience, 1st workflow → sequence.
+// SyncCampaignFromFolder applies folder assets to a draft campaign.
 //
-// Contact membership is only re-snapshotted when the linked list changes — not on
-// every page load (full snapshots of large sheets were making Manage unusable).
+// Detection (does not invent files):
+//   - published workflow in folder → workflow mode (keeps workflow_ab if already set)
+//   - otherwise → bulk (keeps A/B if Template B is still a folder template)
+//
+// Template A = first folder template. Template B is only kept/assigned when the
+// campaign is already in an A/B mode (bulk with B, or workflow_ab) — never
+// auto-copies a template to fill the B slot, and never treats a follow-up email
+// as Variant B just because it is the second file in the folder.
+//
+// Contact membership is only re-snapshotted when the linked list changes.
 func SyncCampaignFromFolder(userID, campaignID int64) error {
 	c, err := GetCampaignForUser(campaignID, userID)
 	if err != nil {
@@ -106,14 +113,16 @@ func SyncCampaignFromFolder(userID, campaignID int64) error {
 		return err
 	}
 
+	inFolder := make(map[int64]bool, len(templates))
+	for _, id := range templates {
+		inFolder[id] = true
+	}
+
 	var templateA, templateB int64
 	if len(templates) > 0 {
 		templateA = templates[0]
 	} else {
 		templateA = c.TemplateAID
-	}
-	if len(templates) > 1 {
-		templateB = templates[1]
 	}
 	if templateA <= 0 {
 		templateA, err = ensurePlaceholderTemplate(userID, c.LibraryFolderID)
@@ -121,6 +130,22 @@ func SyncCampaignFromFolder(userID, campaignID int64) error {
 			return err
 		}
 	}
+
+	wantAB := c.ExecutionMode == "workflow_ab" || c.TemplateBID > 0
+	if wantAB {
+		if c.TemplateBID > 0 && inFolder[c.TemplateBID] && c.TemplateBID != templateA {
+			templateB = c.TemplateBID
+		} else if len(templates) > 1 {
+			// Prefer a folder template that isn't A — do not create a copy.
+			for _, id := range templates {
+				if id != templateA {
+					templateB = id
+					break
+				}
+			}
+		}
+	}
+
 	if templateA != c.TemplateAID || templateB != c.TemplateBID {
 		if err := UpdateCampaignTemplates(campaignID, userID, templateA, templateB); err != nil {
 			return err
@@ -133,12 +158,14 @@ func SyncCampaignFromFolder(userID, campaignID int64) error {
 		pub, err := LatestPublishedVersionID(workflows[0])
 		if err == nil && pub > 0 {
 			wfVer = pub
-			if templateB > 0 {
+			if c.ExecutionMode == "workflow_ab" || (wantAB && templateB > 0) {
 				mode = "workflow_ab"
 			} else {
 				mode = "workflow"
 			}
 		}
+	} else if wantAB && templateB > 0 {
+		mode = "bulk"
 	}
 	if mode != c.ExecutionMode || wfVer != c.WorkflowVersionID {
 		if err := updateCampaignExecutionFromFolder(campaignID, userID, mode, wfVer); err != nil {
@@ -154,7 +181,6 @@ func SyncCampaignFromFolder(userID, campaignID int64) error {
 				return err
 			}
 		}
-		// Same list already linked: skip re-inserting every member on each page view.
 	} else if c.ContactListID > 0 {
 		_ = SetCampaignContactList(campaignID, userID, 0)
 	}
@@ -163,6 +189,103 @@ func SyncCampaignFromFolder(userID, campaignID int64) error {
 		_ = syncWorkflowStepTemplatesFromFolder(campaignID, wfVer, templates, mode)
 	}
 	return nil
+}
+
+// SetCampaignMode updates draft campaign execution mode and optionally binds B from folder.
+// mode: bulk | bulk_ab | workflow | workflow_ab
+func SetCampaignMode(userID, campaignID int64, mode string) error {
+	c, err := GetCampaignForUser(campaignID, userID)
+	if err != nil {
+		return err
+	}
+	if !CampaignDraftMutable(c) {
+		return fmt.Errorf("campaign cannot be edited in its current state")
+	}
+	mode = strings.TrimSpace(strings.ToLower(mode))
+	switch mode {
+	case "bulk", "bulk_ab", "workflow", "workflow_ab":
+	default:
+		return fmt.Errorf("invalid mode")
+	}
+
+	var templates, workflows []int64
+	if c.LibraryFolderID > 0 {
+		templates, _, workflows, err = listFolderAssetsOrdered(userID, c.LibraryFolderID)
+		if err != nil {
+			return err
+		}
+	}
+
+	templateA := c.TemplateAID
+	if len(templates) > 0 {
+		templateA = templates[0]
+	}
+	templateB := int64(0)
+	execMode := "bulk"
+	var wfVer int64
+
+	switch mode {
+	case "bulk":
+		execMode = "bulk"
+	case "bulk_ab":
+		execMode = "bulk"
+		templateB = pickABTemplateB(templates, templateA, c.TemplateBID)
+		if templateB <= 0 {
+			return fmt.Errorf("add a second template in this campaign folder for A/B")
+		}
+	case "workflow":
+		execMode = "workflow"
+		if len(workflows) == 0 {
+			return fmt.Errorf("add and publish a workflow in this campaign folder first")
+		}
+		wfVer, err = LatestPublishedVersionID(workflows[0])
+		if err != nil || wfVer <= 0 {
+			return fmt.Errorf("publish the workflow before using workflow mode")
+		}
+	case "workflow_ab":
+		execMode = "workflow_ab"
+		if len(workflows) == 0 {
+			return fmt.Errorf("add and publish a workflow in this campaign folder first")
+		}
+		wfVer, err = LatestPublishedVersionID(workflows[0])
+		if err != nil || wfVer <= 0 {
+			return fmt.Errorf("publish the workflow before using workflow mode")
+		}
+		templateB = pickABTemplateB(templates, templateA, c.TemplateBID)
+		if templateB <= 0 {
+			return fmt.Errorf("add a second template in this campaign folder for A/B")
+		}
+	}
+
+	if templateA <= 0 {
+		return fmt.Errorf("add a template to this campaign folder first")
+	}
+	if err := UpdateCampaignTemplates(campaignID, userID, templateA, templateB); err != nil {
+		return err
+	}
+	if err := updateCampaignExecutionFromFolder(campaignID, userID, execMode, wfVer); err != nil {
+		return err
+	}
+	if wfVer > 0 && len(templates) > 0 {
+		_ = syncWorkflowStepTemplatesFromFolder(campaignID, wfVer, templates, execMode)
+	}
+	return nil
+}
+
+func pickABTemplateB(templates []int64, templateA, currentB int64) int64 {
+	if currentB > 0 && currentB != templateA {
+		for _, id := range templates {
+			if id == currentB {
+				return currentB
+			}
+		}
+	}
+	for _, id := range templates {
+		if id != templateA {
+			return id
+		}
+	}
+	return 0
 }
 
 func campaignWorkflowMapsEqual(a, b map[string]int64) bool {

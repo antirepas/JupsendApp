@@ -172,6 +172,37 @@ func parseTemperatureRulesFromForm(ctx *gin.Context) model.LeadTemperatureRules 
 	return model.LeadTemperatureRulesFromForm(minPos, anyNonNeg, negStops)
 }
 
+func SaveCampaignMode(ctx *gin.Context) {
+	userID := mustUserID(ctx)
+	campaignID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
+	if err != nil {
+		ctx.Redirect(http.StatusFound, "/campaigns?error=Invalid+campaign")
+		return
+	}
+	mode := ctx.PostForm("mode")
+	if err := model.SetCampaignMode(userID, campaignID, mode); err != nil {
+		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error="+url.QueryEscape(err.Error()))
+		return
+	}
+	ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?success="+url.QueryEscape("Campaign mode updated"))
+}
+
+func SaveCampaignHypothesis(ctx *gin.Context) {
+	userID := mustUserID(ctx)
+	campaignID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
+	if err != nil {
+		ctx.Redirect(http.StatusFound, "/campaigns?error=Invalid+campaign")
+		return
+	}
+	variable := strings.TrimSpace(ctx.PostForm("experiment_variable"))
+	hypothesis := strings.TrimSpace(ctx.PostForm("experiment_hypothesis"))
+	if err := model.UpdateCampaignExperiment(campaignID, userID, variable, hypothesis); err != nil {
+		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error="+url.QueryEscape(err.Error()))
+		return
+	}
+	ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?success="+url.QueryEscape("Hypothesis saved"))
+}
+
 func SaveCampaignTemperatureRules(ctx *gin.Context) {
 	userID := mustUserID(ctx)
 	campaignID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
@@ -361,6 +392,16 @@ func CampaignDetailPage(ctx *gin.Context) {
 	}
 
 	pickerPage := pageExtras.PickerPage
+	canEditMode := detail.DisplayStatus != "sent" && detail.DisplayStatus != "sending" && detail.DisplayStatus != "stopped"
+	campaignMode := "bulk"
+	switch {
+	case detail.ExecutionMode == "workflow_ab":
+		campaignMode = "workflow_ab"
+	case detail.ExecutionMode == "workflow":
+		campaignMode = "workflow"
+	case detail.TemplateBID > 0:
+		campaignMode = "bulk_ab"
+	}
 	pageData := gin.H{
 		"title":               detail.Name,
 		"active":              "campaigns",
@@ -383,6 +424,11 @@ func CampaignDetailPage(ctx *gin.Context) {
 		"error":               ctx.Query("error"),
 		"isWorkflow":          isWorkflow,
 		"canStop":             canStop,
+		"canEditMode":         canEditMode,
+		"campaignMode":        campaignMode,
+		"experimentVariable":  detail.ExperimentVariable,
+		"experimentHypothesis": detail.ExperimentHypothesis,
+		"experimentVariableLabel": experimentVariableLabel(detail.ExperimentVariable),
 		"temperatureRules":    detail.TemperatureRules,
 		"temperaturePreview":  model.PreviewLeadTemperatureRules(detail.TemperatureRules),
 		"openTrackingEnabled": detail.OpenTrackingEnabled,

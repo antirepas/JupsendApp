@@ -1,6 +1,7 @@
 package model
 
 import (
+	"database/sql"
 	"fmt"
 	"log"
 	"strconv"
@@ -264,8 +265,92 @@ func DeleteTemplate(id, userID int64) error {
 	if _, err := GetTemplateForUser(id, userID); err != nil {
 		return err
 	}
-	_, err := db.Exec(`DELETE FROM template WHERE id = ?`, id)
+	// Detach from draft campaigns first — template_a/b FKs have no ON DELETE SET NULL.
+	if err := detachTemplateFromDraftCampaigns(id, userID); err != nil {
+		return err
+	}
+	_, err := db.Exec(`DELETE FROM template WHERE id = ? AND user_id = ?`, id, userID)
 	return err
+}
+
+func detachTemplateFromDraftCampaigns(templateID, userID int64) error {
+	_, err := db.Exec(`DELETE FROM campaign_workflow_step_templates WHERE template_id = ? AND campaign_id IN (
+		SELECT id FROM campaigns WHERE user_id = ? AND status = 'draft' AND COALESCE(is_sending, 0) = 0
+	)`, templateID, userID)
+	if err != nil {
+		return err
+	}
+	// Clear B when this template is B.
+	_, err = db.Exec(`
+		UPDATE campaigns SET template_b_id = NULL
+		WHERE user_id = ? AND template_b_id = ? AND status = 'draft' AND COALESCE(is_sending, 0) = 0 AND scheduled_at IS NULL
+	`, userID, templateID)
+	if err != nil {
+		return err
+	}
+	// Reassign A to another owned template (or keep a placeholder) so DELETE can succeed.
+	rows, err := db.Query(`
+		SELECT id, COALESCE(library_folder_id, 0) FROM campaigns
+		WHERE user_id = ? AND template_a_id = ? AND status = 'draft' AND COALESCE(is_sending, 0) = 0 AND scheduled_at IS NULL
+	`, userID, templateID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	type campRow struct{ id, folderID int64 }
+	var camps []campRow
+	for rows.Next() {
+		var r campRow
+		if err := rows.Scan(&r.id, &r.folderID); err != nil {
+			return err
+		}
+		camps = append(camps, r)
+	}
+	for _, r := range camps {
+		replacement, err := firstAlternateTemplate(userID, r.folderID, templateID)
+		if err != nil || replacement <= 0 {
+			replacement, err = ensurePlaceholderTemplate(userID, r.folderID)
+			if err != nil {
+				return fmt.Errorf("cannot delete template: it is still used as Template A and no replacement is available")
+			}
+		}
+		if _, err := db.Exec(`UPDATE campaigns SET template_a_id = ? WHERE id = ? AND user_id = ?`, replacement, r.id, userID); err != nil {
+			return err
+		}
+	}
+	// Block delete if a launched campaign still references this template.
+	var n int
+	_ = db.QueryRow(`
+		SELECT COUNT(*) FROM campaigns
+		WHERE user_id = ? AND (template_a_id = ? OR template_b_id = ?)
+		  AND (status IN ('sent', 'stopped') OR COALESCE(is_sending, 0) = 1 OR scheduled_at IS NOT NULL)
+	`, userID, templateID, templateID).Scan(&n)
+	if n > 0 {
+		return fmt.Errorf("cannot delete template: it is used by a launched or scheduled campaign")
+	}
+	_, _ = db.Exec(`DELETE FROM campaign_workflow_step_templates WHERE template_id = ?`, templateID)
+	return nil
+}
+
+func firstAlternateTemplate(userID, folderID, excludeID int64) (int64, error) {
+	var id int64
+	var err error
+	if folderID > 0 {
+		err = db.QueryRow(`
+			SELECT id FROM template WHERE user_id = ? AND folder_id = ? AND id <> ? ORDER BY id ASC LIMIT 1
+		`, userID, folderID, excludeID).Scan(&id)
+	} else {
+		err = db.QueryRow(`
+			SELECT id FROM template WHERE user_id = ? AND id <> ? ORDER BY id ASC LIMIT 1
+		`, userID, excludeID).Scan(&id)
+	}
+	if err == sql.ErrNoRows {
+		return 0, err
+	}
+	if err != nil {
+		return 0, err
+	}
+	return id, nil
 }
 
 func DuplicateTemplate(userID, sourceID int64, newName string) (int64, error) {

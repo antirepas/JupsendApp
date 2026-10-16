@@ -136,6 +136,16 @@
     function syncBody() {
         bodyHidden.value = exportHTML();
     }
+    window.__templateSyncBody = syncBody;
+    window.__templateIsDirty = function () {
+        return !!window.__templateDirtyFlag;
+    };
+    window.__templateMarkClean = function () {
+        window.__templateDirtyFlag = false;
+    };
+    form.addEventListener('input', function () { window.__templateDirtyFlag = true; });
+    form.addEventListener('change', function () { window.__templateDirtyFlag = true; });
+    quill.on('text-change', function () { window.__templateDirtyFlag = true; });
 
     function isBodyEmpty() {
         const html = exportHTML().trim();

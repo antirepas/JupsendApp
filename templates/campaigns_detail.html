@@ -164,22 +164,84 @@
     </ul>
 </div>
 
-{{if .isWorkflowAB}}
+{{if .canEditMode}}
+<div class="card mb-6">
+  <h3 class="card-title">Campaign type</h3>
+  <p class="text-sm text-slate-500 mb-4">Detected from folder assets — change anytime before launch. A/B needs two templates in the folder (we never auto-copy your email).</p>
+  <form method="POST" action="/campaigns/{{.campaign.ID}}/mode" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+    <label class="flex items-start gap-3 rounded-lg border p-3 cursor-pointer {{if eq .campaignMode "bulk"}}border-brand-500 bg-brand-50{{else}}border-slate-200{{end}}">
+      <input type="radio" name="mode" value="bulk" class="mt-1" {{if eq .campaignMode "bulk"}}checked{{end}}>
+      <span><span class="font-medium text-slate-900">One-time send</span><span class="block text-xs text-slate-500">Single template blast</span></span>
+    </label>
+    <label class="flex items-start gap-3 rounded-lg border p-3 cursor-pointer {{if eq .campaignMode "bulk_ab"}}border-brand-500 bg-brand-50{{else}}border-slate-200{{end}}">
+      <input type="radio" name="mode" value="bulk_ab" class="mt-1" {{if eq .campaignMode "bulk_ab"}}checked{{end}}>
+      <span><span class="font-medium text-slate-900">One-time A/B</span><span class="block text-xs text-slate-500">Two templates alternate by contact</span></span>
+    </label>
+    <label class="flex items-start gap-3 rounded-lg border p-3 cursor-pointer {{if eq .campaignMode "workflow"}}border-brand-500 bg-brand-50{{else}}border-slate-200{{end}}">
+      <input type="radio" name="mode" value="workflow" class="mt-1" {{if eq .campaignMode "workflow"}}checked{{end}}>
+      <span><span class="font-medium text-slate-900">Workflow</span><span class="block text-xs text-slate-500">Published sequence in this folder</span></span>
+    </label>
+    <label class="flex items-start gap-3 rounded-lg border p-3 cursor-pointer {{if eq .campaignMode "workflow_ab"}}border-brand-500 bg-brand-50{{else}}border-slate-200{{end}}">
+      <input type="radio" name="mode" value="workflow_ab" class="mt-1" {{if eq .campaignMode "workflow_ab"}}checked{{end}}>
+      <span><span class="font-medium text-slate-900">Workflow + A/B first email</span><span class="block text-xs text-slate-500">A/B on the first send, then follow-ups</span></span>
+    </label>
+    <div class="sm:col-span-2">
+      <button type="submit" class="btn-secondary">Save campaign type</button>
+    </div>
+  </form>
+</div>
+{{end}}
+
+{{if or .isWorkflowAB (eq .campaignMode "bulk_ab")}}
 <div class="card mb-6 bg-blue-50 border-blue-100">
     <h3 class="font-semibold text-slate-900 mb-2">How A/B assignment works</h3>
-    <p class="text-sm text-slate-600">Contacts are ordered by ID. Position 1 → Variant <span class="badge badge-blue">A</span>, position 2 → <span class="badge badge-violet">B</span>, then alternates. Only the <strong>first send step</strong> uses A/B; follow-up emails use the templates you pick below.</p>
+    <p class="text-sm text-slate-600">Contacts are ordered by ID. Position 1 → Variant <span class="badge badge-blue">A</span>, position 2 → <span class="badge badge-violet">B</span>, then alternates.{{if .isWorkflowAB}} Only the <strong>first send step</strong> uses A/B; follow-up emails use the templates you pick below.{{end}}</p>
 </div>
 
-{{if or .experimentHypothesis .experimentVariable}}
 <div class="card mb-6 border-l-4 border-violet-500">
-    <h3 class="font-semibold text-slate-900 mb-2">Experiment</h3>
-    {{if .experimentVariable}}
-    <p class="text-sm text-slate-600">Testing: <strong>{{.experimentVariableLabel}}</strong></p>
-    {{end}}
-    {{if .experimentHypothesis}}
-    <p class="text-sm text-slate-700 mt-2">{{.experimentHypothesis}}</p>
-    {{end}}
+    <div class="flex items-start justify-between gap-3">
+      <div>
+        <h3 class="font-semibold text-slate-900 mb-2">Experiment</h3>
+        {{if .experimentVariable}}
+        <p class="text-sm text-slate-600">Testing: <strong>{{.experimentVariableLabel}}</strong></p>
+        {{end}}
+        {{if .experimentHypothesis}}
+        <p class="text-sm text-slate-700 mt-2">{{.experimentHypothesis}}</p>
+        {{else}}
+        <p class="text-sm text-slate-500 mt-2">No hypothesis yet — add what you are testing.</p>
+        {{end}}
+      </div>
+      {{if .canEditMode}}
+      <button type="button" class="btn-secondary btn-sm" id="camp-hypothesis-open">Edit hypothesis</button>
+      {{end}}
+    </div>
 </div>
+
+{{if .canEditMode}}
+<dialog id="camp-hypothesis-modal" class="camp-ws-modal">
+  <form method="POST" action="/campaigns/{{.campaign.ID}}/hypothesis" class="camp-ws-modal-card">
+    <h3 class="font-semibold text-lg text-slate-900">A/B hypothesis</h3>
+    <p class="text-sm text-slate-500 mt-1 mb-4">What are you testing, and what do you expect to win?</p>
+    <label class="form-label" for="experiment_variable">Variable (optional)</label>
+    <input type="text" id="experiment_variable" name="experiment_variable" class="form-input mb-3" value="{{.experimentVariable}}" placeholder="e.g. Subject line">
+    <label class="form-label" for="experiment_hypothesis">Hypothesis</label>
+    <textarea id="experiment_hypothesis" name="experiment_hypothesis" class="form-input" rows="3" placeholder="e.g. Hiring-focused subject beats ramp-time subject">{{.experimentHypothesis}}</textarea>
+    <div class="flex justify-end gap-2 mt-4">
+      <button type="button" class="btn-secondary" id="camp-hypothesis-cancel">Cancel</button>
+      <button type="submit" class="btn-primary">Save</button>
+    </div>
+  </form>
+</dialog>
+<script>
+(function () {
+  var modal = document.getElementById('camp-hypothesis-modal');
+  var openBtn = document.getElementById('camp-hypothesis-open');
+  var cancelBtn = document.getElementById('camp-hypothesis-cancel');
+  if (!modal || !openBtn) return;
+  openBtn.addEventListener('click', function () { modal.showModal(); });
+  if (cancelBtn) cancelBtn.addEventListener('click', function () { modal.close(); });
+})();
+</script>
 {{end}}
 
 {{end}}
@@ -780,6 +842,7 @@
 </div>
 </div>
 </div>
+<script src="{{assetURL "/static/js/campaign-workspace-nav.js"}}"></script>
 {{template "page_shell_end" .}}
 <script>
 document.querySelectorAll('.preview-toggle').forEach(btn => {

@@ -112,8 +112,9 @@ func TestSyncCampaignFromFolderOrderedDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.TemplateAID != idA || got.TemplateBID != idB {
-		t.Fatalf("templates A=%d B=%d want A=%d B=%d", got.TemplateAID, got.TemplateBID, idA, idB)
+	// Sync must not auto-treat the 2nd template as Variant B / workflow_ab.
+	if got.TemplateAID != idA || got.TemplateBID != 0 {
+		t.Fatalf("templates A=%d B=%d want A=%d B=0", got.TemplateAID, got.TemplateBID, idA)
 	}
 	if got.ContactListID != listID {
 		t.Fatalf("contact_list_id=%d want %d", got.ContactListID, listID)
@@ -123,8 +124,18 @@ func TestSyncCampaignFromFolderOrderedDefaults(t *testing.T) {
 		t.Fatalf("members=%v", members)
 	}
 	pub, _ := LatestPublishedVersionID(wid)
-	if got.WorkflowVersionID != pub || got.ExecutionMode != "workflow_ab" {
-		t.Fatalf("mode=%s wf=%d want workflow_ab / %d", got.ExecutionMode, got.WorkflowVersionID, pub)
+	if got.WorkflowVersionID != pub || got.ExecutionMode != "workflow" {
+		t.Fatalf("mode=%s wf=%d want workflow / %d", got.ExecutionMode, got.WorkflowVersionID, pub)
+	}
+	if err := SetCampaignMode(userID, camp.ID, "workflow_ab"); err != nil {
+		t.Fatal(err)
+	}
+	got, err = GetCampaignForUser(camp.ID, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.TemplateAID != idA || got.TemplateBID != idB || got.ExecutionMode != "workflow_ab" {
+		t.Fatalf("after AB enable A=%d B=%d mode=%s", got.TemplateAID, got.TemplateBID, got.ExecutionMode)
 	}
 
 	nav, err := BuildCampaignWorkspaceNav(userID, folderID, camp.ID)

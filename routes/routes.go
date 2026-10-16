@@ -311,6 +311,8 @@ func RegisterRoutes(server *gin.Engine) {
 		authd.GET("/campaigns/:id/sop", DownloadCampaignSOP)
 		authd.POST("/campaigns/:id/verify-contacts", VerifyCampaignContacts)
 		authd.POST("/campaigns/:id/workflow-templates", SaveCampaignWorkflowTemplatesWeb)
+		authd.POST("/campaigns/:id/mode", SaveCampaignMode)
+		authd.POST("/campaigns/:id/hypothesis", SaveCampaignHypothesis)
 		authd.POST("/campaigns/:id/temperature-rules", SaveCampaignTemperatureRules)
 		authd.POST("/campaigns/:id/mailboxes", SaveCampaignMailboxes)
 		authd.POST("/campaigns/:id/send", SendCampaign)

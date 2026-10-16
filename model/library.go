@@ -267,26 +267,31 @@ func RenameLibraryItem(userID int64, kind string, id int64, name string) error {
 
 func DeleteLibraryItems(userID int64, refs []LibraryRef) (int, error) {
 	n := 0
+	var firstErr error
 	for _, ref := range refs {
+		var err error
 		switch strings.ToLower(ref.Kind) {
 		case LibraryKindTemplate:
-			if err := DeleteTemplate(ref.ID, userID); err != nil {
-				continue
-			}
-			n++
+			err = DeleteTemplate(ref.ID, userID)
 		case LibraryKindWorkflow:
-			if err := ArchiveWorkflow(ref.ID, userID, false); err != nil {
-				continue
-			}
-			n++
+			err = ArchiveWorkflow(ref.ID, userID, false)
 		case LibraryKindContacts:
-			if err := DeleteContactList(ref.ID, userID); err != nil {
-				continue
-			}
-			n++
+			err = DeleteContactList(ref.ID, userID)
+		default:
+			continue
 		}
+		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		n++
 	}
-	return n, nil
+	if n == 0 && firstErr != nil {
+		return 0, firstErr
+	}
+	return n, firstErr
 }
 
 func DuplicateWorkflowToFolder(userID, sourceID, folderID int64) (int64, error) {

@@ -5098,3 +5098,19 @@ g.wf-edge-hovering .wf-edge-delete-btn {
     text-decoration: none;
 }
 .camp-ws-nav-folder a:hover { text-decoration: underline; }
+
+.camp-ws-modal {
+  border: none;
+  border-radius: 0.75rem;
+  padding: 0;
+  max-width: 28rem;
+  width: calc(100% - 2rem);
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.18);
+}
+.camp-ws-modal::backdrop {
+  background: rgba(15, 23, 42, 0.45);
+}
+.camp-ws-modal-card {
+  padding: 1.25rem 1.35rem 1.15rem;
+  background: #fff;
+}

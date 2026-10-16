@@ -4,6 +4,10 @@
   let selectedKey = null;
   let selectedEdgeIndex = null;
   let lastAddedKey = null;
+  let workflowDirty = false;
+  window.__workflowIsDirty = function () { return workflowDirty; };
+  window.__workflowMarkClean = function () { workflowDirty = false; };
+  function markWorkflowDirty() { workflowDirty = true; }
 
   const canvas = document.getElementById('canvas');
   const canvasWrap = document.getElementById('canvas-wrap');
@@ -1265,9 +1269,11 @@
       VERSION_ID = data.version_id;
     }
     showMsg('Workflow saved', true);
+    workflowDirty = false;
     return true;
   }
 
+  document.getElementById('canvas')?.addEventListener('mousedown', markWorkflowDirty);
   document.getElementById('btn-save')?.addEventListener('click', saveGraph);
 
   document.getElementById('btn-validate')?.addEventListener('click', async () => {
