@@ -147,23 +147,6 @@
 {{end}}
 {{end}}
 
-{{if .isWorkflow}}
-<div class="workflow-header-compact">
-    <h3>{{.workflowInfo.WorkflowName}}</h3>
-    <a href="/workflows/{{.workflowInfo.WorkflowID}}/edit" class="text-brand-600 text-sm font-medium">Edit workflow</a>
-</div>
-
-<div class="workflow-explainer">
-    <h3>How this workflow runs</h3>
-    <p>When you launch this campaign, each contact gets their own copy of the workflow below. Steps run automatically — you don't need to do anything per contact.</p>
-    <ul>
-        <li><strong>Send</strong> — an email goes out from your connected Gmail account</li>
-        <li><strong>Wait</strong> — the contact pauses until the delay finishes</li>
-        <li><strong>Branch</strong> — paths can split in parallel; each branch is evaluated by priority</li>
-        <li><strong>Replies stop the sequence</strong> — remaining steps are cancelled for that contact</li>
-    </ul>
-</div>
-
 {{if .canEditMode}}
 <div class="card mb-6">
   <h3 class="card-title">Campaign type</h3>
@@ -243,8 +226,24 @@
 })();
 </script>
 {{end}}
-
 {{end}}
+
+{{if .isWorkflow}}
+<div class="workflow-header-compact">
+    <h3>{{.workflowInfo.WorkflowName}}</h3>
+    <a href="/workflows/{{.workflowInfo.WorkflowID}}/edit" class="text-brand-600 text-sm font-medium">Edit workflow</a>
+</div>
+
+<div class="workflow-explainer">
+    <h3>How this workflow runs</h3>
+    <p>When you launch this campaign, each contact gets their own copy of the workflow below. Steps run automatically — you don't need to do anything per contact.</p>
+    <ul>
+        <li><strong>Send</strong> — an email goes out from your connected Gmail account</li>
+        <li><strong>Wait</strong> — the contact pauses until the delay finishes</li>
+        <li><strong>Branch</strong> — paths can split in parallel; each branch is evaluated by priority</li>
+        <li><strong>Replies stop the sequence</strong> — remaining steps are cancelled for that contact</li>
+    </ul>
+</div>
 
 <div class="card mb-6">
     <h3 class="card-title">Lead temperature</h3>
@@ -508,10 +507,12 @@
 
 {{else}}
 
+{{if ne .campaignMode "bulk_ab"}}
 <div class="card mb-6 bg-blue-50 border-blue-100">
     <h3 class="font-semibold text-slate-900 mb-2">How A/B assignment works</h3>
     <p class="text-sm text-slate-600">Contacts are ordered by ID. Position 1 → Variant <span class="badge badge-blue">A</span>, position 2 → <span class="badge badge-violet">B</span> (if Template B exists), then alternates. Each contact receives the template for their variant; <code class="text-xs bg-white px-1 rounded">{{"{{variable}}"}}</code> placeholders in subject and body are replaced with that contact's values.</p>
 </div>
+{{end}}
 
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
     <div class="card border-l-4 border-blue-500">

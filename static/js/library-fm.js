@@ -181,8 +181,13 @@
     if (!items.length) return;
     if (!confirm(items.length === 1 ? "Delete this item?" : "Delete " + items.length + " items?")) return;
     postJSON("/library/ops/delete", { items: items })
-      .then(function () {
-        toast("Deleted");
+      .then(function (data) {
+        var n = data && data.count ? data.count : 0;
+        if (!n) {
+          toast("Nothing deleted", true);
+          return;
+        }
+        toast(n === 1 ? "Deleted" : "Deleted " + n);
         location.reload();
       })
       .catch(function (err) {

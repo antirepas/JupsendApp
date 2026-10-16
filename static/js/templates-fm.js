@@ -190,8 +190,13 @@
         : "Delete " + ids.length + " templates?";
     if (!confirm(msg)) return;
     postJSON("/templates/ops/delete", { kind: "template", ids: ids })
-      .then(function () {
-        toast("Deleted");
+      .then(function (data) {
+        var n = data && data.count ? data.count : 0;
+        if (!n) {
+          toast("Nothing deleted", true);
+          return;
+        }
+        toast(n === 1 ? "Deleted" : "Deleted " + n);
         location.reload();
       })
       .catch(function (err) {

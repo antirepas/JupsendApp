@@ -269,6 +269,28 @@ func DeleteTemplate(id, userID int64) error {
 	if err := detachTemplateFromDraftCampaigns(id, userID); err != nil {
 		return err
 	}
+	// send_jobs.template_id is NOT NULL with no ON DELETE. Clear unfinished jobs and
+	// draft-campaign leftovers so library deletes aren't blocked by test sends.
+	if _, err := db.Exec(`
+		DELETE FROM send_jobs
+		WHERE template_id = ? AND user_id = ?
+		  AND (
+			status IN ('pending', 'cancelled', 'failed', 'dead')
+			OR campaign_id IS NULL
+			OR campaign_id IN (
+				SELECT id FROM campaigns
+				WHERE user_id = ? AND status = 'draft'
+				  AND COALESCE(is_sending, 0) = 0 AND scheduled_at IS NULL
+			)
+		  )
+	`, id, userID, userID); err != nil {
+		return err
+	}
+	var blocked int
+	_ = db.QueryRow(`SELECT COUNT(*) FROM send_jobs WHERE template_id = ? AND user_id = ?`, id, userID).Scan(&blocked)
+	if blocked > 0 {
+		return fmt.Errorf("cannot delete template: it is referenced by send jobs from a launched campaign")
+	}
 	_, err := db.Exec(`DELETE FROM template WHERE id = ? AND user_id = ?`, id, userID)
 	return err
 }
@@ -280,9 +302,10 @@ func detachTemplateFromDraftCampaigns(templateID, userID int64) error {
 	if err != nil {
 		return err
 	}
-	// Clear B when this template is B.
+	// Clear B when this template is B; demote workflow_ab → workflow.
 	_, err = db.Exec(`
-		UPDATE campaigns SET template_b_id = NULL
+		UPDATE campaigns SET template_b_id = NULL,
+			execution_mode = CASE WHEN execution_mode = 'workflow_ab' THEN 'workflow' ELSE execution_mode END
 		WHERE user_id = ? AND template_b_id = ? AND status = 'draft' AND COALESCE(is_sending, 0) = 0 AND scheduled_at IS NULL
 	`, userID, templateID)
 	if err != nil {

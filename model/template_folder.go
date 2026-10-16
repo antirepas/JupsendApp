@@ -273,14 +273,21 @@ func RenameTemplate(id, userID int64, name string) error {
 
 func DeleteTemplates(userID int64, ids []int64) (int, error) {
 	n := 0
+	var firstErr error
 	for _, id := range ids {
 		if id <= 0 {
 			continue
 		}
 		if err := DeleteTemplate(id, userID); err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
 			continue
 		}
 		n++
+	}
+	if n == 0 && firstErr != nil {
+		return 0, firstErr
 	}
 	return n, nil
 }

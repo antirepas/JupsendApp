@@ -158,7 +158,7 @@ func SyncCampaignFromFolder(userID, campaignID int64) error {
 		pub, err := LatestPublishedVersionID(workflows[0])
 		if err == nil && pub > 0 {
 			wfVer = pub
-			if c.ExecutionMode == "workflow_ab" || (wantAB && templateB > 0) {
+			if wantAB && templateB > 0 {
 				mode = "workflow_ab"
 			} else {
 				mode = "workflow"
