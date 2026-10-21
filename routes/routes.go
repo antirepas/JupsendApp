@@ -23,6 +23,7 @@ func RegisterRoutes(server *gin.Engine) {
 		"templates/partials/reply_pro_note.html",
 		"templates/partials/campaign_deliverability.html",
 		"templates/partials/campaign_workspace_nav.html",
+		"templates/partials/campaign_file_arrows.html",
 		"templates/partials/workflow_archive_modal.html",
 		"templates/partials/contact_import_map_modal.html",
 		"templates/partials/inbox_pane.html",

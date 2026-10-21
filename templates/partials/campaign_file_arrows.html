@@ -1,0 +1,19 @@
+{{define "campaign_file_arrow_prev"}}
+{{if and .workspaceNav .workspaceNavItems}}
+{{if .workspacePrevURL}}
+<a class="camp-ws-file-arrow" href="{{.workspacePrevURL}}" title="Previous file" aria-label="Previous file">‹</a>
+{{else}}
+<span class="camp-ws-file-arrow is-disabled" aria-disabled="true" title="No previous file">‹</span>
+{{end}}
+{{end}}
+{{end}}
+
+{{define "campaign_file_arrow_next"}}
+{{if and .workspaceNav .workspaceNavItems}}
+{{if .workspaceNextURL}}
+<a class="camp-ws-file-arrow" href="{{.workspaceNextURL}}" title="Next file" aria-label="Next file">›</a>
+{{else}}
+<span class="camp-ws-file-arrow is-disabled" aria-disabled="true" title="No next file">›</span>
+{{end}}
+{{end}}
+{{end}}

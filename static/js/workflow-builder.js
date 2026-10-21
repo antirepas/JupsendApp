@@ -20,10 +20,18 @@
   const edgeCountEl = document.getElementById('edge-count');
   const edgePriorityInput = document.getElementById('edge-priority');
 
-  const NODE_W = 168;
+  const NODE_W = 152;
   const NODE_H_FALLBACK = 56;
-  const CANVAS_MIN_W = 1200;
-  const CANVAS_MIN_H = 560;
+  let CANVAS_MIN_W = 1200;
+  let CANVAS_MIN_H = 560;
+
+  function syncCanvasMinFromViewport() {
+    if (!canvasWrap) return;
+    const w = Math.max(800, Math.floor(canvasWrap.clientWidth || 0));
+    const h = Math.max(480, Math.floor(canvasWrap.clientHeight || 0));
+    if (w > 0) CANVAS_MIN_W = Math.max(w, 800);
+    if (h > 0) CANVAS_MIN_H = Math.max(h, 480);
+  }
 
   let dragState = null;
   let connectDrag = null;
@@ -56,7 +64,8 @@
 
   function showMsg(text, ok) {
     const el = document.getElementById('builder-msg');
-    el.className = ok ? 'alert-success mb-4' : 'alert-error mb-4';
+    if (!el) return;
+    el.className = (ok ? 'alert-success' : 'alert-error') + ' wf-stage-toast';
     el.textContent = text;
     el.classList.remove('hidden');
   }
@@ -394,12 +403,13 @@
   }
 
   function ensureCanvasBounds() {
+    syncCanvasMinFromViewport();
     let maxX = CANVAS_MIN_W;
     let maxY = CANVAS_MIN_H;
     nodes.forEach(n => {
       const { w, h } = nodeSize(n);
-      maxX = Math.max(maxX, n.position_x + w + 80);
-      maxY = Math.max(maxY, n.position_y + h + 80);
+      maxX = Math.max(maxX, n.position_x + w + 120);
+      maxY = Math.max(maxY, n.position_y + h + 120);
     });
     canvas.style.minWidth = maxX + 'px';
     canvas.style.minHeight = maxY + 'px';
@@ -687,6 +697,13 @@
     edgeTypeSel.value = e.edge_type;
     if (edgePriorityInput) {
       edgePriorityInput.value = (e.priority != null ? e.priority : 10);
+    }
+
+    const pop = document.getElementById('wf-connections-popover');
+    const btn = document.getElementById('btn-wf-connections');
+    if (pop) {
+      pop.classList.remove('hidden');
+      if (btn) btn.setAttribute('aria-expanded', 'true');
     }
 
     updateEdgeEditorUI();
@@ -1300,5 +1317,34 @@
   document.getElementById('canvas')?.addEventListener('mousedown', markWorkflowDirty);
   document.getElementById('btn-save')?.addEventListener('click', saveGraph);
 
+  (function wireConnectionsPopover() {
+    const btn = document.getElementById('btn-wf-connections');
+    const pop = document.getElementById('wf-connections-popover');
+    const closeBtn = document.getElementById('btn-wf-connections-close');
+    if (!btn || !pop) return;
+    function setOpen(open) {
+      pop.classList.toggle('hidden', !open);
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setOpen(pop.classList.contains('hidden'));
+    });
+    closeBtn?.addEventListener('click', () => setOpen(false));
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !pop.classList.contains('hidden')) setOpen(false);
+    });
+  })();
+
+  let resizeTimer = null;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      syncCanvasMinFromViewport();
+      if (nodes.length) render();
+    }, 80);
+  });
+
+  syncCanvasMinFromViewport();
   loadGraph();
 })();

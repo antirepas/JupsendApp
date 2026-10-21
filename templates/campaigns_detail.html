@@ -8,8 +8,7 @@
   {{end}}
 </head>
 {{template "page_shell_start" .}}
-<div class="app-page">
-{{template "campaign_workspace_nav" .}}
+<div class="app-page app-page--campaign">
 <header class="app-page-header">
   <div class="app-page-header-text">
     {{if and .workspaceFolderID (gt .workspaceFolderID 0)}}
@@ -17,13 +16,19 @@
     {{else}}
     <a href="/campaigns" class="app-page-back">← Campaigns</a>
     {{end}}
-    <h2 class="app-page-title">{{.campaign.Name}}</h2>
-    <p class="app-page-sub">
-      {{.campaign.ContactCount}} contacts ·
-      {{if .isSequence}}<span class="badge badge-violet">Sequence</span>{{if eq .campaignMode "sequence_ab"}}<span class="badge badge-violet ml-1">A/B first email</span>{{end}}{{else}}<span class="badge badge-blue">One-time</span>{{end}}
-      <span class="badge {{if eq .campaign.DisplayStatus "sent"}}badge-green{{else if eq .campaign.DisplayStatus "stopped"}}badge-gray{{else if eq .campaign.DisplayStatus "scheduled"}}badge-amber{{else if eq .campaign.DisplayStatus "sending"}}badge-blue{{else}}badge-gray{{end}} ml-1">{{.campaign.DisplayStatus}}</span>
-      {{if .campaign.ScheduledAt}}<span class="text-sm text-slate-500 ml-2">· {{if or .isWorkflow .isSequence}}starts{{else}}sends{{end}} {{.campaign.ScheduledAt.Format "Jan 2, 2006 15:04"}}</span>{{end}}
-    </p>
+    <div class="camp-ws-file-heading">
+      {{template "campaign_file_arrow_prev" .}}
+      <div class="camp-ws-file-heading-main">
+        <h2 class="app-page-title">{{.campaign.Name}}</h2>
+        <p class="app-page-sub">
+          {{.campaign.ContactCount}} contacts ·
+          {{if .isSequence}}<span class="badge badge-violet">Sequence</span>{{if eq .campaignMode "sequence_ab"}}<span class="badge badge-violet ml-1">A/B first email</span>{{end}}{{else}}<span class="badge badge-blue">One-time</span>{{end}}
+          <span class="badge {{if eq .campaign.DisplayStatus "sent"}}badge-green{{else if eq .campaign.DisplayStatus "stopped"}}badge-gray{{else if eq .campaign.DisplayStatus "scheduled"}}badge-amber{{else if eq .campaign.DisplayStatus "sending"}}badge-blue{{else}}badge-gray{{end}} ml-1">{{.campaign.DisplayStatus}}</span>
+          {{if .campaign.ScheduledAt}}<span class="text-sm text-slate-500 ml-2">· {{if or .isWorkflow .isSequence}}starts{{else}}sends{{end}} {{.campaign.ScheduledAt.Format "Jan 2, 2006 15:04"}}</span>{{end}}
+        </p>
+      </div>
+      {{template "campaign_file_arrow_next" .}}
+    </div>
   </div>
   <div class="app-page-actions">
     {{if .jevEnabled}}
@@ -53,7 +58,7 @@
     {{end}}
   </div>
 </header>
-<div class="app-page-body app-page-body--wide">
+<div class="app-page-body app-page-body--full">
 {{if .success}}<div class="alert-success mb-6">{{.success}}</div>{{end}}
 {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
 

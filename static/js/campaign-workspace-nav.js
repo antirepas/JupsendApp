@@ -1,8 +1,8 @@
 (function () {
   "use strict";
 
-  var nav = document.querySelector(".camp-ws-nav");
-  if (!nav) return;
+  var arrows = document.querySelectorAll("a.camp-ws-file-arrow");
+  if (!arrows.length) return;
 
   var dirty = false;
   var pendingURL = "";
@@ -67,7 +67,6 @@
       credentials: "same-origin",
       redirect: "manual",
     });
-    // 302/303 from Go redirects show as opaqueredirect / 0 status with redirect:manual
     if (res.type === "opaqueredirect" || (res.status >= 200 && res.status < 400)) {
       markClean();
       return true;
@@ -121,7 +120,7 @@
     }
   });
 
-  nav.querySelectorAll("a.camp-ws-nav-arrow").forEach(function (a) {
+  arrows.forEach(function (a) {
     a.addEventListener("click", function (e) {
       var href = a.getAttribute("href");
       if (!href || href === "#") return;
