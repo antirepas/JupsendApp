@@ -7,7 +7,7 @@
 {{template "page_shell_start" .}}
 <div class="app-page app-page--workspace">
 {{template "campaign_workspace_nav" .}}
-<form id="template-form" method="POST" action="{{if .isNew}}/templates{{else}}/templates/{{.template.ID}}{{end}}" class="template-builder-grid template-workspace" data-ai-enabled="{{if .aiEnabled}}true{{else}}false{{end}}">
+<form id="template-form" method="POST" action="{{if .isNew}}/templates{{else}}/templates/{{.template.ID}}{{end}}" class="template-builder-grid template-workspace" data-ai-enabled="{{if .aiEnabled}}true{{else}}false{{end}}" data-jev-enabled="{{if .jevEnabled}}true{{else}}false{{end}}">
     {{if and .folder (ne .folder "all")}}<input type="hidden" name="folder" value="{{.folder}}">{{end}}
 
     <header class="app-page-header" style="grid-column: 1 / -1;">
@@ -22,6 +22,9 @@
             </select>
         </div>
         <div class="app-page-actions">
+            {{if .jevEnabled}}
+            <button type="button" class="btn-secondary" id="template-jev-check">Check with Jev</button>
+            {{end}}
             <a href="/library{{if and .folder (ne .folder "all")}}?folder={{.folder}}{{end}}" class="btn-secondary">Cancel</a>
             <button type="submit" class="btn-primary">{{if .isNew}}Create template{{else}}Save{{end}}</button>
         </div>
@@ -193,6 +196,30 @@
     <button type="button" data-ai-action="direct">More direct</button>
     <button type="button" data-ai-action="grammar">Fix grammar</button>
 </div>
+
+{{if .jevEnabled}}
+<dialog id="template-jev-modal" class="jev-review-modal">
+  <div class="jev-review-card">
+    <div class="jev-review-header">
+      <div>
+        <h3 class="jev-review-title">Jev template review</h3>
+        <p class="jev-review-sub" id="jev-review-sub">Evaluating cold-outreach readiness…</p>
+      </div>
+      <button type="button" class="btn-secondary btn-sm" id="jev-review-close">Close</button>
+    </div>
+    <div id="jev-review-loading" class="jev-review-loading">Running Jev…</div>
+    <div id="jev-review-error" class="alert-error" hidden></div>
+    <div id="jev-review-body" hidden>
+      <div class="jev-decision" id="jev-decision"></div>
+      <div class="jev-section">
+        <h4 class="jev-section-title">Checks</h4>
+        <div id="jev-checks" class="jev-checks"></div>
+      </div>
+      <div class="jev-section" id="jev-choices"></div>
+    </div>
+  </div>
+</dialog>
+{{end}}
 <script type="application/json" id="template-default-sample">{{.defaultSampleJSON}}</script>
 </div>
 {{template "page_shell_end" .}}

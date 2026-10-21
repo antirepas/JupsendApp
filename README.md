@@ -416,6 +416,9 @@ go test ./...
 | `TEST_DATABASE_URL` | Postgres URL for integration tests | same as local compose test DB |
 | `APIFY_TOKEN` | Apify API token for list/campaign email verification | — |
 | `APIFY_EMAIL_VERIFIER_ACTOR` | Apify Actor id for email verification | `account56~email-verifier` |
+| `JEV_API_KEY` | TypeSafe Jev API key for template review (“Check with Jev”) | — |
+| `JEV_MODEL` | Jev model id/alias | `jev-latest` |
+| `OPENAI_API_KEY` | OpenAI key for rewrite/tone/AI template filters | — |
 | `OUTBOUND_WORKER_INTERVAL` | Outbound worker seconds | `8` |
 | `IMAP_POLL_INTERVAL` | IMAP bounce poll seconds | `180` |
 | `OUTBOUND_BATCH_SIZE` | Jobs per worker batch | `10` |

@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"emailtracker.com/ai"
+	"emailtracker.com/config"
 	"emailtracker.com/model"
 	"emailtracker.com/outbound"
 	"emailtracker.com/util"
@@ -318,6 +319,7 @@ func NewTemplatePage(ctx *gin.Context) {
 		"senderEmail":          senderEmail,
 		"defaultSampleJSON":    defaultSampleJSON,
 		"aiEnabled":            ai.Enabled(),
+		"jevEnabled":           config.JEVEnabled(),
 		"contacts":             contacts,
 		"lists":                lists,
 		"folders":              folders,
@@ -398,6 +400,7 @@ func EditTemplatePage(ctx *gin.Context) {
 		"senderEmail":         senderEmail,
 		"defaultSampleJSON":   defaultSampleJSON,
 		"aiEnabled":           ai.Enabled(),
+		"jevEnabled":          config.JEVEnabled(),
 		"contacts":            contacts,
 		"lists":               lists,
 		"folders":             folders,

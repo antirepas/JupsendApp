@@ -10,6 +10,7 @@
     }
 
     const aiEnabled = form.dataset.aiEnabled === 'true';
+    const jevEnabled = form.dataset.jevEnabled === 'true';
     const subjectInput = document.getElementById('template-subject');
     const bodyHidden = document.getElementById('template-body');
     const chipsEl = document.getElementById('template-var-chips');
@@ -950,6 +951,182 @@
 
     onContentChange();
     if (aiEnabled) loadStarters();
+
+    (function initJevReview() {
+        if (!jevEnabled) return;
+        const btn = document.getElementById('template-jev-check');
+        const modal = document.getElementById('template-jev-modal');
+        if (!btn || !modal) return;
+        const closeBtn = document.getElementById('jev-review-close');
+        const loadingEl = document.getElementById('jev-review-loading');
+        const errorEl = document.getElementById('jev-review-error');
+        const bodyEl = document.getElementById('jev-review-body');
+        const subEl = document.getElementById('jev-review-sub');
+        const decisionEl = document.getElementById('jev-decision');
+        const checksEl = document.getElementById('jev-checks');
+        const choicesEl = document.getElementById('jev-choices');
+
+        function pct(n) {
+            if (typeof n !== 'number' || !isFinite(n)) return '—';
+            return Math.round(n * 100) + '%';
+        }
+        function barClass(id, yes) {
+            if (id === 'ai_slop') {
+                if (yes >= 0.65) return 'is-bad';
+                if (yes >= 0.4) return 'is-warn';
+                return '';
+            }
+            if (yes < 0.4) return 'is-bad';
+            if (yes < 0.65) return 'is-warn';
+            return '';
+        }
+        function prettyChoice(s) {
+            return String(s || '—').replace(/_/g, ' ');
+        }
+        function renderChoiceBlock(block) {
+            if (!block || !block.choice) return '';
+            const probs = block.probabilities || {};
+            const keys = Object.keys(probs).sort(function (a, b) {
+                return (probs[b] || 0) - (probs[a] || 0);
+            });
+            let rows = keys
+                .map(function (k) {
+                    const v = probs[k] || 0;
+                    return (
+                        '<div class="jev-prob-row"><span>' +
+                        prettyChoice(k) +
+                        '</span><div class="jev-bar"><span style="width:' +
+                        Math.max(2, Math.round(v * 100)) +
+                        '%"></span></div><span>' +
+                        pct(v) +
+                        '</span></div>'
+                    );
+                })
+                .join('');
+            return (
+                '<div class="jev-choice-block"><div class="jev-choice-head"><span class="jev-choice-name">' +
+                (block.label || block.id) +
+                '</span><span class="jev-choice-pick">' +
+                prettyChoice(block.choice) +
+                ' · ' +
+                pct(block.confidence) +
+                ' conf</span></div>' +
+                rows +
+                '</div>'
+            );
+        }
+        function renderReview(review) {
+            const d = review.decision || {};
+            decisionEl.className = 'jev-decision is-' + (d.choice || '');
+            const dProbs = d.probabilities || {};
+            const dKeys = Object.keys(dProbs).sort(function (a, b) {
+                return (dProbs[b] || 0) - (dProbs[a] || 0);
+            });
+            const dRows = dKeys
+                .map(function (k) {
+                    const v = dProbs[k] || 0;
+                    return (
+                        '<div class="jev-prob-row"><span>' +
+                        prettyChoice(k) +
+                        '</span><div class="jev-bar"><span style="width:' +
+                        Math.max(2, Math.round(v * 100)) +
+                        '%"></span></div><span>' +
+                        pct(v) +
+                        '</span></div>'
+                    );
+                })
+                .join('');
+            decisionEl.innerHTML =
+                '<div class="jev-decision-label">Decision</div>' +
+                '<div class="jev-decision-value">' +
+                prettyChoice(d.choice) +
+                '</div>' +
+                '<div class="jev-decision-meta">Confidence ' +
+                pct(d.confidence) +
+                (review.model ? ' · model ' + review.model : '') +
+                '</div>' +
+                dRows;
+
+            checksEl.innerHTML = (review.checks || [])
+                .map(function (c) {
+                    const yes = typeof c.yes === 'number' ? c.yes : 0;
+                    return (
+                        '<div class="jev-check"><span class="jev-check-label">' +
+                        (c.label || c.id) +
+                        '</span><span class="jev-check-pct">' +
+                        pct(yes) +
+                        '</span><div class="jev-bar ' +
+                        barClass(c.id, yes) +
+                        '"><span style="width:' +
+                        Math.max(2, Math.round(yes * 100)) +
+                        '%"></span></div></div>'
+                    );
+                })
+                .join('');
+
+            choicesEl.innerHTML =
+                '<h4 class="jev-section-title">Issues &amp; fixes</h4>' +
+                renderChoiceBlock(review.primary_issue) +
+                renderChoiceBlock(review.problem_area) +
+                renderChoiceBlock(review.recommended_fix);
+
+            subEl.textContent =
+                'Template-quality review (no prospect contact in state). Uses 1 AI credit.';
+            loadingEl.hidden = true;
+            errorEl.hidden = true;
+            bodyEl.hidden = false;
+        }
+
+        function openModal() {
+            loadingEl.hidden = false;
+            errorEl.hidden = true;
+            bodyEl.hidden = true;
+            subEl.textContent = 'Evaluating cold-outreach readiness…';
+            modal.showModal();
+        }
+        function showError(msg) {
+            loadingEl.hidden = true;
+            bodyEl.hidden = true;
+            errorEl.hidden = false;
+            errorEl.textContent = msg || 'Jev review failed';
+            subEl.textContent = 'Something went wrong';
+        }
+
+        btn.addEventListener('click', async function () {
+            syncBody();
+            openModal();
+            const nameEl = document.getElementById('template-name');
+            try {
+                const res = await fetch('/templates/ai/jev-review', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({
+                        subject: subjectInput ? subjectInput.value : '',
+                        body: bodyHidden ? bodyHidden.value : '',
+                        template_name: nameEl ? nameEl.value : '',
+                    }),
+                });
+                const data = await res.json().catch(function () {
+                    return {};
+                });
+                if (!res.ok || !data.ok) {
+                    throw new Error((data && data.error) || 'Jev review failed');
+                }
+                renderReview(data.review || {});
+            } catch (err) {
+                showError(err.message || 'Jev review failed');
+            }
+        });
+        if (closeBtn) {
+            closeBtn.addEventListener('click', function () {
+                modal.close();
+            });
+        }
+        modal.addEventListener('click', function (e) {
+            if (e.target === modal) modal.close();
+        });
+    })();
 
     const lockPreviewContact = form.dataset.lockPreviewContact || '';
     if (lockPreviewContact) {

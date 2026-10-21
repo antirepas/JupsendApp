@@ -209,6 +209,7 @@ func RegisterRoutes(server *gin.Engine) {
 		authd.POST("/templates/ai/tone-check", TemplateAIToneCheck)
 		authd.POST("/templates/ai/starters", TemplateAIStarters)
 		authd.POST("/templates/ai/soften-body", TemplateAISoftenBody)
+		authd.POST("/templates/ai/jev-review", TemplateJevReview)
 		authd.POST("/templates", CreateTemplate)
 		authd.POST("/templates/ops/move", TemplateOpsMove)
 		authd.POST("/templates/ops/copy", TemplateOpsCopy)

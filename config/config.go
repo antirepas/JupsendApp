@@ -55,6 +55,10 @@ var (
 	OpenAIAPIKey          string
 	OpenAIModel           string
 	OpenAIFallbackModel   string
+	// JEVAPIKey authenticates TypeSafe Jev (System One) evaluations.
+	JEVAPIKey string
+	// JEVModel is the TypeSafe model id/alias (default jev-latest).
+	JEVModel string
 	// ApifyToken authenticates Apify Actor runs (email verification).
 	ApifyToken string
 	// ApifyEmailVerifierActor is the Actor id for bulk email verification.
@@ -120,6 +124,8 @@ func reloadFromEnv() {
 	OpenAIAPIKey = strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
 	OpenAIModel = envOr("OPENAI_MODEL", "gpt-5-nano")
 	OpenAIFallbackModel = strings.TrimSpace(os.Getenv("OPENAI_FALLBACK_MODEL"))
+	JEVAPIKey = strings.TrimSpace(os.Getenv("JEV_API_KEY"))
+	JEVModel = envOr("JEV_MODEL", "jev-latest")
 	ApifyToken = strings.TrimSpace(os.Getenv("APIFY_TOKEN"))
 	ApifyEmailVerifierActor = strings.TrimSpace(envOr("APIFY_EMAIL_VERIFIER_ACTOR", "account56~email-verifier"))
 	ManualInboxKitFulfillment = envBoolDefaultTrue("MANUAL_INBOXKIT_FULFILLMENT")
@@ -159,6 +165,11 @@ func parseTrustedProxies(raw string) []string {
 
 func AIEnabled() bool {
 	return OpenAIAPIKey != ""
+}
+
+// JEVEnabled reports whether TypeSafe Jev reviews can run.
+func JEVEnabled() bool {
+	return JEVAPIKey != ""
 }
 
 func InboxKitIncludedMailboxCount() int {
