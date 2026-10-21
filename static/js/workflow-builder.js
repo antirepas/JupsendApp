@@ -62,12 +62,22 @@
   }
 
   function defaultConfig(type) {
-    if (type === 'action_send_email') return { open_tracking: false, click_tracking: false };
+    if (type === 'action_send_email') return { open_tracking: false, click_tracking: false, template_id: 0 };
     if (type === 'action_wait') return { duration_seconds: 90 }; // reply watchers: ~1–2 min
     if (type === 'trigger_reply_intent') return { intent: 'interested' };
     if (type === 'condition_engagement') return { predicate: 'has_replied', priority: 50, params: { email_send_scope: 'last_in_workflow' } };
     if (type === 'condition_temperature') return {};
     return {};
+  }
+
+  function closeNodeModal() {
+    const modal = document.getElementById('wf-node-modal');
+    if (modal && typeof modal.close === 'function') modal.close();
+  }
+
+  function openNodeModal() {
+    const modal = document.getElementById('wf-node-modal');
+    if (modal && typeof modal.showModal === 'function') modal.showModal();
   }
 
   function nodeClass(type) {
@@ -273,7 +283,6 @@
     nodes.splice(idx, 1);
     if (lastAddedKey === selectedKey) lastAddedKey = nodes.length ? nodes[nodes.length - 1].node_key : null;
     selectedKey = null;
-    document.getElementById('node-props').classList.add('hidden');
     render();
   }
 
@@ -670,7 +679,7 @@
     if (index < 0 || index >= edges.length) return;
     selectedEdgeIndex = index;
     selectedKey = null;
-    document.getElementById('node-props').classList.add('hidden');
+    closeNodeModal();
 
     const e = edges[index];
     edgeFrom.value = e.source_node_key;
@@ -822,7 +831,10 @@
       el.dataset.key = n.node_key;
       let subtitle = `<p class="text-xs text-slate-400 mt-0.5">${escapeHtml(n.node_type)}</p>`;
       if (n.node_type === 'action_send_email') {
-        subtitle = '';
+        const tid = (n.config && n.config.template_id) || 0;
+        subtitle = tid
+          ? `<p class="text-xs text-blue-700 mt-0.5 font-medium">${escapeHtml(templateName(tid))}</p>`
+          : `<p class="text-xs text-amber-700 mt-0.5">Pick a template</p>`;
       } else if (n.node_type === 'trigger_reply_intent') {
         const intent = (n.config && n.config.intent) || 'interested';
         subtitle = `<p class="text-xs text-violet-700 mt-0.5 font-medium">Watch: ${escapeHtml(String(intent).replace(/_/g, ' '))}</p>`;
@@ -994,9 +1006,18 @@
 
     renderNodes();
 
-    const panel = document.getElementById('node-props');
-    const fields = document.getElementById('node-props-fields');
-    panel.classList.remove('hidden');
+    const title = document.getElementById('wf-node-modal-title');
+    const fields = document.getElementById('wf-node-modal-fields');
+    if (!fields) return;
+
+    const typeTitle = {
+      trigger_reply_intent: 'Watch reply',
+      action_wait: 'Wait',
+      action_send_email: 'Send email',
+      action_end: 'End'
+    };
+    if (title) title.textContent = typeTitle[n.node_type] || n.label || 'Configure node';
+
     fields.innerHTML = `<label class="form-label">Label</label>
       <input class="form-input" id="prop-label" value="${escapeAttr(n.label)}">`;
 
@@ -1005,41 +1026,61 @@
         ? REPLY_INTENTS
         : ['interested', 'meeting_ask', 'pricing', 'referral', 'not_now', 'ooo', 'unsubscribe', 'wrong_person'];
       let opts = intents.map(i => `<option value="${escapeAttr(i)}" ${(n.config.intent || 'interested') === i ? 'selected' : ''}>${escapeHtml(String(i).replace(/_/g, ' '))}</option>`).join('');
-      fields.innerHTML += `<label class="form-label mt-2">Reply intent to watch</label><select class="form-input" id="prop-intent">${opts}</select>
-        <p class="text-xs text-slate-500 mt-1">When a reply is classified with this intent, this branch runs (wait → send).</p>`;
+      fields.innerHTML += `<label class="form-label mt-2">What to watch</label><select class="form-input" id="prop-intent">${opts}</select>
+        <p class="text-xs text-slate-500 mt-1">When a reply is classified with this intent, this branch runs.</p>`;
       document.getElementById('prop-intent').onchange = e => {
         n.config.intent = e.target.value;
         n.label = 'Watch: ' + String(e.target.value).replace(/_/g, ' ');
         document.getElementById('prop-label').value = n.label;
+        markWorkflowDirty();
         render();
       };
     }
     if (n.node_type === 'action_wait') {
       const secs = n.config.duration_seconds || 90;
-      const useMinutes = secs < 86400;
-      if (useMinutes) {
-        const mins = Math.max(1, Math.round(secs / 60));
-        fields.innerHTML += `<label class="form-label mt-2">Wait (minutes)</label><input type="number" min="1" class="form-input" id="prop-mins" value="${mins}">
-          <p class="text-xs text-slate-500 mt-1">Reply watchers usually wait 1–2 minutes before sending.</p>`;
-        document.getElementById('prop-mins').onchange = e => {
-          n.config.duration_seconds = Math.max(1, parseInt(e.target.value, 10) || 1) * 60;
-          render();
-        };
-      } else {
-        const days = secs / 86400;
-        fields.innerHTML += `<label class="form-label mt-2">Wait (days)</label><input type="number" min="1" class="form-input" id="prop-days" value="${days}">`;
-        document.getElementById('prop-days').onchange = e => {
-          n.config.duration_seconds = parseInt(e.target.value, 10) * 86400;
-          render();
-        };
-      }
+      const useDays = secs >= 86400;
+      const amount = useDays ? Math.max(1, Math.round(secs / 86400)) : Math.max(1, Math.round(secs / 60));
+      fields.innerHTML += `
+        <div class="grid grid-cols-2 gap-2 mt-2">
+          <div>
+            <label class="form-label">How long</label>
+            <input type="number" min="1" class="form-input" id="prop-wait-amount" value="${amount}">
+          </div>
+          <div>
+            <label class="form-label">Unit</label>
+            <select class="form-input" id="prop-wait-unit">
+              <option value="minutes" ${!useDays ? 'selected' : ''}>Minutes</option>
+              <option value="days" ${useDays ? 'selected' : ''}>Days</option>
+            </select>
+          </div>
+        </div>
+        <p class="text-xs text-slate-500 mt-1">Reply watchers usually wait 1–2 minutes before sending.</p>`;
+      const syncWait = () => {
+        const amt = Math.max(1, parseInt(document.getElementById('prop-wait-amount').value, 10) || 1);
+        const unit = document.getElementById('prop-wait-unit').value;
+        n.config.duration_seconds = unit === 'days' ? amt * 86400 : amt * 60;
+        markWorkflowDirty();
+        render();
+      };
+      document.getElementById('prop-wait-amount').onchange = syncWait;
+      document.getElementById('prop-wait-unit').onchange = syncWait;
     }
-	if (n.node_type === 'action_send_email') {
+    if (n.node_type === 'action_send_email') {
+      const tid = parseInt(n.config.template_id, 10) || 0;
+      let tplOpts = '<option value="0">Select template…</option>';
+      (TEMPLATES || []).forEach(t => {
+        tplOpts += `<option value="${t.id}" ${t.id === tid ? 'selected' : ''}>${escapeHtml(t.name)}</option>`;
+      });
+      if (!(TEMPLATES || []).length) {
+        tplOpts += '<option value="0" disabled>No templates in this folder</option>';
+      }
       const openOn = !!n.config.open_tracking;
       const clickOn = !!n.config.click_tracking;
       fields.innerHTML += `
-        <p class="text-sm text-slate-600 mt-3">Tracking is off by default for deliverability. Enable only when you need the signal.</p>
-        <label class="flex items-center gap-2 text-sm text-slate-700 mt-2">
+        <label class="form-label mt-2">Template to send</label>
+        <select class="form-input" id="prop-template">${tplOpts}</select>
+        <p class="text-xs text-slate-500 mt-1">Only templates from this campaign folder are listed.</p>
+        <label class="flex items-center gap-2 text-sm text-slate-700 mt-3">
           <input type="checkbox" id="prop-open-track" ${openOn ? 'checked' : ''}>
           Track opens (pixel)
         </label>
@@ -1047,116 +1088,37 @@
           <input type="checkbox" id="prop-click-track" ${clickOn ? 'checked' : ''}>
           Track link clicks
         </label>`;
+      document.getElementById('prop-template').onchange = e => {
+        n.config.template_id = parseInt(e.target.value, 10) || 0;
+        if (n.config.template_id) {
+          n.label = templateName(n.config.template_id);
+          const labelEl = document.getElementById('prop-label');
+          if (labelEl) labelEl.value = n.label;
+        }
+        markWorkflowDirty();
+        render();
+      };
       document.getElementById('prop-open-track').onchange = e => {
         n.config.open_tracking = !!e.target.checked;
+        markWorkflowDirty();
         render();
       };
       document.getElementById('prop-click-track').onchange = e => {
         n.config.click_tracking = !!e.target.checked;
+        markWorkflowDirty();
         render();
       };
     }
-    if (n.node_type === 'condition_engagement') {
-      const params = ensureConditionParams(n);
-      const sends = sendEmailNodes();
-      let emailOpts = '<option value="last_in_workflow">Most recent email sent in workflow</option>';
-      sends.forEach(s => {
-        emailOpts += `<option value="node:${escapeAttr(s.node_key)}">${escapeHtml(sendNodeDisplayLabel(s))}</option>`;
-      });
-      if (sends.length === 0) {
-        emailOpts += '<option value="" disabled>Add a Send Email node first</option>';
-      }
-      const emailVal = params.email_send_scope === 'node' && params.email_node_key
-        ? `node:${params.email_node_key}`
-        : 'last_in_workflow';
-      const minClicks = params.min || 1;
-      const waitDays = params.wait_days || 3;
-
-      fields.innerHTML += `
-        <label class="form-label mt-2">About which email?</label>
-        <select class="form-input" id="prop-email-ref">${emailOpts}</select>
-        <p class="text-xs text-slate-500 mt-1">Link the condition to a specific send step — not just the node before it. You can branch on the same email from multiple conditions.</p>
-        <label class="form-label mt-2">Check</label>
-        <select class="form-input" id="prop-predicate">
-          <option value="has_replied">Has replied</option>
-          <option value="has_not_replied">Has not replied (after wait)</option>
-          <option value="has_positive_reply">Has positive reply</option>
-          <option value="has_negative_reply">Has negative reply</option>
-          <option value="has_opened">Has opened</option>
-          <option value="has_not_opened">Has not opened (after wait)</option>
-          <option value="click_count_gte">Click count ≥</option>
-        </select>
-        <label class="form-label mt-2">Condition priority</label>
-        <input type="number" min="0" class="form-input" id="prop-cond-priority" value="${n.config.priority || 50}">
-        <p class="text-xs text-slate-500 mt-1">Higher numbers run later when multiple conditions evaluate for the same email.</p>
-        <div id="prop-wait-days-wrap" class="mt-2 hidden">
-          <label class="form-label">Wait before checking (days)</label>
-          <input type="number" min="1" class="form-input" id="prop-wait-days" value="${waitDays}">
-          <p class="text-xs text-slate-500 mt-1">The workflow pauses on this step until the wait elapses. If they open or reply sooner, the "no" branch runs immediately.</p>
-        </div>
-        <div id="prop-min-clicks-wrap" class="mt-2 hidden">
-          <label class="form-label">Minimum clicks</label>
-          <input type="number" min="1" class="form-input" id="prop-min-clicks" value="${minClicks}">
-        </div>`;
-
-      const emailSel = document.getElementById('prop-email-ref');
-      emailSel.value = emailVal;
-      emailSel.onchange = e => {
-        const v = e.target.value;
-        if (v === 'last_in_workflow') {
-          params.email_send_scope = 'last_in_workflow';
-          delete params.email_node_key;
-        } else if (v.startsWith('node:')) {
-          params.email_send_scope = 'node';
-          params.email_node_key = v.slice(5);
-        }
-        render();
-      };
-
-      const predSel = document.getElementById('prop-predicate');
-      predSel.value = n.config.predicate || 'has_replied';
-      const condPrioInput = document.getElementById('prop-cond-priority');
-      if (condPrioInput) {
-        condPrioInput.value = n.config.priority || 50;
-        condPrioInput.onchange = e => {
-          n.config.priority = Math.max(0, parseInt(e.target.value, 10) || 0);
-          render();
-        };
-      }
-      const minWrap = document.getElementById('prop-min-clicks-wrap');
-      const minInput = document.getElementById('prop-min-clicks');
-      const waitWrap = document.getElementById('prop-wait-days-wrap');
-      const waitInput = document.getElementById('prop-wait-days');
-      const syncPredicateFields = () => {
-        minWrap.classList.toggle('hidden', predSel.value !== 'click_count_gte');
-        const showWait = needsGracePeriod(predSel.value);
-        waitWrap.classList.toggle('hidden', !showWait);
-        if (showWait && !params.wait_days) params.wait_days = 3;
-      };
-      syncPredicateFields();
-      predSel.onchange = e => {
-        n.config.predicate = e.target.value;
-        if (needsGracePeriod(e.target.value) && !params.wait_days) {
-          params.wait_days = 3;
-        }
-        syncPredicateFields();
-        render();
-      };
-      minInput.onchange = e => {
-        params.min = Math.max(1, parseInt(e.target.value, 10) || 1);
-        render();
-      };
-      waitInput.onchange = e => {
-        params.wait_days = Math.max(1, parseInt(e.target.value, 10) || 1);
-        render();
-      };
+    if (n.node_type === 'action_end') {
+      fields.innerHTML += `<p class="text-sm text-slate-600 mt-2">Ends this reply-watcher branch.</p>`;
     }
-    if (n.node_type === 'condition_temperature') {
-      fields.innerHTML += `
-        <p class="text-sm text-slate-600 mt-3">Uses this campaign’s lead temperature rules (hot / warm / cold). Connect three outgoing edges: Hot, Warm, and Cold.</p>
-        <p class="text-xs text-slate-500 mt-2">Edit thresholds on the campaign page under Lead temperature. Counts only engagement from this campaign.</p>`;
-    }
-    document.getElementById('prop-label').onchange = e => { n.label = e.target.value; render(); };
+
+    document.getElementById('prop-label').onchange = e => {
+      n.label = e.target.value;
+      markWorkflowDirty();
+      render();
+    };
+    openNodeModal();
   }
 
   let paletteDidDrag = false;
@@ -1209,9 +1171,19 @@
     if (!dragState || !dragState.moved) {
       clearEdgeSelection();
       selectedKey = null;
-      document.getElementById('node-props').classList.add('hidden');
       renderNodes();
     }
+  });
+
+  document.getElementById('wf-node-modal-done')?.addEventListener('click', () => {
+    closeNodeModal();
+  });
+  document.getElementById('wf-node-modal-delete')?.addEventListener('click', () => {
+    deleteSelectedNode();
+    closeNodeModal();
+  });
+  document.getElementById('wf-node-modal')?.addEventListener('click', (ev) => {
+    if (ev.target === ev.currentTarget) closeNodeModal();
   });
 
   document.getElementById('btn-save-edge').addEventListener('click', () => {
@@ -1239,8 +1211,6 @@
       edgeTypeSel.value = 'default';
     }
   });
-
-  document.getElementById('btn-delete-node')?.addEventListener('click', deleteSelectedNode);
 
   async function loadGraph() {
     const res = await fetch('/api/v1/workflows/' + WORKFLOW_ID + '/versions/' + VERSION_ID);
@@ -1284,7 +1254,12 @@
     }
   }
 
+  // Save persists + validates + publishes. Broken graphs are rejected (not published).
   async function saveGraph() {
+    if (typeof WORKFLOW_ARCHIVED !== 'undefined' && WORKFLOW_ARCHIVED) {
+      showMsg('Archived workflows cannot be saved', false);
+      return false;
+    }
     const body = {
       nodes: nodes.map(n => ({
         node_key: n.node_key,
@@ -1307,42 +1282,23 @@
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
     });
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      showMsg(data.error || 'Save failed', false);
+      const detail = (data.errors && data.errors.length) ? data.errors.join('; ') : (data.error || 'Save failed');
+      showMsg(detail, false);
       return false;
     }
     if (data.version_id) {
       VERSION_ID = data.version_id;
     }
-    showMsg('Workflow saved', true);
+    showMsg('Saved', true);
     workflowDirty = false;
+    setTimeout(() => location.reload(), 500);
     return true;
   }
 
   document.getElementById('canvas')?.addEventListener('mousedown', markWorkflowDirty);
   document.getElementById('btn-save')?.addEventListener('click', saveGraph);
-
-  document.getElementById('btn-validate')?.addEventListener('click', async () => {
-    await saveGraph();
-    const res = await fetch('/api/v1/workflows/' + WORKFLOW_ID + '/versions/' + VERSION_ID + '/validate', { method: 'POST' });
-    const data = await res.json();
-    if (data.valid) showMsg('Workflow is valid', true);
-    else showMsg((data.errors || []).join('; '), false);
-  });
-
-  document.getElementById('btn-publish')?.addEventListener('click', async () => {
-    const saved = await saveGraph();
-    if (saved === false) return;
-    const res = await fetch('/api/v1/workflows/' + WORKFLOW_ID + '/versions/' + VERSION_ID + '/publish', { method: 'POST' });
-    const data = await res.json();
-    if (!res.ok) {
-      showMsg(data.error || 'Publish failed', false);
-      return;
-    }
-    showMsg('Workflow published — reloading editable draft…', true);
-    setTimeout(() => location.reload(), 600);
-  });
 
   loadGraph();
 })();

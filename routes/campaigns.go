@@ -69,29 +69,34 @@ func CreateCampaign(ctx *gin.Context) {
 			ctx.Redirect(http.StatusFound, "/campaigns/new?error=Select+template+A")
 			return
 		}
-	case "workflow", "workflow_ab":
-		if workflowVersionID == 0 {
-			ctx.Redirect(http.StatusFound, "/campaigns/new?error=Select+a+published+workflow")
+	case "sequence", "sequence_ab":
+		workflowVersionID = 0
+		if templateAID <= 0 {
+			var err error
+			templateAID, err = model.FirstTemplateIDForUser(userID)
+			if err != nil {
+				ctx.Redirect(http.StatusFound, "/campaigns/new?error=Create+at+least+one+template+first")
+				return
+			}
+		}
+		if executionMode == "sequence_ab" && templateBID <= 0 {
+			ctx.Redirect(http.StatusFound, "/campaigns/new?error=Select+template+A+and+B+for+sequence+A%2FB")
 			return
 		}
+	case "workflow", "workflow_ab":
+		// Hard cut: outreach workflows are sequences now.
 		if executionMode == "workflow_ab" {
-			if templateAID <= 0 || templateBID <= 0 {
-				ctx.Redirect(http.StatusFound, "/campaigns/new?error=Select+template+A+and+B+for+hybrid+A%2FB")
-				return
-			}
-			if experimentHypothesis == "" {
-				ctx.Redirect(http.StatusFound, "/campaigns/new?error=Enter+a+hypothesis+for+the+A%2FB+test")
-				return
-			}
+			executionMode = "sequence_ab"
 		} else {
-			// Placeholder for NOT NULL; follow-up templates are mapped on the manage page.
-			if templateAID <= 0 {
-				var err error
-				templateAID, err = model.FirstTemplateIDForUser(userID)
-				if err != nil {
-					ctx.Redirect(http.StatusFound, "/campaigns/new?error=Create+at+least+one+template+first")
-					return
-				}
+			executionMode = "sequence"
+		}
+		workflowVersionID = 0
+		if templateAID <= 0 {
+			var err error
+			templateAID, err = model.FirstTemplateIDForUser(userID)
+			if err != nil {
+				ctx.Redirect(http.StatusFound, "/campaigns/new?error=Create+at+least+one+template+first")
+				return
 			}
 		}
 	default:
@@ -398,14 +403,10 @@ func CampaignDetailPage(ctx *gin.Context) {
 	canEditMode := detail.DisplayStatus != "sent" && detail.DisplayStatus != "sending" && detail.DisplayStatus != "stopped"
 	campaignMode := "bulk"
 	switch {
-	case detail.ExecutionMode == "sequence_ab":
+	case detail.ExecutionMode == "sequence_ab", detail.ExecutionMode == "workflow_ab":
 		campaignMode = "sequence_ab"
-	case detail.ExecutionMode == "sequence":
+	case detail.ExecutionMode == "sequence", detail.ExecutionMode == "workflow":
 		campaignMode = "sequence"
-	case detail.ExecutionMode == "workflow_ab":
-		campaignMode = "workflow_ab"
-	case detail.ExecutionMode == "workflow":
-		campaignMode = "workflow"
 	case detail.TemplateBID > 0:
 		campaignMode = "bulk_ab"
 	}
@@ -424,6 +425,9 @@ func CampaignDetailPage(ctx *gin.Context) {
 		folderReplyWorkflows[i].Enabled = attachedWatcherSet[folderReplyWorkflows[i].WorkflowID]
 	}
 	stepMappings, _ := model.GetCampaignWorkflowTemplates(detail.ID)
+	for _, w := range folderReplyWorkflows {
+		model.EnrichWorkflowTemplateMappings(w.VersionID, stepMappings)
+	}
 	pageData := gin.H{
 		"title":                   detail.Name,
 		"active":                  "campaigns",

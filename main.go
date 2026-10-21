@@ -57,6 +57,7 @@ func main() {
 	model.MigrateLegacyStandardUsersToPro()
 	model.MigrateAllUsersToPlanLimits()
 	model.MigrateLegacyCampaignWorkflowStepTemplates()
+	model.MigrateLegacyWorkflowCampaignsToSequences()
 	defer db.Close()
 
 	engine := routes.InitWorkflowEngine()

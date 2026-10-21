@@ -30,14 +30,14 @@
                     <p class="text-sm text-gray-500 mt-1">Pick a template (optional A/B) and send once.</p>
                 </label>
                 <label class="campaign-type-card cursor-pointer border-2 border-gray-200 rounded-lg p-4 block" id="card-workflow">
-                    <input type="radio" name="execution_mode" value="workflow" class="sr-only mode-radio">
-                    <p class="font-semibold text-charcoal">Workflow</p>
-                    <p class="text-sm text-gray-500 mt-1">Attach a workflow — map follow-up templates on the manage page.</p>
+                    <input type="radio" name="execution_mode" value="sequence" class="sr-only mode-radio">
+                    <p class="font-semibold text-charcoal">Sequence</p>
+                    <p class="text-sm text-gray-500 mt-1">Email → wait → follow-ups configured on Manage.</p>
                 </label>
                 <label class="campaign-type-card cursor-pointer border-2 border-gray-200 rounded-lg p-4 block" id="card-workflow-ab">
-                    <input type="radio" name="execution_mode" value="workflow_ab" class="sr-only mode-radio">
-                    <p class="font-semibold text-charcoal">Workflow + A/B first email</p>
-                    <p class="text-sm text-gray-500 mt-1">A/B on the first send; map follow-ups after creation.</p>
+                    <input type="radio" name="execution_mode" value="sequence_ab" class="sr-only mode-radio">
+                    <p class="font-semibold text-charcoal">Sequence + A/B first email</p>
+                    <p class="text-sm text-gray-500 mt-1">A/B on the first send; follow-ups on Manage.</p>
                 </label>
             </div>
         </div>
@@ -254,44 +254,42 @@ function setCardActive(card, active) {
 }
 
 function setMode(mode) {
-    const isWorkflow = mode === 'workflow' || mode === 'workflow_ab';
-    const isHybrid = mode === 'workflow_ab';
+    const isSequence = mode === 'sequence' || mode === 'sequence_ab';
+    const isHybrid = mode === 'sequence_ab';
 
     setCardActive(bulkCard, mode === 'bulk');
-    setCardActive(wfCard, mode === 'workflow');
-    setCardActive(wfAbCard, mode === 'workflow_ab');
+    setCardActive(wfCard, mode === 'sequence');
+    setCardActive(wfAbCard, mode === 'sequence_ab');
 
-    bulkFields.classList.toggle('hidden', isWorkflow);
-    wfFields.classList.toggle('hidden', !isWorkflow);
+    bulkFields.classList.toggle('hidden', isSequence);
+    wfFields.classList.toggle('hidden', !isSequence);
     hybridFields?.classList.toggle('hidden', !isHybrid);
 
     const stopRules = document.getElementById('workflow-stop-rules');
     if (stopRules) {
-        stopRules.classList.toggle('hidden', !isWorkflow);
-        stopRules.querySelectorAll('input').forEach(el => { el.disabled = !isWorkflow; });
+        stopRules.classList.toggle('hidden', !isSequence);
+        stopRules.querySelectorAll('input').forEach(el => { el.disabled = !isSequence; });
     }
 
-    bulkTemplateA && (bulkTemplateA.disabled = isWorkflow);
-    bulkTemplateB && (bulkTemplateB.disabled = isWorkflow);
+    bulkTemplateA && (bulkTemplateA.disabled = isSequence);
+    bulkTemplateB && (bulkTemplateB.disabled = isSequence);
     wfTemplateA && (wfTemplateA.disabled = !isHybrid);
     wfTemplateB && (wfTemplateB.disabled = !isHybrid);
     document.querySelectorAll('.wf-experiment-field').forEach(el => { el.disabled = !isHybrid; });
-    // Bulk experiment fields stay in the DOM — disable when hidden so they don't
-    // override the workflow A/B hypothesis (PostForm takes the first value).
     const showBulkExp = mode === 'bulk' && !!(bulkTemplateB && bulkTemplateB.value);
     experimentFields?.classList.toggle('hidden', !showBulkExp);
     experimentFields?.querySelectorAll('select, textarea, input').forEach(el => { el.disabled = !showBulkExp; });
 
     document.querySelectorAll('.wf-radio').forEach(r => {
-        r.disabled = !isWorkflow;
-        r.required = isWorkflow;
-        if (!isWorkflow) r.checked = false;
+        r.disabled = !isSequence;
+        r.required = isSequence;
+        if (!isSequence) r.checked = false;
     });
 }
 
 bulkCard?.addEventListener('click', () => { document.querySelector('input[value="bulk"]').checked = true; setMode('bulk'); });
-wfCard?.addEventListener('click', () => { document.querySelector('input[value="workflow"]').checked = true; setMode('workflow'); });
-wfAbCard?.addEventListener('click', () => { document.querySelector('input[value="workflow_ab"]').checked = true; setMode('workflow_ab'); });
+wfCard?.addEventListener('click', () => { document.querySelector('input[value="sequence"]').checked = true; setMode('sequence'); });
+wfAbCard?.addEventListener('click', () => { document.querySelector('input[value="sequence_ab"]').checked = true; setMode('sequence_ab'); });
 
 function toggleExperiment() {
     const mode = document.querySelector('input[name=execution_mode]:checked')?.value || 'bulk';

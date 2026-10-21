@@ -194,7 +194,18 @@ func apiSaveWorkflowGraph(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	ctx.JSON(http.StatusOK, gin.H{"message": "saved", "version_id": saveVID})
+	if errs := model.ValidateWorkflowGraph(saveVID); len(errs) > 0 {
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"error":  errs[0],
+			"errors": errs,
+		})
+		return
+	}
+	if err := model.PublishWorkflowVersion(wid, saveVID); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	ctx.JSON(http.StatusOK, gin.H{"message": "saved", "version_id": saveVID, "published": true})
 }
 
 func apiPublishWorkflow(ctx *gin.Context) {

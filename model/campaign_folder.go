@@ -156,8 +156,18 @@ func SyncCampaignFromFolder(userID, campaignID int64) error {
 		mode = "bulk"
 	}
 	if IsLegacyWorkflowMode(mode) {
-		// Leave legacy mode for banner; clear binding so Start is blocked until reconfigured.
-	} else if IsSequenceMode(mode) {
+		if err := ConvertCampaignWorkflowToSequence(campaignID, userID, mode, c.WorkflowVersionID, templateA, templateB); err != nil {
+			return err
+		}
+		mode = "sequence"
+		if templateB > 0 {
+			mode = "sequence_ab"
+		}
+		if refreshed, err := GetCampaignForUser(campaignID, userID); err == nil {
+			c = refreshed
+		}
+	}
+	if IsSequenceMode(mode) {
 		if mode == "sequence_ab" && templateB <= 0 {
 			mode = "sequence"
 		}

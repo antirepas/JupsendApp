@@ -572,9 +572,20 @@ func ValidateWorkflowGraph(versionID int64) []string {
 	}
 
 	hasEnd := false
+	hasSend := false
 	for _, n := range g.Nodes {
 		if n.NodeType == "action_end" {
 			hasEnd = true
+		}
+		if n.NodeType == "action_send_email" {
+			hasSend = true
+			if isReplyWorkflow && TemplateIDFromSendConfig(n.ConfigJSON) <= 0 {
+				label := n.Label
+				if label == "" {
+					label = n.NodeKey
+				}
+				errs = append(errs, fmt.Sprintf("send step %q needs a template", label))
+			}
 		}
 		if n.NodeType == "condition_engagement" {
 			hasTrue, hasFalse := false, false
@@ -612,6 +623,9 @@ func ValidateWorkflowGraph(versionID int64) []string {
 	}
 	if !hasEnd {
 		errs = append(errs, "workflow must include at least one action_end node")
+	}
+	if isReplyWorkflow && !hasSend {
+		errs = append(errs, "reply watcher needs at least one Send Email step")
 	}
 
 	return errs
