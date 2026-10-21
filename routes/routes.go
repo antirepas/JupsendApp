@@ -317,6 +317,7 @@ func RegisterRoutes(server *gin.Engine) {
 		authd.POST("/campaigns/:id/temperature-rules", SaveCampaignTemperatureRules)
 		authd.POST("/campaigns/:id/mailboxes", SaveCampaignMailboxes)
 		authd.POST("/campaigns/:id/send", SendCampaign)
+		authd.POST("/campaigns/:id/jev-review", CampaignJevReview)
 		authd.POST("/campaigns/:id/test-workflow", TestCampaignWorkflowWeb)
 		authd.POST("/campaigns/:id/stop", StopCampaign)
 

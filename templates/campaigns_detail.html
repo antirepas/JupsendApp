@@ -26,6 +26,9 @@
     </p>
   </div>
   <div class="app-page-actions">
+    {{if .jevEnabled}}
+    <button type="button" class="btn-secondary" id="campaign-jev-check">Check with Jev</button>
+    {{end}}
     <a href="/campaigns/{{.campaign.ID}}/sop" class="btn-secondary" title="Download a full SOP of this campaign’s strategy, workflow, and templates">Export SOP</a>
     <a href="/campaigns/{{.campaign.ID}}/analytics" class="btn-secondary">{{if .isWorkflowAB}}Analytics{{else if .isWorkflow}}Workflow analytics{{else}}Campaign analytics{{end}}</a>
     {{if and .isWorkflow .workflowTestReady}}
@@ -843,6 +846,29 @@
 </div>
 </div>
 </div>
+{{if .jevEnabled}}
+<dialog id="campaign-jev-modal" class="jev-review-modal">
+  <div class="jev-review-card">
+    <div class="jev-review-header">
+      <div>
+        <h3 class="jev-review-title">Jev campaign review</h3>
+        <p class="jev-review-sub" id="campaign-jev-sub">Analyzing campaign sequence, A/B, follow-ups, and audience…</p>
+      </div>
+      <button type="button" class="btn-secondary btn-sm" id="campaign-jev-close">Close</button>
+    </div>
+    <div id="campaign-jev-loading" class="jev-review-loading">Running Jev…</div>
+    <div id="campaign-jev-error" class="alert-error" hidden></div>
+    <div id="campaign-jev-body" hidden>
+      <div class="jev-decision" id="campaign-jev-decision"></div>
+      <div class="jev-section">
+        <h4 class="jev-section-title">Checks</h4>
+        <div id="campaign-jev-checks" class="jev-checks"></div>
+      </div>
+      <div class="jev-section" id="campaign-jev-choices"></div>
+    </div>
+  </div>
+</dialog>
+{{end}}
 <script src="{{assetURL "/static/js/campaign-workspace-nav.js"}}"></script>
 {{template "page_shell_end" .}}
 <script>
@@ -873,6 +899,169 @@ document.getElementById('member-select-all')?.addEventListener('change', (e) => 
 document.getElementById('wf-select-all')?.addEventListener('change', (e) => {
     document.querySelectorAll('.wf-member-cb').forEach(cb => { cb.checked = e.target.checked; });
 });
+
+(function initCampaignJevReview() {
+    const btn = document.getElementById('campaign-jev-check');
+    const modal = document.getElementById('campaign-jev-modal');
+    if (!btn || !modal) return;
+    const campaignId = {{.campaign.ID}};
+    const closeBtn = document.getElementById('campaign-jev-close');
+    const loadingEl = document.getElementById('campaign-jev-loading');
+    const errorEl = document.getElementById('campaign-jev-error');
+    const bodyEl = document.getElementById('campaign-jev-body');
+    const subEl = document.getElementById('campaign-jev-sub');
+    const decisionEl = document.getElementById('campaign-jev-decision');
+    const checksEl = document.getElementById('campaign-jev-checks');
+    const choicesEl = document.getElementById('campaign-jev-choices');
+
+    function pct(n) {
+        if (typeof n !== 'number' || !isFinite(n)) return '—';
+        return Math.round(n * 100) + '%';
+    }
+    function barClass(id, yes) {
+        if (yes < 0.4) return 'is-bad';
+        if (yes < 0.65) return 'is-warn';
+        return '';
+    }
+    function prettyChoice(s) {
+        return String(s || '—').replace(/_/g, ' ');
+    }
+    function renderChoiceBlock(block) {
+        if (!block || !block.choice) return '';
+        const probs = block.probabilities || {};
+        const keys = Object.keys(probs).sort(function (a, b) {
+            return (probs[b] || 0) - (probs[a] || 0);
+        });
+        const rows = keys
+            .map(function (k) {
+                const v = probs[k] || 0;
+                return (
+                    '<div class="jev-prob-row"><span>' +
+                    prettyChoice(k) +
+                    '</span><div class="jev-bar"><span style="width:' +
+                    Math.max(2, Math.round(v * 100)) +
+                    '%"></span></div><span>' +
+                    pct(v) +
+                    '</span></div>'
+                );
+            })
+            .join('');
+        return (
+            '<div class="jev-choice-block"><div class="jev-choice-head"><span class="jev-choice-name">' +
+            (block.label || block.id) +
+            '</span><span class="jev-choice-pick">' +
+            prettyChoice(block.choice) +
+            ' · ' +
+            pct(block.confidence) +
+            ' conf</span></div>' +
+            rows +
+            '</div>'
+        );
+    }
+    function renderReview(review) {
+        const d = review.decision || {};
+        decisionEl.className = 'jev-decision is-' + (d.choice || '');
+        const dProbs = d.probabilities || {};
+        const dKeys = Object.keys(dProbs).sort(function (a, b) {
+            return (dProbs[b] || 0) - (dProbs[a] || 0);
+        });
+        const dRows = dKeys
+            .map(function (k) {
+                const v = dProbs[k] || 0;
+                return (
+                    '<div class="jev-prob-row"><span>' +
+                    prettyChoice(k) +
+                    '</span><div class="jev-bar"><span style="width:' +
+                    Math.max(2, Math.round(v * 100)) +
+                    '%"></span></div><span>' +
+                    pct(v) +
+                    '</span></div>'
+                );
+            })
+            .join('');
+        decisionEl.innerHTML =
+            '<div class="jev-decision-label">Decision</div>' +
+            '<div class="jev-decision-value">' +
+            prettyChoice(d.choice) +
+            '</div>' +
+            '<div class="jev-decision-meta">Confidence ' +
+            pct(d.confidence) +
+            (review.model ? ' · model ' + review.model : '') +
+            '</div>' +
+            dRows;
+
+        checksEl.innerHTML = (review.checks || [])
+            .map(function (c) {
+                const yes = typeof c.yes === 'number' ? c.yes : 0;
+                return (
+                    '<div class="jev-check"><span class="jev-check-label">' +
+                    (c.label || c.id) +
+                    '</span><span class="jev-check-pct">' +
+                    pct(yes) +
+                    '</span><div class="jev-bar ' +
+                    barClass(c.id, yes) +
+                    '"><span style="width:' +
+                    Math.max(2, Math.round(yes * 100)) +
+                    '%"></span></div></div>'
+                );
+            })
+            .join('');
+
+        choicesEl.innerHTML =
+            '<h4 class="jev-section-title">Issues &amp; fixes</h4>' +
+            renderChoiceBlock(review.primary_issue) +
+            renderChoiceBlock(review.problem_area) +
+            renderChoiceBlock(review.recommended_fix);
+
+        subEl.textContent =
+            'Whole-campaign review: sequence, A/B, follow-ups, audience fit. Uses 2 AI credits.';
+        loadingEl.hidden = true;
+        errorEl.hidden = true;
+        bodyEl.hidden = false;
+    }
+    function openModal() {
+        loadingEl.hidden = false;
+        errorEl.hidden = true;
+        bodyEl.hidden = true;
+        subEl.textContent = 'Analyzing campaign sequence, A/B, follow-ups, and audience…';
+        modal.showModal();
+    }
+    function showError(msg) {
+        loadingEl.hidden = true;
+        bodyEl.hidden = true;
+        errorEl.hidden = false;
+        errorEl.textContent = msg || 'Jev review failed';
+        subEl.textContent = 'Something went wrong';
+    }
+
+    btn.addEventListener('click', async function () {
+        openModal();
+        try {
+            const res = await fetch('/campaigns/' + campaignId + '/jev-review', {
+                method: 'POST',
+                headers: { Accept: 'application/json' },
+                credentials: 'same-origin',
+            });
+            const data = await res.json().catch(function () {
+                return {};
+            });
+            if (!res.ok || !data.ok) {
+                throw new Error((data && data.error) || 'Jev review failed');
+            }
+            renderReview(data.review || {});
+        } catch (err) {
+            showError(err.message || 'Jev review failed');
+        }
+    });
+    if (closeBtn) {
+        closeBtn.addEventListener('click', function () {
+            modal.close();
+        });
+    }
+    modal.addEventListener('click', function (e) {
+        if (e.target === modal) modal.close();
+    });
+})();
 </script>
 </body>
 </html>
