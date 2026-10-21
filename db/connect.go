@@ -24,6 +24,11 @@ func pgxConnectURL(raw string) string {
 	if q.Get("default_query_exec_mode") == "" {
 		q.Set("default_query_exec_mode", "simple_protocol")
 	}
+	// Supabase dumps can leave role/database search_path empty → SQLSTATE 3F000
+	// ("no schema has been selected to create in") on CREATE TABLE.
+	if q.Get("search_path") == "" {
+		q.Set("search_path", "public")
+	}
 	u.RawQuery = q.Encode()
 
 	out := u.String()

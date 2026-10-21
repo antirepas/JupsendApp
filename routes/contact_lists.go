@@ -335,6 +335,20 @@ func DeleteListMemberContact(c *gin.Context) {
 	c.Redirect(http.StatusFound, "/contacts/lists/"+strconv.FormatInt(listID, 10)+"?success=Lead+deleted")
 }
 
+func verifyContactListReturnBase(c *gin.Context, listID int64) string {
+	classic := "/contacts/lists/" + strconv.FormatInt(listID, 10)
+	sheet := "/library/sheets/" + strconv.FormatInt(listID, 10)
+	ret := strings.TrimSpace(c.PostForm("return_to"))
+	if ret == sheet || strings.HasPrefix(ret, sheet+"?") {
+		return sheet
+	}
+	ref := c.GetHeader("Referer")
+	if strings.Contains(ref, sheet) {
+		return sheet
+	}
+	return classic
+}
+
 func VerifyContactList(c *gin.Context) {
 	userID := mustUserID(c)
 	listID, err := strconv.ParseInt(c.Param("id"), 10, 64)
@@ -342,7 +356,7 @@ func VerifyContactList(c *gin.Context) {
 		c.Redirect(http.StatusFound, "/contacts?tab=lists&error=Invalid+list")
 		return
 	}
-	base := "/contacts/lists/" + strconv.FormatInt(listID, 10)
+	base := verifyContactListReturnBase(c, listID)
 	if !apify.Configured() {
 		c.Redirect(http.StatusFound, base+"?error="+url.QueryEscape("Email verification is not configured (APIFY_TOKEN)"))
 		return

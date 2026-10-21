@@ -118,6 +118,53 @@ func TestVerifyContactsForUserStubbed(t *testing.T) {
 	}
 }
 
+func TestVerifyContactsForUserEmptyProviderDoesNotStickRisky(t *testing.T) {
+	db.OpenTestDB(t)
+	email := fmt.Sprintf("verify-empty-%d@example.com", time.Now().UnixNano())
+	userID, err := CreateUser(email, "hash", "http://localhost")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := Contact{Email: fmt.Sprintf("need-%d@example.com", time.Now().UnixNano())}
+	cid, err := c.SaveContact(userID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = VerifyContactsForUser(userID, []int64{cid}, true, func(emails []string) ([]EmailVerificationResult, error) {
+		return nil, nil
+	})
+	if err == nil {
+		t.Fatal("expected provider empty error")
+	}
+	st, reason, _ := GetContactEmailStatus(cid)
+	if st != "unknown" && st != "" {
+		t.Fatalf("status should stay unknown, got %q reason=%q", st, reason)
+	}
+
+	// Simulate legacy stuck risky from missing_from_provider — should be retriable.
+	if err := SetContactEmailStatus(cid, "risky", "result=unknown; subresult=missing_from_provider"); err != nil {
+		t.Fatal(err)
+	}
+	sum, err := VerifyContactsForUser(userID, []int64{cid}, true, func(emails []string) ([]EmailVerificationResult, error) {
+		out := make([]EmailVerificationResult, 0, len(emails))
+		for _, e := range emails {
+			out = append(out, EmailVerificationResult{Email: e, Result: "ok", Subresult: "deliverable"})
+		}
+		return out, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sum.Submitted != 1 || sum.Valid != 1 {
+		t.Fatalf("summary=%+v", sum)
+	}
+	st, _, _ = GetContactEmailStatus(cid)
+	if st != "valid" {
+		t.Fatalf("status=%q", st)
+	}
+}
+
 func TestVerifyContactsForUserNoCredits(t *testing.T) {
 	db.OpenTestDB(t)
 	email := fmt.Sprintf("verify-nocred-%d@example.com", time.Now().UnixNano())

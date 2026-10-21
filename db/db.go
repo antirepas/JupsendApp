@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"emailtracker.com/config"
@@ -39,7 +40,51 @@ func Prepare() {
 	}
 
 	fmt.Println("Connected to PostgreSQL")
+	ensurePublicSearchPath()
 	CreateTables()
+}
+
+// ensurePublicSearchPath repairs empty search_path left by Supabase pg_restore
+// and makes CREATE TABLE IF NOT EXISTS work on a plain Postgres host.
+func ensurePublicSearchPath() {
+	if DB == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	_, _ = DB.ExecContext(ctx, `CREATE SCHEMA IF NOT EXISTS public`)
+	_, _ = DB.ExecContext(ctx, `GRANT USAGE, CREATE ON SCHEMA public TO CURRENT_USER`)
+	_, _ = DB.ExecContext(ctx, `SELECT set_config('search_path', 'public', false)`)
+	// Persist for new pool connections / app restarts (ignore errors if not allowed).
+	// RESET first: Supabase dumps often leave an explicit empty search_path on the role.
+	var role, dbname string
+	_ = DB.QueryRowContext(ctx, `SELECT CURRENT_USER, current_database()`).Scan(&role, &dbname)
+	if role != "" {
+		_, _ = DB.ExecContext(ctx, fmt.Sprintf(`ALTER ROLE %s RESET search_path`, pqQuoteIdent(role)))
+	}
+	if dbname != "" {
+		_, _ = DB.ExecContext(ctx, fmt.Sprintf(`ALTER DATABASE %s RESET search_path`, pqQuoteIdent(dbname)))
+		_, _ = DB.ExecContext(ctx, fmt.Sprintf(`ALTER DATABASE %s SET search_path TO public`, pqQuoteIdent(dbname)))
+	}
+	if role != "" && dbname != "" {
+		_, _ = DB.ExecContext(ctx, fmt.Sprintf(
+			`ALTER ROLE %s IN DATABASE %s RESET search_path`,
+			pqQuoteIdent(role), pqQuoteIdent(dbname),
+		))
+		_, _ = DB.ExecContext(ctx, fmt.Sprintf(
+			`ALTER ROLE %s IN DATABASE %s SET search_path TO public`,
+			pqQuoteIdent(role), pqQuoteIdent(dbname),
+		))
+		_, _ = DB.ExecContext(ctx, fmt.Sprintf(
+			`ALTER ROLE %s SET search_path TO public`,
+			pqQuoteIdent(role),
+		))
+	}
+}
+
+func pqQuoteIdent(ident string) string {
+	return `"` + strings.ReplaceAll(ident, `"`, `""`) + `"`
 }
 
 func Close() error {
@@ -97,6 +142,10 @@ func CreateTables() {
 			log.Printf("schema unlock: %v", err)
 		}
 	}()
+
+	if _, err := conn.ExecContext(ctx, `SET search_path TO public`); err != nil {
+		log.Printf("schema search_path: %v", err)
+	}
 
 	runSchema()
 }

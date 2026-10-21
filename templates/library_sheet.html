@@ -22,6 +22,7 @@
             <a href="/contacts/lists/{{.list.ID}}" class="btn-secondary btn-sm">Classic view</a>
             <form method="POST" action="/contacts/lists/{{.list.ID}}/verify" class="inline" onsubmit="return confirm('Verify emails? Uses 1 AI credit each.');">
                 <input type="hidden" name="only_unverified" value="1">
+                <input type="hidden" name="return_to" value="/library/sheets/{{.list.ID}}">
                 <button type="submit" class="btn-secondary btn-sm">Verify emails</button>
             </form>
         </div>

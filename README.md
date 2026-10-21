@@ -53,23 +53,44 @@ go run .
 
 6. Open [http://localhost:8080/signup](http://localhost:8080/signup) to create an account, then subscribe under **Billing** and connect Gmail in **Settings**.
 
-### Production (VPS + Supabase)
+### Production (VPS app + VPS Postgres)
 
-Keep the app on your VPS; use Supabase for managed PostgreSQL with Table Editor, SQL metrics, and backups.
+Run the app and Postgres on the same VPS. The deploy script uses `--network host`, so the DB URL should be `127.0.0.1:5432`. Local/dev can still use Supabase or Docker Compose Postgres — that does not affect production egress.
 
-**Outbound SMTP:** the app sends via **SMTP XOAUTH2** to `smtp.gmail.com` (ports **465/587**). Your VPS must allow outbound SMTP (e.g. Hostinger KVM). Many cloud hosts (including some DigitalOcean droplets) block these ports — if Settings → **Test SMTP** times out, fix the host before sending.
+**Outbound SMTP:** the app sends via **SMTP XOAUTH2** to `smtp.gmail.com` (ports **465/587**). Your VPS must allow outbound SMTP (e.g. Hostinger KVM). Many cloud hosts block these ports — if Settings → **Test SMTP** times out, fix the host before sending.
 
-1. Create a [Supabase](https://supabase.com) project.
-2. In **Project Settings → Database**, copy the **Connection pooling** URI (port `6543`, host `*.pooler.supabase.com`).
-3. Add to `/opt/emailtracker/.env` on your VPS:
+#### Create Postgres on the VPS
+
+```bash
+# on the VPS
+POSTGRES_PASSWORD='choose-a-strong-password' bash scripts/setup-vps-postgres.sh
+```
+
+Then set `/opt/emailtracker/.env`:
 
 ```env
-DATABASE_URL=postgres://postgres.[project-ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres?sslmode=require
+DATABASE_URL=postgres://emailtracker:choose-a-strong-password@127.0.0.1:5432/emailtracker?sslmode=disable
 SESSION_SECRET=your-production-secret
 BASE_URL=https://your-public-url
 ```
 
-4. Deploy/restart the app container. Schema tables are created automatically on first connect.
+#### Migrate data from Supabase → VPS
+
+Use the **direct** Supabase DB URL (`db.<ref>.supabase.co:5432`), not the pooler (`:6543`).
+
+```bash
+# on the VPS (install postgresql-client if needed)
+docker stop emailtracker   # brief downtime so nothing writes mid-dump
+
+export SUPABASE_URL='postgres://postgres.[ref]:[pass]@db.[ref].supabase.co:5432/postgres?sslmode=require'
+export VPS_URL='postgres://emailtracker:[pass]@127.0.0.1:5432/emailtracker?sslmode=disable'
+bash scripts/migrate-supabase-to-vps.sh
+
+# point .env DATABASE_URL at VPS_URL, then start the app again (or redeploy)
+docker start emailtracker
+```
+
+Keep the dump file under `/opt/emailtracker/backups/` until you confirm sends, replies, and logins look right.
 
 #### Post-deploy Gmail / SMTP check
 
@@ -79,16 +100,6 @@ BASE_URL=https://your-public-url
 4. App logs should show delivery `via smtp-xoauth2` (not `gmail-api`).
 
 If the SMTP test reports ports blocked, open outbound 465/587 on the VPS or move the app to a host that allows SMTP.
-
-**Supabase SQL examples** (SQL Editor):
-
-```sql
-SELECT COUNT(*) FROM users;
-SELECT status, COUNT(*) FROM send_jobs GROUP BY status;
-SELECT COUNT(*) FROM email_sends WHERE sent_at > NOW() - INTERVAL '7 days';
-```
-
-Supabase Auth is **not** used by this app — only PostgreSQL hosting.
 
 ## Authentication
 

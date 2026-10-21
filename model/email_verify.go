@@ -27,17 +27,24 @@ type EmailVerifyFunc func(emails []string) ([]EmailVerificationResult, error)
 
 // VerifySummary is returned after a verify run.
 type VerifySummary struct {
-	Submitted        int
-	Valid            int
-	Invalid          int
-	Risky            int
-	SkippedNoCredits int
-	Errors           int
-	CreditsRemaining int
-	CreditsCap       int
+	Submitted         int
+	Valid             int
+	Invalid           int
+	Risky             int
+	SkippedNoCredits  int
+	SkippedVerified   int
+	Errors            int
+	CreditsRemaining  int
+	CreditsCap        int
 }
 
 func (s VerifySummary) FlashMessage() string {
+	if s.Submitted == 0 {
+		if s.SkippedVerified > 0 {
+			return fmt.Sprintf("Nothing new to verify — %d already verified (valid/invalid/risky)", s.SkippedVerified)
+		}
+		return "No contacts to verify"
+	}
 	return fmt.Sprintf(
 		"Verified %d · %d valid · %d invalid · %d risky · %d skipped (credits)%s",
 		s.Submitted, s.Valid, s.Invalid, s.Risky, s.SkippedNoCredits,
@@ -48,6 +55,25 @@ func (s VerifySummary) FlashMessage() string {
 			return ""
 		}(),
 	)
+}
+
+// emailStatusCountsAsVerified reports whether onlyUnverified should skip this contact.
+// Contacts stuck as risky from a failed/empty provider response are treated as unverified
+// so Verify can be retried.
+func emailStatusCountsAsVerified(status, reason string) bool {
+	status = strings.ToLower(strings.TrimSpace(status))
+	switch status {
+	case "valid", "invalid":
+		return true
+	case "risky":
+		reason = strings.ToLower(reason)
+		if strings.Contains(reason, "missing_from_provider") || strings.Contains(reason, "subresult=missing_from_provider") {
+			return false
+		}
+		return true
+	default:
+		return false
+	}
 }
 
 // MapEmailVerificationResult maps Apify result → email_status + reason.
@@ -114,9 +140,9 @@ func VerifyContactsForUser(userID int64, contactIDs []int64, onlyUnverified bool
 		if id <= 0 {
 			continue
 		}
-		var email, status string
+		var email, status, reason string
 		var owner int64
-		err := dbQueryContactEmailStatus(id, &owner, &email, &status)
+		err := dbQueryContactEmailStatus(id, &owner, &email, &status, &reason)
 		if err != nil || owner != userID {
 			continue
 		}
@@ -125,7 +151,8 @@ func VerifyContactsForUser(userID int64, contactIDs []int64, onlyUnverified bool
 			continue
 		}
 		status = strings.ToLower(strings.TrimSpace(status))
-		if onlyUnverified && (status == "valid" || status == "invalid" || status == "risky") {
+		if onlyUnverified && emailStatusCountsAsVerified(status, reason) {
+			sum.SkippedVerified++
 			continue
 		}
 		work = append(work, row{id: id, email: email})
@@ -168,14 +195,6 @@ func VerifyContactsForUser(userID int64, contactIDs []int64, onlyUnverified bool
 		if err != nil {
 			return sum, fmt.Errorf("verification provider: %w", err)
 		}
-		// Charge for emails submitted in this chunk (1 credit each), even if provider omitted a row.
-		if _, rem, ok := ConsumeAICredits(userID, len(chunk)); !ok {
-			sum.CreditsRemaining = rem
-			return sum, fmt.Errorf("could not consume AI credits for verification")
-		} else {
-			sum.CreditsRemaining = rem
-		}
-		sum.Submitted += len(chunk)
 
 		got := map[string]EmailVerificationResult{}
 		for _, r := range results {
@@ -184,10 +203,31 @@ func VerifyContactsForUser(userID int64, contactIDs []int64, onlyUnverified bool
 				got[key] = r
 			}
 		}
+		matched := 0
+		for _, email := range chunk {
+			if _, ok := got[email]; ok {
+				matched++
+			}
+		}
+		if matched == 0 {
+			return sum, fmt.Errorf("verification provider returned no results — check APIFY_TOKEN / actor and try again")
+		}
+
+		// Charge 1 credit per email we asked the provider about.
+		if _, rem, ok := ConsumeAICredits(userID, len(chunk)); !ok {
+			sum.CreditsRemaining = rem
+			return sum, fmt.Errorf("could not consume AI credits for verification")
+		} else {
+			sum.CreditsRemaining = rem
+		}
+		sum.Submitted += len(chunk)
+
 		for _, email := range chunk {
 			r, ok := got[email]
 			if !ok {
-				r = EmailVerificationResult{Email: email, Result: "unknown", Subresult: "missing_from_provider"}
+				// Leave status unknown so the user can retry; do not stick as "risky".
+				sum.Errors++
+				continue
 			}
 			status, reason := MapEmailVerificationResult(r)
 			switch status {
@@ -208,11 +248,11 @@ func VerifyContactsForUser(userID int64, contactIDs []int64, onlyUnverified bool
 	return sum, nil
 }
 
-func dbQueryContactEmailStatus(contactID int64, userID *int64, email, status *string) error {
+func dbQueryContactEmailStatus(contactID int64, userID *int64, email, status, reason *string) error {
 	return db.QueryRow(`
-		SELECT user_id, COALESCE(email, ''), COALESCE(email_status, 'unknown')
+		SELECT user_id, COALESCE(email, ''), COALESCE(email_status, 'unknown'), COALESCE(email_status_reason, '')
 		FROM contact WHERE id = ?
-	`, contactID).Scan(userID, email, status)
+	`, contactID).Scan(userID, email, status, reason)
 }
 
 // ListContactIDsInList returns contact IDs for a list owned by userID.

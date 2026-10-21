@@ -189,8 +189,12 @@ func (c *Client) fetchDataset(datasetID string) ([]model.EmailVerificationResult
 	}
 	out := make([]model.EmailVerificationResult, 0, len(items))
 	for _, it := range items {
+		email := strings.TrimSpace(it.Email)
+		if email == "" {
+			continue
+		}
 		out = append(out, model.EmailVerificationResult{
-			Email:      it.Email,
+			Email:      email,
 			Result:     it.Result,
 			Subresult:  it.Subresult,
 			Quality:    it.Quality,
@@ -199,6 +203,9 @@ func (c *Client) fetchDataset(datasetID string) ([]model.EmailVerificationResult
 			DidYouMean: it.DidYouMean,
 			Error:      it.Error,
 		})
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("apify dataset empty (actor returned no verification rows)")
 	}
 	return out, nil
 }
