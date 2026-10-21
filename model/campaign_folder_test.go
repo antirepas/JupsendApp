@@ -123,18 +123,21 @@ func TestSyncCampaignFromFolderOrderedDefaults(t *testing.T) {
 	if len(members) != 1 || members[0] != cid {
 		t.Fatalf("members=%v", members)
 	}
-	pub, _ := LatestPublishedVersionID(wid)
-	if got.WorkflowVersionID != pub || got.ExecutionMode != "workflow" {
-		t.Fatalf("mode=%s wf=%d want workflow / %d", got.ExecutionMode, got.WorkflowVersionID, pub)
+	// Hard cut: published workflows in the folder no longer flip the campaign to workflow mode.
+	if pub, _ := LatestPublishedVersionID(wid); pub <= 0 {
+		t.Fatal("expected folder workflow to stay publishable")
 	}
-	if err := SetCampaignMode(userID, camp.ID, "workflow_ab"); err != nil {
+	if got.WorkflowVersionID != 0 || got.ExecutionMode != "bulk" {
+		t.Fatalf("mode=%s wf=%d want bulk / 0 (sequences are Manage-owned)", got.ExecutionMode, got.WorkflowVersionID)
+	}
+	if err := SetCampaignMode(userID, camp.ID, "sequence_ab"); err != nil {
 		t.Fatal(err)
 	}
 	got, err = GetCampaignForUser(camp.ID, userID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.TemplateAID != idA || got.TemplateBID != idB || got.ExecutionMode != "workflow_ab" {
+	if got.TemplateAID != idA || got.TemplateBID != idB || got.ExecutionMode != "sequence_ab" {
 		t.Fatalf("after AB enable A=%d B=%d mode=%s", got.TemplateAID, got.TemplateBID, got.ExecutionMode)
 	}
 
