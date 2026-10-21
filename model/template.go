@@ -180,7 +180,41 @@ func ListTemplatesFiltered(userID int64, folderFilter string) ([]TemplateListIte
 
 // ListTemplatePickerItems returns templates for dropdowns without loading variables (fast).
 func ListTemplatePickerItems(userID int64) ([]TemplateListItem, error) {
-	rows, err := db.Query(`SELECT id, name, subject FROM template WHERE user_id = ? ORDER BY id DESC`, userID)
+	return listTemplatePickerItems(userID, 0, false)
+}
+
+// ListTemplatePickerItemsInFolder returns only templates in a library folder (for campaign sequence/watchers).
+func ListTemplatePickerItemsInFolder(userID, folderID int64) ([]TemplateListItem, error) {
+	if folderID <= 0 {
+		return nil, nil
+	}
+	return listTemplatePickerItems(userID, folderID, true)
+}
+
+// TemplateInFolder reports whether templateID belongs to the user's library folder.
+func TemplateInFolder(userID, templateID, folderID int64) bool {
+	if userID <= 0 || templateID <= 0 || folderID <= 0 {
+		return false
+	}
+	var id int64
+	err := db.QueryRow(`
+		SELECT id FROM template WHERE id = ? AND user_id = ? AND folder_id = ?
+	`, templateID, userID, folderID).Scan(&id)
+	return err == nil && id > 0
+}
+
+func listTemplatePickerItems(userID, folderID int64, requireFolder bool) ([]TemplateListItem, error) {
+	var rows *sql.Rows
+	var err error
+	if requireFolder {
+		rows, err = db.Query(`
+			SELECT id, name, subject FROM template
+			WHERE user_id = ? AND folder_id = ?
+			ORDER BY id ASC
+		`, userID, folderID)
+	} else {
+		rows, err = db.Query(`SELECT id, name, subject FROM template WHERE user_id = ? ORDER BY id DESC`, userID)
+	}
 	if err != nil {
 		return nil, err
 	}

@@ -112,7 +112,11 @@ func loadCampaignDetailPageData(userID int64, detail model.CampaignDetail, picke
 		})
 		g.Go(func() error {
 			var err error
-			data.Templates, err = model.ListTemplatePickerItems(userID)
+			if detail.LibraryFolderID > 0 {
+				data.Templates, err = model.ListTemplatePickerItemsInFolder(userID, detail.LibraryFolderID)
+			} else {
+				data.Templates, err = model.ListTemplatePickerItems(userID)
+			}
 			return err
 		})
 	} else {

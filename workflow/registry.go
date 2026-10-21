@@ -1,11 +1,13 @@
 package workflow
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
+	"emailtracker.com/ai"
 	"emailtracker.com/model"
 	"emailtracker.com/util"
 )
@@ -23,6 +25,7 @@ func GetExecutor(nodeType string) (NodeExecutor, bool) {
 
 func init() {
 	Register(&TriggerExecutor{})
+	Register(&ReplyIntentTriggerExecutor{})
 	Register(&SendEmailExecutor{})
 	Register(&WaitExecutor{})
 	Register(&EndExecutor{})
@@ -35,6 +38,15 @@ type TriggerExecutor struct{}
 func (TriggerExecutor) Type() string { return "trigger_campaign_started" }
 
 func (TriggerExecutor) Execute(ctx ExecutionContext) (NodeResult, error) {
+	return NodeResult{NextEdgeType: "default"}, nil
+}
+
+// ReplyIntentTriggerExecutor is the entry for reply-watcher workflows.
+type ReplyIntentTriggerExecutor struct{}
+
+func (ReplyIntentTriggerExecutor) Type() string { return "trigger_reply_intent" }
+
+func (ReplyIntentTriggerExecutor) Execute(ctx ExecutionContext) (NodeResult, error) {
 	return NodeResult{NextEdgeType: "default"}, nil
 }
 
@@ -103,6 +115,15 @@ func (SendEmailExecutor) Execute(ctx ExecutionContext) (NodeResult, error) {
 			Failed:       true,
 			ErrorMessage: "missing template variables: " + strings.Join(missing, ", "),
 		}, nil
+	}
+
+	// Reply-watcher path: Jev-verify the rendered template against the inbound reply before sending.
+	if skip, reason := shouldSkipReplyWatcherSend(ctx, tmpl, contactVars, instCtx); skip {
+		model.AbortStartedExecution(execKey)
+		userID, _ := model.GetUserIDForContact(ctx.Instance.ContactID)
+		_ = model.InsertSystemConversationNote(userID, ctx.Instance.ContactID, reason)
+		_ = model.CancelInstance(ctx.Instance.ID)
+		return NodeResult{Failed: true, ErrorMessage: reason}, nil
 	}
 
 	sendID, err := ctx.Mailer.SendWorkflowEmail(templateID, ctx.Instance.ContactID, campaignID, variant, ctx.Instance.ID, openTrack, clickTrack)
@@ -291,4 +312,64 @@ func recordConditionExecution(ctx ExecutionContext, edgeType string) {
 	execKey := fmt.Sprintf("%d:%s:%s", ctx.Instance.ID, ctx.Node.NodeKey, edgeType)
 	_, _ = model.CreateExecution(ctx.Instance.ID, ctx.Node.NodeKey, execKey, "succeeded",
 		fmt.Sprintf(`{"next_edge":%q}`, edgeType), "")
+}
+
+func shouldSkipReplyWatcherSend(ctx ExecutionContext, tmpl model.Template, contactVars []model.ContactVariables, instCtx map[string]interface{}) (bool, string) {
+	if instCtx == nil {
+		return false, ""
+	}
+	watcher, _ := instCtx["watcher"].(bool)
+	if !watcher {
+		return false, ""
+	}
+	msgID := int64FromCtx(instCtx["reply_message_id"])
+	intent, _ := instCtx["reply_intent"].(string)
+	if msgID <= 0 {
+		return false, ""
+	}
+	subjIn, bodyIn, _, userID, err := model.GetConversationMessageText(msgID)
+	if err != nil {
+		return true, "[Auto-reply skipped] Could not load inbound message for verification."
+	}
+	renderedSubj, renderedBody, missing, err := util.RenderEmail(tmpl.Subject, tmpl.Body, contactVars, util.RenderOptions{
+		UserID: userID,
+		Ctx:    context.Background(),
+	})
+	if err != nil {
+		return true, "[Auto-reply skipped] " + err.Error()
+	}
+	if len(missing) > 0 {
+		return true, "[Auto-reply skipped] Missing variables: " + strings.Join(missing, ", ")
+	}
+	if !ai.JEVConfigured() {
+		return false, "" // no Jev → allow send (wait already applied)
+	}
+	plain := util.StripHTML(util.NormalizeQuillHTML(renderedBody))
+	vrCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	vr, err := ai.VerifyAutoReply(vrCtx, subjIn, bodyIn, renderedSubj, plain, intent)
+	if err != nil {
+		return true, "[Auto-reply skipped] Verification failed: " + err.Error()
+	}
+	_, _, _ = model.ConsumeAICredit(userID)
+	if vr.Decision != "send" {
+		return true, fmt.Sprintf("[Auto-reply skipped] Jev decided not to send (intent=%s).", intent)
+	}
+	return false, ""
+}
+
+func int64FromCtx(v interface{}) int64 {
+	switch t := v.(type) {
+	case float64:
+		return int64(t)
+	case int64:
+		return t
+	case int:
+		return int64(t)
+	case string:
+		n, _ := strconv.ParseInt(t, 10, 64)
+		return n
+	default:
+		return 0
+	}
 }

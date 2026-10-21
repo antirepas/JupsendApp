@@ -166,3 +166,45 @@ func TestListSendEmailStepsUsesDisplayReachability(t *testing.T) {
 	}
 }
 
+func TestListSendEmailStepsFromReplyTriggers(t *testing.T) {
+	db.OpenTestDB(t)
+	userID, _ := CreateUser("wfmap-reply@test.com", "hash", "http://localhost")
+
+	wid, _ := CreateWorkflow(userID, "wfmap-reply", "")
+	w, _ := GetWorkflow(wid)
+	vid := w.CurrentVersionID
+
+	_ = SaveWorkflowGraph(vid, GraphSaveInput{
+		Nodes: []WorkflowNodeInput{
+			{NodeKey: "watch_int", NodeType: "trigger_reply_intent", Label: "Watch interested", ConfigJSON: `{"intent":"interested"}`},
+			{NodeKey: "watch_meet", NodeType: "trigger_reply_intent", Label: "Watch meeting", ConfigJSON: `{"intent":"meeting_ask"}`},
+			{NodeKey: "wait1", NodeType: "action_wait", Label: "Wait", ConfigJSON: `{"duration_seconds":90}`},
+			{NodeKey: "send_int", NodeType: "action_send_email", Label: "Reply interested", ConfigJSON: "{}"},
+			{NodeKey: "send_meet", NodeType: "action_send_email", Label: "Reply meeting", ConfigJSON: "{}"},
+			{NodeKey: "end", NodeType: "action_end", Label: "End", ConfigJSON: "{}"},
+		},
+		Edges: []WorkflowEdgeInput{
+			{SourceNodeKey: "watch_int", TargetNodeKey: "wait1", EdgeType: "default"},
+			{SourceNodeKey: "wait1", TargetNodeKey: "send_int", EdgeType: "default"},
+			{SourceNodeKey: "send_int", TargetNodeKey: "end", EdgeType: "default"},
+			{SourceNodeKey: "watch_meet", TargetNodeKey: "send_meet", EdgeType: "default"},
+			{SourceNodeKey: "send_meet", TargetNodeKey: "end", EdgeType: "default"},
+		},
+	})
+
+	steps, err := ListSendEmailSteps(vid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(steps) != 2 {
+		t.Fatalf("expected 2 reply-watcher send steps, got %d: %+v", len(steps), steps)
+	}
+	keys := map[string]bool{}
+	for _, s := range steps {
+		keys[s.NodeKey] = true
+	}
+	if !keys["send_int"] || !keys["send_meet"] {
+		t.Fatalf("missing send steps: %+v", steps)
+	}
+}
+

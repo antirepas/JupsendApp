@@ -82,7 +82,12 @@ func WorkflowBuilderPage(ctx *gin.Context) {
 		hasLivePublished = pubID > 0 && pubID != versionID
 	}
 	userID := mustUserID(ctx)
-	templates, _ := model.ListTemplates(userID)
+	var templates []model.TemplateListItem
+	if w.FolderID > 0 {
+		templates, _ = model.ListTemplatePickerItemsInFolder(userID, w.FolderID)
+	} else {
+		templates, _ = model.ListTemplates(userID)
+	}
 	pageData := gin.H{
 		"title":            w.Name,
 		"active":           "workflows",
@@ -91,6 +96,7 @@ func WorkflowBuilderPage(ctx *gin.Context) {
 		"hasLivePublished": hasLivePublished,
 		"editingDraft":     true,
 		"templates":        templates,
+		"replyIntents":     model.ReplyIntents,
 		"success":          ctx.Query("success"),
 	}
 	if w.FolderID > 0 {

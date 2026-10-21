@@ -79,15 +79,16 @@ func ListSendEmailSteps(versionID int64) ([]WorkflowSendStep, error) {
 }
 
 // listDisplayReachableSendSteps returns send steps reachable via the same edges shown in the campaign manage UI.
+// Outreach graphs start from Campaign Start; reply-watcher graphs start from every Reply intent trigger.
 func listDisplayReachableSendSteps(graph WorkflowGraph) []WorkflowSendStep {
-	var entryKey string
+	var entryKeys []string
 	for _, n := range graph.Nodes {
-		if n.NodeType == "trigger_campaign_started" {
-			entryKey = n.NodeKey
-			break
+		switch n.NodeType {
+		case "trigger_campaign_started", "trigger_reply_intent":
+			entryKeys = append(entryKeys, n.NodeKey)
 		}
 	}
-	if entryKey == "" {
+	if len(entryKeys) == 0 {
 		return nil
 	}
 
@@ -123,7 +124,7 @@ func listDisplayReachableSendSteps(graph WorkflowGraph) []WorkflowSendStep {
 		}
 
 		children := outgoingDisplayEdges(graph, nodeKey, n.NodeType)
-		if n.NodeType == "trigger_campaign_started" && len(children) == 1 {
+		if (n.NodeType == "trigger_campaign_started" || n.NodeType == "trigger_reply_intent") && len(children) == 1 {
 			walk(children[0].TargetNodeKey, path)
 			return
 		}
@@ -131,7 +132,9 @@ func listDisplayReachableSendSteps(graph WorkflowGraph) []WorkflowSendStep {
 			walk(e.TargetNodeKey, copyPath(path))
 		}
 	}
-	walk(entryKey, nil)
+	for _, entryKey := range entryKeys {
+		walk(entryKey, nil)
+	}
 	return steps
 }
 

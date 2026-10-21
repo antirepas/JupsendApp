@@ -63,7 +63,8 @@
 
   function defaultConfig(type) {
     if (type === 'action_send_email') return { open_tracking: false, click_tracking: false };
-    if (type === 'action_wait') return { duration_seconds: 259200 };
+    if (type === 'action_wait') return { duration_seconds: 90 }; // reply watchers: ~1–2 min
+    if (type === 'trigger_reply_intent') return { intent: 'interested' };
     if (type === 'condition_engagement') return { predicate: 'has_replied', priority: 50, params: { email_send_scope: 'last_in_workflow' } };
     if (type === 'condition_temperature') return {};
     return {};
@@ -223,8 +224,18 @@
     if (type === 'trigger_campaign_started') {
       const existing = nodes.find(n => n.node_type === 'trigger_campaign_started');
       if (existing) {
-        showMsg('Only one Start trigger allowed', false);
+        showMsg('Only one Campaign Start trigger allowed', false);
         selectNode(existing.node_key);
+        return null;
+      }
+      if (nodes.some(n => n.node_type === 'trigger_reply_intent')) {
+        showMsg('Cannot mix Campaign Start with Reply watchers', false);
+        return null;
+      }
+    }
+    if (type === 'trigger_reply_intent') {
+      if (nodes.some(n => n.node_type === 'trigger_campaign_started')) {
+        showMsg('Cannot mix Reply watchers with Campaign Start — use a separate workflow', false);
         return null;
       }
     }
@@ -812,6 +823,13 @@
       let subtitle = `<p class="text-xs text-slate-400 mt-0.5">${escapeHtml(n.node_type)}</p>`;
       if (n.node_type === 'action_send_email') {
         subtitle = '';
+      } else if (n.node_type === 'trigger_reply_intent') {
+        const intent = (n.config && n.config.intent) || 'interested';
+        subtitle = `<p class="text-xs text-violet-700 mt-0.5 font-medium">Watch: ${escapeHtml(String(intent).replace(/_/g, ' '))}</p>`;
+      } else if (n.node_type === 'action_wait') {
+        const secs = (n.config && n.config.duration_seconds) || 90;
+        const waitLabel = secs < 3600 ? Math.round(secs / 60) + ' min' : (secs / 86400) + ' days';
+        subtitle = `<p class="text-xs text-slate-500 mt-0.5">${escapeHtml(waitLabel)}</p>`;
       } else if (n.node_type === 'condition_engagement') {
         subtitle = `<p class="text-xs text-amber-700 mt-0.5 font-medium">re: ${escapeHtml(conditionEmailRefLabel(n))}</p>
           <p class="text-xs text-slate-400">${escapeHtml(conditionPredicateSummary(n))}</p>`;
@@ -982,10 +1000,39 @@
     fields.innerHTML = `<label class="form-label">Label</label>
       <input class="form-input" id="prop-label" value="${escapeAttr(n.label)}">`;
 
+    if (n.node_type === 'trigger_reply_intent') {
+      const intents = (typeof REPLY_INTENTS !== 'undefined' && REPLY_INTENTS.length)
+        ? REPLY_INTENTS
+        : ['interested', 'meeting_ask', 'pricing', 'referral', 'not_now', 'ooo', 'unsubscribe', 'wrong_person'];
+      let opts = intents.map(i => `<option value="${escapeAttr(i)}" ${(n.config.intent || 'interested') === i ? 'selected' : ''}>${escapeHtml(String(i).replace(/_/g, ' '))}</option>`).join('');
+      fields.innerHTML += `<label class="form-label mt-2">Reply intent to watch</label><select class="form-input" id="prop-intent">${opts}</select>
+        <p class="text-xs text-slate-500 mt-1">When a reply is classified with this intent, this branch runs (wait → send).</p>`;
+      document.getElementById('prop-intent').onchange = e => {
+        n.config.intent = e.target.value;
+        n.label = 'Watch: ' + String(e.target.value).replace(/_/g, ' ');
+        document.getElementById('prop-label').value = n.label;
+        render();
+      };
+    }
     if (n.node_type === 'action_wait') {
-      const days = (n.config.duration_seconds || 86400) / 86400;
-      fields.innerHTML += `<label class="form-label mt-2">Wait (days)</label><input type="number" min="1" class="form-input" id="prop-days" value="${days}">`;
-      document.getElementById('prop-days').onchange = e => { n.config.duration_seconds = parseInt(e.target.value, 10) * 86400; };
+      const secs = n.config.duration_seconds || 90;
+      const useMinutes = secs < 86400;
+      if (useMinutes) {
+        const mins = Math.max(1, Math.round(secs / 60));
+        fields.innerHTML += `<label class="form-label mt-2">Wait (minutes)</label><input type="number" min="1" class="form-input" id="prop-mins" value="${mins}">
+          <p class="text-xs text-slate-500 mt-1">Reply watchers usually wait 1–2 minutes before sending.</p>`;
+        document.getElementById('prop-mins').onchange = e => {
+          n.config.duration_seconds = Math.max(1, parseInt(e.target.value, 10) || 1) * 60;
+          render();
+        };
+      } else {
+        const days = secs / 86400;
+        fields.innerHTML += `<label class="form-label mt-2">Wait (days)</label><input type="number" min="1" class="form-input" id="prop-days" value="${days}">`;
+        document.getElementById('prop-days').onchange = e => {
+          n.config.duration_seconds = parseInt(e.target.value, 10) * 86400;
+          render();
+        };
+      }
     }
 	if (n.node_type === 'action_send_email') {
       const openOn = !!n.config.open_tracking;
@@ -1230,7 +1277,7 @@
     });
 
     if (nodes.length === 0) {
-      addNode('trigger_campaign_started', 'Campaign Start', 60, 60, false);
+      addNode('trigger_reply_intent', 'Watch: interested', 60, 60, false);
     } else {
       lastAddedKey = nodes[nodes.length - 1].node_key;
       render();

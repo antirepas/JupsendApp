@@ -4,30 +4,48 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"math/rand"
 	"strings"
 	"time"
 
 	"emailtracker.com/ai"
 	"emailtracker.com/model"
 	"emailtracker.com/util"
+	"emailtracker.com/workflow"
 )
 
-// MaybeEnqueueReplyWatcher schedules a delayed verified auto-reply when a watcher matches.
+// MaybeEnqueueReplyWatcher starts attached reply-watcher workflows for a matching intent.
+// The workflow graph itself owns wait → verify → send (wait node + send executor verify).
 func MaybeEnqueueReplyWatcher(campaignID, contactID, messageID int64, intent string) {
-	w, ok := model.FindCampaignReplyWatcher(campaignID, intent)
-	if !ok {
-		return
-	}
-	// Never auto-reply to unsubscribe / wrong_person (suppress path handles them).
 	switch model.NormalizeReplyIntent(intent) {
-	case "unsubscribe", "wrong_person":
+	case "unsubscribe", "wrong_person", "":
 		return
 	}
-	delay := time.Duration(60+rand.Intn(61)) * time.Second // 60–120s
-	runAt := time.Now().Add(delay)
-	if _, err := model.EnqueueReplyAutoJob(campaignID, contactID, messageID, intent, w.TemplateID, runAt); err != nil {
-		log.Printf("reply watcher enqueue campaign=%d msg=%d: %v", campaignID, messageID, err)
+	matches, err := model.FindReplyWatcherTriggersForCampaign(campaignID, intent)
+	if err != nil {
+		log.Printf("reply watcher lookup campaign=%d: %v", campaignID, err)
+		return
+	}
+	ctxJSON := model.MarshalIntentContext(intent, messageID)
+	started := 0
+	for _, m := range matches {
+		id, err := model.CreateReplyWatcherInstance(m.VersionID, contactID, campaignID, m.TriggerKey, ctxJSON)
+		if err != nil {
+			log.Printf("reply watcher instance campaign=%d wf=%d: %v", campaignID, m.WorkflowID, err)
+			continue
+		}
+		started++
+		_, _ = model.InsertContactEvent(model.ContactEventInput{
+			ContactID:          contactID,
+			CampaignID:         campaignID,
+			WorkflowID:         m.WorkflowID,
+			WorkflowInstanceID: id,
+			EventType:          "REPLY_WATCHER_STARTED",
+		})
+	}
+	if started > 0 {
+		if eng := workflow.GetEngine(); eng != nil {
+			go eng.ProcessDueInstances()
+		}
 	}
 }
 

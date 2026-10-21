@@ -410,12 +410,20 @@ func CampaignDetailPage(ctx *gin.Context) {
 		campaignMode = "bulk_ab"
 	}
 	sequenceSteps, _ := model.ListCampaignSequenceSteps(detail.ID)
-	replyWatchers, _ := model.ListCampaignReplyWatchers(detail.ID)
-	watcherByIntent := map[string]int64{}
-	for _, w := range replyWatchers {
-		watcherByIntent[w.Intent] = w.TemplateID
+	var templatePicker []model.TemplateListItem
+	if detail.LibraryFolderID > 0 {
+		templatePicker, _ = model.ListTemplatePickerItemsInFolder(userID, detail.LibraryFolderID)
 	}
-	templatePicker, _ := model.ListTemplatePickerItems(userID)
+	folderReplyWorkflows, _ := model.ListFolderReplyWorkflows(userID, detail.LibraryFolderID)
+	attachedWatcherIDs, _ := model.ListCampaignWatcherWorkflowIDs(detail.ID)
+	attachedWatcherSet := map[int64]bool{}
+	for _, id := range attachedWatcherIDs {
+		attachedWatcherSet[id] = true
+	}
+	for i := range folderReplyWorkflows {
+		folderReplyWorkflows[i].Enabled = attachedWatcherSet[folderReplyWorkflows[i].WorkflowID]
+	}
+	stepMappings, _ := model.GetCampaignWorkflowTemplates(detail.ID)
 	pageData := gin.H{
 		"title":                   detail.Name,
 		"active":                  "campaigns",
@@ -423,8 +431,8 @@ func CampaignDetailPage(ctx *gin.Context) {
 		"isSequence":              isSequence,
 		"isLegacyWorkflow":        isLegacyWorkflow,
 		"sequenceSteps":           sequenceSteps,
-		"replyIntents":            model.ReplyIntents,
-		"watcherByIntent":         watcherByIntent,
+		"folderReplyWorkflows":    folderReplyWorkflows,
+		"watcherStepMappings":     stepMappings,
 		"templatePicker":          templatePicker,
 		"campaign":                detail,
 		"pickerContacts":          pickerPage.Items,

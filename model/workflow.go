@@ -496,14 +496,31 @@ func ValidateWorkflowGraph(versionID int64) []string {
 		return []string{"workflow has no nodes"}
 	}
 
-	entryCount := 0
+	campaignStarts := 0
+	replyTriggers := 0
+	var replyEntries []string
 	for _, n := range g.Nodes {
-		if n.NodeType == "trigger_campaign_started" {
-			entryCount++
+		switch n.NodeType {
+		case "trigger_campaign_started":
+			campaignStarts++
+		case "trigger_reply_intent":
+			replyTriggers++
+			replyEntries = append(replyEntries, n.NodeKey)
+			if ReplyIntentFromNodeConfig(n.ConfigJSON) == "" {
+				errs = append(errs, fmt.Sprintf("reply trigger %s needs an intent (interested, meeting_ask, …)", n.NodeKey))
+			}
 		}
 	}
-	if entryCount != 1 {
-		errs = append(errs, "workflow must have exactly one trigger_campaign_started node")
+	if campaignStarts > 0 && replyTriggers > 0 {
+		errs = append(errs, "workflow cannot mix Campaign Start with Reply watchers — use separate workflows")
+	}
+	isReplyWorkflow := replyTriggers > 0
+	if isReplyWorkflow {
+		if replyTriggers < 1 {
+			errs = append(errs, "reply watcher needs at least one Reply intent trigger")
+		}
+	} else if campaignStarts != 1 {
+		errs = append(errs, "workflow must have exactly one trigger_campaign_started node (or use Reply intent triggers)")
 	}
 
 	nodeKeys := make(map[string]bool)
@@ -521,15 +538,17 @@ func ValidateWorkflowGraph(versionID int64) []string {
 		adj[e.SourceNodeKey] = append(adj[e.SourceNodeKey], e)
 	}
 
-	var entryKey string
-	for _, n := range g.Nodes {
-		if n.NodeType == "trigger_campaign_started" {
-			entryKey = n.NodeKey
+	reachable := map[string]bool{}
+	queue := []string{}
+	if isReplyWorkflow {
+		queue = append(queue, replyEntries...)
+	} else {
+		for _, n := range g.Nodes {
+			if n.NodeType == "trigger_campaign_started" {
+				queue = append(queue, n.NodeKey)
+			}
 		}
 	}
-
-	reachable := map[string]bool{}
-	queue := []string{entryKey}
 	for len(queue) > 0 {
 		k := queue[0]
 		queue = queue[1:]
@@ -544,7 +563,11 @@ func ValidateWorkflowGraph(versionID int64) []string {
 
 	for k := range nodeKeys {
 		if !reachable[k] {
-			errs = append(errs, fmt.Sprintf("node %s is not reachable from entry", k))
+			if isReplyWorkflow {
+				errs = append(errs, fmt.Sprintf("node %s is not reachable from any Reply trigger", k))
+			} else {
+				errs = append(errs, fmt.Sprintf("node %s is not reachable from entry", k))
+			}
 		}
 	}
 

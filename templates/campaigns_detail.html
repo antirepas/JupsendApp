@@ -312,25 +312,44 @@
 </div>
 {{end}}
 
-{{if .isSequence}}
+{{if or .isSequence .canEditMode}}
 <div class="card mb-6">
   <h3 class="card-title">Reply watchers</h3>
-  <p class="text-sm text-slate-500 mb-4">When a reply is classified with an intent, wait ~1–2 minutes, verify the template answers them with Jev, then auto-send. Leave blank to skip that intent.</p>
-  <form method="POST" action="/campaigns/{{.campaign.ID}}/reply-watchers" class="space-y-3">
-    {{range .replyIntents}}
-    {{$intent := .}}
-    <div class="flex flex-col sm:flex-row sm:items-center gap-2">
-      <label class="text-sm font-medium text-slate-800 w-40 shrink-0">{{$intent}}</label>
-      <select name="watcher_{{$intent}}" class="form-input text-sm">
-        <option value="0">— no auto-reply —</option>
-        {{range $.templatePicker}}
-        <option value="{{.ID}}" {{if eq (index $.watcherByIntent $intent) .ID}}selected{{end}}>{{.Name}}</option>
+  <p class="text-sm text-slate-500 mb-4">Watcher workflows live in this campaign folder (Trigger: Watch reply → Wait → Send). Enable the ones you want on this campaign, then map each send step to a <strong>folder</strong> template.</p>
+  {{if .folderReplyWorkflows}}
+  <form method="POST" action="/campaigns/{{.campaign.ID}}/reply-watchers" class="space-y-4">
+    {{range .folderReplyWorkflows}}
+    <div class="rounded-lg border border-slate-200 p-3 space-y-2">
+      <label class="flex items-start gap-2">
+        <input type="checkbox" name="watcher_workflow" value="{{.WorkflowID}}" class="mt-1" {{if .Enabled}}checked{{end}}>
+        <span>
+          <span class="font-medium text-slate-900">{{.WorkflowName}}</span>
+          <span class="block text-xs text-slate-500 mt-0.5">Watches: {{range $i, $intent := .TriggerIntents}}{{if $i}}, {{end}}{{$intent}}{{end}}</span>
+          <a href="/workflows/{{.WorkflowID}}/edit" class="text-xs text-brand-600 font-medium">Edit workflow</a>
+        </span>
+      </label>
+      {{if .SendSteps}}
+      <div class="pl-6 space-y-2">
+        {{range .SendSteps}}
+        <div class="flex flex-col sm:flex-row sm:items-center gap-2">
+          <label class="text-xs text-slate-600 w-40 shrink-0">{{.Label}}</label>
+          <select name="watcher_step_template[{{.NodeKey}}]" class="form-input text-sm">
+            <option value="0">— pick folder template —</option>
+            {{range $.templatePicker}}
+            <option value="{{.ID}}" {{if eq (index $.watcherStepMappings $.NodeKey) .ID}}selected{{end}}>{{.Name}}</option>
+            {{end}}
+          </select>
+        </div>
         {{end}}
-      </select>
+      </div>
+      {{end}}
     </div>
     {{end}}
     <button type="submit" class="btn-secondary text-sm">Save reply watchers</button>
   </form>
+  {{else}}
+  <p class="text-sm text-amber-800">No reply-watcher workflows in this folder yet. Create a workflow with <strong>Trigger: Watch reply</strong> → Wait → Send Email, publish it, then enable it here.</p>
+  {{end}}
 </div>
 {{end}}
 
@@ -891,7 +910,10 @@
 <dialog id="camp-sequence-modal" class="camp-ws-modal">
   <form method="POST" action="/campaigns/{{.campaign.ID}}/sequence" class="camp-ws-modal-card" style="max-width:36rem;width:100%;">
     <h3 class="font-semibold text-lg text-slate-900">Edit sequence</h3>
-    <p class="text-sm text-slate-500 mt-1 mb-4">First email uses Template A{{if eq .campaignMode "sequence_ab"}}/B{{end}}. Add follow-ups with a wait (days) before each.</p>
+    <p class="text-sm text-slate-500 mt-1 mb-4">First email uses Template A{{if eq .campaignMode "sequence_ab"}}/B{{end}}. Add follow-ups with a wait (days) before each. Follow-up choices are limited to templates in this campaign folder.</p>
+    {{if not .templatePicker}}
+    <p class="text-sm text-amber-800 mb-3">No templates in this folder yet — add templates to the campaign folder before choosing follow-ups.</p>
+    {{end}}
     <div id="camp-sequence-rows" class="space-y-3">
       {{if .sequenceSteps}}
       {{range $i, $s := .sequenceSteps}}

@@ -167,6 +167,9 @@ func ValidateCampaignSequenceReady(c Campaign) error {
 		if _, _, err := GetTemplateByID(s.TemplateID, c.UserID); err != nil {
 			return fmt.Errorf("follow-up step %d: invalid template", i+1)
 		}
+		if c.LibraryFolderID > 0 && !TemplateInFolder(c.UserID, s.TemplateID, c.LibraryFolderID) {
+			return fmt.Errorf("follow-up step %d must use a template from this campaign folder", i+1)
+		}
 	}
 	return nil
 }

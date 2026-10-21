@@ -299,6 +299,12 @@ func runAlterSchema() {
 		`CREATE INDEX IF NOT EXISTS idx_reply_auto_jobs_due ON reply_auto_jobs(status, run_at) WHERE status = 'pending'`,
 		`ALTER TABLE conversation_messages DROP CONSTRAINT IF EXISTS conversation_messages_direction_check`,
 		`ALTER TABLE conversation_messages ADD CONSTRAINT conversation_messages_direction_check CHECK (direction IN ('inbound', 'outbound', 'system'))`,
+		// Campaign attaches published reply-watcher workflows from its folder
+		`CREATE TABLE IF NOT EXISTS campaign_watcher_workflows (
+			campaign_id BIGINT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+			workflow_id BIGINT NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
+			PRIMARY KEY (campaign_id, workflow_id)
+		)`,
 	}
 	for _, stmt := range alters {
 		if _, err := DB.Exec(stmt); err != nil {
