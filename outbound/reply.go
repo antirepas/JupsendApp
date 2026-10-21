@@ -340,14 +340,22 @@ func handleReply(userID int64, match ReplyMatch, msg inboxMessage, accountID int
 func classifyReplySentimentAsync(userID, contactID, campaignID, messageID int64, subject, body string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
-	res, err := ai.ClassifyReplySentiment(ctx, subject, body)
+	res, err := ai.ClassifyReplyIntent(ctx, subject, body)
 	if err != nil {
 		return
 	}
-	if err := model.SetConversationReplySentiment(messageID, res.Sentiment, "ai"); err != nil {
+	sentiment := res.Sentiment
+	if sentiment == "" {
+		sentiment = model.IntentToSentiment(res.Intent)
+	}
+	if err := model.SetConversationReplyClassification(messageID, res.Intent, sentiment, "ai"); err != nil {
 		return
 	}
-	model.ApplyReplySentimentSideEffects(userID, contactID, campaignID, messageID, res.Sentiment)
+	_, _, _ = model.ConsumeAICredit(userID)
+	model.ApplyReplySentimentSideEffects(userID, contactID, campaignID, messageID, sentiment)
+	if campaignID > 0 && res.Intent != "" {
+		MaybeEnqueueReplyWatcher(campaignID, contactID, messageID, res.Intent)
+	}
 }
 
 func replyDedupeKey(match ReplyMatch, imapMessageID string) string {

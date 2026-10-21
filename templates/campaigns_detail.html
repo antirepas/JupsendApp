@@ -20,9 +20,9 @@
     <h2 class="app-page-title">{{.campaign.Name}}</h2>
     <p class="app-page-sub">
       {{.campaign.ContactCount}} contacts ·
-      {{if .isWorkflow}}<span class="badge badge-violet">Workflow</span>{{if .isWorkflowAB}}<span class="badge badge-violet ml-1">A/B first email</span>{{end}}{{else}}<span class="badge badge-blue">One-time</span>{{end}}
+      {{if .isSequence}}<span class="badge badge-violet">Sequence</span>{{if eq .campaignMode "sequence_ab"}}<span class="badge badge-violet ml-1">A/B first email</span>{{end}}{{else if .isLegacyWorkflow}}<span class="badge badge-amber">Legacy workflow</span>{{else if .isWorkflow}}<span class="badge badge-violet">Workflow</span>{{if .isWorkflowAB}}<span class="badge badge-violet ml-1">A/B first email</span>{{end}}{{else}}<span class="badge badge-blue">One-time</span>{{end}}
       <span class="badge {{if eq .campaign.DisplayStatus "sent"}}badge-green{{else if eq .campaign.DisplayStatus "stopped"}}badge-gray{{else if eq .campaign.DisplayStatus "scheduled"}}badge-amber{{else if eq .campaign.DisplayStatus "sending"}}badge-blue{{else}}badge-gray{{end}} ml-1">{{.campaign.DisplayStatus}}</span>
-      {{if .campaign.ScheduledAt}}<span class="text-sm text-slate-500 ml-2">· {{if .isWorkflow}}starts{{else}}sends{{end}} {{.campaign.ScheduledAt.Format "Jan 2, 2006 15:04"}}</span>{{end}}
+      {{if .campaign.ScheduledAt}}<span class="text-sm text-slate-500 ml-2">· {{if or .isWorkflow .isSequence}}starts{{else}}sends{{end}} {{.campaign.ScheduledAt.Format "Jan 2, 2006 15:04"}}</span>{{end}}
     </p>
   </div>
   <div class="app-page-actions">
@@ -46,8 +46,8 @@
     </form>
     {{if gt .campaign.ContactCount 0}}
     {{if and (ne .campaign.DisplayStatus "sent") (ne .campaign.DisplayStatus "stopped") (ne .campaign.DisplayStatus "sending")}}
-    <form method="POST" action="/campaigns/{{.campaign.ID}}/send" onsubmit="return confirm('{{if .isWorkflow}}Start workflow for{{else}}Send to{{end}} all {{.campaign.ContactCount}} contacts now?');">
-      <button type="submit" class="btn-primary">{{if .isWorkflow}}Start workflow{{else}}Send now{{end}}</button>
+    <form method="POST" action="/campaigns/{{.campaign.ID}}/send" onsubmit="return confirm('{{if .isLegacyWorkflow}}Reconfigure as a Sequence first.{{else if or .isWorkflow .isSequence}}Start sequence for{{else}}Send to{{end}}{{if not .isLegacyWorkflow}} all {{.campaign.ContactCount}} contacts now?{{end}}');">
+      <button type="submit" class="btn-primary" {{if .isLegacyWorkflow}}disabled title="Configure a Sequence first"{{end}}>{{if or .isWorkflow .isSequence}}Start sequence{{else}}Send now{{end}}</button>
     </form>
     {{end}}
     {{end}}
@@ -150,10 +150,16 @@
 {{end}}
 {{end}}
 
+{{if .isLegacyWorkflow}}
+<div class="alert-error mb-6">
+  This campaign still uses a <strong>legacy workflow</strong>. Outreach sequences now live on Manage — switch to <strong>Sequence</strong> below, edit the email steps, then launch.
+</div>
+{{end}}
+
 {{if .canEditMode}}
 <div class="card mb-6">
   <h3 class="card-title">Campaign type</h3>
-  <p class="text-sm text-slate-500 mb-4">Detected from folder assets — change anytime before launch. A/B needs two templates in the folder (we never auto-copy your email).</p>
+  <p class="text-sm text-slate-500 mb-4">Change anytime before launch. Sequences are multi-touch emails with waits — configured in the modal below. A/B needs two templates in the folder.</p>
   <form method="POST" action="/campaigns/{{.campaign.ID}}/mode" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
     <label class="flex items-start gap-3 rounded-lg border p-3 cursor-pointer {{if eq .campaignMode "bulk"}}border-brand-500 bg-brand-50{{else}}border-slate-200{{end}}">
       <input type="radio" name="mode" value="bulk" class="mt-1" {{if eq .campaignMode "bulk"}}checked{{end}}>
@@ -163,13 +169,13 @@
       <input type="radio" name="mode" value="bulk_ab" class="mt-1" {{if eq .campaignMode "bulk_ab"}}checked{{end}}>
       <span><span class="font-medium text-slate-900">One-time A/B</span><span class="block text-xs text-slate-500">Two templates alternate by contact</span></span>
     </label>
-    <label class="flex items-start gap-3 rounded-lg border p-3 cursor-pointer {{if eq .campaignMode "workflow"}}border-brand-500 bg-brand-50{{else}}border-slate-200{{end}}">
-      <input type="radio" name="mode" value="workflow" class="mt-1" {{if eq .campaignMode "workflow"}}checked{{end}}>
-      <span><span class="font-medium text-slate-900">Workflow</span><span class="block text-xs text-slate-500">Published sequence in this folder</span></span>
+    <label class="flex items-start gap-3 rounded-lg border p-3 cursor-pointer {{if or (eq .campaignMode "sequence") (eq .campaignMode "workflow")}}border-brand-500 bg-brand-50{{else}}border-slate-200{{end}}">
+      <input type="radio" name="mode" value="sequence" class="mt-1" {{if or (eq .campaignMode "sequence") (eq .campaignMode "workflow")}}checked{{end}}>
+      <span><span class="font-medium text-slate-900">Sequence</span><span class="block text-xs text-slate-500">Email → wait → follow-ups on Manage</span></span>
     </label>
-    <label class="flex items-start gap-3 rounded-lg border p-3 cursor-pointer {{if eq .campaignMode "workflow_ab"}}border-brand-500 bg-brand-50{{else}}border-slate-200{{end}}">
-      <input type="radio" name="mode" value="workflow_ab" class="mt-1" {{if eq .campaignMode "workflow_ab"}}checked{{end}}>
-      <span><span class="font-medium text-slate-900">Workflow + A/B first email</span><span class="block text-xs text-slate-500">A/B on the first send, then follow-ups</span></span>
+    <label class="flex items-start gap-3 rounded-lg border p-3 cursor-pointer {{if or (eq .campaignMode "sequence_ab") (eq .campaignMode "workflow_ab")}}border-brand-500 bg-brand-50{{else}}border-slate-200{{end}}">
+      <input type="radio" name="mode" value="sequence_ab" class="mt-1" {{if or (eq .campaignMode "sequence_ab") (eq .campaignMode "workflow_ab")}}checked{{end}}>
+      <span><span class="font-medium text-slate-900">Sequence + A/B first email</span><span class="block text-xs text-slate-500">A/B on the first send, then follow-ups</span></span>
     </label>
     <div class="sm:col-span-2">
       <button type="submit" class="btn-secondary">Save campaign type</button>
@@ -178,7 +184,38 @@
 </div>
 {{end}}
 
-{{if or .isWorkflowAB (eq .campaignMode "bulk_ab")}}
+{{if or .isSequence .isLegacyWorkflow .canEditMode}}
+<div class="card mb-6">
+  <div class="flex items-start justify-between gap-3 flex-wrap">
+    <div>
+      <h3 class="card-title mb-1">Outreach sequence</h3>
+      <p class="text-sm text-slate-500">Linear emails with waits between them. First email uses Template A{{if eq .campaignMode "sequence_ab"}} / B{{end}}.</p>
+      {{if .sequenceSteps}}
+      <ol class="mt-3 text-sm text-slate-700 space-y-1 list-decimal list-inside">
+        {{range $i, $s := .sequenceSteps}}
+        <li>
+          {{if eq $i 0}}First email (campaign A{{if eq $.campaignMode "sequence_ab"}}/B{{end}}){{else}}Follow-up{{end}}
+          {{if gt $s.DelayDays 0}} · wait {{$s.DelayDays}}d before{{end}}
+        </li>
+        {{end}}
+      </ol>
+      {{else}}
+      <p class="text-sm text-amber-700 mt-2">No sequence steps yet.</p>
+      {{end}}
+    </div>
+    <div class="flex gap-2 flex-wrap">
+      {{if .canEditMode}}
+      <form method="POST" action="/campaigns/{{.campaign.ID}}/sequence/recommended" onsubmit="return confirm('Replace sequence with the recommended 3-touch preset?');">
+        <button type="submit" class="btn-secondary btn-sm">Apply recommended</button>
+      </form>
+      <button type="button" class="btn-primary btn-sm" id="camp-sequence-open">Edit sequence</button>
+      {{end}}
+    </div>
+  </div>
+</div>
+{{end}}
+
+{{if or .isWorkflowAB (eq .campaignMode "bulk_ab") (eq .campaignMode "sequence_ab")}}
 <div class="card mb-6 bg-blue-50 border-blue-100">
     <h3 class="font-semibold text-slate-900 mb-2">How A/B assignment works</h3>
     <p class="text-sm text-slate-600">Contacts are ordered by ID. Position 1 → Variant <span class="badge badge-blue">A</span>, position 2 → <span class="badge badge-violet">B</span>, then alternates.{{if .isWorkflowAB}} Only the <strong>first send step</strong> uses A/B; follow-up emails use the templates you pick below.{{end}}</p>
@@ -231,26 +268,10 @@
 {{end}}
 {{end}}
 
-{{if .isWorkflow}}
-<div class="workflow-header-compact">
-    <h3>{{.workflowInfo.WorkflowName}}</h3>
-    <a href="/workflows/{{.workflowInfo.WorkflowID}}/edit" class="text-brand-600 text-sm font-medium">Edit workflow</a>
-</div>
-
-<div class="workflow-explainer">
-    <h3>How this workflow runs</h3>
-    <p>When you launch this campaign, each contact gets their own copy of the workflow below. Steps run automatically — you don't need to do anything per contact.</p>
-    <ul>
-        <li><strong>Send</strong> — an email goes out from your connected Gmail account</li>
-        <li><strong>Wait</strong> — the contact pauses until the delay finishes</li>
-        <li><strong>Branch</strong> — paths can split in parallel; each branch is evaluated by priority</li>
-        <li><strong>Replies stop the sequence</strong> — remaining steps are cancelled for that contact</li>
-    </ul>
-</div>
-
+{{if or .isSequence .isWorkflow}}
 <div class="card mb-6">
     <h3 class="card-title">Lead temperature</h3>
-    <p class="text-sm text-slate-500 mb-4">Defines cold / warm / hot for <strong>this campaign only</strong> from reply sentiment. Hot = positive replies. Warm = any non-negative reply. Cold = no reply.</p>
+    <p class="text-sm text-slate-500 mb-4">Defines cold / warm / hot for <strong>this campaign only</strong> from reply intent/sentiment. Hot = positive intents. Warm = any non-negative reply. Cold = no reply.</p>
     <form method="POST" action="/campaigns/{{.campaign.ID}}/temperature-rules" class="space-y-4">
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div class="rounded-lg border border-amber-100 bg-amber-50/40 p-4 space-y-2">
@@ -273,11 +294,10 @@
             Negative replies stop outreach and suppress the contact
         </label>
         <p class="text-xs text-slate-500">{{.temperaturePreview}}</p>
-        {{if .isWorkflow}}
         <input type="hidden" name="has_stop_policy" value="1">
         <div class="border-t border-slate-100 pt-4 space-y-2">
-            <h4 class="text-sm font-semibold text-slate-900">Workflow stop rules</h4>
-            <p class="text-xs text-slate-500">Cancel remaining workflow steps for a lead when these fire.</p>
+            <h4 class="text-sm font-semibold text-slate-900">Stop rules</h4>
+            <p class="text-xs text-slate-500">Cancel remaining sequence steps for a lead when these fire.</p>
             <label class="flex items-center gap-2 text-sm text-slate-700">
                 <input type="checkbox" name="stop_on_reply" value="1" {{if .campaign.StopOnReply}}checked{{end}}>
                 Fully stop sending once the lead has replied
@@ -288,12 +308,33 @@
             </label>
         </div>
         <button type="submit" class="btn-secondary text-sm">Save temperature &amp; stop rules</button>
-        {{else}}
-        <button type="submit" class="btn-secondary text-sm">Save temperature rules</button>
-        {{end}}
     </form>
 </div>
+{{end}}
 
+{{if .isSequence}}
+<div class="card mb-6">
+  <h3 class="card-title">Reply watchers</h3>
+  <p class="text-sm text-slate-500 mb-4">When a reply is classified with an intent, wait ~1–2 minutes, verify the template answers them with Jev, then auto-send. Leave blank to skip that intent.</p>
+  <form method="POST" action="/campaigns/{{.campaign.ID}}/reply-watchers" class="space-y-3">
+    {{range .replyIntents}}
+    {{$intent := .}}
+    <div class="flex flex-col sm:flex-row sm:items-center gap-2">
+      <label class="text-sm font-medium text-slate-800 w-40 shrink-0">{{$intent}}</label>
+      <select name="watcher_{{$intent}}" class="form-input text-sm">
+        <option value="0">— no auto-reply —</option>
+        {{range $.templatePicker}}
+        <option value="{{.ID}}" {{if eq (index $.watcherByIntent $intent) .ID}}selected{{end}}>{{.Name}}</option>
+        {{end}}
+      </select>
+    </div>
+    {{end}}
+    <button type="submit" class="btn-secondary text-sm">Save reply watchers</button>
+  </form>
+</div>
+{{end}}
+
+{{if .isWorkflow}}
 {{if .isWorkflowAB}}
 {{if .hasB}}
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
@@ -846,6 +887,89 @@
 </div>
 </div>
 </div>
+{{if .canEditMode}}
+<dialog id="camp-sequence-modal" class="camp-ws-modal">
+  <form method="POST" action="/campaigns/{{.campaign.ID}}/sequence" class="camp-ws-modal-card" style="max-width:36rem;width:100%;">
+    <h3 class="font-semibold text-lg text-slate-900">Edit sequence</h3>
+    <p class="text-sm text-slate-500 mt-1 mb-4">First email uses Template A{{if eq .campaignMode "sequence_ab"}}/B{{end}}. Add follow-ups with a wait (days) before each.</p>
+    <div id="camp-sequence-rows" class="space-y-3">
+      {{if .sequenceSteps}}
+      {{range $i, $s := .sequenceSteps}}
+      <div class="camp-seq-row grid grid-cols-1 sm:grid-cols-3 gap-2 items-end border border-slate-200 rounded-lg p-3">
+        <div class="sm:col-span-2">
+          <label class="form-label text-xs">{{if eq $i 0}}Email 1 (A/B){{else}}Follow-up{{end}}</label>
+          {{if eq $i 0}}
+          <input type="hidden" name="step_template" value="0">
+          <p class="text-sm text-slate-600 py-2">Uses campaign Template A{{if eq $.campaignMode "sequence_ab"}} / B{{end}}</p>
+          {{else}}
+          <select name="step_template" class="form-input text-sm" required>
+            <option value="">Select template…</option>
+            {{range $.templatePicker}}
+            <option value="{{.ID}}" {{if eq $s.TemplateID .ID}}selected{{end}}>{{.Name}}</option>
+            {{end}}
+          </select>
+          {{end}}
+        </div>
+        <div>
+          <label class="form-label text-xs">Wait days before</label>
+          <input type="number" min="0" name="step_delay_days" class="form-input text-sm" value="{{if eq $i 0}}0{{else}}{{$s.DelayDays}}{{end}}" {{if eq $i 0}}readonly{{end}}>
+        </div>
+      </div>
+      {{end}}
+      {{else}}
+      <div class="camp-seq-row grid grid-cols-1 sm:grid-cols-3 gap-2 items-end border border-slate-200 rounded-lg p-3">
+        <div class="sm:col-span-2">
+          <label class="form-label text-xs">Email 1 (A/B)</label>
+          <input type="hidden" name="step_template" value="0">
+          <p class="text-sm text-slate-600 py-2">Uses campaign Template A</p>
+        </div>
+        <div>
+          <label class="form-label text-xs">Wait days before</label>
+          <input type="number" min="0" name="step_delay_days" class="form-input text-sm" value="0" readonly>
+        </div>
+      </div>
+      {{end}}
+    </div>
+    <button type="button" class="btn-secondary btn-sm mt-3" id="camp-sequence-add">+ Add follow-up</button>
+    <div class="flex justify-end gap-2 mt-4">
+      <button type="button" class="btn-secondary" id="camp-sequence-cancel">Cancel</button>
+      <button type="submit" class="btn-primary">Save sequence</button>
+    </div>
+  </form>
+</dialog>
+<select id="camp-sequence-tpl-options" class="hidden" hidden aria-hidden="true">
+  <option value="">Select template…</option>
+  {{range .templatePicker}}
+  <option value="{{.ID}}">{{.Name}}</option>
+  {{end}}
+</select>
+<script>
+(function () {
+  var modal = document.getElementById('camp-sequence-modal');
+  var openBtn = document.getElementById('camp-sequence-open');
+  var cancelBtn = document.getElementById('camp-sequence-cancel');
+  var addBtn = document.getElementById('camp-sequence-add');
+  var rows = document.getElementById('camp-sequence-rows');
+  var tplOpts = document.getElementById('camp-sequence-tpl-options');
+  if (!modal || !openBtn || !rows) return;
+  function followUpRow() {
+    var opts = tplOpts ? tplOpts.innerHTML : '<option value="">Select template…</option>';
+    var div = document.createElement('div');
+    div.className = 'camp-seq-row grid grid-cols-1 sm:grid-cols-3 gap-2 items-end border border-slate-200 rounded-lg p-3';
+    div.innerHTML =
+      '<div class="sm:col-span-2"><label class="form-label text-xs">Follow-up</label>' +
+      '<select name="step_template" class="form-input text-sm" required>' + opts + '</select></div>' +
+      '<div><label class="form-label text-xs">Wait days before</label>' +
+      '<input type="number" min="0" name="step_delay_days" class="form-input text-sm" value="3"></div>';
+    return div;
+  }
+  openBtn.addEventListener('click', function () { modal.showModal(); });
+  if (cancelBtn) cancelBtn.addEventListener('click', function () { modal.close(); });
+  if (addBtn) addBtn.addEventListener('click', function () { rows.appendChild(followUpRow()); });
+})();
+</script>
+{{end}}
+
 {{if .jevEnabled}}
 <dialog id="campaign-jev-modal" class="jev-review-modal">
   <div class="jev-review-card">

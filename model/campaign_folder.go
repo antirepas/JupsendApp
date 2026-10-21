@@ -87,13 +87,13 @@ func ensurePlaceholderTemplate(userID, folderID int64) (int64, error) {
 // SyncCampaignFromFolder applies folder assets to a draft campaign.
 //
 // Detection (does not invent files):
-//   - published workflow in folder → workflow mode (keeps workflow_ab if already set)
+//   - keeps sequence / sequence_ab when already set
 //   - otherwise → bulk (keeps A/B if Template B is still a folder template)
 //
+// Legacy workflow modes are left as-is so Manage can show a reconfigure banner.
+//
 // Template A = first folder template. Template B is only kept/assigned when the
-// campaign is already in an A/B mode (bulk with B, or workflow_ab) — never
-// auto-copies a template to fill the B slot, and never treats a follow-up email
-// as Variant B just because it is the second file in the folder.
+// campaign is already in an A/B mode — never auto-copies a template to fill B.
 //
 // Contact membership is only re-snapshotted when the linked list changes.
 func SyncCampaignFromFolder(userID, campaignID int64) error {
@@ -108,7 +108,7 @@ func SyncCampaignFromFolder(userID, campaignID int64) error {
 		return nil
 	}
 
-	templates, sheets, workflows, err := listFolderAssetsOrdered(userID, c.LibraryFolderID)
+	templates, sheets, _, err := listFolderAssetsOrdered(userID, c.LibraryFolderID)
 	if err != nil {
 		return err
 	}
@@ -131,12 +131,11 @@ func SyncCampaignFromFolder(userID, campaignID int64) error {
 		}
 	}
 
-	wantAB := c.ExecutionMode == "workflow_ab" || c.TemplateBID > 0
+	wantAB := c.ExecutionMode == "sequence_ab" || c.ExecutionMode == "workflow_ab" || c.TemplateBID > 0
 	if wantAB {
 		if c.TemplateBID > 0 && inFolder[c.TemplateBID] && c.TemplateBID != templateA {
 			templateB = c.TemplateBID
 		} else if len(templates) > 1 {
-			// Prefer a folder template that isn't A — do not create a copy.
 			for _, id := range templates {
 				if id != templateA {
 					templateB = id
@@ -152,24 +151,31 @@ func SyncCampaignFromFolder(userID, campaignID int64) error {
 		}
 	}
 
-	mode := "bulk"
-	var wfVer int64
-	if len(workflows) > 0 {
-		pub, err := LatestPublishedVersionID(workflows[0])
-		if err == nil && pub > 0 {
-			wfVer = pub
-			if wantAB && templateB > 0 {
-				mode = "workflow_ab"
-			} else {
-				mode = "workflow"
-			}
-		}
-	} else if wantAB && templateB > 0 {
+	mode := c.ExecutionMode
+	if mode == "" {
 		mode = "bulk"
 	}
-	if mode != c.ExecutionMode || wfVer != c.WorkflowVersionID {
-		if err := updateCampaignExecutionFromFolder(campaignID, userID, mode, wfVer); err != nil {
-			return err
+	if IsLegacyWorkflowMode(mode) {
+		// Leave legacy mode for banner; clear binding so Start is blocked until reconfigured.
+	} else if IsSequenceMode(mode) {
+		if mode == "sequence_ab" && templateB <= 0 {
+			mode = "sequence"
+		}
+		if mode != c.ExecutionMode || c.WorkflowVersionID != 0 {
+			if err := updateCampaignExecutionFromFolder(campaignID, userID, mode, 0); err != nil {
+				return err
+			}
+		}
+		_ = EnsureDefaultSequenceSteps(campaignID, templateA)
+	} else {
+		mode = "bulk"
+		if wantAB && templateB > 0 {
+			mode = "bulk" // A/B still stored via TemplateBID
+		}
+		if mode != c.ExecutionMode || c.WorkflowVersionID != 0 {
+			if err := updateCampaignExecutionFromFolder(campaignID, userID, mode, 0); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -184,15 +190,12 @@ func SyncCampaignFromFolder(userID, campaignID int64) error {
 	} else if c.ContactListID > 0 {
 		_ = SetCampaignContactList(campaignID, userID, 0)
 	}
-
-	if wfVer > 0 && len(templates) > 0 {
-		_ = syncWorkflowStepTemplatesFromFolder(campaignID, wfVer, templates, mode)
-	}
 	return nil
 }
 
 // SetCampaignMode updates draft campaign execution mode and optionally binds B from folder.
-// mode: bulk | bulk_ab | workflow | workflow_ab
+// mode: bulk | bulk_ab | sequence | sequence_ab
+// Legacy workflow / workflow_ab are rejected (hard cut — use Manage sequence).
 func SetCampaignMode(userID, campaignID int64, mode string) error {
 	c, err := GetCampaignForUser(campaignID, userID)
 	if err != nil {
@@ -203,14 +206,16 @@ func SetCampaignMode(userID, campaignID int64, mode string) error {
 	}
 	mode = strings.TrimSpace(strings.ToLower(mode))
 	switch mode {
-	case "bulk", "bulk_ab", "workflow", "workflow_ab":
+	case "bulk", "bulk_ab", "sequence", "sequence_ab":
+	case "workflow", "workflow_ab":
+		return fmt.Errorf("workflow mode was removed — use Sequence on Manage instead")
 	default:
 		return fmt.Errorf("invalid mode")
 	}
 
-	var templates, workflows []int64
+	var templates []int64
 	if c.LibraryFolderID > 0 {
-		templates, _, workflows, err = listFolderAssetsOrdered(userID, c.LibraryFolderID)
+		templates, _, _, err = listFolderAssetsOrdered(userID, c.LibraryFolderID)
 		if err != nil {
 			return err
 		}
@@ -222,7 +227,6 @@ func SetCampaignMode(userID, campaignID int64, mode string) error {
 	}
 	templateB := int64(0)
 	execMode := "bulk"
-	var wfVer int64
 
 	switch mode {
 	case "bulk":
@@ -233,24 +237,10 @@ func SetCampaignMode(userID, campaignID int64, mode string) error {
 		if templateB <= 0 {
 			return fmt.Errorf("add a second template in this campaign folder for A/B")
 		}
-	case "workflow":
-		execMode = "workflow"
-		if len(workflows) == 0 {
-			return fmt.Errorf("add and publish a workflow in this campaign folder first")
-		}
-		wfVer, err = LatestPublishedVersionID(workflows[0])
-		if err != nil || wfVer <= 0 {
-			return fmt.Errorf("publish the workflow before using workflow mode")
-		}
-	case "workflow_ab":
-		execMode = "workflow_ab"
-		if len(workflows) == 0 {
-			return fmt.Errorf("add and publish a workflow in this campaign folder first")
-		}
-		wfVer, err = LatestPublishedVersionID(workflows[0])
-		if err != nil || wfVer <= 0 {
-			return fmt.Errorf("publish the workflow before using workflow mode")
-		}
+	case "sequence":
+		execMode = "sequence"
+	case "sequence_ab":
+		execMode = "sequence_ab"
 		templateB = pickABTemplateB(templates, templateA, c.TemplateBID)
 		if templateB <= 0 {
 			return fmt.Errorf("add a second template in this campaign folder for A/B")
@@ -263,11 +253,11 @@ func SetCampaignMode(userID, campaignID int64, mode string) error {
 	if err := UpdateCampaignTemplates(campaignID, userID, templateA, templateB); err != nil {
 		return err
 	}
-	if err := updateCampaignExecutionFromFolder(campaignID, userID, execMode, wfVer); err != nil {
+	if err := updateCampaignExecutionFromFolder(campaignID, userID, execMode, 0); err != nil {
 		return err
 	}
-	if wfVer > 0 && len(templates) > 0 {
-		_ = syncWorkflowStepTemplatesFromFolder(campaignID, wfVer, templates, execMode)
+	if IsSequenceMode(execMode) {
+		_ = EnsureDefaultSequenceSteps(campaignID, templateA)
 	}
 	return nil
 }
@@ -361,6 +351,15 @@ func syncWorkflowStepTemplatesFromFolder(campaignID, versionID int64, templateID
 		return nil
 	}
 	return SaveCampaignWorkflowTemplates(campaignID, mappings)
+}
+
+// ListLibraryFolderTemplateIDs returns template IDs in a library folder (ordered).
+func ListLibraryFolderTemplateIDs(userID, folderID int64) []int64 {
+	tids, _, _, err := listFolderAssetsOrdered(userID, folderID)
+	if err != nil {
+		return nil
+	}
+	return tids
 }
 
 func listFolderAssetsOrdered(userID, folderID int64) (templates, sheets, workflows []int64, err error) {

@@ -31,10 +31,10 @@ func bulkEnqueueActive() bool {
 }
 
 type EnqueueResult struct {
-	Queued          int
-	Skipped         int
-	SkippedReasons  map[string]int
-	JobIDs          []int64
+	Queued         int
+	Skipped        int
+	SkippedReasons map[string]int
+	JobIDs         []int64
 }
 
 type EnqueueInput struct {
@@ -44,14 +44,15 @@ type EnqueueInput struct {
 	CampaignID         int64
 	Variant            string
 	WorkflowInstanceID int64
+	SequenceInstanceID int64
 	// SMTPAccountID forces the From mailbox when > 0 (one-off / explicit sends).
 	// Campaign/workflow jobs leave this 0 and use sticky resolution.
 	SMTPAccountID int64
 	// When TrackingExplicit is true, Open/ClickTrackingEnabled are used as-is.
 	// Otherwise campaign defaults apply (one-offs: both off).
-	TrackingExplicit       bool
-	OpenTrackingEnabled    bool
-	ClickTrackingEnabled   bool
+	TrackingExplicit     bool
+	OpenTrackingEnabled  bool
+	ClickTrackingEnabled bool
 	// SubjectPrefix is prepended to the rendered subject at send time (e.g. "[Test]").
 	// Encoded on the send job only so email_sends keeps a clean variant label.
 	SubjectPrefix string
@@ -72,6 +73,11 @@ func EnqueueSend(input EnqueueInput) (int64, int64, error) {
 
 	if input.WorkflowInstanceID > 0 && input.TemplateID > 0 {
 		if sendID, jobID, ok := model.FindActiveWorkflowEmailSend(input.WorkflowInstanceID, input.TemplateID); ok {
+			return sendID, jobID, nil
+		}
+	}
+	if input.SequenceInstanceID > 0 && input.TemplateID > 0 {
+		if sendID, jobID, ok := model.FindActiveSequenceEmailSend(input.SequenceInstanceID, input.TemplateID); ok {
 			return sendID, jobID, nil
 		}
 	}
@@ -124,9 +130,9 @@ func EnqueueSend(input EnqueueInput) (int64, int64, error) {
 	}
 
 	trackID := fmt.Sprintf("%d", util.GenerateID())
-	emailSendID, err := model.CreateQueuedEmailSend(
+	emailSendID, err := model.CreateQueuedEmailSendWithSequence(
 		input.UserID, input.TemplateID, input.ContactID, trackID,
-		input.CampaignID, input.Variant, input.WorkflowInstanceID,
+		input.CampaignID, input.Variant, input.WorkflowInstanceID, input.SequenceInstanceID,
 	)
 	if err != nil {
 		return 0, 0, err

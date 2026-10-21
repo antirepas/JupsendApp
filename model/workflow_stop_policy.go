@@ -53,12 +53,16 @@ func ApplyStopOnReplyForContact(contactID, preferCampaignID int64) {
 			if err := CancelActiveInstancesForContactCampaign(contactID, preferCampaignID); err != nil {
 				log.Printf("stop-on-reply campaign=%d contact=%d: %v", preferCampaignID, contactID, err)
 			}
+			_ = CancelSequenceInstancesForContactCampaign(contactID, preferCampaignID)
 		}
 	}
 	rows, err := db.Query(`
 		SELECT DISTINCT COALESCE(campaign_id, 0) FROM workflow_instances
 		WHERE contact_id = ? AND status IN ('active', 'waiting') AND COALESCE(campaign_id, 0) > 0
-	`, contactID)
+		UNION
+		SELECT DISTINCT campaign_id FROM campaign_sequence_instances
+		WHERE contact_id = ? AND status IN ('active', 'waiting') AND campaign_id > 0
+	`, contactID, contactID)
 	if err != nil {
 		return
 	}
@@ -76,6 +80,7 @@ func ApplyStopOnReplyForContact(contactID, preferCampaignID int64) {
 		if err := CancelActiveInstancesForContactCampaign(contactID, campaignID); err != nil {
 			log.Printf("stop-on-reply campaign=%d contact=%d: %v", campaignID, contactID, err)
 		}
+		_ = CancelSequenceInstancesForContactCampaign(contactID, campaignID)
 	}
 }
 
@@ -96,6 +101,7 @@ func MaybeStopWorkflowOnHot(campaignID, contactID int64) {
 	if err := CancelActiveInstancesForContactCampaign(contactID, campaignID); err != nil {
 		log.Printf("stop-on-hot campaign=%d contact=%d: %v", campaignID, contactID, err)
 	}
+	_ = CancelSequenceInstancesForContactCampaign(contactID, campaignID)
 }
 
 // ShouldBlockWorkflowSend reports whether a send step should be skipped for campaign stop policies.

@@ -14,61 +14,41 @@
 <div class="app-page-body app-page-body--narrow guide-prose">
 
 <div class="card guide-section guide-hero-cta">
-  <p class="help-card-label">Recommended system</p>
-  <h3 class="!mb-2">Don’t start from a blank canvas</h3>
-  <p class="mb-4">Use the jupsend outreach playbook — A/B cold → temperature → value prop or breakup → manual Loom close. Full copy skeletons and campaign checklist included.</p>
+  <p class="help-card-label">Where things live now</p>
+  <h3 class="!mb-2">Sequences vs reply watchers</h3>
+  <p class="mb-4"><strong>Outreach sequences</strong> (email → wait → follow-up) are configured on the campaign <strong>Manage</strong> page — Edit sequence modal. <strong>Reply watchers</strong> map inbound intents (interested, meeting ask, pricing, OOO, …) to a template that auto-sends after a short delay if Jev verifies the reply.</p>
   <div class="flex flex-wrap gap-2">
-    <a href="/guides/outreach" class="btn-primary">Read outreach playbook</a>
-    <form method="POST" action="/workflows/from-playbook">
-      <button type="submit" class="btn-secondary">Clone workflow</button>
-    </form>
+    <a href="/guides/outreach" class="btn-primary">Outreach playbook</a>
+    <a href="/guides/campaigns" class="btn-secondary">Campaigns guide</a>
   </div>
 </div>
 
 <div class="card guide-section">
-  <h3>Node types</h3>
+  <h3>Manage sequence</h3>
   <ul>
-    <li><strong>Start</strong> — campaign launched for a contact.</li>
-    <li><strong>Send email</strong> — maps to a template on the campaign.</li>
-    <li><strong>Wait</strong> — pause days before the next check or send.</li>
-    <li><strong>Condition</strong> — yes/no on opened, clicked, replied (optionally after a wait).</li>
-    <li><strong>Lead temperature</strong> — three-way branch: hot / warm / cold using <em>this campaign’s</em> temperature rules.</li>
-    <li><strong>End</strong> — sequence complete for that contact (use one path for “manual Loom”).</li>
+    <li>Set campaign type to <strong>Sequence</strong> or <strong>Sequence + A/B first email</strong>.</li>
+    <li>Open <strong>Edit sequence</strong> — first email uses Template A/B; add follow-ups with wait days.</li>
+    <li>Optional: <strong>Apply recommended</strong> for a simple 3-touch preset from folder templates.</li>
   </ul>
 </div>
 
 <div class="card guide-section">
-  <h3>Build → publish → attach</h3>
-  <ol>
-    <li>Clone the playbook or build in the canvas; connect yes/no or hot/warm/cold edges.</li>
-    <li><strong>Publish</strong> a version (drafts aren’t launchable).</li>
-    <li>Create a workflow (or workflow A/B) campaign and select that published version.</li>
-    <li>Map a template to every send step on the campaign page.</li>
-    <li>Add contacts and launch — each contact gets a workflow instance.</li>
-  </ol>
-</div>
-
-<div class="card guide-section">
-  <h3>Replies stop the sequence</h3>
-  <p>When a contact replies, remaining automated steps cancel for them. Treat that as success: move to Interested and continue the conversation yourself.</p>
-</div>
-
-<div class="card guide-section guide-mistake">
-  <h3 class="!mb-2">Common mistakes</h3>
+  <h3>Reply watchers</h3>
   <ul>
-    <li>Lead temperature node without hot, warm, and cold edges (won’t publish).</li>
-    <li>Condition on “not opened” with no wait — everyone fails instantly.</li>
-    <li>Editing a live published graph without understanding draft-fork: publish creates the version campaigns use.</li>
+    <li>On Manage, map each intent to a reply template (or leave blank).</li>
+    <li>When a reply arrives, Jev classifies intent, waits ~1–2 minutes, verifies the template answers the inbound message, then auto-sends — or skips with a system note.</li>
+    <li><code>unsubscribe</code> / <code>wrong_person</code> never auto-reply (suppress / stop path).</li>
   </ul>
 </div>
 
 <div class="card guide-section">
-  <h3>Next</h3>
-  <p><a href="/guides/outreach" class="text-brand-600 font-medium">Outreach playbook</a> · <a href="/guides/campaigns" class="text-brand-600 font-medium">Campaigns</a> · <a href="/workflows/new" class="text-brand-600 font-medium">Blank workflow</a></p>
+  <h3>Legacy workflows</h3>
+  <p>Old send→wait→send workflow graphs are no longer used for outreach. Campaigns still on legacy workflow mode show a banner — switch to Sequence and reconfigure steps before launch.</p>
 </div>
-</div>
+
 </div>
 {{template "page_shell_end" .}}
+</div>
 </body>
 </html>
 {{end}}

@@ -6,6 +6,7 @@ import (
 
 	"emailtracker.com/model"
 	"emailtracker.com/outbound"
+	"emailtracker.com/sequence"
 	"emailtracker.com/workflow"
 )
 
@@ -16,6 +17,8 @@ func StartWorkflowScheduler(engine *workflow.Engine) {
 		ticker := time.NewTicker(45 * time.Second)
 		for range ticker.C {
 			runWorkflowProcessor(engine)
+			sequence.ProcessDueInstances()
+			outbound.ProcessDueReplyAutoJobs()
 		}
 	}()
 }

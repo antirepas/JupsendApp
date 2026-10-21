@@ -239,6 +239,66 @@ func runAlterSchema() {
 		`ALTER TABLE contact_lists ADD COLUMN IF NOT EXISTS folder_id BIGINT REFERENCES library_folders(id) ON DELETE SET NULL`,
 		`ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS library_folder_id BIGINT REFERENCES library_folders(id) ON DELETE CASCADE`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_campaigns_library_folder_id ON campaigns (library_folder_id) WHERE library_folder_id IS NOT NULL`,
+		// Campaign sequences (Manage modal) — replace outreach send→wait→send workflows
+		`CREATE TABLE IF NOT EXISTS campaign_sequence_steps (
+			id BIGSERIAL PRIMARY KEY,
+			campaign_id BIGINT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+			position INTEGER NOT NULL,
+			template_id BIGINT NOT NULL DEFAULT 0,
+			delay_seconds_before INTEGER NOT NULL DEFAULT 0,
+			UNIQUE (campaign_id, position)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_campaign_sequence_steps_campaign ON campaign_sequence_steps(campaign_id)`,
+		`CREATE TABLE IF NOT EXISTS campaign_sequence_instances (
+			id BIGSERIAL PRIMARY KEY,
+			campaign_id BIGINT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+			contact_id BIGINT NOT NULL REFERENCES contact(id) ON DELETE CASCADE,
+			status TEXT NOT NULL DEFAULT 'active',
+			step_index INTEGER NOT NULL DEFAULT 0,
+			variant TEXT NOT NULL DEFAULT '',
+			last_email_send_id BIGINT NOT NULL DEFAULT 0,
+			next_wake_at TIMESTAMPTZ,
+			context_json TEXT NOT NULL DEFAULT '{}',
+			created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE (campaign_id, contact_id)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_campaign_sequence_instances_due
+			ON campaign_sequence_instances(status, next_wake_at)
+			WHERE status IN ('active', 'waiting')`,
+		`ALTER TABLE email_sends ADD COLUMN IF NOT EXISTS sequence_instance_id BIGINT NOT NULL DEFAULT 0`,
+		`CREATE INDEX IF NOT EXISTS idx_email_sends_sequence_instance ON email_sends(sequence_instance_id) WHERE sequence_instance_id > 0`,
+		// Reply intent + watchers
+		`ALTER TABLE conversation_messages ADD COLUMN IF NOT EXISTS reply_intent TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE contact ADD COLUMN IF NOT EXISTS last_reply_intent TEXT NOT NULL DEFAULT ''`,
+		`CREATE TABLE IF NOT EXISTS campaign_reply_watchers (
+			id BIGSERIAL PRIMARY KEY,
+			campaign_id BIGINT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+			intent TEXT NOT NULL,
+			template_id BIGINT NOT NULL REFERENCES template(id),
+			enabled BOOLEAN NOT NULL DEFAULT TRUE,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE (campaign_id, intent)
+		)`,
+		`CREATE TABLE IF NOT EXISTS reply_auto_jobs (
+			id BIGSERIAL PRIMARY KEY,
+			campaign_id BIGINT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+			contact_id BIGINT NOT NULL REFERENCES contact(id) ON DELETE CASCADE,
+			message_id BIGINT NOT NULL REFERENCES conversation_messages(id) ON DELETE CASCADE,
+			intent TEXT NOT NULL,
+			template_id BIGINT NOT NULL,
+			status TEXT NOT NULL DEFAULT 'pending',
+			run_at TIMESTAMPTZ NOT NULL,
+			verify_decision TEXT NOT NULL DEFAULT '',
+			last_error TEXT NOT NULL DEFAULT '',
+			email_send_id BIGINT NOT NULL DEFAULT 0,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE (message_id, intent)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_reply_auto_jobs_due ON reply_auto_jobs(status, run_at) WHERE status = 'pending'`,
+		`ALTER TABLE conversation_messages DROP CONSTRAINT IF EXISTS conversation_messages_direction_check`,
+		`ALTER TABLE conversation_messages ADD CONSTRAINT conversation_messages_direction_check CHECK (direction IN ('inbound', 'outbound', 'system'))`,
 	}
 	for _, stmt := range alters {
 		if _, err := DB.Exec(stmt); err != nil {

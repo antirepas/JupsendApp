@@ -118,7 +118,17 @@ func loadCampaignDetailPageData(userID int64, detail model.CampaignDetail, picke
 	} else {
 		g.Go(func() error {
 			var err error
-			data.MergedVars, err = model.MergeTemplateVariables(userID, []int64{detail.TemplateAID, detail.TemplateBID})
+			ids := []int64{detail.TemplateAID, detail.TemplateBID}
+			if model.IsSequenceMode(detail.ExecutionMode) {
+				if steps, sErr := model.ListCampaignSequenceSteps(detail.ID); sErr == nil {
+					for _, s := range steps {
+						if s.TemplateID > 0 {
+							ids = append(ids, s.TemplateID)
+						}
+					}
+				}
+			}
+			data.MergedVars, err = model.MergeTemplateVariables(userID, ids)
 			return err
 		})
 	}

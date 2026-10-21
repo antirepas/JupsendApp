@@ -10,10 +10,10 @@ import (
 
 // StopCampaignResult summarizes cancelled work after a stop.
 type StopCampaignResult struct {
-	CancelledJobs       int
-	CancelledInstances  int
-	AlreadyStopped      bool
-	HadNothingToCancel  bool
+	CancelledJobs      int
+	CancelledInstances int
+	AlreadyStopped     bool
+	HadNothingToCancel bool
 }
 
 // CampaignIsStopped reports whether the campaign was stopped by the user.
@@ -47,7 +47,18 @@ func CampaignHasCancellableWork(campaignID int64) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return instances > 0, nil
+	if instances > 0 {
+		return true, nil
+	}
+	var seq int
+	err = db.QueryRow(`
+		SELECT COUNT(*) FROM campaign_sequence_instances
+		WHERE campaign_id = ? AND status IN ('active', 'waiting')
+	`, campaignID).Scan(&seq)
+	if err != nil {
+		return false, err
+	}
+	return seq > 0, nil
 }
 
 // StopCampaign marks the campaign stopped, deletes queued send jobs/sends, and cancels workflow instances.
@@ -89,6 +100,15 @@ func StopCampaign(campaignID, userID int64) (StopCampaignResult, error) {
 		return result, err
 	}
 	result.CancelledInstances = nInst
+	nSeq, err := cancelSequenceInstancesForCampaignTx(tx, campaignID)
+	if err != nil {
+		return result, err
+	}
+	result.CancelledInstances += nSeq
+	_, _ = tx.Exec(`
+		UPDATE reply_auto_jobs SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP
+		WHERE campaign_id = ? AND status IN ('pending', 'processing')
+	`, campaignID)
 
 	_, err = tx.Exec(`
 		UPDATE campaigns SET status = 'stopped', scheduled_at = NULL, is_sending = 0
@@ -177,6 +197,19 @@ func cancelWorkflowInstancesForCampaignTx(tx *db.Tx, campaignID int64) (int, err
 	res, err := tx.Exec(`
 		UPDATE workflow_instances SET status = 'cancelled', completed_at = CURRENT_TIMESTAMP,
 			lock_token = NULL, lock_expires_at = NULL
+		WHERE campaign_id = ? AND status IN ('active', 'waiting')
+	`, campaignID)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	return int(n), nil
+}
+
+func cancelSequenceInstancesForCampaignTx(tx *db.Tx, campaignID int64) (int, error) {
+	res, err := tx.Exec(`
+		UPDATE campaign_sequence_instances
+		SET status = 'cancelled', next_wake_at = NULL, updated_at = CURRENT_TIMESTAMP
 		WHERE campaign_id = ? AND status IN ('active', 'waiting')
 	`, campaignID)
 	if err != nil {

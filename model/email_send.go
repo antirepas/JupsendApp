@@ -78,6 +78,11 @@ func SaveSendEmail(userID, tId, cId int64, trackId string, campaignID int64, var
 }
 
 func CreateQueuedEmailSend(userID, tId, cId int64, trackId string, campaignID int64, variant string, workflowInstanceID int64) (int64, error) {
+	return CreateQueuedEmailSendWithSequence(userID, tId, cId, trackId, campaignID, variant, workflowInstanceID, 0)
+}
+
+// CreateQueuedEmailSendWithSequence queues a send optionally tied to a campaign sequence instance.
+func CreateQueuedEmailSendWithSequence(userID, tId, cId int64, trackId string, campaignID int64, variant string, workflowInstanceID, sequenceInstanceID int64) (int64, error) {
 	var campID, instID, tmplID interface{}
 	if campaignID > 0 {
 		campID = campaignID
@@ -88,8 +93,12 @@ func CreateQueuedEmailSend(userID, tId, cId int64, trackId string, campaignID in
 	if tId > 0 {
 		tmplID = tId
 	}
-	query := `INSERT INTO email_sends (template_id, contact_id, tracking_id, campaign_id, variant, workflow_instance_id, delivery_status, user_id) VALUES (?, ?, ?, ?, ?, ?, 'queued', ?) RETURNING id`
-	row := db.QueryRow(query, tmplID, cId, trackId, campID, variant, instID, userID)
+	seqID := sequenceInstanceID
+	if seqID < 0 {
+		seqID = 0
+	}
+	query := `INSERT INTO email_sends (template_id, contact_id, tracking_id, campaign_id, variant, workflow_instance_id, sequence_instance_id, delivery_status, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, 'queued', ?) RETURNING id`
+	row := db.QueryRow(query, tmplID, cId, trackId, campID, variant, instID, seqID, userID)
 	var id int64
 	err := row.Scan(&id)
 	return id, err
@@ -109,6 +118,25 @@ func FindActiveWorkflowEmailSend(workflowInstanceID, templateID int64) (emailSen
 		ORDER BY es.id ASC
 		LIMIT 1
 	`, workflowInstanceID, templateID).Scan(&emailSendID, &jobID)
+	if err != nil || emailSendID <= 0 {
+		return 0, 0, false
+	}
+	return emailSendID, jobID, true
+}
+
+// FindActiveSequenceEmailSend dedupes sequence step sends.
+func FindActiveSequenceEmailSend(sequenceInstanceID, templateID int64) (emailSendID, jobID int64, ok bool) {
+	if sequenceInstanceID <= 0 || templateID <= 0 {
+		return 0, 0, false
+	}
+	err := db.QueryRow(`
+		SELECT es.id, COALESCE(es.send_job_id, 0)
+		FROM email_sends es
+		WHERE es.sequence_instance_id = ? AND es.template_id = ?
+		  AND COALESCE(es.delivery_status, '') IN ('queued', 'sending', 'sent')
+		ORDER BY es.id ASC
+		LIMIT 1
+	`, sequenceInstanceID, templateID).Scan(&emailSendID, &jobID)
 	if err != nil || emailSendID <= 0 {
 		return 0, 0, false
 	}

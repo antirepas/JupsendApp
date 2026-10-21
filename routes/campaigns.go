@@ -375,7 +375,9 @@ func CampaignDetailPage(ctx *gin.Context) {
 		return
 	}
 
-	isWorkflow := (detail.ExecutionMode == "workflow" || detail.ExecutionMode == "workflow_ab") && detail.WorkflowVersionID > 0
+	isLegacyWorkflow := model.IsLegacyWorkflowMode(detail.ExecutionMode)
+	isSequence := model.IsSequenceMode(detail.ExecutionMode)
+	isWorkflow := isLegacyWorkflow && detail.WorkflowVersionID > 0 // legacy graph UI only
 
 	canStop := detail.DisplayStatus == "sending" || detail.DisplayStatus == "scheduled"
 	if !canStop && detail.DisplayStatus != "stopped" {
@@ -396,6 +398,10 @@ func CampaignDetailPage(ctx *gin.Context) {
 	canEditMode := detail.DisplayStatus != "sent" && detail.DisplayStatus != "sending" && detail.DisplayStatus != "stopped"
 	campaignMode := "bulk"
 	switch {
+	case detail.ExecutionMode == "sequence_ab":
+		campaignMode = "sequence_ab"
+	case detail.ExecutionMode == "sequence":
+		campaignMode = "sequence"
 	case detail.ExecutionMode == "workflow_ab":
 		campaignMode = "workflow_ab"
 	case detail.ExecutionMode == "workflow":
@@ -403,10 +409,23 @@ func CampaignDetailPage(ctx *gin.Context) {
 	case detail.TemplateBID > 0:
 		campaignMode = "bulk_ab"
 	}
+	sequenceSteps, _ := model.ListCampaignSequenceSteps(detail.ID)
+	replyWatchers, _ := model.ListCampaignReplyWatchers(detail.ID)
+	watcherByIntent := map[string]int64{}
+	for _, w := range replyWatchers {
+		watcherByIntent[w.Intent] = w.TemplateID
+	}
+	templatePicker, _ := model.ListTemplatePickerItems(userID)
 	pageData := gin.H{
 		"title":                   detail.Name,
 		"active":                  "campaigns",
 		"jevEnabled":              config.JEVEnabled(),
+		"isSequence":              isSequence,
+		"isLegacyWorkflow":        isLegacyWorkflow,
+		"sequenceSteps":           sequenceSteps,
+		"replyIntents":            model.ReplyIntents,
+		"watcherByIntent":         watcherByIntent,
+		"templatePicker":          templatePicker,
 		"campaign":                detail,
 		"pickerContacts":          pickerPage.Items,
 		"pickerPage":              pickerPage,
@@ -1051,8 +1070,11 @@ func launchCampaign(userID, campaignID int64) (outbound.EnqueueResult, error) {
 	if _, err := model.ListSendReadyAccountsForCampaign(userID, campaignID); err != nil {
 		return outbound.EnqueueResult{}, err
 	}
-	if (campaign.ExecutionMode == "workflow" || campaign.ExecutionMode == "workflow_ab") && campaign.WorkflowVersionID > 0 {
-		sent, failed, err := startWorkflowCampaign(campaignID, campaign)
+	if model.IsLegacyWorkflowMode(campaign.ExecutionMode) {
+		return outbound.EnqueueResult{}, fmt.Errorf("this campaign still uses a legacy workflow — open Manage and configure a Sequence instead")
+	}
+	if model.IsSequenceMode(campaign.ExecutionMode) {
+		sent, failed, err := startSequenceCampaign(campaignID, campaign)
 		return outbound.EnqueueResult{Queued: sent, Skipped: failed}, err
 	}
 	return executeCampaignSend(userID, campaignID)

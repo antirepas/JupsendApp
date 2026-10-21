@@ -41,10 +41,16 @@ func IsNonNegativeReplySentiment(s string) bool {
 
 // SetConversationReplySentiment updates an inbound message sentiment and contact rollup.
 func SetConversationReplySentiment(messageID int64, sentiment, source string) error {
+	return SetConversationReplyClassification(messageID, "", sentiment, source)
+}
+
+// SetConversationReplyClassification stores intent + derived sentiment on the inbound message.
+func SetConversationReplyClassification(messageID int64, intent, sentiment, source string) error {
 	sentiment = NormalizeReplySentiment(sentiment)
 	if sentiment == ReplySentimentPending {
 		sentiment = ReplySentimentPending
 	}
+	intent = NormalizeReplyIntent(intent)
 	var userID, contactID, emailSendID int64
 	err := db.QueryRow(`
 		SELECT user_id, contact_id, COALESCE(email_send_id, 0)
@@ -53,15 +59,49 @@ func SetConversationReplySentiment(messageID int64, sentiment, source string) er
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec(`UPDATE conversation_messages SET reply_sentiment = ? WHERE id = ?`, sentiment, messageID)
+	_, err = db.Exec(`
+		UPDATE conversation_messages SET reply_sentiment = ?, reply_intent = CASE WHEN ? <> '' THEN ? ELSE reply_intent END
+		WHERE id = ?
+	`, sentiment, intent, intent, messageID)
 	if err != nil {
 		return err
 	}
 	_, _ = db.Exec(`UPDATE contact SET last_reply_sentiment = ? WHERE id = ?`, sentiment, contactID)
+	if intent != "" {
+		_, _ = db.Exec(`UPDATE contact SET last_reply_intent = ? WHERE id = ?`, intent, contactID)
+	}
 	if emailSendID > 0 {
 		_ = patchReplyEventSentiment(emailSendID, contactID, sentiment, source)
+		if intent != "" {
+			_ = patchReplyEventIntent(emailSendID, contactID, intent, source)
+		}
 	}
 	return nil
+}
+
+func patchReplyEventIntent(emailSendID, contactID int64, intent, source string) error {
+	var metaRaw string
+	var eventID int64
+	err := db.QueryRow(`
+		SELECT id, COALESCE(metadata_json, '{}') FROM contact_events
+		WHERE contact_id = ? AND email_send_id = ? AND event_type = 'REPLY'
+		ORDER BY id DESC LIMIT 1
+	`, contactID, emailSendID).Scan(&eventID, &metaRaw)
+	if err != nil {
+		return err
+	}
+	meta := map[string]interface{}{}
+	_ = json.Unmarshal([]byte(metaRaw), &meta)
+	if meta == nil {
+		meta = map[string]interface{}{}
+	}
+	meta["intent"] = intent
+	if source != "" {
+		meta["intent_source"] = source
+	}
+	b, _ := json.Marshal(meta)
+	_, err = db.Exec(`UPDATE contact_events SET metadata_json = ? WHERE id = ?`, string(b), eventID)
+	return err
 }
 
 func patchReplyEventSentiment(emailSendID, contactID int64, sentiment, source string) error {

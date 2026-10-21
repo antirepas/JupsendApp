@@ -32,8 +32,8 @@
   <ol>
     <li>Mailbox send-ready; domain warmed if Pro.</li>
     <li>Contacts imported with variables that match templates.</li>
-    <li>Templates written; for workflows, every send step mapped.</li>
-    <li>Set <strong>Lead temperature</strong> (campaign rules): e.g. warm ≥2 human opens + ≥1 click; hot = reply or higher thresholds.</li>
+    <li>Templates written; for sequences, configure steps on Manage (Edit sequence).</li>
+    <li>Set <strong>Lead temperature</strong> + stop rules; optionally map <strong>Reply watchers</strong> by intent.</li>
     <li>Decide open tracking: on for learning; off for ultra-cold if scanner noise worries you (clicks/replies still work).</li>
     <li>Preview a few contacts → Send now or schedule.</li>
     <li>Watch analytics + Interested; stop the campaign if something’s wrong.</li>
@@ -41,9 +41,8 @@
 </div>
 
 <div class="card guide-section">
-  <h3>Lead temperature in campaigns</h3>
-  <p>Defined once per campaign and scored only from that campaign’s engagement. Workflows can branch with a <strong>Lead temperature</strong> node (hot / warm / cold) so warm leads get a different email than cold ones.</p>
-  <p class="mt-2">Edit rules on the campaign page. Defaults: warm = 2 opens + 1 click; hot = 3 opens + 2 clicks or any reply.</p>
+  <h3>Lead temperature &amp; reply watchers</h3>
+  <p>Temperature is defined per campaign from reply sentiment/intent. Stop-on-reply / stop-on-hot cancel remaining sequence steps. Reply watchers auto-send a mapped template after a short delay when Jev verifies the reply fits the inbound message.</p>
 </div>
 
 <div class="card guide-section">
@@ -54,7 +53,7 @@
 <div class="card guide-section guide-mistake">
   <h3 class="!mb-2">Common mistakes</h3>
   <ul>
-    <li>Attaching a draft workflow — publish first.</li>
+    <li>Leaving a campaign on legacy workflow mode — switch to Sequence on Manage.</li>
     <li>Missing template on a follow-up step (contacts stall).</li>
     <li>Huge first send on a fresh domain.</li>
     <li>Ignoring Interested while the sequence keeps bumping people who already replied (replies stop remaining steps, but you still need human follow-up).</li>

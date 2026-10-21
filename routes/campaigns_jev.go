@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -87,6 +88,15 @@ func buildCampaignReviewInput(userID int64, c model.Campaign) (ai.CampaignReview
 
 	emails := collectCampaignReviewEmails(userID, c, mode)
 	mergedIDs := []int64{c.TemplateAID, c.TemplateBID}
+	if mode == "sequence" || mode == "sequence_ab" {
+		if steps, err := model.ListCampaignSequenceSteps(c.ID); err == nil {
+			for _, s := range steps {
+				if s.TemplateID > 0 {
+					mergedIDs = append(mergedIDs, s.TemplateID)
+				}
+			}
+		}
+	}
 	if mode == "workflow" || mode == "workflow_ab" {
 		if mappings, err := model.GetCampaignWorkflowTemplates(c.ID); err == nil {
 			for _, tid := range mappings {
@@ -179,6 +189,23 @@ func collectCampaignReviewEmails(userID int64, c model.Campaign, mode string) []
 	}
 
 	switch mode {
+	case "sequence", "sequence_ab":
+		steps, err := model.ListCampaignSequenceSteps(c.ID)
+		if err != nil || len(steps) == 0 {
+			appendTpl("first_a", "Variant A", "", c.TemplateAID)
+			appendTpl("first_b", "Variant B", "", c.TemplateBID)
+			return out
+		}
+		for i, step := range steps {
+			if i == 0 {
+				appendTpl("first_a", "Email 1 (A)", "", c.TemplateAID)
+				if mode == "sequence_ab" || c.TemplateBID > 0 {
+					appendTpl("first_b", "Email 1 (B)", "", c.TemplateBID)
+				}
+				continue
+			}
+			appendTpl("follow_up", fmt.Sprintf("Follow-up %d", i+1), "", step.TemplateID)
+		}
 	case "workflow", "workflow_ab":
 		steps, err := model.GetCampaignWorkflowStepDisplayForCampaign(c, userID)
 		if err != nil {
