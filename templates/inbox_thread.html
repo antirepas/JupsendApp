@@ -1,0 +1,93 @@
+{{define "inbox_thread.html"}}
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>{{template "head" .}}</head>
+{{template "page_shell_start" .}}
+<div class="inbox-thread-page" id="inbox-thread-page">
+  <header class="inbox-thread-bar">
+    <a href="{{.backURL}}" class="inbox-thread-back" aria-label="Back to inbox">← Back</a>
+    <div class="inbox-thread-bar-main">
+      <h1 class="inbox-thread-title">{{.selected.Subject}}</h1>
+      <p class="inbox-thread-meta">{{.selected.Contact.Email}}</p>
+    </div>
+    <a href="/contacts/{{.selected.Contact.ID}}" class="inbox-thread-side-link">Contact</a>
+  </header>
+
+  {{if .success}}<div class="alert-success inbox-thread-flash">{{.success}}</div>{{end}}
+  {{if .error}}<div class="alert-error inbox-thread-flash">{{.error}}</div>{{end}}
+
+  {{if .selected.NeedsRecovery}}
+  <div class="inbox-recover inbox-thread-recover">
+    <p>We have their reply signal, but the full message body isn’t here yet.</p>
+    <form method="POST" action="/contacts/{{.selected.Contact.ID}}/recover-reply">
+      <button type="submit" class="btn-primary text-sm">Recover from mailbox</button>
+    </form>
+  </div>
+  {{end}}
+
+  <div class="inbox-thread-stream" id="inbox-messages">
+    {{if .selected.Messages}}
+    {{range .selected.Messages}}
+    <article class="inbox-letter {{if .IsInbound}}inbox-letter--in{{else}}inbox-letter--out{{end}}">
+      <header class="inbox-letter-head">
+        <div class="inbox-letter-who">
+          <span class="inbox-letter-name">{{if .IsInbound}}{{$.selected.Contact.Email}}{{else}}You{{end}}</span>
+          {{if .IsInbound}}
+          <span class="inbox-letter-dir">to you</span>
+          {{else}}
+          <span class="inbox-letter-dir">to {{$.selected.Contact.Email}}</span>
+          {{end}}
+        </div>
+        <time class="inbox-letter-time" datetime="{{.OccurredAt.Format "2006-01-02T15:04:05Z07:00"}}">{{.OccurredAt.Format "Jan 2, 15:04"}}</time>
+      </header>
+      {{if and .Subject (ne .Subject $.selected.Subject)}}
+      <p class="inbox-letter-subj">{{.Subject}}</p>
+      {{end}}
+      {{if .InboxPlainBody}}
+      <div class="inbox-letter-body">{{.InboxPlainBody}}</div>
+      {{else if or .BodyHTML .BodyText}}
+      <iframe class="inbox-msg-frame" title="Message" sandbox="allow-same-origin" srcdoc="{{.DisplaySrcDoc}}" loading="lazy"></iframe>
+      {{else}}
+      <p class="inbox-letter-empty">No message body</p>
+      {{end}}
+      {{if .IsInbound}}
+      <form method="POST" action="/contacts/{{$.selected.Contact.ID}}/messages/{{.ID}}/sentiment" class="inbox-letter-tone">
+        <span class="inbox-letter-tone-label">Mark</span>
+        <button name="sentiment" value="positive" type="submit" class="{{if eq .ReplySentiment "positive"}}is-on{{end}}">Positive</button>
+        <button name="sentiment" value="neutral" type="submit" class="{{if eq .ReplySentiment "neutral"}}is-on{{end}}">Neutral</button>
+        <button name="sentiment" value="negative" type="submit" class="{{if eq .ReplySentiment "negative"}}is-on{{end}}">Negative</button>
+      </form>
+      {{end}}
+    </article>
+    {{end}}
+    {{else}}
+    <div class="inbox-empty">
+      <p class="inbox-empty-title">No messages yet</p>
+      <p class="inbox-empty-sub">Replies show up here after IMAP syncs your mailbox.</p>
+    </div>
+    {{end}}
+  </div>
+
+  <footer class="inbox-thread-composer">
+    {{if .selected.CanReply}}
+    <form method="POST" action="/inbox/threads/{{.selected.Contact.ID}}/reply" class="inbox-composer-form" id="inbox-composer-form">
+      <input type="hidden" name="folder" value="{{.folder}}">
+      {{if .replyFrom}}<p class="inbox-composer-from">From {{.replyFrom}}</p>{{end}}
+      <input type="text" id="inbox-reply-subject" name="subject" class="inbox-composer-subject" value="{{.replySubject}}" required aria-label="Subject" placeholder="Subject">
+      <textarea id="inbox-reply-body" name="body_text" class="inbox-composer-body" rows="5" required placeholder="Write your reply…" aria-label="Reply"></textarea>
+      <div class="inbox-composer-actions">
+        <button type="submit" class="btn-primary">Send</button>
+      </div>
+    </form>
+    {{else}}
+    <div class="inbox-composer-locked">
+      <p>Reply unlocks after their first reply is detected.</p>
+    </div>
+    {{end}}
+  </footer>
+</div>
+{{template "page_shell_end" .}}
+<script src="{{assetURL "/static/js/inbox.js"}}" defer></script>
+</body>
+</html>
+{{end}}

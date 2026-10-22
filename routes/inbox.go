@@ -8,7 +8,6 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"sync"
 
 	"emailtracker.com/model"
 	"emailtracker.com/outbound"
@@ -17,13 +16,13 @@ import (
 )
 
 func inboxReturnURL(folder string, contactID int64, extra ...string) string {
+	if contactID > 0 {
+		return inboxThreadURL(folder, contactID, extra...)
+	}
 	q := url.Values{}
 	folder = model.NormalizeInboxFolder(folder)
 	if folder != model.InboxFolderAll {
 		q.Set("folder", folder)
-	}
-	if contactID > 0 {
-		q.Set("contact", strconv.FormatInt(contactID, 10))
 	}
 	for i := 0; i+1 < len(extra); i += 2 {
 		if extra[i] != "" && extra[i+1] != "" {
@@ -34,6 +33,24 @@ func inboxReturnURL(folder string, contactID int64, extra ...string) string {
 		return "/inbox?" + enc
 	}
 	return "/inbox"
+}
+
+func inboxThreadURL(folder string, contactID int64, extra ...string) string {
+	q := url.Values{}
+	folder = model.NormalizeInboxFolder(folder)
+	if folder != model.InboxFolderAll {
+		q.Set("folder", folder)
+	}
+	for i := 0; i+1 < len(extra); i += 2 {
+		if extra[i] != "" && extra[i+1] != "" {
+			q.Set(extra[i], extra[i+1])
+		}
+	}
+	path := "/inbox/threads/" + strconv.FormatInt(contactID, 10)
+	if enc := q.Encode(); enc != "" {
+		return path + "?" + enc
+	}
+	return path
 }
 
 func inboxFolderTitle(folder string) string {
@@ -81,6 +98,20 @@ func InboxPage(ctx *gin.Context) {
 	sendID, _ := strconv.ParseInt(ctx.Query("send"), 10, 64)
 	sendStatus := strings.TrimSpace(ctx.Query("status"))
 
+	// Legacy deep links (?contact= / ?send=) open the dedicated thread window.
+	if contactID > 0 || sendID > 0 {
+		if sendID > 0 {
+			detail, err := model.GetEmailSendDetailForUser(sendID, userID)
+			if err != nil {
+				ctx.Redirect(http.StatusFound, inboxReturnURL(folder, 0, "error", "Send not found"))
+				return
+			}
+			contactID = detail.ContactID
+		}
+		ctx.Redirect(http.StatusFound, inboxThreadURL(folder, contactID))
+		return
+	}
+
 	var (
 		threads      []model.InboxThread
 		sends        []model.EmailSendListItem
@@ -88,55 +119,18 @@ func InboxPage(ctx *gin.Context) {
 		threadsErr   error
 		sendsErr     error
 		folderCounts model.InboxFolderCounts
-		selected     *model.InboxThreadDetail
-		selectedID   int64
-		selectedSend int64
-		replySubject string
-		replyFrom    string
-		selectedErr  error
 	)
 
-	if sendID > 0 {
-		detail, err := model.GetEmailSendDetailForUser(sendID, userID)
-		if err != nil {
-			ctx.Redirect(http.StatusFound, inboxReturnURL(folder, 0, "error", "Send not found"))
-			return
-		}
-		contactID = detail.ContactID
-		selectedSend = sendID
-	}
-
-	var wg sync.WaitGroup
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		folderCounts = model.CountInboxFolders(userID)
-		if folder == model.InboxFolderSent {
-			pageNum, _ := strconv.Atoi(ctx.Query("page"))
-			sendPage, sendsErr = model.ListEmailSendsFiltered(userID, model.SendListFilter{
-				Status:   sendStatus,
-				Query:    q,
-				Page:     pageNum,
-				PageSize: 75,
-			})
-			sends = sendPage.Items
-			return
-		}
-		threads, threadsErr = model.ListInboxThreads(userID, folder, q, 75)
-	}()
-	go func() {
-		defer wg.Done()
-		if contactID <= 0 {
-			return
-		}
-		selected, replySubject, replyFrom, selectedErr = loadInboxSelected(userID, contactID, folder)
-		if selectedErr == nil {
-			selectedID = contactID
-		}
-	}()
-	wg.Wait()
-
+	folderCounts = model.CountInboxFolders(userID)
 	if folder == model.InboxFolderSent {
+		pageNum, _ := strconv.Atoi(ctx.Query("page"))
+		sendPage, sendsErr = model.ListEmailSendsFiltered(userID, model.SendListFilter{
+			Status:   sendStatus,
+			Query:    q,
+			Page:     pageNum,
+			PageSize: 75,
+		})
+		sends = sendPage.Items
 		if sendsErr != nil {
 			log.Print(sendsErr)
 			ctx.HTML(http.StatusInternalServerError, "error.html", gin.H{
@@ -144,54 +138,62 @@ func InboxPage(ctx *gin.Context) {
 			})
 			return
 		}
-	} else if threadsErr != nil {
-		log.Print(threadsErr)
-		ctx.HTML(http.StatusInternalServerError, "error.html", gin.H{
-			"title": "Error", "active": "inbox", "error": "Failed to load inbox",
-		})
-		return
-	}
-	if (contactID > 0 || sendID > 0) && selectedErr != nil {
-		log.Print(selectedErr)
-		ctx.Redirect(http.StatusFound, inboxReturnURL(folder, 0, "error", "Thread not found"))
-		return
-	}
-	for i := range threads {
-		if threads[i].ContactID == selectedID {
-			threads[i].Unread = false
+	} else {
+		threads, threadsErr = model.ListInboxThreads(userID, folder, q, 75)
+		if threadsErr != nil {
+			log.Print(threadsErr)
+			ctx.HTML(http.StatusInternalServerError, "error.html", gin.H{
+				"title": "Error", "active": "inbox", "error": "Failed to load inbox",
+			})
+			return
 		}
 	}
 
 	ctx.HTML(http.StatusOK, "inbox.html", gin.H{
-		"title":         "Inbox",
-		"active":        "inbox",
-		"folder":        folder,
-		"folderTitle":   inboxFolderTitle(folder),
-		"q":             q,
-		"threads":       threads,
-		"sends":         sends,
-		"sendPage":      sendPage,
-		"sendStatus":    sendStatus,
-		"folderCounts":  folderCounts.Map(),
-		"inboxUnread":   folderCounts.Unread,
-		"selected":      selected,
-		"selectedID":    selectedID,
-		"selectedSend":  selectedSend,
-		"replySubject":  replySubject,
-		"replyFrom":     replyFrom,
-		"success":       ctx.Query("success"),
-		"error":         ctx.Query("error"),
+		"title":        "Inbox",
+		"active":       "inbox",
+		"folder":       folder,
+		"folderTitle":  inboxFolderTitle(folder),
+		"q":            q,
+		"threads":      threads,
+		"sends":        sends,
+		"sendPage":     sendPage,
+		"sendStatus":   sendStatus,
+		"folderCounts": folderCounts.Map(),
+		"inboxUnread":  folderCounts.Unread,
+		"success":      ctx.Query("success"),
+		"error":        ctx.Query("error"),
 	})
 }
 
 func InboxThreadPage(ctx *gin.Context) {
+	userID := mustUserID(ctx)
 	contactID, err := strconv.ParseInt(ctx.Param("contactId"), 10, 64)
 	if err != nil || contactID <= 0 {
 		ctx.Redirect(http.StatusFound, "/inbox?error=Invalid+thread")
 		return
 	}
 	folder := model.NormalizeInboxFolder(ctx.Query("folder"))
-	ctx.Redirect(http.StatusFound, inboxReturnURL(folder, contactID))
+	selected, replySubject, replyFrom, err := loadInboxSelected(userID, contactID, folder)
+	if err != nil {
+		log.Print(err)
+		ctx.Redirect(http.StatusFound, inboxReturnURL(folder, 0, "error", "Thread not found"))
+		return
+	}
+	ctx.HTML(http.StatusOK, "inbox_thread.html", gin.H{
+		"title":        selected.Subject,
+		"active":       "inbox",
+		"folder":       folder,
+		"folderTitle":  inboxFolderTitle(folder),
+		"selected":     selected,
+		"selectedID":   contactID,
+		"replySubject": replySubject,
+		"replyFrom":    replyFrom,
+		"success":      ctx.Query("success"),
+		"error":        ctx.Query("error"),
+		"backURL":      inboxReturnURL(folder, 0),
+		"inboxUnread":  model.CountInboxUnread(userID),
+	})
 }
 
 func InboxThreadPane(ctx *gin.Context) {

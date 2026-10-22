@@ -3,23 +3,18 @@
 <html lang="en" class="h-full">
 <head>{{template "head" .}}</head>
 {{template "page_shell_start" .}}
-<div class="inbox-fm" id="inbox-fm"
-     data-folder="{{.folder}}"
-     data-selected="{{.selectedID}}"
-     data-selected-send="{{.selectedSend}}"
-     tabindex="0">
+<div class="inbox-fm inbox-fm--list" id="inbox-fm" data-folder="{{.folder}}" tabindex="0">
 
-    <header class="tpl-fm-header">
-        <div class="tpl-fm-header-text">
-            <h2 class="tpl-fm-title">Inbox</h2>
-            <p class="tpl-fm-sub">Replies, engagement, and outbound sends in one place.</p>
+    <header class="inbox-topbar">
+        <div class="inbox-topbar-text">
+            <h2 class="inbox-topbar-title">Inbox</h2>
         </div>
         <div class="inbox-header-actions">
-            <a href="/inbox/compose" class="btn-primary btn-sm">New email</a>
+            <a href="/inbox/compose" class="btn-primary btn-sm">Compose</a>
             <form class="inbox-search" method="GET" action="/inbox" role="search">
                 {{if ne .folder "all"}}<input type="hidden" name="folder" value="{{.folder}}">{{end}}
                 {{if and (eq .folder "sent") .sendStatus}}<input type="hidden" name="status" value="{{.sendStatus}}">{{end}}
-                <input type="search" name="q" value="{{.q}}" class="form-input inbox-search-input" placeholder="Search email or subject…" aria-label="Search inbox">
+                <input type="search" name="q" value="{{.q}}" class="form-input inbox-search-input" placeholder="Search mail" aria-label="Search inbox">
             </form>
         </div>
     </header>
@@ -27,46 +22,37 @@
     {{if .success}}<div class="alert-success tpl-fm-flash">{{.success}}</div>{{end}}
     {{if .error}}<div class="alert-error tpl-fm-flash">{{.error}}</div>{{end}}
 
-    <div class="inbox-body">
-        <aside class="tpl-fm-sidebar inbox-folders" aria-label="Folders">
-            <div class="tpl-fm-sidebar-label">Folders</div>
-            <nav class="tpl-fm-nav">
-                <a href="/inbox" class="tpl-fm-nav-item {{if eq .folder "all"}}is-active{{end}}">
-                    <span class="tpl-fm-nav-name">Inbox</span>
-                    <span class="tpl-fm-nav-count">{{index .folderCounts "all"}}</span>
+    <div class="inbox-body inbox-body--list">
+        <aside class="inbox-folders" aria-label="Folders">
+            <nav class="inbox-folder-nav">
+                <a href="/inbox" class="inbox-folder-link {{if eq .folder "all"}}is-active{{end}}">
+                    <span>Inbox</span>
+                    {{if gt (index .folderCounts "all") 0}}<span class="inbox-folder-count">{{index .folderCounts "all"}}</span>{{end}}
                 </a>
-                <a href="/inbox?folder=unread" class="tpl-fm-nav-item {{if eq .folder "unread"}}is-active{{end}}">
-                    <span class="tpl-fm-nav-name">Unread</span>
-                    <span class="tpl-fm-nav-count">{{index .folderCounts "unread"}}</span>
+                <a href="/inbox?folder=unread" class="inbox-folder-link {{if eq .folder "unread"}}is-active{{end}}">
+                    <span>Unread</span>
+                    {{if gt (index .folderCounts "unread") 0}}<span class="inbox-folder-count">{{index .folderCounts "unread"}}</span>{{end}}
                 </a>
-                <a href="/inbox?folder=interested" class="tpl-fm-nav-item {{if eq .folder "interested"}}is-active{{end}}">
-                    <span class="tpl-fm-nav-name">Interested</span>
-                    <span class="tpl-fm-nav-count">{{index .folderCounts "interested"}}</span>
+                <a href="/inbox?folder=interested" class="inbox-folder-link {{if eq .folder "interested"}}is-active{{end}}">
+                    <span>Interested</span>
+                    {{if gt (index .folderCounts "interested") 0}}<span class="inbox-folder-count">{{index .folderCounts "interested"}}</span>{{end}}
                 </a>
-                <a href="/inbox?folder=sent" class="tpl-fm-nav-item {{if eq .folder "sent"}}is-active{{end}}">
-                    <span class="tpl-fm-nav-name">Sent</span>
-                    <span class="tpl-fm-nav-count">{{index .folderCounts "sent"}}</span>
+                <a href="/inbox?folder=sent" class="inbox-folder-link {{if eq .folder "sent"}}is-active{{end}}">
+                    <span>Sent</span>
+                    {{if gt (index .folderCounts "sent") 0}}<span class="inbox-folder-count">{{index .folderCounts "sent"}}</span>{{end}}
                 </a>
-                <a href="/inbox?folder=opened" class="tpl-fm-nav-item {{if eq .folder "opened"}}is-active{{end}}">
-                    <span class="tpl-fm-nav-name">Opened</span>
-                    <span class="tpl-fm-nav-count">{{index .folderCounts "opened"}}</span>
+                <a href="/inbox?folder=opened" class="inbox-folder-link {{if eq .folder "opened"}}is-active{{end}}">
+                    <span>Opened</span>
+                    {{if gt (index .folderCounts "opened") 0}}<span class="inbox-folder-count">{{index .folderCounts "opened"}}</span>{{end}}
                 </a>
-                <a href="/inbox?folder=clicked" class="tpl-fm-nav-item {{if eq .folder "clicked"}}is-active{{end}}">
-                    <span class="tpl-fm-nav-name">Clicked</span>
-                    <span class="tpl-fm-nav-count">{{index .folderCounts "clicked"}}</span>
+                <a href="/inbox?folder=clicked" class="inbox-folder-link {{if eq .folder "clicked"}}is-active{{end}}">
+                    <span>Clicked</span>
+                    {{if gt (index .folderCounts "clicked") 0}}<span class="inbox-folder-count">{{index .folderCounts "clicked"}}</span>{{end}}
                 </a>
             </nav>
         </aside>
 
-        <section class="inbox-thread-list" aria-label="{{.folderTitle}}">
-            <div class="inbox-list-head">
-                <span class="inbox-list-title">{{.folderTitle}}</span>
-                {{if eq .folder "sent"}}
-                <span class="inbox-list-meta">{{len .sends}} send{{if ne (len .sends) 1}}s{{end}}</span>
-                {{else}}
-                <span class="inbox-list-meta">{{len .threads}} thread{{if ne (len .threads) 1}}s{{end}}</span>
-                {{end}}
-            </div>
+        <section class="inbox-mail-list" aria-label="{{.folderTitle}}">
             {{if eq .folder "sent"}}
             <div class="inbox-send-filters">
                 <a href="/inbox?folder=sent" class="{{if not .sendStatus}}is-active{{end}}">All</a>
@@ -75,77 +61,54 @@
                 <a href="/inbox?folder=sent&amp;status=failed" class="{{if eq .sendStatus "failed"}}is-active{{end}}">Failed</a>
             </div>
             {{if .sends}}
-            <div class="inbox-threads" role="listbox">
+            <div class="inbox-rows" role="list">
                 {{range .sends}}
-                <a href="/inbox?folder=sent&amp;send={{.ID}}&amp;contact={{.ContactID}}{{if $.q}}&amp;q={{urlquery $.q}}{{end}}{{if $.sendStatus}}&amp;status={{urlquery $.sendStatus}}{{end}}"
-                   class="inbox-thread {{if eq .ID $.selectedSend}}is-active{{end}}"
-                   role="option"
-                   data-contact-id="{{.ContactID}}"
-                   data-send-id="{{.ID}}">
-                    <span class="inbox-thread-avatar" aria-hidden="true">{{.Initial}}</span>
-                    <span class="inbox-thread-main">
-                        <span class="inbox-thread-top">
-                            <span class="inbox-thread-email">{{.ContactEmail}}</span>
-                            <time class="inbox-thread-time">{{if not .SentAt.IsZero}}{{.SentAt.Format "Jan 2"}}{{else}}—{{end}}</time>
-                        </span>
-                        <span class="inbox-thread-subject">{{.DisplaySubject}}</span>
-                        <span class="inbox-thread-meta">
-                            <span class="inbox-chip inbox-chip-status-{{.DeliveryStatus}}">{{.DeliveryStatus}}</span>
-                            {{if gt .OpenCount 0}}<span class="inbox-chip inbox-chip-open">{{.OpenCount}} open{{if ne .OpenCount 1}}s{{end}}</span>{{end}}
-                            {{if gt .ClickCount 0}}<span class="inbox-chip inbox-chip-click">{{.ClickCount}} click{{if ne .ClickCount 1}}s{{end}}</span>{{end}}
-                        </span>
+                <a href="/inbox/threads/{{.ContactID}}?folder=sent"
+                   class="inbox-row"
+                   role="listitem">
+                    <span class="inbox-row-from">{{.ContactEmail}}</span>
+                    <span class="inbox-row-content">
+                        <span class="inbox-row-subject">{{.DisplaySubject}}</span>
+                        <span class="inbox-row-sep">–</span>
+                        <span class="inbox-row-snippet">{{.DeliveryStatus}}{{if gt .OpenCount 0}} · {{.OpenCount}} open{{if ne .OpenCount 1}}s{{end}}{{end}}</span>
                     </span>
+                    <time class="inbox-row-time">{{if not .SentAt.IsZero}}{{.SentAt.Format "Jan 2"}}{{else}}—{{end}}</time>
                 </a>
                 {{end}}
             </div>
             {{else}}
             <div class="inbox-empty">
                 <p class="inbox-empty-title">No sends yet</p>
-                <p class="inbox-empty-sub">Outbound emails appear here. Use <a href="/inbox/compose" class="text-brand-600 font-medium">New email</a> for a one-off send.</p>
+                <p class="inbox-empty-sub"><a href="/inbox/compose" class="text-brand-600 font-medium">Compose</a> a one-off email.</p>
             </div>
             {{end}}
             {{else}}
             {{if .threads}}
-            <div class="inbox-threads" role="listbox">
+            <div class="inbox-rows" role="list">
                 {{range .threads}}
-                <a href="/inbox?{{if ne $.folder "all"}}folder={{$.folder}}&amp;{{end}}contact={{.ContactID}}{{if $.q}}&amp;q={{urlquery $.q}}{{end}}"
-                   class="inbox-thread {{if eq .ContactID $.selectedID}}is-active{{end}} {{if .Unread}}is-unread{{end}}"
-                   role="option" aria-selected="{{if eq .ContactID $.selectedID}}true{{else}}false{{end}}"
-                   data-contact-id="{{.ContactID}}">
-                    <span class="inbox-thread-avatar" aria-hidden="true">{{.Initial}}</span>
-                    <span class="inbox-thread-main">
-                        <span class="inbox-thread-top">
-                            <span class="inbox-thread-email">{{.Email}}</span>
-                            <time class="inbox-thread-time">{{.LastAt.Format "Jan 2"}}</time>
-                        </span>
-                        <span class="inbox-thread-subject">{{.Subject}}</span>
-                        <span class="inbox-thread-snippet">{{.Snippet}}</span>
-                        <span class="inbox-thread-meta">
-                            {{if .Unread}}<span class="inbox-dot" title="Unread"></span>{{end}}
-                            {{if gt .OpenCount 0}}<span class="inbox-chip inbox-chip-open">{{.OpenCount}} open{{if ne .OpenCount 1}}s{{end}}</span>{{end}}
-                            {{if gt .ClickCount 0}}<span class="inbox-chip inbox-chip-click">{{.ClickCount}} click{{if ne .ClickCount 1}}s{{end}}</span>{{end}}
-                            {{if and .Sentiment (ne .Sentiment "pending")}}<span class="inbox-chip inbox-chip-{{.Sentiment}}">{{.Sentiment}}</span>{{end}}
-                        </span>
+                <a href="/inbox/threads/{{.ContactID}}{{if ne $.folder "all"}}?folder={{$.folder}}{{end}}"
+                   class="inbox-row {{if .Unread}}is-unread{{end}}"
+                   role="listitem">
+                    <span class="inbox-row-from">{{.Email}}</span>
+                    <span class="inbox-row-content">
+                        <span class="inbox-row-subject">{{.Subject}}</span>
+                        {{if .Snippet}}<span class="inbox-row-sep">–</span><span class="inbox-row-snippet">{{.Snippet}}</span>{{end}}
                     </span>
+                    <time class="inbox-row-time">{{.DisplayTime}}</time>
                 </a>
                 {{end}}
             </div>
             {{else}}
             <div class="inbox-empty">
-                <p class="inbox-empty-title">No threads here</p>
-                <p class="inbox-empty-sub">Replies appear after IMAP syncs your mailboxes. Opens and clicks show on each conversation once you select it.</p>
+                <p class="inbox-empty-title">No conversations</p>
+                <p class="inbox-empty-sub">Replies appear here after IMAP syncs your mailboxes.</p>
             </div>
             {{end}}
             {{end}}
         </section>
-
-        <section class="inbox-reading" id="inbox-reading" aria-label="Reading pane">
-            {{template "inbox_pane" .}}
-        </section>
     </div>
 </div>
 {{template "page_shell_end" .}}
-<script src="{{assetURL "/static/js/inbox.js"}}" defer></script>
 </body>
 </html>
 {{end}}

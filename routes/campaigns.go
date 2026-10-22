@@ -28,16 +28,26 @@ type WorkflowPickerItem struct {
 
 func ListCampaignsPage(ctx *gin.Context) {
 	userID := mustUserID(ctx)
-	campaigns, err := model.ListCampaigns(userID)
+	campaigns, err := model.ListLaunchedCampaigns(userID)
 	if err != nil {
 		log.Print(err)
 		ctx.HTML(http.StatusInternalServerError, "error.html", gin.H{"title": "Error", "active": "campaigns", "error": "Failed to load campaigns"})
 		return
 	}
+	var featured *model.CampaignHomeFeatured
+	var older []model.CampaignListItem
+	if len(campaigns) > 0 {
+		f := model.BuildCampaignHomeFeatured(campaigns[0])
+		featured = &f
+		if len(campaigns) > 1 {
+			older = campaigns[1:]
+		}
+	}
 	ctx.HTML(http.StatusOK, "campaigns_list.html", gin.H{
 		"title":     "Campaigns",
 		"active":    "campaigns",
-		"campaigns": campaigns,
+		"featured":  featured,
+		"campaigns": older,
 		"playbook":  playbookCampaigns(),
 		"success":   ctx.Query("success"),
 		"error":     ctx.Query("error"),

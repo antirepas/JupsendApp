@@ -180,6 +180,15 @@ func UpdateCampaignExperiment(campaignID, userID int64, variable, hypothesis str
 }
 
 func ListCampaigns(userID int64) ([]CampaignListItem, error) {
+	return listCampaigns(userID, false)
+}
+
+// ListLaunchedCampaigns returns campaigns that have started sending (sent or in progress).
+func ListLaunchedCampaigns(userID int64) ([]CampaignListItem, error) {
+	return listCampaigns(userID, true)
+}
+
+func listCampaigns(userID int64, launchedOnly bool) ([]CampaignListItem, error) {
 	query := `
 		SELECT c.id, c.name, c.status, c.created_at, c.scheduled_at,
 			COALESCE(c.execution_mode, 'bulk'), COALESCE(c.workflow_version_id, 0),
@@ -196,8 +205,12 @@ func ListCampaigns(userID int64) ([]CampaignListItem, error) {
 			SELECT campaign_id, COUNT(*) as cnt FROM campaign_contacts GROUP BY campaign_id
 		) cc ON cc.campaign_id = c.id
 		WHERE c.user_id = ?
-		ORDER BY c.created_at DESC
 	`
+	if launchedOnly {
+		query += ` AND (c.status IN ('sent', 'sending') OR COALESCE(c.is_sending, 0) = 1)`
+	}
+	query += ` ORDER BY c.created_at DESC`
+
 	rows, err := db.Query(query, userID)
 	if err != nil {
 		return nil, err
@@ -225,6 +238,40 @@ func ListCampaigns(userID int64) ([]CampaignListItem, error) {
 		items = append(items, item)
 	}
 	return items, nil
+}
+
+// CampaignHomeFeatured is the newest launched campaign with a compact performance snapshot.
+type CampaignHomeFeatured struct {
+	Item             CampaignListItem
+	EmailsSent       int
+	UniqueOpens      int
+	UniqueClicks     int
+	Replies          int
+	PositiveReplies  int
+	OpenRate         float64
+	ReplyRate        float64
+	DailyStats       []CampaignDailyStat
+	ShowPixelMetrics bool
+}
+
+// BuildCampaignHomeFeatured loads chart + KPI data for the campaigns home hero.
+func BuildCampaignHomeFeatured(item CampaignListItem) CampaignHomeFeatured {
+	eng := getCampaignWorkflowEngagement(item.ID, item.ContactCount)
+	feat := CampaignHomeFeatured{
+		Item:            item,
+		EmailsSent:      eng.EmailsSent,
+		UniqueOpens:     eng.UniqueOpens,
+		UniqueClicks:    eng.UniqueClicks,
+		Replies:         eng.Replies,
+		PositiveReplies: eng.PositiveReplies,
+		OpenRate:        eng.OpenRate,
+		ReplyRate:       eng.ReplyPctOfSent,
+		DailyStats:      getCampaignDailyStats(item.ID),
+	}
+	if c, err := GetCampaign(item.ID); err == nil {
+		feat.ShowPixelMetrics = c.OpenTrackingEnabled || c.ClickTrackingEnabled
+	}
+	return feat
 }
 
 func GetCampaign(id int64) (Campaign, error) {

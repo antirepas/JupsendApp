@@ -43,6 +43,7 @@ func RegisterRoutes(server *gin.Engine) {
 		"templates/library.html",
 		"templates/library_sheet.html",
 		"templates/inbox.html",
+		"templates/inbox_thread.html",
 		"templates/inbox_compose.html",
 		"templates/templates_list.html",
 		"templates/templates_form.html",

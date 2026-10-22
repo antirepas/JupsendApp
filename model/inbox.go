@@ -114,6 +114,21 @@ func (t InboxThread) Initial() string {
 	return contactInitial(t.Email)
 }
 
+// DisplayTime formats LastAt like Gmail (time today, else short date).
+func (t InboxThread) DisplayTime() string {
+	if t.LastAt.IsZero() {
+		return ""
+	}
+	now := time.Now()
+	if t.LastAt.Year() == now.Year() && t.LastAt.YearDay() == now.YearDay() {
+		return t.LastAt.Format("15:04")
+	}
+	if t.LastAt.Year() == now.Year() {
+		return t.LastAt.Format("Jan 2")
+	}
+	return t.LastAt.Format("2006-01-02")
+}
+
 func (c InboxFolderCounts) Map() map[string]int {
 	return map[string]int{
 		InboxFolderAll:        c.All,

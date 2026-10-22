@@ -7,76 +7,164 @@
 <header class="app-page-header">
   <div class="app-page-header-text">
     <h2 class="app-page-title">Campaigns</h2>
-    <p class="app-page-sub">Folder-backed campaigns live in Library. Legacy campaigns without a folder still appear here.</p>
+    <p class="app-page-sub">Live and completed sends. Drafts live in Library folders.</p>
   </div>
   <div class="app-page-actions">
     <a href="/library?new_campaign=1" class="btn-primary">New Campaign</a>
   </div>
 </header>
-<div class="app-page-body app-page-body--wide">
+<div class="app-page-body app-page-body--full">
 {{if .success}}<div class="alert-success mb-6">{{.success}}</div>{{end}}
 {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
 
-<div class="card overflow-hidden">
-    {{if .campaigns}}
-    <table class="data-table">
-        <thead>
-            <tr>
-                <th>Name</th>
-                <th>Type</th>
-                <th>Content</th>
-                <th>Contacts</th>
-                <th>Status</th>
-                <th class="text-right">Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {{range .campaigns}}
-            <tr>
-                <td class="font-medium">{{.Name}}</td>
-                <td>
-                    {{if eq .ExecutionMode "workflow"}}
-                    <span class="badge badge-violet">Workflow</span>
-                    {{else}}
-                    <span class="badge badge-blue">One-time</span>
-                    {{end}}
-                </td>
-                <td class="text-sm">
-                    {{if eq .ExecutionMode "workflow"}}
-                    {{if .WorkflowName}}{{.WorkflowName}}{{else}}<span class="text-slate-400">Workflow</span>{{end}}
-                    {{else}}
-                    {{.TemplateAName}}{{if .TemplateBName}} <span class="text-slate-400">+ {{.TemplateBName}}</span>{{end}}
-                    {{end}}
-                </td>
-                <td>{{.ContactCount}}</td>
-                <td><span class="badge {{if eq .DisplayStatus "sent"}}badge-green{{else if eq .DisplayStatus "scheduled"}}badge-amber{{else}}badge-gray{{end}}">{{.DisplayStatus}}</span>
-                    {{if .ScheduledAt}}<span class="text-xs text-slate-500 block">{{.ScheduledAt.Format "Jan 2, 15:04"}}</span>{{end}}
-                </td>
-                <td class="text-right space-x-3">
-                    <a href="/campaigns/{{.ID}}" class="text-brand-600 text-sm font-medium">Manage</a>
-                    {{if gt .LibraryFolderID 0}}
-                    <a href="/library?folder={{.LibraryFolderID}}" class="text-brand-600 text-sm font-medium">Folder</a>
-                    {{end}}
-                    <a href="/campaigns/{{.ID}}/analytics" class="text-brand-600 text-sm font-medium">Analytics</a>
-                    <form method="POST" action="/campaigns/{{.ID}}/delete" class="inline" onsubmit="return confirm('Delete this campaign?');">
-                        <button type="submit" class="text-red-600 text-sm font-medium">Delete</button>
-                    </form>
-                </td>
-            </tr>
-            {{end}}
-        </tbody>
-    </table>
-    {{else}}
-    <div class="empty-state">
-        <p>No campaigns yet.</p>
-        <a href="/library?new_campaign=1" class="btn-primary mt-4">Create your first campaign</a>
+{{if .featured}}
+<section class="camp-home-featured card mb-6">
+  <div class="camp-home-featured-head">
+    <div class="min-w-0">
+      <p class="camp-home-kicker">Latest campaign</p>
+      <h3 class="camp-home-title">
+        <a href="/campaigns/{{.featured.Item.ID}}">{{.featured.Item.Name}}</a>
+      </h3>
+      <p class="camp-home-meta">
+        <span class="badge {{if eq .featured.Item.DisplayStatus "sent"}}badge-green{{else if eq .featured.Item.DisplayStatus "sending"}}badge-blue{{else}}badge-gray{{end}}">{{.featured.Item.DisplayStatus}}</span>
+        <span class="text-slate-500">{{.featured.Item.ContactCount}} contacts</span>
+        <span class="text-slate-400">·</span>
+        <span class="text-slate-500">{{.featured.Item.CreatedAt.Format "Jan 2, 2006"}}</span>
+      </p>
+    </div>
+    <div class="camp-home-featured-actions">
+      <a href="/campaigns/{{.featured.Item.ID}}/analytics" class="btn-secondary btn-sm">Full analytics</a>
+      <a href="/campaigns/{{.featured.Item.ID}}" class="btn-primary btn-sm">Manage</a>
+    </div>
+  </div>
+
+  <div class="camp-home-kpis">
+    <div class="camp-home-kpi">
+      <p class="camp-home-kpi-label">Sends</p>
+      <p class="camp-home-kpi-value">{{.featured.EmailsSent}}</p>
+    </div>
+    <div class="camp-home-kpi">
+      <p class="camp-home-kpi-label">Replies</p>
+      <p class="camp-home-kpi-value">{{.featured.Replies}}</p>
+      {{if gt .featured.EmailsSent 0}}
+      <p class="camp-home-kpi-sub">{{printf "%.1f" .featured.ReplyRate}}%</p>
+      {{end}}
+    </div>
+    <div class="camp-home-kpi">
+      <p class="camp-home-kpi-label">Positive</p>
+      <p class="camp-home-kpi-value text-emerald-700">{{.featured.PositiveReplies}}</p>
+    </div>
+    {{if .featured.ShowPixelMetrics}}
+    <div class="camp-home-kpi">
+      <p class="camp-home-kpi-label">Opens</p>
+      <p class="camp-home-kpi-value">{{.featured.UniqueOpens}}</p>
+      {{if gt .featured.EmailsSent 0}}
+      <p class="camp-home-kpi-sub">{{printf "%.1f" .featured.OpenRate}}%</p>
+      {{end}}
+    </div>
+    <div class="camp-home-kpi">
+      <p class="camp-home-kpi-label">Clicks</p>
+      <p class="camp-home-kpi-value">{{.featured.UniqueClicks}}</p>
     </div>
     {{end}}
+  </div>
+
+  <div class="camp-home-chart-wrap">
+    <canvas id="camp-home-chart" height="120"></canvas>
+  </div>
+</section>
+
+{{if .campaigns}}
+<section class="card overflow-hidden">
+  <div class="px-4 py-3 border-b border-slate-100">
+    <h3 class="font-semibold text-slate-900 text-sm">Earlier campaigns</h3>
+  </div>
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Contacts</th>
+        <th>Status</th>
+        <th class="text-right">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .campaigns}}
+      <tr>
+        <td class="font-medium">
+          <a href="/campaigns/{{.ID}}" class="text-slate-900 hover:text-brand-700">{{.Name}}</a>
+        </td>
+        <td>{{.ContactCount}}</td>
+        <td><span class="badge {{if eq .DisplayStatus "sent"}}badge-green{{else if eq .DisplayStatus "sending"}}badge-blue{{else}}badge-gray{{end}}">{{.DisplayStatus}}</span></td>
+        <td class="text-right space-x-3">
+          <a href="/campaigns/{{.ID}}/analytics" class="text-brand-600 text-sm font-medium">Analytics</a>
+          <a href="/campaigns/{{.ID}}" class="text-brand-600 text-sm font-medium">Manage</a>
+        </td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</section>
+{{end}}
+
+{{else}}
+<div class="card">
+  <div class="empty-state">
+    <p>No sent campaigns yet.</p>
+    <p class="text-sm text-slate-500 mt-1">Launch a campaign from a Library folder — it will show up here with performance.</p>
+    <a href="/library?new_campaign=1" class="btn-primary mt-4">Create campaign</a>
+  </div>
 </div>
+{{end}}
+
 {{template "page_playbook" .}}
 </div>
 </div>
 {{template "page_shell_end" .}}
+{{if .featured}}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+  var showPixel = {{if .featured.ShowPixelMetrics}}true{{else}}false{{end}};
+  var daily = [
+    {{range .featured.DailyStats}}
+    { date: "{{.Date}}", sends: {{.Sends}}, opens: {{.Opens}}, clicks: {{.Clicks}}, replies: {{.Replies}} },
+    {{end}}
+  ];
+  var el = document.getElementById('camp-home-chart');
+  if (!el || typeof Chart === 'undefined') return;
+  var datasets = [
+    { label: 'Sends', data: daily.map(function (d) { return d.sends; }), borderColor: '#64748b', backgroundColor: 'rgba(100,116,139,0.08)', fill: true, tension: 0.35, pointRadius: 0, borderWidth: 2 },
+    { label: 'Replies', data: daily.map(function (d) { return d.replies; }), borderColor: '#059669', backgroundColor: 'rgba(5,150,105,0.08)', fill: true, tension: 0.35, pointRadius: 0, borderWidth: 2 }
+  ];
+  if (showPixel) {
+    datasets.splice(1, 0, {
+      label: 'Opens', data: daily.map(function (d) { return d.opens; }),
+      borderColor: '#2563eb', backgroundColor: 'rgba(37,99,235,0.06)', fill: false, tension: 0.35, pointRadius: 0, borderWidth: 2
+    });
+  }
+  new Chart(el, {
+    type: 'line',
+    data: {
+      labels: daily.length ? daily.map(function (d) { return d.date; }) : ['—'],
+      datasets: datasets
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom', labels: { boxWidth: 10, boxHeight: 10, font: { size: 11 } } },
+        tooltip: { mode: 'index', intersect: false }
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { maxTicksLimit: 6, font: { size: 10 }, color: '#94a3b8' } },
+        y: { beginAtZero: true, grid: { color: '#f1f5f9' }, ticks: { precision: 0, font: { size: 10 }, color: '#94a3b8' } }
+      }
+    }
+  });
+})();
+</script>
+{{end}}
 </body>
 </html>
 {{end}}
