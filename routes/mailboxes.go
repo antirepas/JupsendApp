@@ -553,25 +553,19 @@ func MailboxesPage(c *gin.Context) {
 				row.IMAPHost = acc.IMAPHost
 				row.IMAPPort = acc.IMAPPort
 				row.SMTPUser = acc.SMTPUser
-				row.WarmupEnabled = acc.WarmupEnabled
+				row.WarmupEnabled = false
 				row.DailyLimit = acc.DailyLimit
 				row.SendsToday = acc.SendsToday
-				schedule := outbound.EffectiveDailyCap(acc)
-				cap, hint := outbound.ApplyInsightsToCap(schedule, acc, m.AnalyticsJSON)
-				if acc.WarmupEnabled {
-					row.WarmupLabel = fmt.Sprintf("%d/%d", acc.SendsToday, cap)
-					row.WarmupReady = true
-				} else {
-					row.WarmupLabel = "Add"
-					row.WarmupReady = false
-				}
-				if hint.Adjusted {
+				cap := outbound.EffectiveDailyCap(acc)
+				row.WarmupLabel = fmt.Sprintf("%d/%d", acc.SendsToday, cap)
+				row.WarmupReady = true
+				if hint := outbound.ParseInsightsWarmupHint(m.AnalyticsJSON); hint.Adjusted {
 					row.InsightsHint = hint.Reason
 				}
 				row.CampaignsLabel = "—"
 			}
 		} else if st == "ready" || st == "active" {
-			row.WarmupLabel = "Add"
+			row.WarmupLabel = "—"
 		}
 		if row.Source == "" {
 			if strings.EqualFold(m.Platform, "MANUAL") {
@@ -959,13 +953,12 @@ func MailboxesRevealPassword(c *gin.Context) {
 func MailboxesUpdateWarmup(c *gin.Context) {
 	userID := mustUserID(c)
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
-	enabled := c.PostForm("warmup_enabled") == "1" || c.PostForm("warmup_enabled") == "on"
 	daily, _ := strconv.Atoi(strings.TrimSpace(c.PostForm("daily_limit")))
-	if err := model.UpdateMailboxWarmupSettings(userID, id, enabled, daily); err != nil {
+	if err := model.UpdateMailboxWarmupSettings(userID, id, false, daily); err != nil {
 		c.Redirect(http.StatusFound, mailboxManageURL(id, "settings", err.Error(), ""))
 		return
 	}
-	c.Redirect(http.StatusFound, mailboxManageURL(id, "settings", "", "Warmup settings saved"))
+	c.Redirect(http.StatusFound, mailboxManageURL(id, "settings", "", "Send limits saved"))
 }
 
 func MailboxesCancel(c *gin.Context) {

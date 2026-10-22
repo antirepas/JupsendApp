@@ -8,7 +8,8 @@ import (
 	"emailtracker.com/model"
 )
 
-// InsightsWarmupHint extracts an optional daily-cap hint from InboxKit insights JSON.
+// InsightsWarmupHint extracts an optional daily-cap hint from InboxKit insights JSON
+// (display/advisory only — does not change send caps).
 type InsightsWarmupHint struct {
 	RecommendedDaily int
 	HealthScore      float64 // 0-100 if present
@@ -49,7 +50,7 @@ func ParseInsightsWarmupHint(raw string) InsightsWarmupHint {
 	if h.HealthScore > 0 && h.HealthScore < 50 {
 		h.Adjusted = true
 		h.Reason = "InboxKit health score low"
-		h.RecommendedDaily = -1 // signal: soften schedule
+		h.RecommendedDaily = -1
 	}
 	return h
 }
@@ -102,28 +103,12 @@ func floatFromAny(vals ...any) float64 {
 	return 0
 }
 
-// ApplyInsightsToCap clamps a schedule cap using InboxKit hints; never exceeds account.DailyLimit.
+// ApplyInsightsToCap returns scheduleCap unchanged (hints are advisory only).
 func ApplyInsightsToCap(scheduleCap int, account model.SMTPAccount, analyticsJSON string) (int, InsightsWarmupHint) {
-	cap := scheduleCap
 	hint := ParseInsightsWarmupHint(analyticsJSON)
-	if !hint.Adjusted {
-		return cap, hint
+	_ = account
+	if scheduleCap < 1 {
+		scheduleCap = 1
 	}
-	if hint.RecommendedDaily > 0 {
-		if hint.RecommendedDaily < cap {
-			cap = hint.RecommendedDaily
-		}
-	} else if hint.RecommendedDaily < 0 {
-		cap = scheduleCap / 2
-		if cap < model.DefaultWarmupDailyCap {
-			cap = model.DefaultWarmupDailyCap
-		}
-	}
-	if account.DailyLimit > 0 && cap > account.DailyLimit {
-		cap = account.DailyLimit
-	}
-	if cap < 1 {
-		cap = 1
-	}
-	return cap, hint
+	return scheduleCap, hint
 }

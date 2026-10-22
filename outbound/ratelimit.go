@@ -39,7 +39,7 @@ func rateLimitReason(account model.SMTPAccount, job model.SendJob) string {
 	analytics := model.GetMailboxAnalyticsBySMTPAccountID(account.ID)
 	cap := EffectiveDailyCapWithInsights(account, analytics)
 	if account.SendsToday >= cap {
-		return "mailbox daily/warmup cap reached (" +
+		return "mailbox daily limit reached (" +
 			strconv.Itoa(account.SendsToday) + "/" + strconv.Itoa(cap) + "); resumes after midnight"
 	}
 	if !accountUnderMinuteLimit(account) {
@@ -116,12 +116,12 @@ func AccountCanSendNow(account model.SMTPAccount) bool {
 }
 
 // AccountCanSendManualNow allows one-off sends and conversation replies even when
-// the warmup / daily campaign cap is exhausted. Status and per-minute limits still apply.
+// the daily campaign cap is exhausted. Status and per-minute limits still apply.
 func AccountCanSendManualNow(account model.SMTPAccount) bool {
 	return accountCanSend(account, false, true, false)
 }
 
-// AccountCanSendNowForJob applies rate limits. Manual one-off sends skip daily warmup
+// AccountCanSendNowForJob applies rate limits. Manual one-off sends skip daily
 // caps and spacing so replies / test emails are not blocked behind campaign throttling.
 func AccountCanSendNowForJob(account model.SMTPAccount, job model.SendJob) bool {
 	if job.Priority >= PriorityManual {

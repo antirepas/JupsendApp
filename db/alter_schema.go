@@ -13,6 +13,16 @@ func runAlterSchema() {
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS wizard_dismissed_at TIMESTAMPTZ`,
 		`UPDATE smtp_accounts SET warmup_started_at = COALESCE(warmup_started_at, created_at, CURRENT_TIMESTAMP)
 		 WHERE warmup_enabled = 1 AND warmup_started_at IS NULL`,
+		// Warmup ramp retired: use daily_limit / spacing only.
+		`UPDATE smtp_accounts SET
+			warmup_enabled = 0,
+			warmup_daily_cap = 0,
+			warmup_target_daily_cap = 0,
+			warmup_increment_per_day = 0,
+			warmup_started_at = NULL,
+			warmup_current_cap = 0,
+			warmup_earned_days = 0
+		 WHERE COALESCE(warmup_enabled, 0) = 1`,
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_tier TEXT NOT NULL DEFAULT 'free'`,
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS whop_membership_id TEXT DEFAULT ''`,
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS whop_member_id TEXT DEFAULT ''`,

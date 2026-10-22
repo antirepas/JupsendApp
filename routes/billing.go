@@ -20,7 +20,6 @@ type billingPlanView struct {
 	Name        string
 	DailyEmails int
 	AICredits   int
-	Warmup      bool
 	Current     bool
 }
 
@@ -42,7 +41,6 @@ func BillingPage(c *gin.Context) {
 			Name:        p.Name,
 			DailyEmails: p.DailyEmails,
 			AICredits:   p.AICredits,
-			Warmup:      p.Warmup,
 			Current:     p.Tier == currentTier,
 		})
 	}

@@ -49,7 +49,7 @@ func SignupPlanPage(c *gin.Context) {
 		"plan":             string(tier),
 		"dailyEmails":      spec.DailyEmailCap,
 		"aiCreditsPerDay":  spec.AICreditsPerDay,
-		"warmup":           spec.WarmupEnabled,
+		"warmup":           false,
 		"includedDomains":  spec.IncludedDomains,
 		"includedMailboxes": spec.IncludedMailboxes,
 		"stripeLikeNote":   "Whop checkout is used for Pro.",

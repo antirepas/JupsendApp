@@ -422,18 +422,15 @@ func TestComputeCombinedWarmupProgress(t *testing.T) {
 		t.Fatal("empty should have no account")
 	}
 
-	start := time.Now()
 	a := model.SMTPAccount{
 		ID: 1, Status: "active", FromEmail: "a@x.com", SMTPHost: "smtp.gmail.com",
 		SMTPUser: "a", SMTPPassword: "p", MailboxSource: model.MailboxSourceInboxKit,
-		WarmupEnabled: true, WarmupDailyCap: 20, WarmupTargetDailyCap: 100,
-		WarmupIncrementPerDay: 20, DailyLimit: 100, SendsToday: 5, WarmupStartedAt: &start,
+		DailyLimit: 100, SendsToday: 5,
 	}
 	b := model.SMTPAccount{
 		ID: 2, Status: "active", FromEmail: "b@x.com", SMTPHost: "smtp.gmail.com",
 		SMTPUser: "b", SMTPPassword: "p", MailboxSource: model.MailboxSourceInboxKit,
-		WarmupEnabled: true, WarmupDailyCap: 20, WarmupTargetDailyCap: 100,
-		WarmupIncrementPerDay: 20, DailyLimit: 100, SendsToday: 10, WarmupStartedAt: &start,
+		DailyLimit: 100, SendsToday: 10,
 	}
 	p := ComputeCombinedWarmupProgress([]model.SMTPAccount{a, b})
 	if !p.HasAccount || p.MailboxCount != 2 {
@@ -442,8 +439,8 @@ func TestComputeCombinedWarmupProgress(t *testing.T) {
 	if p.SendsToday != 15 {
 		t.Fatalf("sends=%d", p.SendsToday)
 	}
-	if p.TodayCap != 40 {
-		t.Fatalf("cap=%d want 40 (day0 start caps)", p.TodayCap)
+	if p.TodayCap != 200 {
+		t.Fatalf("cap=%d want 200 (sum of daily limits)", p.TodayCap)
 	}
 	if p.CombinedLabel == "" {
 		t.Fatal("expected combined label")

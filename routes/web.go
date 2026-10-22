@@ -33,20 +33,21 @@ func Dashboard(ctx *gin.Context) {
 		stats               model.DashboardStats
 		contactActivityPage model.ContactActivityPage
 		daily               []model.DailyStat
-		counts            model.EntityCounts
-		campaigns         []model.CampaignListItem
-		benchmark         model.AccountBenchmark
-		recentExperiments []model.RecentExperiment
-		repliesThisMonth  int
-		inboxUnread       int
-		interestedCount   int
-		acc               model.SMTPAccount
-		readyAccounts     []model.SMTPAccount
-		statsErr          error
+		counts              model.EntityCounts
+		campaigns           []model.CampaignListItem
+		campaignBars        []model.DashboardCampaignBar
+		benchmark           model.AccountBenchmark
+		recentExperiments   []model.RecentExperiment
+		repliesThisMonth    int
+		inboxUnread         int
+		interestedCount     int
+		acc                 model.SMTPAccount
+		readyAccounts       []model.SMTPAccount
+		statsErr            error
 	)
 
 	var wg sync.WaitGroup
-	wg.Add(11)
+	wg.Add(12)
 	go func() {
 		defer wg.Done()
 		stats, statsErr = model.GetDashboardStats(userID)
@@ -66,6 +67,10 @@ func Dashboard(ctx *gin.Context) {
 	go func() {
 		defer wg.Done()
 		campaigns, _ = model.ListCampaigns(userID)
+	}()
+	go func() {
+		defer wg.Done()
+		campaignBars = model.ListDashboardCampaignBars(userID, 8)
 	}()
 	go func() {
 		defer wg.Done()
@@ -195,6 +200,15 @@ func Dashboard(ctx *gin.Context) {
 		activityRangeEnd = activityRangeStart + len(contactActivityPage.Items) - 1
 	}
 
+	neutralReplies := benchmark.UniqueReplies - benchmark.PositiveReplies - benchmark.NegativeReplies
+	if neutralReplies < 0 {
+		neutralReplies = 0
+	}
+	recentCampaigns := campaigns
+	if len(recentCampaigns) > 6 {
+		recentCampaigns = recentCampaigns[:6]
+	}
+
 	ctx.HTML(http.StatusOK, "dashboard.html", gin.H{
 		"title":               "Dashboard",
 		"active":              "dashboard",
@@ -211,6 +225,9 @@ func Dashboard(ctx *gin.Context) {
 		"dailyStats":          daily,
 		"counts":              counts,
 		"campaigns":           campaigns,
+		"recentCampaigns":     recentCampaigns,
+		"campaignBars":        campaignBars,
+		"neutralReplies":      neutralReplies,
 		"isEmpty":             isEmpty,
 		"setupSteps":          steps,
 		"stepsLeft":           stepsLeft,

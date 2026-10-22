@@ -288,7 +288,7 @@ func BuildCampaignSOPMarkdown(campaignID, userID int64) (content string, filenam
 	writeln("## 7. How to operate this campaign")
 	writeln("")
 	writeln("1. Confirm audience and suppressions are clean (verify emails; keep bounce rate low).")
-	writeln("2. Confirm sending mailboxes are ready and within warmup caps.")
+	writeln("2. Confirm sending mailboxes are ready and within daily send limits.")
 	writeln("3. Review each template subject/body above before launch.")
 	if c.ExecutionMode == "workflow" || c.ExecutionMode == "workflow_ab" {
 		writeln("4. Walk the workflow steps: waits must fully elapse between follow-ups.")

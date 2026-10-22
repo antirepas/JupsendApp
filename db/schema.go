@@ -276,7 +276,7 @@ func runSchema() {
 			daily_limit INTEGER NOT NULL DEFAULT 50,
 			per_minute_limit INTEGER NOT NULL DEFAULT 2,
 			min_seconds_between_sends INTEGER NOT NULL DEFAULT 30,
-			warmup_enabled SMALLINT NOT NULL DEFAULT 1,
+			warmup_enabled SMALLINT NOT NULL DEFAULT 0,
 			warmup_daily_cap INTEGER NOT NULL DEFAULT 20,
 			warmup_target_daily_cap INTEGER NOT NULL DEFAULT 50,
 			warmup_increment_per_day INTEGER NOT NULL DEFAULT 20,

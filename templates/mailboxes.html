@@ -72,9 +72,6 @@
     <strong>{{.combinedWarmup.SendsToday}} / {{.combinedWarmup.TodayCap}}</strong>
     {{if gt .combinedWarmup.MailboxCount 1}}({{.combinedWarmup.MailboxCount}} mailboxes){{end}}
     {{if ge .combinedWarmup.TodayRemaining 1}} · {{.combinedWarmup.TodayRemaining}} remaining today{{end}}
-    {{if and .combinedWarmup.Enabled (not .combinedWarmup.IsFullyWarmed)}}
-    <span class="block text-xs text-amber-800 mt-1">Warmup limits today’s volume ({{.combinedWarmup.TargetCap}}/day when fully warmed). Cap rises only when you use ~70% of a day’s limit — idle days don’t count.</span>
-    {{end}}
   </p>
   {{end}}
 
@@ -119,7 +116,7 @@
           <tr class="text-left text-xs uppercase tracking-wide text-gray-500 border-b border-gray-100">
             <th class="px-4 py-3 font-medium">Mailbox</th>
             <th class="px-4 py-3 font-medium">Status</th>
-            <th class="px-4 py-3 font-medium">Warmup</th>
+            <th class="px-4 py-3 font-medium">Today</th>
             <th class="px-4 py-3 font-medium">Campaigns</th>
             <th class="px-4 py-3 font-medium">Renewal Date</th>
             <th class="px-4 py-3 font-medium text-right">Action</th>
@@ -156,10 +153,8 @@
             <td class="px-4 py-3">
               {{if .WarmupReady}}
               <span class="text-xs text-gray-700">{{.WarmupLabel}}</span>
-              {{else if eq .WarmupLabel "Add"}}
-              <a href="/mailboxes?manage={{.ID}}&tab=settings" class="inline-flex items-center gap-1 text-xs font-medium text-brand-700 hover:underline">+ Add</a>
               {{else}}
-              <span class="text-gray-400">—</span>
+              <span class="text-gray-400">{{.WarmupLabel}}</span>
               {{end}}
             </td>
             <td class="px-4 py-3 text-gray-600">{{.CampaignsLabel}}</td>
@@ -483,17 +478,14 @@
         </form>
         {{end}}
         <form method="POST" action="/mailboxes/{{.ID}}/warmup" class="space-y-3 rounded-lg border border-gray-100 p-4">
-          <h4 class="text-sm font-medium text-charcoal">Warmup (jupsend)</h4>
-          <label class="flex items-center gap-2 text-sm">
-            <input type="checkbox" name="warmup_enabled" value="1" {{if .WarmupEnabled}}checked{{end}}>
-            Enable gradual daily ramp
-          </label>
+          <h4 class="text-sm font-medium text-charcoal">Send limits</h4>
+          <p class="text-xs text-gray-500">Daily cap for this mailbox. Spacing and per-minute limits still apply.</p>
           <div>
             <label class="form-label">Daily limit</label>
             <input name="daily_limit" type="number" min="1" class="form-input text-sm" value="{{if .DailyLimit}}{{.DailyLimit}}{{else}}50{{end}}">
           </div>
-          {{if .WarmupEnabled}}<p class="text-xs text-gray-500">Sent today: {{.SendsToday}}</p>{{end}}
-          <button type="submit" class="btn-secondary text-sm">Save warmup</button>
+          <p class="text-xs text-gray-500">Sent today: {{.SendsToday}}</p>
+          <button type="submit" class="btn-secondary text-sm">Save limits</button>
         </form>
         {{if .IsInboxKit}}
         <form method="POST" action="/mailboxes/{{.ID}}/cancel" class="rounded-lg border border-amber-200 bg-amber-50 p-4 space-y-2" onsubmit="return confirm('Cancel this mailbox at InboxKit? Sending will stop when the seat ends.');">

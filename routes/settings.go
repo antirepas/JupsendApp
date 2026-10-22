@@ -113,9 +113,6 @@ func parseSendingSettingsForm(c *gin.Context) model.SMTPAccount {
 	daily, _ := strconv.Atoi(c.PostForm("daily_limit"))
 	perMin, _ := strconv.Atoi(c.PostForm("per_minute_limit"))
 	minGap, _ := strconv.Atoi(c.PostForm("min_seconds_between_sends"))
-	warmCap, _ := strconv.Atoi(c.PostForm("warmup_daily_cap"))
-	warmTarget, _ := strconv.Atoi(c.PostForm("warmup_target_daily_cap"))
-	warmInc, _ := strconv.Atoi(c.PostForm("warmup_increment_per_day"))
 	if daily == 0 {
 		daily = 50
 	}
@@ -125,24 +122,12 @@ func parseSendingSettingsForm(c *gin.Context) model.SMTPAccount {
 	if minGap == 0 {
 		minGap = 30
 	}
-	if warmCap == 0 {
-		warmCap = 5
-	}
-	if warmTarget == 0 {
-		warmTarget = daily
-	}
-	if warmInc == 0 {
-		warmInc = 5
-	}
 	fromName := c.PostForm("from_name")
 	return model.SMTPAccount{
 		FromName:               fromName,
 		DailyLimit:             daily,
 		PerMinuteLimit:         perMin,
 		MinSecondsBetweenSends: minGap,
-		WarmupEnabled:          c.PostForm("warmup_enabled") == "on",
-		WarmupDailyCap:         warmCap,
-		WarmupTargetDailyCap:   warmTarget,
-		WarmupIncrementPerDay:  warmInc,
+		WarmupEnabled:          false,
 	}
 }

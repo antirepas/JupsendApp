@@ -29,10 +29,10 @@
           </div>
         </div>
         <ul class="mt-3 text-sm text-gray-600 space-y-1">
-          <li>Warmup: {{if .warmup}}Enabled (ramps to {{.dailyEmails}}/day){{else}}Disabled{{end}}</li>
+          <li>Up to {{.dailyEmails}} emails / day per mailbox</li>
           {{if eq .plan "pro"}}
           <li>Buy custom domains and mailboxes as add-ons</li>
-          <li>Warmup and higher per-mailbox send limits</li>
+          <li>Higher per-mailbox send limits</li>
           {{else}}
           <li>Shared platform mailbox (no custom domain)</li>
           {{end}}

@@ -207,7 +207,7 @@ func CreateDefaultSMTPAccountForUser(userID int64) error {
 
 func SaveGoogleOAuthAccount(userID int64, email, fromName, encRefresh, encAccess string, expiry time.Time) error {
 	now := time.Now()
-	warmup := 1
+	warmup := 0
 	var existingID int64
 	_ = db.QueryRow(`
 		SELECT id FROM smtp_accounts
@@ -302,14 +302,6 @@ func UpsertSMTPAccountForUser(userID int64, a SMTPAccount) error {
 
 func CreateSMTPAccountForUser(userID int64, a SMTPAccount) (int64, error) {
 	now := time.Now()
-	warmup := 0
-	if a.WarmupEnabled {
-		warmup = 1
-	}
-	warmupStart := now
-	if a.WarmupStartedAt != nil {
-		warmupStart = *a.WarmupStartedAt
-	}
 	row := db.QueryRow(`
 		INSERT INTO smtp_accounts (
 			user_id, name, smtp_host, smtp_port, smtp_user, smtp_password, from_email, from_name,
@@ -319,13 +311,12 @@ func CreateSMTPAccountForUser(userID int64, a SMTPAccount) (int64, error) {
 			sends_today_reset_at,
 			auth_type, oauth_refresh_token, oauth_access_token, oauth_expiry, google_email,
 			created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, 0, NULL, 0, 0, ?, ?, ?, ?, ?, ?, ?, ?)
 		RETURNING id
 	`,
 		userID, a.Name, a.SMTPHost, a.SMTPPort, a.SMTPUser, a.SMTPPassword, a.FromEmail, a.FromName,
 		a.IMAPHost, a.IMAPPort, a.IMAPUser, a.IMAPPassword, a.Status, a.DailyLimit, a.PerMinuteLimit,
-		a.MinSecondsBetweenSends, warmup, a.WarmupDailyCap, a.WarmupTargetDailyCap, a.WarmupIncrementPerDay,
-		warmupStart, WarmupStartCap(a), 0, now.Format("2006-01-02"),
+		a.MinSecondsBetweenSends, now.Format("2006-01-02"),
 		a.AuthType, a.OAuthRefreshToken, a.OAuthAccessToken, nullTime(a.OAuthExpiry), a.GoogleEmail,
 		now, now,
 	)
@@ -342,68 +333,31 @@ func nullTime(t time.Time) interface{} {
 }
 
 func UpdateSMTPAccount(a SMTPAccount) error {
-	warmup := 0
-	if a.WarmupEnabled {
-		warmup = 1
-	}
-	var warmupStart interface{}
-	if a.WarmupStartedAt != nil {
-		warmupStart = *a.WarmupStartedAt
-	}
+	// Warmup ramp is retired — always persist disabled/zero ramp fields.
 	_, err := db.Exec(`
 		UPDATE smtp_accounts SET
 			name=?, smtp_host=?, smtp_port=?, smtp_user=?, smtp_password=?, from_email=?, from_name=?,
 			imap_host=?, imap_port=?, imap_user=?, imap_password=?, status=?, daily_limit=?,
-			per_minute_limit=?, min_seconds_between_sends=?, warmup_enabled=?, warmup_daily_cap=?,
-			warmup_target_daily_cap=?, warmup_increment_per_day=?, warmup_started_at=?,
-			warmup_current_cap=?, warmup_earned_days=?,
+			per_minute_limit=?, min_seconds_between_sends=?, warmup_enabled=0, warmup_daily_cap=0,
+			warmup_target_daily_cap=0, warmup_increment_per_day=0, warmup_started_at=NULL,
+			warmup_current_cap=0, warmup_earned_days=0,
 			auth_type=?, oauth_refresh_token=?, oauth_access_token=?, oauth_expiry=?, google_email=?,
 			updated_at=?
 		WHERE id=?
 	`,
 		a.Name, a.SMTPHost, a.SMTPPort, a.SMTPUser, a.SMTPPassword, a.FromEmail, a.FromName,
 		a.IMAPHost, a.IMAPPort, a.IMAPUser, a.IMAPPassword, a.Status, a.DailyLimit,
-		a.PerMinuteLimit, a.MinSecondsBetweenSends, warmup, a.WarmupDailyCap,
-		a.WarmupTargetDailyCap, a.WarmupIncrementPerDay, warmupStart,
-		a.WarmupCurrentCap, a.WarmupEarnedDays,
+		a.PerMinuteLimit, a.MinSecondsBetweenSends,
 		a.AuthType, a.OAuthRefreshToken, a.OAuthAccessToken, nullTime(a.OAuthExpiry), a.GoogleEmail,
 		time.Now(), a.ID,
 	)
 	return err
 }
 
-// EnsureWarmupStartedAt stamps warmup_started_at when warmup is on but the clock was never set.
-// Also seeds warmup_current_cap to the start floor when unset (in memory always; DB when available).
+// EnsureWarmupStartedAt is a no-op (warmup ramp removed).
 func EnsureWarmupStartedAt(a *SMTPAccount) bool {
-	if a == nil || !a.WarmupEnabled {
-		return false
-	}
-	changed := false
-	if a.WarmupCurrentCap <= 0 {
-		a.WarmupCurrentCap = WarmupStartCap(*a)
-		changed = true
-	}
-	if a.ID <= 0 {
-		return changed
-	}
-	if a.WarmupStartedAt == nil {
-		start := time.Now()
-		if !a.CreatedAt.IsZero() {
-			start = a.CreatedAt
-		}
-		a.WarmupStartedAt = &start
-		if db.DB != nil {
-			_, err := db.Exec(`UPDATE smtp_accounts SET warmup_started_at=?, updated_at=? WHERE id=? AND warmup_started_at IS NULL`, start, time.Now(), a.ID)
-			if err != nil {
-				return changed
-			}
-		}
-		changed = true
-	}
-	if changed && a.WarmupCurrentCap > 0 && db.DB != nil {
-		_, _ = db.Exec(`UPDATE smtp_accounts SET warmup_current_cap=?, updated_at=? WHERE id=? AND COALESCE(warmup_current_cap, 0) = 0`, a.WarmupCurrentCap, time.Now(), a.ID)
-	}
-	return changed
+	_ = a
+	return false
 }
 
 func SetSMTPAccountStatus(id int64, status string) error {

@@ -11,24 +11,21 @@ import (
 )
 
 const (
-	DefaultWarmupDailyCap        = 20
-	DefaultWarmupIncrementPerDay = 20
+	DefaultDailyLimit            = 50
+	DefaultWarmupDailyCap        = 20 // legacy; unused (warmup removed)
+	DefaultWarmupIncrementPerDay = 20 // legacy; unused (warmup removed)
 	MailboxSourceShared          = "shared"
 	MailboxSourceInboxKit        = "inboxkit"
 	MailboxSourceManual          = "manual"
 )
 
 type planSpec struct {
-	DailyEmailCap             int
-	AICreditsPerDay           int
-	WarmupEnabled             bool
-	WarmupDailyCap            int
-	WarmupTargetDailyCap      int
-	WarmupIncrementPerDay     int
-	PerMinuteLimit            int
-	MinSecondsBetweenSends    int
-	IncludedDomains           int
-	IncludedMailboxes         int
+	DailyEmailCap          int
+	AICreditsPerDay        int
+	PerMinuteLimit         int
+	MinSecondsBetweenSends int
+	IncludedDomains        int
+	IncludedMailboxes      int
 }
 
 func PlanSpecForTier(tier PlanTier) (planSpec, error) {
@@ -37,10 +34,6 @@ func PlanSpecForTier(tier PlanTier) (planSpec, error) {
 		return planSpec{
 			DailyEmailCap:          10,
 			AICreditsPerDay:        50,
-			WarmupEnabled:          false,
-			WarmupDailyCap:         0,
-			WarmupTargetDailyCap:   0,
-			WarmupIncrementPerDay:  0,
 			PerMinuteLimit:         2,
 			MinSecondsBetweenSends: 30,
 			IncludedDomains:        0,
@@ -50,10 +43,6 @@ func PlanSpecForTier(tier PlanTier) (planSpec, error) {
 		return planSpec{
 			DailyEmailCap:          250, // per mailbox
 			AICreditsPerDay:        5000,
-			WarmupEnabled:          true,
-			WarmupDailyCap:         DefaultWarmupDailyCap,
-			WarmupTargetDailyCap:   250,
-			WarmupIncrementPerDay:  DefaultWarmupIncrementPerDay,
 			PerMinuteLimit:         2,
 			MinSecondsBetweenSends: 30,
 			// Domains and mailboxes are paid add-ons — not included with Pro.
@@ -79,7 +68,6 @@ type PlanInfo struct {
 	Name        string
 	DailyEmails int
 	AICredits   int
-	Warmup      bool
 	Domains     int
 	Mailboxes   int
 }
@@ -100,7 +88,6 @@ func PlanInfoForTier(tier PlanTier) PlanInfo {
 		Name:        name,
 		DailyEmails: spec.DailyEmailCap,
 		AICredits:   spec.AICreditsPerDay,
-		Warmup:      spec.WarmupEnabled,
 		Domains:     spec.IncludedDomains,
 		Mailboxes:   spec.IncludedMailboxes,
 	}
@@ -152,7 +139,7 @@ func EnsureAdminProAccess(userID int64) error {
 	return nil
 }
 
-// ApplyPlanLimitsToUser sets plan_tier + synchronizes smtp_accounts sending limits and warmup behavior.
+// ApplyPlanLimitsToUser sets plan_tier + synchronizes smtp_accounts sending limits.
 func ApplyPlanLimitsToUser(userID int64, tier PlanTier) error {
 	tier = NormalizePlanTier(string(tier))
 	spec, err := PlanSpecForTier(tier)
@@ -171,15 +158,6 @@ func ApplyPlanLimitsToUser(userID int64, tier PlanTier) error {
 	}
 
 	now := time.Now()
-
-	var warmupStartedAt any = nil
-	if spec.WarmupEnabled {
-		warmupStartedAt = now
-	}
-	warmupEnabledInt := 0
-	if spec.WarmupEnabled {
-		warmupEnabledInt = 1
-	}
 
 	tx, err := db.Begin()
 	if err != nil {
@@ -200,38 +178,22 @@ func ApplyPlanLimitsToUser(userID int64, tier PlanTier) error {
 
 	// Sync limit fields only. Never reset sends_today/last_send_at here — RequireMailboxSetup
 	// and billing webhooks call this often; wiping counters let Free users exceed the daily cap.
-	// Day rollover is handled by ResetAccountDailyIfNeeded.
+	// Day rollover is handled by ResetAccountDailyIfNeeded. Warmup ramp is retired.
 	if _, err := tx.Exec(`
 		UPDATE smtp_accounts SET
 			daily_limit=?,
 			per_minute_limit=?,
 			min_seconds_between_sends=?,
-			warmup_enabled=?,
-			warmup_daily_cap=?,
-			warmup_target_daily_cap=?,
-			warmup_increment_per_day=?,
-			warmup_started_at=CASE
-				WHEN ? = 1 AND (COALESCE(warmup_enabled, 0) = 0 OR warmup_started_at IS NULL) THEN ?
-				WHEN ? = 0 THEN NULL
-				ELSE warmup_started_at
-			END,
-			warmup_current_cap=CASE
-				WHEN ? = 1 AND (COALESCE(warmup_enabled, 0) = 0 OR COALESCE(warmup_current_cap, 0) = 0) THEN ?
-				WHEN ? = 0 THEN 0
-				ELSE warmup_current_cap
-			END,
-			warmup_earned_days=CASE
-				WHEN ? = 1 AND COALESCE(warmup_enabled, 0) = 0 THEN 0
-				WHEN ? = 0 THEN 0
-				ELSE warmup_earned_days
-			END,
+			warmup_enabled=0,
+			warmup_daily_cap=0,
+			warmup_target_daily_cap=0,
+			warmup_increment_per_day=0,
+			warmup_started_at=NULL,
+			warmup_current_cap=0,
+			warmup_earned_days=0,
 			updated_at=?
 		WHERE user_id=? AND COALESCE(mailbox_source,'') <> ?
 	`, spec.DailyEmailCap, spec.PerMinuteLimit, spec.MinSecondsBetweenSends,
-		warmupEnabledInt, spec.WarmupDailyCap, spec.WarmupTargetDailyCap, spec.WarmupIncrementPerDay,
-		warmupEnabledInt, warmupStartedAt, warmupEnabledInt,
-		warmupEnabledInt, spec.WarmupDailyCap, warmupEnabledInt,
-		warmupEnabledInt, warmupEnabledInt,
 		now, userID, MailboxSourceShared); err != nil {
 		return err
 	}

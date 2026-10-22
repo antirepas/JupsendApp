@@ -35,32 +35,14 @@ func EnsureDailyCounterReset(accountID int64) error {
 		return nil
 	}
 
-	currentCap := EffectiveWarmupCurrentCap(acc)
-	earnedDays := acc.WarmupEarnedDays
-	if acc.WarmupEnabled {
-		next, promoted := NextWarmupCapAfterDay(
-			currentCap,
-			acc.SendsToday,
-			WarmupIncrement(acc),
-			WarmupTargetCap(acc),
-			acc.DailyLimit,
-		)
-		currentCap = next
-		if promoted {
-			earnedDays++
-		}
-	}
-
 	_, err = db.Exec(`
 		UPDATE smtp_accounts SET
 			sends_today = 0,
 			sends_today_reset_at = ?,
-			warmup_current_cap = ?,
-			warmup_earned_days = ?,
 			updated_at = ?
 		WHERE id = ?
 		  AND (sends_today_reset_at IS NULL OR sends_today_reset_at::date < CURRENT_DATE)
-	`, today, currentCap, earnedDays, time.Now(), accountID)
+	`, today, time.Now(), accountID)
 	return err
 }
 
@@ -102,7 +84,7 @@ func smtpAccountIDsLinkedToOutreach(userID int64) (map[int64]bool, error) {
 }
 
 // filterSendReadySeats drops Free shared seats when personal seats exist, and when the user
-// has outreach-linked SMTP rows, keeps only those (so orphan/legacy profiles don't inflate warmup).
+// has outreach-linked SMTP rows, keeps only those (so orphan/legacy profiles don't inflate counts).
 func filterSendReadySeats(userID int64, ready []SMTPAccount) []SMTPAccount {
 	if len(ready) == 0 {
 		return ready

@@ -23,8 +23,11 @@ func TestParseInsightsHealthSoftens(t *testing.T) {
 func TestApplyInsightsToCap(t *testing.T) {
 	acc := model.SMTPAccount{DailyLimit: 250}
 	cap, hint := ApplyInsightsToCap(80, acc, `{"recommended_daily": 50}`)
-	if cap != 50 || !hint.Adjusted {
-		t.Fatalf("cap=%d hint=%+v", cap, hint)
+	if cap != 80 {
+		t.Fatalf("cap=%d want schedule unchanged (hints advisory only)", cap)
+	}
+	if !hint.Adjusted || hint.RecommendedDaily != 50 {
+		t.Fatalf("hint=%+v", hint)
 	}
 	cap2, _ := ApplyInsightsToCap(80, acc, `{}`)
 	if cap2 != 80 {

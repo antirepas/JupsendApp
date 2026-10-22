@@ -47,8 +47,8 @@ func TestEffectiveDailyCap(t *testing.T) {
 		DailyLimit:            50,
 	}
 	cap := EffectiveDailyCap(acc)
-	if cap != 15 {
-		t.Fatalf("expected 15 got %d", cap)
+	if cap != 50 {
+		t.Fatalf("expected daily limit 50 got %d", cap)
 	}
 	acc.WarmupEnabled = false
 	if EffectiveDailyCap(acc) != 50 {

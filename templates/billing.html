@@ -35,7 +35,7 @@
         <div class="text-sm text-slate-600 space-y-1">
             <p><strong>{{.currentPlan.DailyEmails}}</strong> emails / day</p>
             <p><strong>{{.currentPlan.AICredits}}</strong> AI credits / day</p>
-            <p>Warmup: {{if .currentPlan.Warmup}}On{{else}}Off{{end}}</p>
+            <p>Daily limit: {{.currentPlan.DailyEmails}}/mailbox</p>
         </div>
     </div>
     {{if .manageURL}}
@@ -56,7 +56,7 @@
         <ul class="text-sm text-slate-600 space-y-1 mb-4">
             <li>{{.DailyEmails}} emails / day{{if eq .Tier "pro"}} per mailbox{{end}}</li>
             <li>{{.AICredits}} AI credits / day</li>
-            <li>Warmup {{if .Warmup}}on{{else}}off{{end}}</li>
+            <li>{{.DailyEmails}} emails/day per mailbox</li>
             {{if eq .Tier "pro"}}
             <li>Buy domains &amp; mailboxes as add-ons</li>
             {{else}}

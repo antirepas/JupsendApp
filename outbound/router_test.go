@@ -51,7 +51,7 @@ func TestAccountCanSendNowForJobSkipsSpacingForManual(t *testing.T) {
 	}
 }
 
-func TestAccountCanSendNowForJobSkipsDailyWarmupForManual(t *testing.T) {
+func TestAccountCanSendNowForJobSkipsDailyLimitForManual(t *testing.T) {
 	now := time.Now()
 	acc := model.SMTPAccount{
 		ID:                     1,
@@ -59,27 +59,22 @@ func TestAccountCanSendNowForJobSkipsDailyWarmupForManual(t *testing.T) {
 		DailyLimit:             50,
 		PerMinuteLimit:         10,
 		MinSecondsBetweenSends: 0,
-		WarmupEnabled:          true,
-		WarmupDailyCap:         20,
-		WarmupTargetDailyCap:   50,
-		WarmupIncrementPerDay:  20,
-		WarmupStartedAt:        &now,
-		SendsToday:             20,
+		SendsToday:             50,
 		SendsTodayResetAt:      &now,
 	}
 	if AccountCanSendNow(acc) {
-		t.Fatal("campaign send should be blocked at warmup cap")
+		t.Fatal("campaign send should be blocked at daily limit")
 	}
 	manual := model.SendJob{Priority: PriorityManual}
 	if !AccountCanSendNowForJob(acc, manual) {
-		t.Fatal("manual one-off should ignore warmup daily cap")
+		t.Fatal("manual one-off should ignore daily cap")
 	}
 	if !AccountCanSendManualNow(acc) {
-		t.Fatal("conversation reply path should ignore warmup daily cap")
+		t.Fatal("conversation reply path should ignore daily cap")
 	}
 	campaign := model.SendJob{Priority: PriorityCampaign}
 	if AccountCanSendNowForJob(acc, campaign) {
-		t.Fatal("campaign job must still respect warmup cap")
+		t.Fatal("campaign job must still respect daily cap")
 	}
 }
 

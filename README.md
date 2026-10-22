@@ -106,7 +106,7 @@ If the SMTP test reports ports blocked, open outbound 465/587 on the VPS or move
 - **Sign up** (`/signup`) — email + password (8+ characters). Redirects to **Billing** to choose a plan.
 - **Login** (`/login`) / **Logout** (sidebar).
 - Sessions use a signed HTTP-only cookie; set `SESSION_SECRET` in production (if unset, a random dev secret is generated and sessions reset on restart).
-- **Settings** (`/settings`) — change password, per-user `BASE_URL`, connect Gmail (OAuth), send limits and warmup. Available without an active subscription.
+- **Settings** (`/settings`) — change password, per-user `BASE_URL`, connect Gmail (OAuth), send limits. Available without an active subscription.
 - **Billing** (`/settings/billing`) — Whop checkout and subscription status. Required for dashboard, campaigns, contacts, sends, and workflows.
 
 Protected routes redirect to login; unsubscribed users are redirected to billing. JSON API routes under `/api/v1/*` return `401` when unauthenticated and `402` when subscription is inactive. Tracking endpoints (`/api/v1/track/*`) and the Whop webhook remain public.
@@ -254,14 +254,13 @@ Email sends go through a **PostgreSQL-backed job queue** processed by a backgrou
 - Rate limits apply per profile.
 - If OAuth expires, Settings and the Sends page show a reconnect warning.
 
-### Rate limits & warmup (defaults per account)
+### Rate limits (defaults per account)
 
 | Setting | Default |
 |---------|---------|
 | `per_minute_limit` | 2 |
 | `daily_limit` | 50 |
 | `min_seconds_between_sends` | 30s |
-| Warmup | usage-based: starts at plan floor; +increment only after using ~70% of that day’s cap |
 
 ### Retries
 
