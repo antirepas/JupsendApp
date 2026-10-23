@@ -392,8 +392,15 @@ func CampaignDetailPage(ctx *gin.Context) {
 		return
 	}
 
-	if c, err := model.GetCampaignForUser(id, userID); err == nil && c.LibraryFolderID > 0 {
-		_ = model.SyncCampaignFromFolder(userID, id)
+	if c, err := model.GetCampaignForUser(id, userID); err == nil {
+		if c.LibraryFolderID > 0 {
+			_ = model.SyncCampaignFromFolder(userID, id)
+		} else if model.IsLegacyWorkflowMode(c.ExecutionMode) && model.CampaignDraftMutable(c) {
+			_ = model.ConvertCampaignWorkflowToSequence(c.ID, userID, c.ExecutionMode, c.WorkflowVersionID, c.TemplateAID, c.TemplateBID)
+		}
+		if refreshed, rErr := model.GetCampaignForUser(id, userID); rErr == nil && model.IsSequenceMode(refreshed.ExecutionMode) {
+			_ = model.RepairCampaignSequenceSteps(refreshed.ID, refreshed.TemplateAID)
+		}
 	}
 	detail, err := model.GetCampaignDetail(id, userID)
 	if err != nil {
@@ -860,8 +867,29 @@ func SendCampaign(ctx *gin.Context) {
 		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error="+url.QueryEscape(err.Error()))
 		return
 	}
-	if (campaign.ExecutionMode == "workflow" || campaign.ExecutionMode == "workflow_ab") && campaign.WorkflowVersionID > 0 {
-		if err := model.ValidateCampaignWorkflowReady(campaign); err != nil {
+	contactIDs, err := model.GetCampaignContactIDs(campaignID)
+	if err != nil || len(contactIDs) == 0 {
+		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error="+url.QueryEscape("Add contacts before sending"))
+		return
+	}
+	if !model.IsSequenceMode(campaign.ExecutionMode) && !model.IsLegacyWorkflowMode(campaign.ExecutionMode) && campaign.TemplateAID <= 0 {
+		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error="+url.QueryEscape("Pick a template before sending"))
+		return
+	}
+	if model.IsLegacyWorkflowMode(campaign.ExecutionMode) {
+		if err := model.ConvertCampaignWorkflowToSequence(campaign.ID, userID, campaign.ExecutionMode, campaign.WorkflowVersionID, campaign.TemplateAID, campaign.TemplateBID); err != nil {
+			ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error="+url.QueryEscape("Could not upgrade this campaign to a sequence — open Manage and save Campaign type as Sequence or One-time send"))
+			return
+		}
+		campaign, err = model.GetCampaignForUser(campaignID, userID)
+		if err != nil {
+			ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error="+url.QueryEscape("Campaign not found after upgrade"))
+			return
+		}
+	}
+	if model.IsSequenceMode(campaign.ExecutionMode) {
+		_ = model.RepairCampaignSequenceSteps(campaign.ID, campaign.TemplateAID)
+		if err := model.ValidateCampaignSequenceReady(campaign); err != nil {
 			ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error="+url.QueryEscape(err.Error()))
 			return
 		}
@@ -1138,7 +1166,13 @@ func launchCampaign(userID, campaignID int64) (outbound.EnqueueResult, error) {
 		return outbound.EnqueueResult{}, err
 	}
 	if model.IsLegacyWorkflowMode(campaign.ExecutionMode) {
-		return outbound.EnqueueResult{}, fmt.Errorf("this campaign still uses a legacy workflow — open Manage and configure a Sequence instead")
+		if err := model.ConvertCampaignWorkflowToSequence(campaign.ID, userID, campaign.ExecutionMode, campaign.WorkflowVersionID, campaign.TemplateAID, campaign.TemplateBID); err != nil {
+			return outbound.EnqueueResult{}, fmt.Errorf("legacy workflow upgrade failed: %w", err)
+		}
+		campaign, err = model.GetCampaignForUser(campaignID, userID)
+		if err != nil {
+			return outbound.EnqueueResult{}, fmt.Errorf("campaign not found after upgrade")
+		}
 	}
 	if model.IsSequenceMode(campaign.ExecutionMode) {
 		sent, failed, err := startSequenceCampaign(campaignID, campaign)

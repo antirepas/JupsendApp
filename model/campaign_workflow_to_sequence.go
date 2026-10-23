@@ -65,6 +65,7 @@ func ConvertCampaignWorkflowToSequence(campaignID, userID int64, mode string, ve
 			steps = extracted
 		}
 	}
+	steps = sanitizeConvertedSequenceSteps(steps, templateA)
 	if err := SaveCampaignSequenceSteps(campaignID, steps); err != nil {
 		return err
 	}
@@ -74,6 +75,55 @@ func ConvertCampaignWorkflowToSequence(campaignID, userID int64, mode string, ve
 		WHERE id = ? AND user_id = ?
 	`, newMode, campaignID, userID)
 	return err
+}
+
+// sanitizeConvertedSequenceSteps keeps a valid first email and drops follow-ups
+// that have no template (legacy graphs often left send nodes unmapped).
+func sanitizeConvertedSequenceSteps(steps []CampaignSequenceStep, _ int64) []CampaignSequenceStep {
+	if len(steps) == 0 {
+		return []CampaignSequenceStep{{Position: 1, TemplateID: 0, DelaySecondsBefore: 0}}
+	}
+	out := make([]CampaignSequenceStep, 0, len(steps))
+	for i, s := range steps {
+		if i == 0 {
+			s.Position = 1
+			s.TemplateID = 0
+			s.DelaySecondsBefore = 0
+			out = append(out, s)
+			continue
+		}
+		if s.TemplateID <= 0 {
+			continue
+		}
+		s.Position = len(out) + 1
+		out = append(out, s)
+	}
+	if len(out) == 0 {
+		return []CampaignSequenceStep{{Position: 1, TemplateID: 0, DelaySecondsBefore: 0}}
+	}
+	return out
+}
+
+// RepairCampaignSequenceSteps drops incomplete follow-ups left by legacy workflow conversion.
+func RepairCampaignSequenceSteps(campaignID int64, templateA int64) error {
+	steps, err := ListCampaignSequenceSteps(campaignID)
+	if err != nil {
+		return err
+	}
+	fixed := sanitizeConvertedSequenceSteps(steps, templateA)
+	if len(fixed) == len(steps) {
+		same := true
+		for i := range fixed {
+			if fixed[i].TemplateID != steps[i].TemplateID || fixed[i].DelaySecondsBefore != steps[i].DelaySecondsBefore {
+				same = false
+				break
+			}
+		}
+		if same {
+			return nil
+		}
+	}
+	return SaveCampaignSequenceSteps(campaignID, fixed)
 }
 
 // SequenceStepsFromOutreachWorkflow walks the primary path (default / yes / hot) and

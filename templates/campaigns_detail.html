@@ -22,7 +22,7 @@
         <h2 class="app-page-title">{{.campaign.Name}}</h2>
         <p class="app-page-sub">
           {{.campaign.ContactCount}} contacts ·
-          {{if .isSequence}}<span class="badge badge-violet">Sequence</span>{{if eq .campaignMode "sequence_ab"}}<span class="badge badge-violet ml-1">A/B first email</span>{{end}}{{else}}<span class="badge badge-blue">One-time</span>{{end}}
+          {{if .isLegacyWorkflow}}<span class="badge badge-amber">Needs Sequence upgrade</span>{{else if .isSequence}}<span class="badge badge-violet">Sequence</span>{{if eq .campaignMode "sequence_ab"}}<span class="badge badge-violet ml-1">A/B first email</span>{{end}}{{else}}<span class="badge badge-blue">One-time</span>{{end}}
           <span class="badge {{if eq .campaign.DisplayStatus "sent"}}badge-green{{else if eq .campaign.DisplayStatus "stopped"}}badge-gray{{else if eq .campaign.DisplayStatus "scheduled"}}badge-amber{{else if eq .campaign.DisplayStatus "sending"}}badge-blue{{else}}badge-gray{{end}} ml-1">{{.campaign.DisplayStatus}}</span>
           {{if .campaign.ScheduledAt}}<span class="text-sm text-slate-500 ml-2">· {{if or .isWorkflow .isSequence}}starts{{else}}sends{{end}} {{.campaign.ScheduledAt.Format "Jan 2, 2006 15:04"}}</span>{{end}}
         </p>
@@ -61,6 +61,12 @@
 <div class="app-page-body app-page-body--full">
 {{if .success}}<div class="alert-success mb-6">{{.success}}</div>{{end}}
 {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
+
+{{if .isLegacyWorkflow}}
+<div class="alert-error mb-6">
+  This campaign still uses an old workflow graph that can no longer launch. Under <strong>Campaign type</strong>, choose <strong>Sequence</strong> or <strong>One-time send</strong> and click Save — then Send again.
+</div>
+{{end}}
 
 {{if .smtpOptions}}
 <div class="card mb-6">
