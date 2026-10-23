@@ -318,6 +318,7 @@ func RegisterRoutes(server *gin.Engine) {
 		authd.POST("/campaigns/:id/sequence/recommended", ApplyRecommendedSequenceWeb)
 		authd.POST("/campaigns/:id/reply-watchers", SaveCampaignReplyWatchersWeb)
 		authd.POST("/campaigns/:id/mode", SaveCampaignMode)
+		authd.POST("/campaigns/:id/templates", SaveCampaignTemplatesWeb)
 		authd.POST("/campaigns/:id/hypothesis", SaveCampaignHypothesis)
 		authd.POST("/campaigns/:id/temperature-rules", SaveCampaignTemperatureRules)
 		authd.POST("/campaigns/:id/mailboxes", SaveCampaignMailboxes)

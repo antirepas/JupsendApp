@@ -124,7 +124,8 @@ func ApplyRecommendedSequenceWeb(ctx *gin.Context) {
 	ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?success="+url.QueryEscape("Recommended sequence applied"))
 }
 
-// SaveCampaignReplyWatchersWeb attaches published reply-watcher workflows + send-step templates.
+// SaveCampaignReplyWatchersWeb attaches published reply-watcher workflows.
+// Send templates come from the workflow graph (set in the workflow editor), not from Manage.
 func SaveCampaignReplyWatchersWeb(ctx *gin.Context) {
 	userID := mustUserID(ctx)
 	campaignID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
@@ -138,14 +139,14 @@ func SaveCampaignReplyWatchersWeb(ctx *gin.Context) {
 		return
 	}
 	allowed, _ := model.ListFolderReplyWorkflows(userID, campaign.LibraryFolderID)
-	allowedSet := map[int64]bool{}
+	allowedByID := map[int64]model.CampaignWatcherWorkflow{}
 	for _, w := range allowed {
-		allowedSet[w.WorkflowID] = true
+		allowedByID[w.WorkflowID] = w
 	}
 	var workflowIDs []int64
 	for _, raw := range ctx.PostFormArray("watcher_workflow") {
 		wid, _ := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
-		if wid > 0 && allowedSet[wid] {
+		if wid > 0 && allowedByID[wid].WorkflowID > 0 {
 			workflowIDs = append(workflowIDs, wid)
 		}
 	}
@@ -153,40 +154,13 @@ func SaveCampaignReplyWatchersWeb(ctx *gin.Context) {
 		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error="+url.QueryEscape(err.Error()))
 		return
 	}
-	if mappings := parseWatcherStepTemplateMap(ctx); len(mappings) > 0 {
-		existing, _ := model.GetCampaignWorkflowTemplates(campaignID)
-		for k, v := range mappings {
-			if v > 0 && campaign.LibraryFolderID > 0 && !model.TemplateInFolder(userID, v, campaign.LibraryFolderID) {
-				continue
-			}
-			if v > 0 {
-				existing[k] = v
-			}
+	for _, wid := range workflowIDs {
+		w := allowedByID[wid]
+		if w.VersionID > 0 {
+			_ = model.SeedCampaignTemplatesFromWorkflowVersion(campaignID, w.VersionID)
 		}
-		_ = model.SaveCampaignWorkflowTemplates(campaignID, existing)
 	}
 	ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?success="+url.QueryEscape("Reply watchers saved"))
-}
-
-func parseWatcherStepTemplateMap(ctx *gin.Context) map[string]int64 {
-	out := map[string]int64{}
-	if err := ctx.Request.ParseForm(); err != nil {
-		return out
-	}
-	for key, vals := range ctx.Request.PostForm {
-		if !strings.HasPrefix(key, "watcher_step_template[") || !strings.HasSuffix(key, "]") {
-			continue
-		}
-		nodeKey := strings.TrimSuffix(strings.TrimPrefix(key, "watcher_step_template["), "]")
-		if nodeKey == "" || len(vals) == 0 {
-			continue
-		}
-		tid, _ := strconv.ParseInt(strings.TrimSpace(vals[0]), 10, 64)
-		if tid > 0 {
-			out[nodeKey] = tid
-		}
-	}
-	return out
 }
 
 func startSequenceCampaign(campaignID int64, campaign model.Campaign) (sent, failed int, err error) {

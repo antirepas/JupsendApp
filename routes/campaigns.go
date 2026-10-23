@@ -203,6 +203,50 @@ func SaveCampaignMode(ctx *gin.Context) {
 	ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?success="+url.QueryEscape("Campaign mode updated"))
 }
 
+// SaveCampaignTemplatesWeb sets Template A/B for one-time (bulk) campaigns.
+func SaveCampaignTemplatesWeb(ctx *gin.Context) {
+	userID := mustUserID(ctx)
+	campaignID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
+	if err != nil {
+		ctx.Redirect(http.StatusFound, "/campaigns?error=Invalid+campaign")
+		return
+	}
+	campaign, err := model.GetCampaignForUser(campaignID, userID)
+	if err != nil {
+		ctx.Redirect(http.StatusFound, "/campaigns?error=Campaign+not+found")
+		return
+	}
+	if model.IsLegacyWorkflowMode(campaign.ExecutionMode) {
+		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error="+url.QueryEscape("Change workflow templates from the workflow mapping section"))
+		return
+	}
+	templateAID, _ := strconv.ParseInt(strings.TrimSpace(ctx.PostForm("template_a_id")), 10, 64)
+	templateBID, _ := strconv.ParseInt(strings.TrimSpace(ctx.PostForm("template_b_id")), 10, 64)
+	if templateAID <= 0 {
+		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error="+url.QueryEscape("Pick a template to send"))
+		return
+	}
+	if campaign.ExecutionMode == "sequence_ab" && templateBID <= 0 {
+		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error="+url.QueryEscape("Pick Template B for sequence A/B"))
+		return
+	}
+	if campaign.LibraryFolderID > 0 {
+		if !model.TemplateInFolder(userID, templateAID, campaign.LibraryFolderID) {
+			ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error="+url.QueryEscape("Template A must be in this campaign folder"))
+			return
+		}
+		if templateBID > 0 && !model.TemplateInFolder(userID, templateBID, campaign.LibraryFolderID) {
+			ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error="+url.QueryEscape("Template B must be in this campaign folder"))
+			return
+		}
+	}
+	if err := model.UpdateCampaignTemplates(campaignID, userID, templateAID, templateBID); err != nil {
+		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error="+url.QueryEscape(err.Error()))
+		return
+	}
+	ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?success="+url.QueryEscape("Templates saved"))
+}
+
 func SaveCampaignHypothesis(ctx *gin.Context) {
 	userID := mustUserID(ctx)
 	campaignID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
@@ -433,6 +477,7 @@ func CampaignDetailPage(ctx *gin.Context) {
 	}
 	for i := range folderReplyWorkflows {
 		folderReplyWorkflows[i].Enabled = attachedWatcherSet[folderReplyWorkflows[i].WorkflowID]
+		model.FillSendStepTemplateNames(userID, folderReplyWorkflows[i].SendSteps)
 	}
 	stepMappings, _ := model.GetCampaignWorkflowTemplates(detail.ID)
 	for _, w := range folderReplyWorkflows {

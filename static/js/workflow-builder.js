@@ -34,6 +34,8 @@
   }
 
   let dragState = null;
+  // Survives past mouseup so the trailing click after a drag does not open the node modal.
+  let suppressNodeClick = false;
   let connectDrag = null;
   let previewPathEl = null;
 
@@ -896,6 +898,12 @@
 
       el.addEventListener('click', (ev) => {
         if (ev.target.closest('.wf-port')) return;
+        if (suppressNodeClick) {
+          suppressNodeClick = false;
+          ev.preventDefault();
+          ev.stopPropagation();
+          return;
+        }
         if (dragState && dragState.moved) return;
         ev.stopPropagation();
         clearEdgeSelection();
@@ -977,6 +985,8 @@
     dragState = {
       key,
       moved: false,
+      startX: ev.clientX,
+      startY: ev.clientY,
       offsetX: ev.clientX - rect.left - n.position_x + canvasWrap.scrollLeft,
       offsetY: ev.clientY - rect.top - n.position_y + canvasWrap.scrollTop
     };
@@ -990,6 +1000,9 @@
 
   function onNodeDrag(ev) {
     if (!dragState) return;
+    const dx = Math.abs(ev.clientX - dragState.startX);
+    const dy = Math.abs(ev.clientY - dragState.startY);
+    if (!dragState.moved && dx < 4 && dy < 4) return;
     dragState.moved = true;
     const n = getNode(dragState.key);
     if (!n) return;
@@ -1008,6 +1021,7 @@
 
   function endNodeDrag() {
     if (dragState) {
+      if (dragState.moved) suppressNodeClick = true;
       const el = canvas.querySelector(`[data-key="${dragState.key}"]`);
       if (el) el.classList.remove('dragging');
     }

@@ -8,8 +8,10 @@ import (
 )
 
 type WorkflowSendStep struct {
-	NodeKey string `json:"node_key"`
-	Label   string `json:"label"`
+	NodeKey      string `json:"node_key"`
+	Label        string `json:"label"`
+	TemplateID   int64  `json:"template_id,omitempty"`
+	TemplateName string `json:"template_name,omitempty"`
 }
 
 // SaveCampaignWorkflowTemplates stores the template mapping for send steps in a workflow campaign.
@@ -120,7 +122,8 @@ func listDisplayReachableSendSteps(graph WorkflowGraph) []WorkflowSendStep {
 			if label == "" {
 				label = "Send email"
 			}
-			steps = append(steps, WorkflowSendStep{NodeKey: nodeKey, Label: label})
+			tid := templateIDFromNodeConfig(n.ConfigJSON)
+			steps = append(steps, WorkflowSendStep{NodeKey: nodeKey, Label: label, TemplateID: tid})
 		}
 
 		children := outgoingDisplayEdges(graph, nodeKey, n.NodeType)
@@ -232,16 +235,56 @@ func workflowNodeTemplateIDs(graph WorkflowGraph) map[string]int64 {
 		if n.NodeType != "action_send_email" {
 			continue
 		}
-		cfg := ParseNodeConfig(n.ConfigJSON)
-		if v, ok := cfg["template_id"].(float64); ok && int64(v) > 0 {
-			nodeTemplates[n.NodeKey] = int64(v)
-		} else if v, ok := cfg["template_id"].(int64); ok && v > 0 {
-			nodeTemplates[n.NodeKey] = v
-		} else if v, ok := cfg["template_id"].(int); ok && v > 0 {
-			nodeTemplates[n.NodeKey] = int64(v)
+		if tid := templateIDFromNodeConfig(n.ConfigJSON); tid > 0 {
+			nodeTemplates[n.NodeKey] = tid
 		}
 	}
 	return nodeTemplates
+}
+
+// FillSendStepTemplateNames resolves display names for steps that already have TemplateID.
+func FillSendStepTemplateNames(userID int64, steps []WorkflowSendStep) {
+	for i := range steps {
+		if steps[i].TemplateID <= 0 {
+			continue
+		}
+		t, _, err := GetTemplateByID(steps[i].TemplateID, userID)
+		if err != nil {
+			continue
+		}
+		steps[i].TemplateName = t.Name
+	}
+}
+
+// SeedCampaignTemplatesFromWorkflowVersion copies template_id from workflow send nodes
+// into campaign_workflow_step_templates when a campaign mapping is missing.
+func SeedCampaignTemplatesFromWorkflowVersion(campaignID, versionID int64) error {
+	if campaignID <= 0 || versionID <= 0 {
+		return nil
+	}
+	existing, err := GetCampaignWorkflowTemplates(campaignID)
+	if err != nil {
+		return err
+	}
+	if existing == nil {
+		existing = map[string]int64{}
+	}
+	before := make(map[string]int64, len(existing))
+	for k, v := range existing {
+		before[k] = v
+	}
+	EnrichWorkflowTemplateMappings(versionID, existing)
+	changed := false
+	for k, v := range existing {
+		if before[k] != v {
+			changed = true
+			break
+		}
+	}
+	if !changed && len(existing) == len(before) {
+		return nil
+	}
+	return SaveCampaignWorkflowTemplates(campaignID, existing)
 }
 
 // EnrichWorkflowTemplateMappings fills gaps from legacy node config template_id values.

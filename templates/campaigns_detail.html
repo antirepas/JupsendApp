@@ -183,7 +183,66 @@
 </div>
 {{end}}
 
-{{if or .isSequence .canEditMode}}
+{{if and .canEditMode (not .isWorkflow)}}
+<div class="card mb-6">
+  <h3 class="card-title mb-1">{{if or (eq .campaignMode "bulk") (eq .campaignMode "bulk_ab")}}Email template{{else}}First email template{{end}}</h3>
+  <p class="text-sm text-slate-500 mb-4">
+    {{if or (eq .campaignMode "bulk") (eq .campaignMode "bulk_ab")}}
+    Choose which folder template this one-time send uses.{{if eq .campaignMode "bulk_ab"}} Contacts alternate between A and B.{{end}}
+    {{else}}
+    The first email in the sequence uses Template A{{if eq .campaignMode "sequence_ab"}} / B{{end}}. Follow-ups are set in Outreach sequence.
+    {{end}}
+  </p>
+  {{if .templatePicker}}
+  <form method="POST" action="/campaigns/{{.campaign.ID}}/templates" class="space-y-4 max-w-xl">
+    <div>
+      <label class="form-label" for="camp-template-a">{{if or (eq .campaignMode "bulk_ab") (eq .campaignMode "sequence_ab") (eq .campaignMode "sequence")}}Template A{{else}}Template{{end}}</label>
+      <select id="camp-template-a" name="template_a_id" class="form-input" required>
+        <option value="">Select template…</option>
+        {{range .templatePicker}}
+        <option value="{{.ID}}" {{if eq $.campaign.TemplateAID .ID}}selected{{end}}>{{.Name}}</option>
+        {{end}}
+      </select>
+    </div>
+    {{if or (eq .campaignMode "bulk_ab") (eq .campaignMode "sequence_ab")}}
+    <div>
+      <label class="form-label" for="camp-template-b">Template B</label>
+      <select id="camp-template-b" name="template_b_id" class="form-input" required>
+        <option value="">Select template…</option>
+        {{range .templatePicker}}
+        <option value="{{.ID}}" {{if eq $.campaign.TemplateBID .ID}}selected{{end}}>{{.Name}}</option>
+        {{end}}
+      </select>
+    </div>
+    {{else if eq .campaignMode "bulk"}}
+    <div>
+      <label class="form-label" for="camp-template-b">Template B <span class="font-normal text-slate-400">(optional — enables A/B)</span></label>
+      <select id="camp-template-b" name="template_b_id" class="form-input">
+        <option value="0">None — single template only</option>
+        {{range .templatePicker}}
+        <option value="{{.ID}}" {{if eq $.campaign.TemplateBID .ID}}selected{{end}}>{{.Name}}</option>
+        {{end}}
+      </select>
+    </div>
+    {{else}}
+    <input type="hidden" name="template_b_id" value="0">
+    {{end}}
+    <button type="submit" class="btn-primary btn-sm">Save template</button>
+  </form>
+  {{else}}
+  <p class="text-sm text-amber-800">No templates in this campaign folder yet. Add a template to the folder, then pick it here.</p>
+  {{end}}
+</div>
+{{end}}
+
+{{if or (eq .campaignMode "bulk") (eq .campaignMode "bulk_ab")}}
+{{if .canEditMode}}
+<div class="card mb-6 border-slate-200 bg-slate-50/60">
+  <h3 class="card-title mb-1">Outreach sequence</h3>
+  <p class="text-sm text-slate-600">Follow-up sequences aren’t used on one-time sends. Switch this campaign to <strong>Sequence</strong> under Campaign type if you want email → wait → follow-ups.</p>
+</div>
+{{end}}
+{{else if or .isSequence .canEditMode}}
 <div class="card mb-6">
   <div class="flex items-start justify-between gap-3 flex-wrap">
     <div>
@@ -314,7 +373,7 @@
 {{if or .isSequence .canEditMode}}
 <div class="card mb-6">
   <h3 class="card-title">Reply watchers</h3>
-  <p class="text-sm text-slate-500 mb-4">Watcher workflows live in this campaign folder (Trigger: Watch reply → Wait → Send). Enable the ones you want on this campaign, then map each send step to a <strong>folder</strong> template.</p>
+  <p class="text-sm text-slate-500 mb-4">Enable reply-watcher workflows from this folder. Each send step uses the template already set in the <strong>workflow editor</strong> — you don’t pick templates here.</p>
   {{if .folderReplyWorkflows}}
   <form method="POST" action="/campaigns/{{.campaign.ID}}/reply-watchers" class="space-y-4">
     {{range .folderReplyWorkflows}}
@@ -328,19 +387,20 @@
         </span>
       </label>
       {{if .SendSteps}}
-      <div class="pl-6 space-y-2">
+      <ul class="pl-6 space-y-1 text-xs text-slate-600">
         {{range .SendSteps}}
-        <div class="flex flex-col sm:flex-row sm:items-center gap-2">
-          <label class="text-xs text-slate-600 w-40 shrink-0">{{.Label}}</label>
-          <select name="watcher_step_template[{{.NodeKey}}]" class="form-input text-sm">
-            <option value="0">— pick folder template —</option>
-            {{range $.templatePicker}}
-            <option value="{{.ID}}" {{if eq (index $.watcherStepMappings $.NodeKey) .ID}}selected{{end}}>{{.Name}}</option>
-            {{end}}
-          </select>
-        </div>
+        <li>
+          <span class="font-medium text-slate-700">{{.Label}}</span>
+          {{if .TemplateName}}
+          · {{.TemplateName}}
+          {{else if gt .TemplateID 0}}
+          · template #{{.TemplateID}}
+          {{else}}
+          · <span class="text-amber-700">no template in workflow — set it in the editor</span>
+          {{end}}
+        </li>
         {{end}}
-      </div>
+      </ul>
       {{end}}
     </div>
     {{end}}
@@ -569,10 +629,10 @@
 
 {{else}}
 
-{{if ne .campaignMode "bulk_ab"}}
+{{if eq .campaignMode "bulk_ab"}}
 <div class="card mb-6 bg-blue-50 border-blue-100">
     <h3 class="font-semibold text-slate-900 mb-2">How A/B assignment works</h3>
-    <p class="text-sm text-slate-600">Contacts are ordered by ID. Position 1 → Variant <span class="badge badge-blue">A</span>, position 2 → <span class="badge badge-violet">B</span> (if Template B exists), then alternates. Each contact receives the template for their variant; <code class="text-xs bg-white px-1 rounded">{{"{{variable}}"}}</code> placeholders in subject and body are replaced with that contact's values.</p>
+    <p class="text-sm text-slate-600">Contacts are ordered by ID. Position 1 → Variant <span class="badge badge-blue">A</span>, position 2 → <span class="badge badge-violet">B</span>, then alternates. Each contact receives the template for their variant; <code class="text-xs bg-white px-1 rounded">{{"{{variable}}"}}</code> placeholders in subject and body are replaced with that contact's values.</p>
 </div>
 {{end}}
 
