@@ -114,12 +114,32 @@ func GetCampaignAnalyticsFor(c Campaign, userID int64) (CampaignAnalytics, error
 		analytics.Deliverability = loadCampaignDeliverability(campaignID, len(contactIDs), 0)
 		return nil
 	})
+	g.Go(func() error {
+		analytics.Watchers = GetCampaignWatcherAnalytics(campaignID)
+		return nil
+	})
 
 	if err := g.Wait(); err != nil {
 		return CampaignAnalytics{}, err
 	}
 
 	fillOverview(&analytics)
+	// Prefer intent-derived sentiment rollup when watcher classification is present.
+	if analytics.Watchers.Classified > 0 || analytics.Watchers.Unclassified > 0 {
+		analytics.Overview.PositiveReplies = analytics.Watchers.PositiveFromIntent
+		analytics.Overview.NegativeReplies = analytics.Watchers.NegativeFromIntent
+		analytics.Overview.NeutralReplies = analytics.Watchers.NeutralFromIntent
+		analytics.Overview.PendingReplies = analytics.Watchers.Unclassified
+		if analytics.Overview.SentCount > 0 {
+			analytics.Overview.PositiveReplyRate = float64(analytics.Overview.PositiveReplies) / float64(analytics.Overview.SentCount) * 100
+			analytics.Overview.NegativeReplyRate = float64(analytics.Overview.NegativeReplies) / float64(analytics.Overview.SentCount) * 100
+			analytics.Overview.NeutralReplyRate = float64(analytics.Overview.NeutralReplies) / float64(analytics.Overview.SentCount) * 100
+		}
+		if analytics.Overview.ReplyCount > 0 {
+			analytics.Overview.PositivePctOfReplies = float64(analytics.Overview.PositiveReplies) / float64(analytics.Overview.ReplyCount) * 100
+			analytics.Overview.NegativePctOfReplies = float64(analytics.Overview.NegativeReplies) / float64(analytics.Overview.ReplyCount) * 100
+		}
+	}
 	analytics.ShowPixelMetrics = c.OpenTrackingEnabled || c.ClickTrackingEnabled
 	analytics.Funnel = EngagementFunnel{
 		Sent:    analytics.Overview.SentCount,
@@ -225,6 +245,7 @@ func getContactEngagementFast(campaignID int64, contactIDs []int64, hasB bool, a
 		if reply, ok := replyMap[cid]; ok {
 			row.HasReplied = true
 			row.ReplySentiment = reply.Sentiment
+			row.ReplyIntent = reply.Intent
 			row.RepliedAt = reply.At
 			row.Engaged = true
 			if row.LastActivityAt == nil || (reply.At != nil && reply.At.After(*row.LastActivityAt)) {
@@ -239,6 +260,7 @@ func getContactEngagementFast(campaignID int64, contactIDs []int64, hasB bool, a
 
 type contactReplyInfo struct {
 	Sentiment string
+	Intent    string
 	At        *time.Time
 }
 
@@ -246,13 +268,14 @@ func getCampaignContactReplyMap(campaignID int64) map[int64]contactReplyInfo {
 	out := map[int64]contactReplyInfo{}
 	rows, err := db.Query(`
 		SELECT es.contact_id,
-			COALESCE(NULLIF(c.last_reply_sentiment, ''), 'pending'),
+			COALESCE(NULLIF(TRIM(c.last_reply_intent), ''), ''),
+			COALESCE(NULLIF(TRIM(c.last_reply_sentiment), ''), 'pending'),
 			MAX(ce.created_at)
 		FROM contact_events ce
 		INNER JOIN email_sends es ON es.id = ce.email_send_id
 		INNER JOIN contact c ON c.id = es.contact_id
 		WHERE es.campaign_id = ? AND ce.event_type = 'REPLY'
-		GROUP BY es.contact_id, c.last_reply_sentiment
+		GROUP BY es.contact_id, c.last_reply_intent, c.last_reply_sentiment
 	`, campaignID)
 	if err != nil {
 		return out
@@ -260,13 +283,18 @@ func getCampaignContactReplyMap(campaignID int64) map[int64]contactReplyInfo {
 	defer rows.Close()
 	for rows.Next() {
 		var cid int64
-		var sentiment string
+		var intent, sentiment string
 		var at time.Time
-		if rows.Scan(&cid, &sentiment, &at) != nil {
+		if rows.Scan(&cid, &intent, &sentiment, &at) != nil {
 			continue
 		}
 		t := at
-		out[cid] = contactReplyInfo{Sentiment: NormalizeReplySentiment(sentiment), At: &t}
+		intent = NormalizeReplyIntent(intent)
+		out[cid] = contactReplyInfo{
+			Intent:    intent,
+			Sentiment: SentimentFromReplyIntent(intent, sentiment),
+			At:        &t,
+		}
 	}
 	return out
 }
@@ -413,8 +441,28 @@ func GetCampaignWorkflowAnalyticsFor(c Campaign, userID int64) (CampaignWorkflow
 		deliverability = loadCampaignDeliverability(campaignID, len(contactIDs), 0)
 		return nil
 	})
+	var watchers CampaignWatcherAnalytics
+	g.Go(func() error {
+		watchers = GetCampaignWatcherAnalytics(campaignID)
+		return nil
+	})
 	if err := g.Wait(); err != nil {
 		return CampaignWorkflowAnalytics{}, err
+	}
+	if watchers.Classified > 0 || watchers.Unclassified > 0 {
+		engagement.PositiveReplies = watchers.PositiveFromIntent
+		engagement.NegativeReplies = watchers.NegativeFromIntent
+		engagement.NeutralReplies = watchers.NeutralFromIntent
+		engagement.PendingReplies = watchers.Unclassified
+		if engagement.EmailsSent > 0 {
+			engagement.PositiveReplyRate = float64(engagement.PositiveReplies) / float64(engagement.EmailsSent) * 100
+			engagement.NegativeReplyRate = float64(engagement.NegativeReplies) / float64(engagement.EmailsSent) * 100
+			engagement.NeutralReplyRate = float64(engagement.NeutralReplies) / float64(engagement.EmailsSent) * 100
+		}
+		if engagement.Replies > 0 {
+			engagement.PositivePctOfReplies = float64(engagement.PositiveReplies) / float64(engagement.Replies) * 100
+			engagement.NegativePctOfReplies = float64(engagement.NegativeReplies) / float64(engagement.Replies) * 100
+		}
 	}
 
 	denom := overview.TotalContacts
@@ -484,6 +532,7 @@ func GetCampaignWorkflowAnalyticsFor(c Campaign, userID int64) (CampaignWorkflow
 		ClickTrackingEnabled: c.ClickTrackingEnabled,
 		ShowPixelMetrics:     c.OpenTrackingEnabled || c.ClickTrackingEnabled,
 		Deliverability:       deliverability,
+		Watchers:             watchers,
 	}
 
 	sort.Slice(result.DailyStats, func(i, j int) bool {

@@ -89,12 +89,18 @@ func FilterSendEligible(userID, campaignID int64, contactIDs []int64) ([]int64, 
 		crows.Close()
 	}
 
+	// Only block contacts already on a campaign that is launching or scheduled.
+	// Idle drafts must not block — otherwise a personal test address on old drafts
+	// can never be sent again even with cooldown set to 0.
 	activeSet := make(map[int64]bool)
 	arows, err := db.Query(`
 		SELECT cc.contact_id FROM campaign_contacts cc
 		INNER JOIN campaigns c ON c.id = cc.campaign_id
 		WHERE c.user_id = ? AND cc.campaign_id != ?
-			AND (c.status = 'draft' OR COALESCE(c.is_sending, 0) = 1)
+			AND (
+				COALESCE(c.is_sending, 0) = 1
+				OR c.scheduled_at IS NOT NULL
+			)
 	`, userID, campaignID)
 	if err != nil {
 		return nil, nil, err

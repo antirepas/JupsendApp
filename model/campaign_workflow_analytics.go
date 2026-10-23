@@ -78,6 +78,7 @@ type CampaignWorkflowAnalytics struct {
 	OpenTrackingEnabled  bool
 	ClickTrackingEnabled bool
 	Deliverability       CampaignDeliverability
+	Watchers             CampaignWatcherAnalytics
 }
 
 func GetCampaignWorkflowAnalytics(campaignID, userID int64) (CampaignWorkflowAnalytics, error) {

@@ -61,8 +61,8 @@
 </div>
 
 <div class="card mb-8">
-    <h3 class="card-title">Reply sentiment</h3>
-    <p class="text-sm text-slate-500 mb-4">The core signal for cold outreach — unique contacts who replied, by AI/manual sentiment.</p>
+    <h3 class="card-title">Reply classification</h3>
+    <p class="text-sm text-slate-500 mb-4">Positive / negative match reply-watcher intents (e.g. interested &amp; meeting ask → positive; not now &amp; unsubscribe → negative).</p>
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div class="rounded-lg bg-violet-50 px-4 py-3">
             <p class="text-xs uppercase tracking-wide text-violet-700">Reply rate</p>
@@ -72,12 +72,12 @@
         <div class="rounded-lg bg-emerald-50 px-4 py-3">
             <p class="text-xs uppercase tracking-wide text-emerald-700">Positive rate</p>
             <p class="text-2xl font-bold text-emerald-700">{{printf "%.1f" .analytics.Overview.PositiveReplyRate}}%</p>
-            <p class="text-xs text-slate-500 mt-1">{{.analytics.Overview.PositiveReplies}} interested</p>
+            <p class="text-xs text-slate-500 mt-1">{{.analytics.Overview.PositiveReplies}} positive intents</p>
         </div>
         <div class="rounded-lg bg-red-50 px-4 py-3">
             <p class="text-xs uppercase tracking-wide text-red-700">Negative rate</p>
             <p class="text-2xl font-bold text-red-700">{{printf "%.1f" .analytics.Overview.NegativeReplyRate}}%</p>
-            <p class="text-xs text-slate-500 mt-1">{{.analytics.Overview.NegativeReplies}} not interested</p>
+            <p class="text-xs text-slate-500 mt-1">{{.analytics.Overview.NegativeReplies}} negative intents</p>
         </div>
         <div class="rounded-lg bg-slate-50 px-4 py-3">
             <p class="text-xs uppercase tracking-wide text-slate-600">Of all replies</p>
@@ -87,34 +87,7 @@
     </div>
 </div>
 
-<!-- Reply funnel (always) -->
-<div class="card mb-8">
-    <h3 class="card-title">Reply funnel</h3>
-    <div class="flex items-center justify-center gap-4 py-6 flex-wrap">
-        <div class="text-center px-8 py-4 bg-slate-100 rounded-lg min-w-[120px]">
-            <p class="text-3xl font-bold">{{.analytics.Funnel.Sent}}</p>
-            <p class="text-sm text-slate-600">Sent</p>
-        </div>
-        <span class="text-slate-400 text-2xl">→</span>
-        <div class="text-center px-8 py-4 bg-violet-50 rounded-lg min-w-[120px]">
-            <p class="text-3xl font-bold text-violet-600">{{.analytics.Funnel.Replied}}</p>
-            <p class="text-sm text-slate-600">Replied</p>
-            {{if gt .analytics.Funnel.Sent 0}}<p class="text-xs text-slate-500">{{printf "%.1f" .analytics.Overview.ReplyRate}}% of sent</p>{{end}}
-        </div>
-        <span class="text-slate-400 text-2xl">→</span>
-        <div class="text-center px-8 py-4 bg-emerald-100 rounded-lg min-w-[120px]">
-            <p class="text-3xl font-bold text-emerald-800">{{.analytics.Overview.PositiveReplies}}</p>
-            <p class="text-sm text-slate-600">Positive</p>
-            {{if gt .analytics.Funnel.Replied 0}}<p class="text-xs text-slate-500">{{printf "%.0f" .analytics.Overview.PositivePctOfReplies}}% of replies</p>{{end}}
-        </div>
-        <span class="text-slate-400 text-2xl">→</span>
-        <div class="text-center px-8 py-4 bg-red-50 rounded-lg min-w-[120px]">
-            <p class="text-3xl font-bold text-red-700">{{.analytics.Overview.NegativeReplies}}</p>
-            <p class="text-sm text-slate-600">Negative</p>
-            {{if gt .analytics.Funnel.Replied 0}}<p class="text-xs text-slate-500">{{printf "%.0f" .analytics.Overview.NegativePctOfReplies}}% of replies</p>{{end}}
-        </div>
-    </div>
-</div>
+{{template "campaign_watcher_analytics" .analytics.Watchers}}
 
 {{template "campaign_deliverability" .analytics.Deliverability}}
 
@@ -304,7 +277,8 @@
             <td>{{if .SentAt}}{{.SentAt.Format "Jan 2, 15:04"}}{{else}}—{{end}}</td>
             <td>{{if .HasReplied}}<span class="badge badge-green">Yes</span>{{if .RepliedAt}} <span class="text-xs text-gray-400">{{.RepliedAt.Format "Jan 2"}}</span>{{end}}{{else}}—{{end}}</td>
             <td>
-                {{if eq .ReplySentiment "positive"}}<span class="badge badge-green">positive</span>
+                {{if .ReplyIntent}}<span class="badge badge-violet">{{.ReplyIntent}}</span>
+                {{else if eq .ReplySentiment "positive"}}<span class="badge badge-green">positive</span>
                 {{else if eq .ReplySentiment "negative"}}<span class="badge badge-red">negative</span>
                 {{else if eq .ReplySentiment "neutral"}}<span class="badge badge-gray">neutral</span>
                 {{else if eq .ReplySentiment "pending"}}<span class="badge badge-amber">pending</span>

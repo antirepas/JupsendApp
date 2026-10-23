@@ -104,8 +104,19 @@ func MaybeStopWorkflowOnHot(campaignID, contactID int64) {
 	_ = CancelSequenceInstancesForContactCampaign(contactID, campaignID)
 }
 
-// ShouldBlockWorkflowSend reports whether a send step should be skipped for campaign stop policies.
+// ShouldBlockWorkflowSend reports whether an outreach send should stop for campaign policies.
+// Do not use this for reply-watcher / auto-reply sends — those run because the contact replied.
 func ShouldBlockWorkflowSend(campaignID, contactID int64) (block bool, reason string) {
+	return shouldBlockWorkflowSend(campaignID, contactID, false)
+}
+
+// ShouldBlockReplyWatcherSend is the stop-policy check for reply-watcher and auto-reply sends.
+// Stop-on-reply must not apply (the watcher exists to answer the reply). Stop-on-hot still applies.
+func ShouldBlockReplyWatcherSend(campaignID, contactID int64) (block bool, reason string) {
+	return shouldBlockWorkflowSend(campaignID, contactID, true)
+}
+
+func shouldBlockWorkflowSend(campaignID, contactID int64, replyWatcher bool) (block bool, reason string) {
 	if campaignID <= 0 || contactID <= 0 {
 		return false, ""
 	}
@@ -113,7 +124,7 @@ func ShouldBlockWorkflowSend(campaignID, contactID int64) (block bool, reason st
 	if err != nil {
 		return false, ""
 	}
-	if camp.StopOnReply {
+	if camp.StopOnReply && !replyWatcher {
 		var replied bool
 		_ = db.QueryRow(`SELECT replied_at IS NOT NULL FROM contact WHERE id = ?`, contactID).Scan(&replied)
 		if replied {

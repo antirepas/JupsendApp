@@ -872,6 +872,19 @@ func SendCampaign(ctx *gin.Context) {
 		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error="+url.QueryEscape("Add contacts before sending"))
 		return
 	}
+	if eligible, skipped, err := model.FilterSendEligible(userID, campaignID, contactIDs); err != nil {
+		log.Print(err)
+		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error="+url.QueryEscape("Could not check contact eligibility"))
+		return
+	} else if len(eligible) == 0 {
+		b := model.FormatSkipBreakdown(model.CountSkipReasons(skipped))
+		msg := "all contacts skipped"
+		if b != "" {
+			msg = "all contacts skipped (" + b + ")"
+		}
+		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error="+url.QueryEscape(msg+" — adjust cooldown in Settings or pick contacts who were not emailed recently"))
+		return
+	}
 	if !model.IsSequenceMode(campaign.ExecutionMode) && !model.IsLegacyWorkflowMode(campaign.ExecutionMode) && campaign.TemplateAID <= 0 {
 		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error="+url.QueryEscape("Pick a template before sending"))
 		return

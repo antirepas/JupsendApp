@@ -68,7 +68,11 @@ func UpdateSettings(c *gin.Context) {
 	}
 
 	cooldown, _ := strconv.Atoi(c.PostForm("send_cooldown_days"))
-	_ = model.UpdateUserSendCooldownDays(userID, cooldown)
+	if err := model.UpdateUserSendCooldownDays(userID, cooldown); err != nil {
+		log.Print(err)
+		c.Redirect(http.StatusFound, "/settings?error="+url.QueryEscape("Failed to save send cooldown"))
+		return
+	}
 	_ = model.UpdateUserIncludeUnsubscribeLink(userID, c.PostForm("include_unsubscribe_link") == "on")
 	_ = model.UpdateUserNotifyOnReply(userID, c.PostForm("notify_on_reply") == "on")
 

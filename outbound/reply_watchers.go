@@ -71,7 +71,7 @@ func processReplyAutoJob(job model.ReplyAutoJob) error {
 	if err != nil || camp.Status == "stopped" {
 		return model.UpdateReplyAutoJob(job.ID, "cancelled", "", "campaign unavailable", 0)
 	}
-	if block, reason := model.ShouldBlockWorkflowSend(job.CampaignID, job.ContactID); block {
+	if block, reason := model.ShouldBlockReplyWatcherSend(job.CampaignID, job.ContactID); block {
 		return model.UpdateReplyAutoJob(job.ID, "cancelled", "", reason, 0)
 	}
 

@@ -212,12 +212,24 @@ func TestFilterSendEligibleActiveCampaign(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Idle draft membership must not block.
 	eligible, skipped, err := FilterSendEligible(userID, campB, []int64{cid})
 	if err != nil {
 		t.Fatal(err)
 	}
+	if len(eligible) != 1 || len(skipped) != 0 {
+		t.Fatalf("idle draft should not block, eligible=%v skipped=%+v", eligible, skipped)
+	}
+
+	if err := MarkCampaignSending(campA); err != nil {
+		t.Fatal(err)
+	}
+	eligible, skipped, err = FilterSendEligible(userID, campB, []int64{cid})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(eligible) != 0 || len(skipped) != 1 || skipped[0].Reason != SkipReasonActiveCampaign {
-		t.Fatalf("eligible=%v skipped=%+v", eligible, skipped)
+		t.Fatalf("launching campaign should block, eligible=%v skipped=%+v", eligible, skipped)
 	}
 }
 

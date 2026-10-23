@@ -72,6 +72,7 @@ type ContactEngagementRow struct {
 	MinutesToFirstOpen float64
 	HasReplied         bool
 	ReplySentiment     string // positive | negative | neutral | pending | ""
+	ReplyIntent        string // interested | meeting_ask | … (watcher taxonomy)
 	RepliedAt          *time.Time
 }
 
@@ -148,6 +149,8 @@ type CampaignAnalytics struct {
 	ShowPixelMetrics bool
 	// Deliverability is bounce + opt-out health for mailbox reputation.
 	Deliverability CampaignDeliverability
+	// Watchers is the reply → intent → auto-reply funnel (empty when unused).
+	Watchers CampaignWatcherAnalytics
 }
 
 func GetCampaignAnalytics(campaignID, userID int64) (CampaignAnalytics, error) {
@@ -229,15 +232,14 @@ func loadVariantMetrics(campaignID int64, variant string, va *VariantAnalytics) 
 	}
 }
 
-// countCampaignReplySentiments tallies unique reply contacts by last_reply_sentiment.
+// countCampaignReplySentiments tallies unique reply contacts by watcher intent taxonomy
+// (IntentToSentiment), falling back to last_reply_sentiment when intent is missing.
 // variant may be "" for the whole campaign.
 func countCampaignReplySentiments(campaignID int64, variant string) (positive, negative, neutral, pending int) {
 	q := `
-		SELECT
-			COUNT(*) FILTER (WHERE LOWER(COALESCE(c.last_reply_sentiment, '')) = 'positive'),
-			COUNT(*) FILTER (WHERE LOWER(COALESCE(c.last_reply_sentiment, '')) = 'negative'),
-			COUNT(*) FILTER (WHERE LOWER(COALESCE(c.last_reply_sentiment, '')) = 'neutral'),
-			COUNT(*) FILTER (WHERE LOWER(COALESCE(c.last_reply_sentiment, '')) NOT IN ('positive', 'negative', 'neutral'))
+		SELECT c.id,
+			COALESCE(NULLIF(TRIM(c.last_reply_intent), ''), ''),
+			COALESCE(NULLIF(TRIM(c.last_reply_sentiment), ''), '')
 		FROM (
 			SELECT DISTINCT es.contact_id
 			FROM contact_events ce
@@ -251,7 +253,29 @@ func countCampaignReplySentiments(campaignID int64, variant string) (positive, n
 	q += `
 		) r
 		INNER JOIN contact c ON c.id = r.contact_id`
-	_ = db.QueryRow(q, args...).Scan(&positive, &negative, &neutral, &pending)
+	rows, err := db.Query(q, args...)
+	if err != nil {
+		return 0, 0, 0, 0
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int64
+		var intentRaw, sentimentRaw string
+		if rows.Scan(&id, &intentRaw, &sentimentRaw) != nil {
+			continue
+		}
+		s := SentimentFromReplyIntent(intentRaw, sentimentRaw)
+		switch s {
+		case ReplySentimentPositive:
+			positive++
+		case ReplySentimentNegative:
+			negative++
+		case ReplySentimentNeutral:
+			neutral++
+		default:
+			pending++
+		}
+	}
 	return positive, negative, neutral, pending
 }
 

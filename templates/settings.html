@@ -72,11 +72,11 @@
 
 <div class="card space-y-4">
     <h3 class="card-title">Send policy</h3>
-    <p class="text-sm text-gray-600">Contacts are skipped at send time if suppressed, emailed within the cooldown window, or already on another draft/scheduled/sending campaign.</p>
+    <p class="text-sm text-gray-600">Contacts are skipped at send time if suppressed, emailed within the cooldown window, or already on another campaign that is launching or scheduled.</p>
     <div class="max-w-xs">
         <label class="form-label">Send cooldown (days)</label>
         <input name="send_cooldown_days" type="number" class="form-input" min="0" value="{{.user.SendCooldownDays}}">
-        <p class="text-xs text-gray-500 mt-1">Set to 0 to disable cooldown (active-campaign rule still applies).</p>
+        <p class="text-xs text-gray-500 mt-1">Set to 0 to disable cooldown. Being on other idle draft campaigns does not block send.</p>
     </div>
     <label class="flex items-center gap-2 text-sm">
         <input type="checkbox" name="include_unsubscribe_link" {{if .user.IncludeUnsubscribeLink}}checked{{end}}>
