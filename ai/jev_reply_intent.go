@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 )
@@ -200,14 +201,31 @@ func ReplyVerifyQuestions() map[string]interface{} {
 			"type":         "noul",
 			"instructions": `Is the requested next step proportionate and appropriate?`,
 		},
+		"primary_gap": map[string]interface{}{
+			"type":         "choice",
+			"instructions": `If decision is skip, what is the single main reason? If decision is send, pick other.`,
+			"criteria": map[string]string{
+				"does_not_answer":  "Ignores a clear question, request, or buying signal in the inbound message.",
+				"wrong_intent":     "Tone or content mismatches the classified intent.",
+				"grammar":          "Unclear, broken, or unprofessional writing.",
+				"bad_commitment":   "Asks for too much or an inappropriate next step for cold outreach.",
+				"generic_template": "Reads like an unrelated canned template that does not fit this reply.",
+				"other":            "Another issue not listed above.",
+			},
+		},
 	}
 }
 
 // ReplyVerifyResult is the verify-layer outcome.
 type ReplyVerifyResult struct {
-	Decision   string  `json:"decision"` // send | skip
-	Confidence float64 `json:"confidence"`
-	Model      string  `json:"model"`
+	Decision               string  `json:"decision"` // send | skip
+	Confidence             float64 `json:"confidence"`
+	Model                  string  `json:"model"`
+	PrimaryGap             string  `json:"primary_gap"`
+	AnswersInbound         float64 `json:"answers_inbound"`
+	GrammaticallyOK        float64 `json:"grammatically_ok"`
+	AppropriateCommitment  float64 `json:"appropriate_commitment"`
+	Reason                 string  `json:"reason"` // human-readable skip explanation
 }
 
 // VerifyAutoReply runs Jev to gate an automatic template reply.
@@ -230,5 +248,61 @@ func VerifyAutoReply(ctx context.Context, inboundSubject, inboundBody, proposedS
 			out.Confidence = c.Confidence
 		}
 	}
+	if raw, ok := resp.Answers["primary_gap"]; ok {
+		if c, err := DecodeJevChoice(raw); err == nil {
+			out.PrimaryGap = strings.ToLower(strings.TrimSpace(c.Choice))
+		}
+	}
+	out.AnswersInbound = decodeNoulScore(resp.Answers, "answers_inbound")
+	out.GrammaticallyOK = decodeNoulScore(resp.Answers, "grammatically_ok")
+	out.AppropriateCommitment = decodeNoulScore(resp.Answers, "appropriate_commitment")
+	out.Reason = FormatReplyVerifySkipReason(out, intent)
 	return out, nil
+}
+
+func decodeNoulScore(answers map[string]json.RawMessage, key string) float64 {
+	raw, ok := answers[key]
+	if !ok {
+		return 0
+	}
+	n, err := DecodeJevNoul(raw)
+	if err != nil {
+		return 0
+	}
+	return n.Noul
+}
+
+// FormatReplyVerifySkipReason builds a concise explanation for conversation notes / UI.
+func FormatReplyVerifySkipReason(vr ReplyVerifyResult, intent string) string {
+	if vr.Decision == "send" {
+		return ""
+	}
+	gap := strings.TrimSpace(vr.PrimaryGap)
+	gapLabel := map[string]string{
+		"does_not_answer":  "does not address what they wrote",
+		"wrong_intent":     "mismatches the classified intent",
+		"grammar":          "has clarity/grammar issues",
+		"bad_commitment":   "asks for an inappropriate next step",
+		"generic_template": "reads like a mismatched canned template",
+		"other":            "did not pass verification",
+	}[gap]
+	if gapLabel == "" {
+		gapLabel = "did not pass verification"
+	}
+	var parts []string
+	parts = append(parts, fmt.Sprintf("Jev skipped auto-reply (intent=%s, conf=%.0f%%): %s", intent, vr.Confidence*100, gapLabel))
+	var scores []string
+	if vr.AnswersInbound > 0 {
+		scores = append(scores, fmt.Sprintf("answers inbound %.0f%%", vr.AnswersInbound*100))
+	}
+	if vr.GrammaticallyOK > 0 {
+		scores = append(scores, fmt.Sprintf("grammar %.0f%%", vr.GrammaticallyOK*100))
+	}
+	if vr.AppropriateCommitment > 0 {
+		scores = append(scores, fmt.Sprintf("commitment %.0f%%", vr.AppropriateCommitment*100))
+	}
+	if len(scores) > 0 {
+		parts = append(parts, strings.Join(scores, ", "))
+	}
+	return strings.Join(parts, ". ")
 }

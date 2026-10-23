@@ -15,6 +15,11 @@ type countingMailer struct {
 	calls atomic.Int64
 }
 
+func (m *countingMailer) SendWorkflowRenderedReply(contactID, campaignID, workflowInstanceID, templateID, replyToMessageID int64, subject, bodyHTML string) (int64, error) {
+	m.calls.Add(1)
+	return m.calls.Load(), nil
+}
+
 func (m *countingMailer) SendWorkflowEmail(templateID, contactID, campaignID int64, variant string, workflowInstanceID int64, openTracking, clickTracking bool) (int64, error) {
 	m.calls.Add(1)
 	time.Sleep(20 * time.Millisecond) // widen race window

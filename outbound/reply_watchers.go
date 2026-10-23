@@ -100,37 +100,46 @@ func processReplyAutoJob(job model.ReplyAutoJob) error {
 		_ = model.InsertSystemConversationNote(userID, contactID, note)
 		return model.UpdateReplyAutoJob(job.ID, "skipped", "missing_vars", note, 0)
 	}
-	plainBody := util.StripHTML(util.NormalizeQuillHTML(renderedBody))
-
+	sendSubj := renderedSubj
+	sendBody := renderedBody
 	decision := "send"
-	conf := 0.0
 	if ai.JEVConfigured() {
-		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		defer cancel()
-		vr, vErr := ai.VerifyAutoReply(ctx, subjIn, bodyIn, renderedSubj, plainBody, job.Intent)
-		if vErr != nil {
-			note := "[Auto-reply skipped] Verification unavailable: " + vErr.Error()
+		prep, pErr := ai.PrepareAutoReply(ctx, subjIn, bodyIn, renderedSubj, renderedBody, job.Intent)
+		if pErr != nil {
+			note := "[Auto-reply skipped] Verification unavailable: " + pErr.Error()
 			_ = model.InsertSystemConversationNote(userID, contactID, note)
-			return model.UpdateReplyAutoJob(job.ID, "skipped", "verify_error", vErr.Error(), 0)
+			return model.UpdateReplyAutoJob(job.ID, "skipped", "verify_error", pErr.Error(), 0)
 		}
-		decision = vr.Decision
-		conf = vr.Confidence
-		_, _, _ = model.ConsumeAICredit(userID) // verify credit
-	}
-
-	if decision != "send" {
-		note := fmt.Sprintf("[Auto-reply skipped] Jev decided not to send (intent=%s, conf=%.0f%%). Template did not adequately answer the inbound reply.",
-			job.Intent, conf*100)
-		_ = model.InsertSystemConversationNote(userID, contactID, note)
-		return model.UpdateReplyAutoJob(job.ID, "skipped", decision, note, 0)
+		_, _, _ = model.ConsumeAICredit(userID)
+		if prep.Attempts > 0 {
+			_, _, _ = model.ConsumeAICredit(userID)
+		}
+		decision = prep.Verify.Decision
+		if !prep.Send {
+			note := prep.Note
+			if note == "" {
+				note = "[Auto-reply skipped] " + prep.Verify.Reason
+			}
+			_ = model.InsertSystemConversationNote(userID, contactID, note)
+			return model.UpdateReplyAutoJob(job.ID, "skipped", decision, note, 0)
+		}
+		sendSubj = prep.Subject
+		sendBody = prep.BodyHTML
+		if prep.Note != "" {
+			_ = model.InsertSystemConversationNote(userID, contactID, prep.Note)
+		}
 	}
 
 	sendID, err := SendManualReply(ManualReplyInput{
-		UserID:           userID,
-		ContactID:        contactID,
-		Subject:          renderedSubj,
-		BodyHTML:         renderedBody,
-		ReplyToMessageID: job.MessageID,
+		UserID:             userID,
+		ContactID:          contactID,
+		CampaignID:         job.CampaignID,
+		TemplateID:         job.TemplateID,
+		Subject:            sendSubj,
+		BodyHTML:           sendBody,
+		ReplyToMessageID:   job.MessageID,
 	})
 	if err != nil {
 		note := "[Auto-reply failed] " + err.Error()

@@ -13,12 +13,15 @@ import (
 
 // ManualReplyInput is a freeform reply from the contact conversation UI.
 type ManualReplyInput struct {
-	UserID            int64
-	ContactID         int64
-	Subject           string
-	BodyText          string
-	BodyHTML          string
-	ReplyToMessageID  int64 // conversation_messages.id to thread against
+	UserID             int64
+	ContactID          int64
+	CampaignID         int64 // optional — watcher / campaign-linked replies
+	WorkflowInstanceID int64
+	TemplateID         int64
+	Subject            string
+	BodyText           string
+	BodyHTML           string
+	ReplyToMessageID   int64 // conversation_messages.id to thread against
 }
 
 // SendManualReply sends from the mailbox that last emailed this contact (or default).
@@ -107,7 +110,15 @@ func SendManualReply(in ManualReplyInput) (int64, error) {
 	}
 
 	trackID := fmt.Sprintf("%d", util.GenerateID())
-	emailSendID, err := model.CreateManualReplyEmailSend(in.UserID, in.ContactID, trackID, account.ID)
+	emailSendID, err := model.CreateManualReplyEmailSendExt(model.ManualReplySendInput{
+		UserID:             in.UserID,
+		ContactID:          in.ContactID,
+		TrackID:            trackID,
+		SMTPAccountID:      account.ID,
+		CampaignID:         in.CampaignID,
+		WorkflowInstanceID: in.WorkflowInstanceID,
+		TemplateID:         in.TemplateID,
+	})
 	if err != nil {
 		return 0, fmt.Errorf("create send: %w", err)
 	}

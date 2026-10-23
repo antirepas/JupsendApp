@@ -9,6 +9,10 @@ import (
 
 type stubMailer struct{}
 
+func (stubMailer) SendWorkflowRenderedReply(contactID, campaignID, workflowInstanceID, templateID, replyToMessageID int64, subject, bodyHTML string) (int64, error) {
+	return 1, nil
+}
+
 func (stubMailer) SendWorkflowEmail(templateID, contactID, campaignID int64, variant string, workflowInstanceID int64, openTracking, clickTracking bool) (int64, error) {
 	return 1, nil
 }

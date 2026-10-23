@@ -143,17 +143,44 @@ func FindActiveSequenceEmailSend(sequenceInstanceID, templateID int64) (emailSen
 	return emailSendID, jobID, true
 }
 
+// ManualReplySendInput creates a send row for an in-app / watcher reply.
+type ManualReplySendInput struct {
+	UserID             int64
+	ContactID          int64
+	TrackID            string
+	SMTPAccountID      int64
+	CampaignID         int64
+	WorkflowInstanceID int64
+	TemplateID         int64
+}
+
 // CreateManualReplyEmailSend creates a sent-record shell for an in-app conversation reply.
 func CreateManualReplyEmailSend(userID, contactID int64, trackID string, smtpAccountID int64) (int64, error) {
-	var acct interface{}
-	if smtpAccountID > 0 {
-		acct = smtpAccountID
+	return CreateManualReplyEmailSendExt(ManualReplySendInput{
+		UserID: userID, ContactID: contactID, TrackID: trackID, SMTPAccountID: smtpAccountID,
+	})
+}
+
+// CreateManualReplyEmailSendExt creates a reply send row, optionally linked to a campaign/watcher instance.
+func CreateManualReplyEmailSendExt(in ManualReplySendInput) (int64, error) {
+	var acct, camp, wf, tmpl interface{}
+	if in.SMTPAccountID > 0 {
+		acct = in.SMTPAccountID
+	}
+	if in.CampaignID > 0 {
+		camp = in.CampaignID
+	}
+	if in.WorkflowInstanceID > 0 {
+		wf = in.WorkflowInstanceID
+	}
+	if in.TemplateID > 0 {
+		tmpl = in.TemplateID
 	}
 	row := db.QueryRow(`
-		INSERT INTO email_sends (template_id, contact_id, tracking_id, delivery_status, user_id, smtp_account_id)
-		VALUES (NULL, ?, ?, 'queued', ?, ?)
+		INSERT INTO email_sends (template_id, contact_id, tracking_id, delivery_status, user_id, smtp_account_id, campaign_id, workflow_instance_id)
+		VALUES (?, ?, ?, 'queued', ?, ?, ?, ?)
 		RETURNING id
-	`, contactID, trackID, userID, acct)
+	`, tmpl, in.ContactID, in.TrackID, in.UserID, acct, camp, wf)
 	var id int64
 	err := row.Scan(&id)
 	return id, err
