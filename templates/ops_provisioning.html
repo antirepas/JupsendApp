@@ -19,6 +19,39 @@
   {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
 
   <div class="card mb-8">
+    <h3 class="card-title">Create pilot account</h3>
+    <p class="text-sm text-gray-500 mb-4">
+      Create or upgrade a client to Pro for 60 days. They sign in later with Google on this email.
+      Check “Enter account now” to set up their campaign immediately.
+    </p>
+    <form method="POST" action="/ops/pilots" class="space-y-4">
+      <div>
+        <label class="form-label">Client email</label>
+        <input name="user_email" type="email" class="form-input" required placeholder="client@company.com">
+      </div>
+      <label class="flex items-center gap-2 text-sm text-gray-700">
+        <input type="checkbox" name="enter_now" value="1" checked>
+        Enter account now after granting access
+      </label>
+      <button type="submit" class="btn-primary">Create / grant pilot</button>
+    </form>
+  </div>
+
+  <div class="card mb-8">
+    <h3 class="card-title">Enter account</h3>
+    <p class="text-sm text-gray-500 mb-4">
+      Work inside an existing jupsend account. A banner lets you exit back to your admin session.
+    </p>
+    <form method="POST" action="/ops/impersonate" class="space-y-4">
+      <div>
+        <label class="form-label">Client email</label>
+        <input name="user_email" type="email" class="form-input" required placeholder="client@company.com">
+      </div>
+      <button type="submit" class="btn-primary" onclick="return confirm('Enter this account? You will work as this user until you exit.');">Enter account</button>
+    </form>
+  </div>
+
+  <div class="card mb-8">
     <h3 class="card-title">Import existing InboxKit domain (no buy)</h3>
     <p class="text-sm text-gray-500 mb-4">
       Domain and free seats already exist in InboxKit? Link them to a jupsend account and pull SMTP credentials — does <strong>not</strong> purchase mailboxes.

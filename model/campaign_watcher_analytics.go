@@ -310,7 +310,7 @@ func countWatcherSendsByIntent(campaignID int64) (map[string]int, int) {
 func countWatcherSkipsByIntent(campaignID int64) (map[string]int, int) {
 	out := map[string]int{}
 	total := 0
-	// System notes written when Jev / verify skips a watcher send.
+	// Legacy system notes from the former AI verify/rewrite gate (kept for historical analytics).
 	rows, err := db.Query(`
 		SELECT COALESCE(wi.context_json, '{}'), COUNT(DISTINCT cm.contact_id)
 		FROM conversation_messages cm

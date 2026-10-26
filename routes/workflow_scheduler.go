@@ -59,20 +59,3 @@ func (workflowMailAdapter) SendWorkflowEmail(templateID, contactID, campaignID i
 	})
 	return emailSendID, err
 }
-
-func (workflowMailAdapter) SendWorkflowRenderedReply(contactID, campaignID, workflowInstanceID, templateID, replyToMessageID int64, subject, bodyHTML string) (int64, error) {
-	userID, err := model.GetUserIDForContact(contactID)
-	if err != nil {
-		return 0, err
-	}
-	return outbound.SendManualReply(outbound.ManualReplyInput{
-		UserID:             userID,
-		ContactID:          contactID,
-		CampaignID:         campaignID,
-		WorkflowInstanceID: workflowInstanceID,
-		TemplateID:         templateID,
-		Subject:            subject,
-		BodyHTML:           bodyHTML,
-		ReplyToMessageID:   replyToMessageID,
-	})
-}

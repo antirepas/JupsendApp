@@ -315,6 +315,10 @@ func runAlterSchema() {
 			workflow_id BIGINT NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
 			PRIMARY KEY (campaign_id, workflow_id)
 		)`,
+		// Preferred local send time (per contact timezone)
+		`ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS local_send_enabled BOOLEAN NOT NULL DEFAULT FALSE`,
+		`ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS local_send_minute SMALLINT NOT NULL DEFAULT 540`,
+		`ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS local_send_fallback_tz TEXT NOT NULL DEFAULT 'America/New_York'`,
 	}
 	for _, stmt := range alters {
 		if _, err := DB.Exec(stmt); err != nil {

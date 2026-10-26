@@ -70,7 +70,8 @@ func RequireSubscription() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		if model.UserHasAppAccess(user) {
+		// Admins setting up a pilot client must not be blocked by the client's billing state.
+		if model.UserHasAppAccess(user) || auth.IsImpersonating(c) {
 			c.Set("user", user)
 			c.Next()
 			return

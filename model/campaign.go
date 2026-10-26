@@ -32,6 +32,9 @@ type Campaign struct {
 	TemperatureRulesJSON string
 	StopOnReply          bool
 	StopOnHot            bool
+	LocalSendEnabled     bool
+	LocalSendMinute      int // minutes from midnight local (e.g. 9:00 → 540)
+	LocalSendFallbackTZ  string
 }
 
 type CampaignListItem struct {
@@ -76,6 +79,9 @@ type CampaignDetail struct {
 	TemperatureRules     LeadTemperatureRules
 	StopOnReply          bool
 	StopOnHot            bool
+	LocalSendEnabled     bool
+	LocalSendMinute      int
+	LocalSendFallbackTZ  string
 	VariantA             VariantStats
 	VariantB             VariantStats
 }
@@ -281,7 +287,8 @@ func GetCampaign(id int64) (Campaign, error) {
 			COALESCE(contact_list_id, 0), COALESCE(library_folder_id, 0),
 			COALESCE(experiment_variable, ''), COALESCE(experiment_hypothesis, ''), COALESCE(success_metric, 'reply'),
 			COALESCE(open_tracking_enabled, FALSE), COALESCE(click_tracking_enabled, FALSE), COALESCE(temperature_rules_json, ''),
-			COALESCE(stop_on_reply, TRUE), COALESCE(stop_on_hot, FALSE)
+			COALESCE(stop_on_reply, TRUE), COALESCE(stop_on_hot, FALSE),
+			COALESCE(local_send_enabled, FALSE), COALESCE(local_send_minute, 540), COALESCE(NULLIF(TRIM(local_send_fallback_tz), ''), 'America/New_York')
 		FROM campaigns WHERE id = ?
 	`, id)
 	return scanCampaignRow(row)
@@ -294,7 +301,8 @@ func GetCampaignForUser(id, userID int64) (Campaign, error) {
 			COALESCE(contact_list_id, 0), COALESCE(library_folder_id, 0),
 			COALESCE(experiment_variable, ''), COALESCE(experiment_hypothesis, ''), COALESCE(success_metric, 'reply'),
 			COALESCE(open_tracking_enabled, FALSE), COALESCE(click_tracking_enabled, FALSE), COALESCE(temperature_rules_json, ''),
-			COALESCE(stop_on_reply, TRUE), COALESCE(stop_on_hot, FALSE)
+			COALESCE(stop_on_reply, TRUE), COALESCE(stop_on_hot, FALSE),
+			COALESCE(local_send_enabled, FALSE), COALESCE(local_send_minute, 540), COALESCE(NULLIF(TRIM(local_send_fallback_tz), ''), 'America/New_York')
 		FROM campaigns WHERE id = ? AND user_id = ?
 	`, id, userID)
 	return scanCampaignRow(row)
@@ -311,7 +319,8 @@ func scanCampaignRow(row interface{ Scan(...interface{}) error }) (Campaign, err
 		&c.ExecutionMode, &c.WorkflowVersionID, &isSending, &listID, &folderID,
 		&c.ExperimentVariable, &c.ExperimentHypothesis, &c.SuccessMetric,
 		&c.OpenTrackingEnabled, &c.ClickTrackingEnabled,
-		&c.TemperatureRulesJSON, &c.StopOnReply, &c.StopOnHot)
+		&c.TemperatureRulesJSON, &c.StopOnReply, &c.StopOnHot,
+		&c.LocalSendEnabled, &c.LocalSendMinute, &c.LocalSendFallbackTZ)
 	if err != nil {
 		return Campaign{}, err
 	}
@@ -490,6 +499,9 @@ func GetCampaignDetail(id, userID int64) (CampaignDetail, error) {
 		TemperatureRules:     ParseLeadTemperatureRulesJSON(c.TemperatureRulesJSON),
 		StopOnReply:          c.StopOnReply,
 		StopOnHot:            c.StopOnHot,
+		LocalSendEnabled:     c.LocalSendEnabled,
+		LocalSendMinute:      c.LocalSendMinute,
+		LocalSendFallbackTZ:  c.LocalSendFallbackTZ,
 		VariantA:             variantA,
 		VariantB:             variantB,
 	}

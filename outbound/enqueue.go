@@ -60,6 +60,8 @@ type EnqueueInput struct {
 	SkipNotify bool
 	// AccountPrechecked skips the per-row "send ready" lookup when the caller already validated.
 	AccountPrechecked bool
+	// ScheduledAt defers the job; zero means now (or campaign local-send snap when applicable).
+	ScheduledAt time.Time
 }
 
 const testSubjectJobVariantPrefix = "test|"
@@ -148,6 +150,16 @@ func EnqueueSend(input EnqueueInput) (int64, int64, error) {
 		jobVariant = testSubjectJobVariantPrefix + input.Variant
 	}
 
+	scheduledAt := input.ScheduledAt
+	if scheduledAt.IsZero() && input.CampaignID > 0 {
+		if camp, cerr := model.GetCampaign(input.CampaignID); cerr == nil && camp.LocalSendEnabled {
+			_, vars, _ := model.GetContact(input.ContactID)
+			if at, ok := model.CampaignLocalSendAt(camp, vars, time.Now()); ok {
+				scheduledAt = at
+			}
+		}
+	}
+
 	jobID, err := model.CreateSendJob(model.SendJob{
 		UserID:             input.UserID,
 		SMTPAccountID:      pinID,
@@ -158,6 +170,7 @@ func EnqueueSend(input EnqueueInput) (int64, int64, error) {
 		WorkflowInstanceID: input.WorkflowInstanceID,
 		EmailSendID:        emailSendID,
 		Priority:           sendPriority(input),
+		ScheduledAt:        scheduledAt,
 	})
 	if err != nil {
 		return 0, 0, err
@@ -205,12 +218,21 @@ func EnqueueCampaignContacts(userID, campaignID int64, contactIDs []int64, templ
 	}
 	openTrack := model.CampaignOpenTrackingEnabled(campaignID)
 	clickTrack := model.CampaignClickTrackingEnabled(campaignID)
+	camp, _ := model.GetCampaign(campaignID)
+	now := time.Now()
 
 	BeginBulkEnqueue()
 	defer EndBulkEnqueue()
 
 	for i, contactID := range allowed {
 		templateID, variant := templateForContact(contactID, i)
+		var scheduledAt time.Time
+		if camp.LocalSendEnabled {
+			_, vars, _ := model.GetContact(contactID)
+			if at, ok := model.CampaignLocalSendAt(camp, vars, now); ok {
+				scheduledAt = at
+			}
+		}
 		_, _, err := EnqueueSend(EnqueueInput{
 			UserID:               userID,
 			ContactID:            contactID,
@@ -222,6 +244,7 @@ func EnqueueCampaignContacts(userID, campaignID int64, contactIDs []int64, templ
 			ClickTrackingEnabled: clickTrack,
 			SkipNotify:           true,
 			AccountPrechecked:    true,
+			ScheduledAt:          scheduledAt,
 		})
 		if err != nil {
 			result.Skipped++

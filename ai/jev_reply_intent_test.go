@@ -28,28 +28,3 @@ func TestNormalizeIntentAndSentiment(t *testing.T) {
 	}
 }
 
-func TestBuildReplyVerifyState(t *testing.T) {
-	state := BuildReplyVerifyState("hi", "What's your price?", "Re: hi", "Our packages start at…", "pricing")
-	in, _ := state["inbound"].(map[string]interface{})
-	if in["intent"] != "pricing" {
-		t.Fatalf("%v", in)
-	}
-}
-
-func TestFormatReplyVerifySkipReason(t *testing.T) {
-	vr := ReplyVerifyResult{
-		Decision:              "skip",
-		Confidence:            0.82,
-		PrimaryGap:            "does_not_answer",
-		AnswersInbound:        0.2,
-		GrammaticallyOK:       0.9,
-		AppropriateCommitment: 0.7,
-	}
-	got := FormatReplyVerifySkipReason(vr, "interested")
-	if !strings.Contains(got, "interested") || !strings.Contains(got, "does not address") {
-		t.Fatalf("reason=%q", got)
-	}
-	if FormatReplyVerifySkipReason(ReplyVerifyResult{Decision: "send"}, "interested") != "" {
-		t.Fatal("send should have empty reason")
-	}
-}

@@ -1,7 +1,10 @@
 package model
 
 import (
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
+	"fmt"
 	"strings"
 	"time"
 
@@ -208,6 +211,66 @@ func UpdateUserSubscription(userID int64, status, membershipID, memberID string,
 		WHERE id = ?
 	`, status, membershipID, memberID, ends, userID)
 	return err
+}
+
+const DefaultPilotDurationDays = 60
+
+// GrantPilotAccess creates a user (if needed) and grants Pro + active subscription for durationDays.
+// Existing users are upgraded in place. Admin emails are refused.
+func GrantPilotAccess(email string, durationDays int) (userID int64, created bool, err error) {
+	email = strings.TrimSpace(strings.ToLower(email))
+	if email == "" || !strings.Contains(email, "@") {
+		return 0, false, fmt.Errorf("valid email required")
+	}
+	if durationDays <= 0 {
+		durationDays = DefaultPilotDurationDays
+	}
+	if config.IsAdminEmail(email) {
+		return 0, false, fmt.Errorf("cannot grant pilot access to an admin email")
+	}
+
+	exists, err := EmailExists(email)
+	if err != nil {
+		return 0, false, err
+	}
+	if exists {
+		existing, gerr := GetUserByEmail(email)
+		if gerr != nil {
+			return 0, false, gerr
+		}
+		if UserIsAdmin(existing) {
+			return 0, false, fmt.Errorf("cannot grant pilot access to an admin account")
+		}
+		userID = existing.ID
+	} else {
+		hash, herr := unusedPilotPasswordHash()
+		if herr != nil {
+			return 0, false, herr
+		}
+		userID, err = CreateUser(email, hash, config.BaseURL)
+		if err != nil {
+			return 0, false, err
+		}
+		created = true
+	}
+
+	if err := ApplyPlanLimitsToUser(userID, PlanTierPro); err != nil {
+		return userID, created, err
+	}
+	endsAt := time.Now().Add(time.Duration(durationDays) * 24 * time.Hour)
+	if err := UpdateUserSubscription(userID, SubStatusActive, "", "", &endsAt); err != nil {
+		return userID, created, err
+	}
+	return userID, created, nil
+}
+
+func unusedPilotPasswordHash() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	// Unused credential — clients sign in with Google on this email.
+	return "pilot:" + hex.EncodeToString(b), nil
 }
 
 func UpdateUserSubscriptionByEmail(email, status, membershipID, memberID string, endsAt *time.Time) error {

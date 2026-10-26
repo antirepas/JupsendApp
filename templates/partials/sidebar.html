@@ -75,8 +75,32 @@
         </div>
     </nav>
 </aside>
+<div id="impersonation-banner" class="impersonation-banner hidden" role="status" aria-live="polite"></div>
 <div id="import-jobs-banner" class="import-jobs-banner hidden" aria-live="polite"></div>
 <script>
+(function () {
+    const banner = document.getElementById('impersonation-banner');
+    if (banner) {
+        fetch('/api/v1/auth/session', { credentials: 'same-origin', cache: 'no-store' })
+            .then(r => {
+                if (!r.ok) return null;
+                const ct = (r.headers.get('content-type') || '');
+                if (ct.indexOf('application/json') === -1) return null;
+                return r.json();
+            })
+            .then(data => {
+                if (!data || !data.impersonating) return;
+                banner.classList.remove('hidden');
+                const email = (data.user_email || 'client').replace(/</g, '&lt;');
+                banner.innerHTML =
+                    '<span>Working as <strong>' + email + '</strong></span>' +
+                    '<form method="POST" action="/impersonate/exit" class="impersonation-banner-form">' +
+                    '<button type="submit" class="impersonation-banner-exit">Exit to my account</button>' +
+                    '</form>';
+            })
+            .catch(() => {});
+    }
+})();
 (function () {
     const el = document.getElementById('import-jobs-banner');
     if (!el) return;

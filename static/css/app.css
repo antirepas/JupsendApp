@@ -626,6 +626,39 @@ main > .app-page {
     font-size: 0.875rem;
 }
 
+.impersonation-banner {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 70;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+    padding: 0.55rem 1rem;
+    background: #0f172a;
+    color: #f8fafc;
+    font-size: 0.875rem;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.25);
+}
+.impersonation-banner.hidden { display: none; }
+.impersonation-banner strong { color: #fde68a; font-weight: 600; }
+.impersonation-banner-form { margin: 0; }
+.impersonation-banner-exit {
+    appearance: none;
+    border: 1px solid rgba(248, 250, 252, 0.35);
+    background: transparent;
+    color: #f8fafc;
+    border-radius: 0.375rem;
+    padding: 0.25rem 0.65rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+.impersonation-banner-exit:hover { background: rgba(248, 250, 252, 0.1); }
+
 .import-jobs-banner {
     position: fixed;
     top: 0.75rem;
@@ -637,6 +670,7 @@ main > .app-page {
     gap: 0.5rem;
 }
 .import-jobs-banner.hidden { display: none; }
+body:has(.impersonation-banner:not(.hidden)) .import-jobs-banner { top: 3rem; }
 .import-job {
     background: #fff;
     border: 1px solid #E5E7EB;

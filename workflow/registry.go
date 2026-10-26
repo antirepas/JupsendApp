@@ -1,13 +1,11 @@
 package workflow
 
 import (
-	"context"
 	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
-	"emailtracker.com/ai"
 	"emailtracker.com/model"
 	"emailtracker.com/util"
 )
@@ -124,39 +122,12 @@ func (SendEmailExecutor) Execute(ctx ExecutionContext) (NodeResult, error) {
 		}, nil
 	}
 
-	// Reply-watcher path: Jev-verify (and rewrite if needed) before sending.
-	prep, prepErr := prepareReplyWatcherSend(ctx, tmpl, contactVars, instCtx)
-	if prepErr != nil {
+	// Reply watchers: always send the mapped template as written (no AI rewrite / copy gate).
+	// Intent classification only chooses which watcher workflow runs.
+	sendID, sendErr := ctx.Mailer.SendWorkflowEmail(templateID, ctx.Instance.ContactID, campaignID, variant, ctx.Instance.ID, openTrack, clickTrack)
+	if sendErr != nil {
 		model.AbortStartedExecution(execKey)
-		return NodeResult{Failed: true, ErrorMessage: prepErr.Error()}, nil
-	}
-	if prep.skip {
-		model.AbortStartedExecution(execKey)
-		userID, _ := model.GetUserIDForContact(ctx.Instance.ContactID)
-		_ = model.InsertSystemConversationNote(userID, ctx.Instance.ContactID, prep.note)
-		_ = model.CancelInstance(ctx.Instance.ID)
-		return NodeResult{Failed: true, ErrorMessage: prep.note}, nil
-	}
-
-	var sendID int64
-	var sendErr error
-	if prep.rewritten {
-		msgID := int64FromCtx(instCtx["reply_message_id"])
-		sendID, sendErr = ctx.Mailer.SendWorkflowRenderedReply(ctx.Instance.ContactID, campaignID, ctx.Instance.ID, templateID, msgID, prep.subject, prep.bodyHTML)
-		if sendErr != nil {
-			model.AbortStartedExecution(execKey)
-			return NodeResult{Failed: true, ErrorMessage: sendErr.Error()}, nil
-		}
-		if prep.note != "" {
-			userID, _ := model.GetUserIDForContact(ctx.Instance.ContactID)
-			_ = model.InsertSystemConversationNote(userID, ctx.Instance.ContactID, prep.note)
-		}
-	} else {
-		sendID, sendErr = ctx.Mailer.SendWorkflowEmail(templateID, ctx.Instance.ContactID, campaignID, variant, ctx.Instance.ID, openTrack, clickTrack)
-		if sendErr != nil {
-			model.AbortStartedExecution(execKey)
-			return NodeResult{Failed: true, ErrorMessage: sendErr.Error()}, nil
-		}
+		return NodeResult{Failed: true, ErrorMessage: sendErr.Error()}, nil
 	}
 
 	instCtx["last_send_id"] = sendID
@@ -193,6 +164,11 @@ func (WaitExecutor) Execute(ctx ExecutionContext) (NodeResult, error) {
 		secs = 86400
 	}
 	wake := time.Now().Add(time.Duration(secs) * time.Second)
+	if ctx.Instance.CampaignID != nil && *ctx.Instance.CampaignID > 0 {
+		if camp, err := model.GetCampaign(*ctx.Instance.CampaignID); err == nil {
+			wake = model.SnapLocalSendWake(camp, ctx.Instance.ContactID, wake)
+		}
+	}
 	return NodeResult{
 		WakeAt:       &wake,
 		WaitForEvent: "",
@@ -339,75 +315,6 @@ func recordConditionExecution(ctx ExecutionContext, edgeType string) {
 	execKey := fmt.Sprintf("%d:%s:%s", ctx.Instance.ID, ctx.Node.NodeKey, edgeType)
 	_, _ = model.CreateExecution(ctx.Instance.ID, ctx.Node.NodeKey, execKey, "succeeded",
 		fmt.Sprintf(`{"next_edge":%q}`, edgeType), "")
-}
-
-type replyWatcherPrep struct {
-	skip      bool
-	note      string
-	rewritten bool
-	subject   string
-	bodyHTML  string
-}
-
-// prepareReplyWatcherSend verifies (and may rewrite) a watcher auto-reply.
-// Non-watcher sends return zero value (proceed with normal template send).
-func prepareReplyWatcherSend(ctx ExecutionContext, tmpl model.Template, contactVars []model.ContactVariables, instCtx map[string]interface{}) (replyWatcherPrep, error) {
-	if instCtx == nil {
-		return replyWatcherPrep{}, nil
-	}
-	watcher, _ := instCtx["watcher"].(bool)
-	if !watcher {
-		return replyWatcherPrep{}, nil
-	}
-	msgID := int64FromCtx(instCtx["reply_message_id"])
-	intent, _ := instCtx["reply_intent"].(string)
-	if msgID <= 0 {
-		return replyWatcherPrep{skip: true, note: "[Auto-reply skipped] Missing inbound message reference."}, nil
-	}
-	subjIn, bodyIn, _, userID, err := model.GetConversationMessageText(msgID)
-	if err != nil {
-		return replyWatcherPrep{skip: true, note: "[Auto-reply skipped] Could not load inbound message for verification."}, nil
-	}
-	renderedSubj, renderedBody, missing, err := util.RenderEmail(tmpl.Subject, tmpl.Body, contactVars, util.RenderOptions{
-		UserID: userID,
-		Ctx:    context.Background(),
-	})
-	if err != nil {
-		return replyWatcherPrep{skip: true, note: "[Auto-reply skipped] " + err.Error()}, nil
-	}
-	if len(missing) > 0 {
-		return replyWatcherPrep{skip: true, note: "[Auto-reply skipped] Missing variables: " + strings.Join(missing, ", ")}, nil
-	}
-	if !ai.JEVConfigured() {
-		return replyWatcherPrep{}, nil
-	}
-
-	vrCtx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
-	defer cancel()
-	prep, err := ai.PrepareAutoReply(vrCtx, subjIn, bodyIn, renderedSubj, renderedBody, intent)
-	if err != nil {
-		return replyWatcherPrep{skip: true, note: "[Auto-reply skipped] Verification failed: " + err.Error()}, nil
-	}
-	_, _, _ = model.ConsumeAICredit(userID)
-	if prep.Attempts > 0 {
-		_, _, _ = model.ConsumeAICredit(userID) // rewrite + re-verify
-	}
-	if !prep.Send {
-		note := prep.Note
-		if note == "" {
-			note = "[Auto-reply skipped] " + prep.Verify.Reason
-		}
-		return replyWatcherPrep{skip: true, note: note}, nil
-	}
-	if prep.Rewritten {
-		return replyWatcherPrep{
-			rewritten: true,
-			subject:   prep.Subject,
-			bodyHTML:  prep.BodyHTML,
-			note:      prep.Note,
-		}, nil
-	}
-	return replyWatcherPrep{}, nil
 }
 
 func int64FromCtx(v interface{}) int64 {

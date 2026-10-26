@@ -8,8 +8,6 @@ import (
 
 type MailSender interface {
 	SendWorkflowEmail(templateID, contactID, campaignID int64, variant string, workflowInstanceID int64, openTracking, clickTracking bool) (int64, error)
-	// SendWorkflowRenderedReply sends an already-rendered HTML reply (e.g. Jev-rewritten watcher auto-reply).
-	SendWorkflowRenderedReply(contactID, campaignID, workflowInstanceID, templateID, replyToMessageID int64, subject, bodyHTML string) (int64, error)
 }
 
 type NodeResult struct {

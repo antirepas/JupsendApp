@@ -138,6 +138,52 @@
 
 {{if ne .campaign.DisplayStatus "sent"}}
 {{if ne .campaign.DisplayStatus "stopped"}}
+<div class="card mb-6" id="local-send-card">
+  <h3 class="card-title">Send at local time</h3>
+  <p class="text-sm text-slate-500 mb-4">
+    Every email (and follow-up) goes out at the same clock time in each contact’s timezone.
+    Uses their <code class="text-xs bg-slate-100 px-1 rounded">timezone</code> or <code class="text-xs bg-slate-100 px-1 rounded">country</code> from your list.
+  </p>
+  <form method="POST" action="/campaigns/{{.campaign.ID}}/local-send" class="space-y-4" id="local-send-form">
+    <label class="flex items-start gap-3 cursor-pointer">
+      <input type="checkbox" name="local_send_enabled" value="1" class="mt-1" id="local-send-enabled" {{if .localSendEnabled}}checked{{end}}>
+      <span>
+        <span class="font-medium text-slate-900">Send at a preferred local time</span>
+        <span class="block text-xs text-slate-500 mt-0.5">Off = send as soon as the campaign launches</span>
+      </span>
+    </label>
+    <div id="local-send-options" class="grid grid-cols-1 sm:grid-cols-2 gap-4 {{if not .localSendEnabled}}opacity-50 pointer-events-none{{end}}">
+      <div>
+        <label class="form-label" for="local_send_time">Local time</label>
+        <input type="time" name="local_send_time" id="local_send_time" class="form-input" value="{{.localSendTime}}" required>
+      </div>
+      <div>
+        <label class="form-label" for="local_send_fallback_tz">If timezone unknown</label>
+        <select name="local_send_fallback_tz" id="local_send_fallback_tz" class="form-input">
+          {{range .localSendTimezones}}
+          <option value="{{.}}" {{if eq $.localSendFallbackTZ .}}selected{{end}}>{{.}}</option>
+          {{end}}
+        </select>
+      </div>
+    </div>
+    <button type="submit" class="btn-primary">Save local send</button>
+  </form>
+</div>
+<script>
+(function () {
+  var box = document.getElementById('local-send-enabled');
+  var opts = document.getElementById('local-send-options');
+  if (!box || !opts) return;
+  function sync() {
+    if (box.checked) {
+      opts.classList.remove('opacity-50', 'pointer-events-none');
+    } else {
+      opts.classList.add('opacity-50', 'pointer-events-none');
+    }
+  }
+  box.addEventListener('change', sync);
+})();
+</script>
 {{if gt .campaign.ContactCount 0}}
 <div class="card mb-6">
     <h3 class="card-title">{{if .isWorkflow}}Schedule workflow start{{else}}Schedule send{{end}}</h3>

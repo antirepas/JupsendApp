@@ -8,6 +8,7 @@ import (
 )
 
 const sessionUserKey = "user_id"
+const sessionImpersonatorKey = "impersonator_user_id"
 
 func SetUserSession(c *gin.Context, userID int64) {
 	s := sessions.Default(c)
@@ -55,6 +56,54 @@ func RequireUserID(c *gin.Context) (int64, bool) {
 	}
 	c.Set("userID", id)
 	return id, true
+}
+
+func sessionInt64(v interface{}) (int64, bool) {
+	if v == nil {
+		return 0, false
+	}
+	switch id := v.(type) {
+	case int64:
+		return id, id > 0
+	case int:
+		return int64(id), id > 0
+	case float64:
+		return int64(id), id > 0
+	default:
+		return 0, false
+	}
+}
+
+// GetImpersonatorID returns the real admin user id when the session is impersonating.
+func GetImpersonatorID(c *gin.Context) (int64, bool) {
+	s := sessions.Default(c)
+	return sessionInt64(s.Get(sessionImpersonatorKey))
+}
+
+func IsImpersonating(c *gin.Context) bool {
+	_, ok := GetImpersonatorID(c)
+	return ok
+}
+
+// StartImpersonation switches the effective user_id to targetID while remembering adminID.
+func StartImpersonation(c *gin.Context, adminID, targetID int64) {
+	s := sessions.Default(c)
+	s.Set(sessionUserKey, targetID)
+	s.Set(sessionImpersonatorKey, adminID)
+	_ = s.Save()
+}
+
+// StopImpersonation restores the admin session. ok is false if not impersonating.
+func StopImpersonation(c *gin.Context) (adminID int64, ok bool) {
+	s := sessions.Default(c)
+	adminID, ok = sessionInt64(s.Get(sessionImpersonatorKey))
+	if !ok {
+		return 0, false
+	}
+	s.Set(sessionUserKey, adminID)
+	s.Delete(sessionImpersonatorKey)
+	_ = s.Save()
+	return adminID, true
 }
 
 func isAPI(c *gin.Context) bool {

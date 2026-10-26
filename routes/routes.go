@@ -146,6 +146,11 @@ func RegisterRoutes(server *gin.Engine) {
 	v1.HEAD("/track/click/:id", TrackClick)
 	v1.POST("/webhooks/whop", WhopWebhook)
 	v1.GET("/u/:token", UnsubscribePage)
+	v1Authed := v1.Group("/")
+	v1Authed.Use(RequireAuth())
+	{
+		v1Authed.GET("/auth/session", AuthSessionAPI)
+	}
 
 	// Public aliases (no /api/v1 prefix) for tracking and unsubscribe links.
 	server.GET("/track/open/:id", TrackOpen)
@@ -157,6 +162,7 @@ func RegisterRoutes(server *gin.Engine) {
 	settings := server.Group("/")
 	settings.Use(RequireAuth())
 	{
+		settings.POST("/impersonate/exit", ImpersonateExit)
 		settings.GET("/settings", SettingsPage)
 		settings.POST("/settings", UpdateSettings)
 		settings.GET("/settings/billing", BillingPage)
@@ -301,6 +307,7 @@ func RegisterRoutes(server *gin.Engine) {
 		authd.POST("/campaigns/:id/delete", DeleteCampaign)
 		authd.POST("/campaigns/:id/schedule", ScheduleCampaign)
 		authd.POST("/campaigns/:id/cancel-schedule", CancelCampaignSchedule)
+		authd.POST("/campaigns/:id/local-send", UpdateCampaignLocalSend)
 		authd.GET("/campaigns/:id/analytics", CampaignAnalyticsPage)
 		authd.POST("/campaigns/:id/promote-winner", PromoteCampaignWinner)
 		authd.GET("/campaigns/:id", CampaignDetailPage)
@@ -363,5 +370,7 @@ func RegisterRoutes(server *gin.Engine) {
 		adminOps.POST("/provisioning/purchases/:id/fulfill", OpsFulfillPurchase)
 		adminOps.POST("/provisioning/connect-domain", OpsAdminConnectDomain)
 		adminOps.POST("/provisioning/import-domain", OpsAdminImportExistingDomain)
+		adminOps.POST("/pilots", OpsCreatePilot)
+		adminOps.POST("/impersonate", OpsImpersonate)
 	}
 }

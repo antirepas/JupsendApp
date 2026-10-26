@@ -515,6 +515,10 @@ func CampaignDetailPage(ctx *gin.Context) {
 		"contactLists":            pageExtras.ContactLists,
 		"linkedListID":            detail.ContactListID,
 		"scheduledAtLocal":        scheduledAtLocal,
+		"localSendEnabled":        detail.LocalSendEnabled,
+		"localSendTime":           model.LocalSendTimeString(detail.LocalSendMinute),
+		"localSendFallbackTZ":     detail.LocalSendFallbackTZ,
+		"localSendTimezones":      model.CommonFallbackTimezones,
 		"success":                 ctx.Query("success"),
 		"error":                   ctx.Query("error"),
 		"isWorkflow":              isWorkflow,
@@ -1070,6 +1074,32 @@ func StopCampaign(ctx *gin.Context) {
 	msg := fmt.Sprintf("Campaign stopped. Removed %d queued emails", result.CancelledJobs)
 	if result.CancelledInstances > 0 {
 		msg += fmt.Sprintf(" and cancelled %d workflow runs", result.CancelledInstances)
+	}
+	ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?success="+url.QueryEscape(msg))
+}
+
+func UpdateCampaignLocalSend(ctx *gin.Context) {
+	userID := mustUserID(ctx)
+	campaignID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
+	if err != nil {
+		ctx.Redirect(http.StatusFound, "/campaigns?error=Invalid+campaign")
+		return
+	}
+	enabled := ctx.PostForm("local_send_enabled") == "1" || ctx.PostForm("local_send_enabled") == "on"
+	minute, ok := model.ParseLocalSendTime(ctx.PostForm("local_send_time"))
+	if !ok {
+		minute = model.DefaultLocalSendMinute
+	}
+	fallback := strings.TrimSpace(ctx.PostForm("local_send_fallback_tz"))
+	if err := model.SetCampaignLocalSend(campaignID, userID, enabled, minute, fallback); err != nil {
+		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error="+url.QueryEscape(err.Error()))
+		return
+	}
+	msg := "Local send time saved"
+	if enabled {
+		msg = "Local send on — emails go out at " + model.LocalSendTimeString(minute) + " in each contact's timezone"
+	} else {
+		msg = "Local send off — emails send as soon as the campaign launches"
 	}
 	ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?success="+url.QueryEscape(msg))
 }

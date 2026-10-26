@@ -98,6 +98,7 @@ func processInstance(inst model.CampaignSequenceInstance) error {
 	// Active + delay: park once. Waiting instances are already due — send.
 	if inst.Status == "active" && step.DelaySecondsBefore > 0 {
 		wake := time.Now().Add(time.Duration(step.DelaySecondsBefore) * time.Second)
+		wake = model.SnapLocalSendWake(camp, inst.ContactID, wake)
 		return model.UpdateSequenceInstance(inst.ID, "waiting", inst.StepIndex, inst.LastEmailSendID, &wake)
 	}
 
@@ -122,6 +123,7 @@ func processInstance(inst model.CampaignSequenceInstance) error {
 	next := steps[nextIndex]
 	if next.DelaySecondsBefore > 0 {
 		wake := time.Now().Add(time.Duration(next.DelaySecondsBefore) * time.Second)
+		wake = model.SnapLocalSendWake(camp, inst.ContactID, wake)
 		return model.UpdateSequenceInstance(inst.ID, "waiting", nextIndex, sendID, &wake)
 	}
 	// Immediate next send — stay active at next index for another pass soon.

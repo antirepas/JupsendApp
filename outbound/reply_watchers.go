@@ -5,16 +5,14 @@ import (
 	"fmt"
 	"log"
 	"strings"
-	"time"
 
-	"emailtracker.com/ai"
 	"emailtracker.com/model"
 	"emailtracker.com/util"
 	"emailtracker.com/workflow"
 )
 
 // MaybeEnqueueReplyWatcher starts attached reply-watcher workflows for a matching intent.
-// The workflow graph itself owns wait → verify → send (wait node + send executor verify).
+// The workflow graph owns wait → send; the mapped template is sent as written (no AI rewrite).
 func MaybeEnqueueReplyWatcher(campaignID, contactID, messageID int64, intent string) {
 	switch model.NormalizeReplyIntent(intent) {
 	case "unsubscribe", "wrong_person", "":
@@ -75,7 +73,7 @@ func processReplyAutoJob(job model.ReplyAutoJob) error {
 		return model.UpdateReplyAutoJob(job.ID, "cancelled", "", reason, 0)
 	}
 
-	subjIn, bodyIn, contactID, userID, err := model.GetConversationMessageText(job.MessageID)
+	_, _, contactID, userID, err := model.GetConversationMessageText(job.MessageID)
 	if err != nil {
 		return model.UpdateReplyAutoJob(job.ID, "failed", "", err.Error(), 0)
 	}
@@ -100,51 +98,19 @@ func processReplyAutoJob(job model.ReplyAutoJob) error {
 		_ = model.InsertSystemConversationNote(userID, contactID, note)
 		return model.UpdateReplyAutoJob(job.ID, "skipped", "missing_vars", note, 0)
 	}
-	sendSubj := renderedSubj
-	sendBody := renderedBody
-	decision := "send"
-	if ai.JEVConfigured() {
-		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
-		defer cancel()
-		prep, pErr := ai.PrepareAutoReply(ctx, subjIn, bodyIn, renderedSubj, renderedBody, job.Intent)
-		if pErr != nil {
-			note := "[Auto-reply skipped] Verification unavailable: " + pErr.Error()
-			_ = model.InsertSystemConversationNote(userID, contactID, note)
-			return model.UpdateReplyAutoJob(job.ID, "skipped", "verify_error", pErr.Error(), 0)
-		}
-		_, _, _ = model.ConsumeAICredit(userID)
-		if prep.Attempts > 0 {
-			_, _, _ = model.ConsumeAICredit(userID)
-		}
-		decision = prep.Verify.Decision
-		if !prep.Send {
-			note := prep.Note
-			if note == "" {
-				note = "[Auto-reply skipped] " + prep.Verify.Reason
-			}
-			_ = model.InsertSystemConversationNote(userID, contactID, note)
-			return model.UpdateReplyAutoJob(job.ID, "skipped", decision, note, 0)
-		}
-		sendSubj = prep.Subject
-		sendBody = prep.BodyHTML
-		if prep.Note != "" {
-			_ = model.InsertSystemConversationNote(userID, contactID, prep.Note)
-		}
-	}
-
 	sendID, err := SendManualReply(ManualReplyInput{
-		UserID:             userID,
-		ContactID:          contactID,
-		CampaignID:         job.CampaignID,
-		TemplateID:         job.TemplateID,
-		Subject:            sendSubj,
-		BodyHTML:           sendBody,
-		ReplyToMessageID:   job.MessageID,
+		UserID:           userID,
+		ContactID:        contactID,
+		CampaignID:       job.CampaignID,
+		TemplateID:       job.TemplateID,
+		Subject:          renderedSubj,
+		BodyHTML:         renderedBody,
+		ReplyToMessageID: job.MessageID,
 	})
 	if err != nil {
 		note := "[Auto-reply failed] " + err.Error()
 		_ = model.InsertSystemConversationNote(userID, contactID, note)
-		return model.UpdateReplyAutoJob(job.ID, "failed", decision, err.Error(), 0)
+		return model.UpdateReplyAutoJob(job.ID, "failed", "", err.Error(), 0)
 	}
-	return model.UpdateReplyAutoJob(job.ID, "sent", decision, "", sendID)
+	return model.UpdateReplyAutoJob(job.ID, "sent", "send", "", sendID)
 }
