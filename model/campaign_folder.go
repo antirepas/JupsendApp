@@ -34,7 +34,8 @@ func GetCampaignByLibraryFolder(folderID, userID int64) (Campaign, error) {
 			COALESCE(contact_list_id, 0), COALESCE(library_folder_id, 0),
 			COALESCE(experiment_variable, ''), COALESCE(experiment_hypothesis, ''), COALESCE(success_metric, 'reply'),
 			COALESCE(open_tracking_enabled, FALSE), COALESCE(click_tracking_enabled, FALSE), COALESCE(temperature_rules_json, ''),
-			COALESCE(stop_on_reply, TRUE), COALESCE(stop_on_hot, FALSE)
+			COALESCE(stop_on_reply, TRUE), COALESCE(stop_on_hot, FALSE),
+			COALESCE(local_send_enabled, FALSE), COALESCE(local_send_minute, 540), COALESCE(NULLIF(TRIM(local_send_fallback_tz), ''), 'America/New_York')
 		FROM campaigns WHERE library_folder_id = ? AND user_id = ?
 	`, folderID, userID)
 	return scanCampaignRow(row)
