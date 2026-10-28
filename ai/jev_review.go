@@ -94,7 +94,8 @@ func BuildTemplateReviewState(in TemplateReviewInput) map[string]interface{} {
 			"goal": "Maximize relevant, credible, and appropriate cold outreach templates; do not simply reward persuasive writing.",
 			"rules": []string{
 				"This is a jupsend reusable email template. Merge tokens are intentional — never treat them as typos, unfinished draft text, or missing content.",
-				"Supported tokens: {{name}}, {{company}}, filters like {{name|default:there}}, mailbox fields {{@from_name}}, AI-fit {{~company}} / {{company|fit}}, and conditionals {% if company %}…{% endif %}.",
+				"Supported tokens: {{name}}, {{full_name|first}}, {{company_name|title}}, {{name|default:there}}, mailbox {{@first_name}} / {{@from_name}}, AI-fit {{~company}} / {{company|fit}}, and {% if company %}…{% endif %}.",
+				"Filters first/title/default/truncate/url/raw/required/fit are real jupsend syntax — never treat them as broken placeholders.",
 				"After send, tokens are replaced with each contact’s data (or mailbox data for {{@…}}). Judging empty braces as broken is wrong.",
 				"Evaluate the offer framing and requested commitment, not just wording polish.",
 				"Never treat a cold prospect as ready to pay merely because the problem sounds relevant.",
@@ -114,13 +115,17 @@ func jupsendTemplateSyntax(detectedVars []string) map[string]interface{} {
 		"engine": "jupsend",
 		"forms": []string{
 			"{{name}} — contact variable filled at send time",
-			"{{@from_name}} — sending mailbox field (not contact data)",
+			"{{@from_name}} / {{@first_name}} — sending mailbox field (not contact data)",
 			"{{~company}} or {{company|fit}} — AI-fit the value into the sentence",
-			"{{name|default:there}} — pipe filters (default, etc.)",
+			"{{full_name|first}} — first word of the value (e.g. first name)",
+			"{{company_name|title}} — Title Case the value",
+			"{{name|default:there}} — fallback when empty",
+			"{{name|truncate:3}}, {{url|url}}, {{html|raw}}, {{name|required}} — other built-in filters",
 			"{% if company %}…{% endif %} — omit the block when the variable is empty",
 		},
+		"valid_filters":      []string{"first", "title", "default", "truncate", "url", "raw", "required", "fit", "summarize"},
 		"detected_variables": detectedVars,
-		"rule":               "These tokens are valid template syntax. Do not score them as broken placeholders, typos, or incomplete copy.",
+		"rule":               "These tokens are valid jupsend template syntax. Do NOT score {{full_name|first}}, {{company_name|title}}, {{@first_name}}, or similar as broken, unnatural, or unfinished — they are filled at send time.",
 	}
 }
 
@@ -147,9 +152,14 @@ are expected and must not be treated as defects.`,
 		"placeholders_ok": map[string]interface{}{
 			"type": "noul",
 			"instructions": `Are jupsend merge tokens used correctly and naturally?
-Valid: {{name}}, {{company}}, {{@from_name}}, {{~company}}, {{name|default:there}}, {% if company %}…{% endif %}.
-These are filled at send time — they are NOT unfinished draft text.
-Score low only for clearly broken tokens (e.g. {{{name}}}, {{123}}, mismatched braces) or doubled nonsense.`,
+Valid examples (score HIGH / yes):
+- {{full_name|first}}, {{company_name|title}}, {{name|default:there}}
+- {{@first_name}}, {{@from_name}} (mailbox fields in the signature)
+- {{~company}}, {{company|fit}}, {% if company %}…{% endif %}
+Built-in filters include: first, title, default, truncate, url, raw, required, fit, summarize.
+These are filled at send time — they are NOT unfinished draft text, typos, or unnatural placeholders.
+Score LOW only for clearly broken tokens (e.g. {{{name}}}, {{123}}, mismatched braces) or doubled nonsense.
+Do not penalize normal cold-email use of |first, |title, or {{@…}} in the greeting/signature.`,
 		},
 		"personalization_ok": map[string]interface{}{
 			"type": "noul",
@@ -192,7 +202,11 @@ or light next step) rather than jumping to purchase or payment?`,
 		"credible": map[string]interface{}{
 			"type": "noul",
 			"instructions": `Are claims specific, believable, and appropriately qualified (not overhyped)?
-Flag unsupported guarantees (“guaranteed 10x”), fake social proof, or assumptions stated as hard facts.
+Score HIGH for normal cold-email social proof: a named client/case study with a concrete result
+(e.g. “Infradone booked 14 qualified calls in their first month”) presented as the sender’s own work —
+that is standard and credible unless it sounds impossible or guaranteed for the prospect.
+Score LOW for: “guaranteed” outcomes for the reader, fake logos/proof, miracle metrics, or claims that
+cannot plausibly be the sender’s experience.
 Merge fields like {{company}} do not reduce credibility.`,
 		},
 		"sender_consistent": map[string]interface{}{
@@ -284,7 +298,7 @@ var noulCheckMeta = []struct {
 	Label string
 	Hint  string
 }{
-	{"placeholders_ok", "Placeholders look natural", "Checks that {{name}} / {{@mailbox}} / filters look like real jupsend merge fields, not broken braces or draft junk."},
+	{"placeholders_ok", "Placeholders look natural", "Checks for broken braces — not normal jupsend tokens like {{full_name|first}}, {{company_name|title}}, or {{@first_name}}."},
 	{"personalization_ok", "Personalization is honest", "Checks you personalize via merge fields instead of inventing prospect-specific facts as if verified."},
 	{"offer_relevant", "Offer framing is relevant", "Checks whether a typical cold recipient could plausibly care about this offer."},
 	{"value_proposition_clear", "Value proposition is clear", "Checks that the email says what you do and why it helps — not only vague buzzwords."},
@@ -292,7 +306,7 @@ var noulCheckMeta = []struct {
 	{"commitment_appropriate", "Commitment fits cold outreach", "Checks you are not asking a cold lead to pay, buy, or over-commit too early."},
 	{"price_framing_appropriate", "Price framing is appropriate", "Checks pricing talk (if any) fits a first cold email — or that there is no premature payment ask."},
 	{"sales_sequence_appropriate", "Sales step is appropriate", "Checks this reads like an early outreach step, not a late-stage purchase email."},
-	{"credible", "Claims are credible", "Checks for overhyped guarantees, fake proof, or hard claims that would make a stranger distrust you."},
+	{"credible", "Claims are credible", "Flags fake guarantees — not normal client case studies (e.g. “14 calls in month one”)."},
 	{"sender_consistent", "Sender identity is consistent", "Checks From name / signature / body don’t look like different people."},
 	{"ai_slop", "Sounds like AI slop", "Higher % = more generic or robotic. Lower is better on this one."},
 }

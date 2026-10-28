@@ -197,7 +197,8 @@ Merge tokens themselves are good personalization structure.`,
 		"credibility_ok": map[string]interface{}{
 			"type": "noul",
 			"instructions": `Are claims across the campaign believable and appropriately qualified (not overhyped)?
-Flag unsupported guarantees, fake social proof, or hard claims that would make a stranger distrust you.
+Score HIGH for normal cold-email social proof: named client/case study results from the sender’s own work.
+Score LOW for guaranteed outcomes for the reader, fake proof, or impossible metrics.
 Merge fields like {{company}} do not reduce credibility.`,
 		},
 		"deliverability_risk_low": map[string]interface{}{
