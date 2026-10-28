@@ -115,7 +115,8 @@ func BuildCampaignReviewState(in CampaignReviewInput) map[string]interface{} {
 			"weak_coverage_vars":    weakVars,
 			"note":                  "No individual contact records are included. Judge fit from coverage aggregates and email copy.",
 		},
-		"emails": emails,
+		"emails":          emails,
+		"template_syntax": jupsendTemplateSyntax(in.MergedVars),
 		"evaluation_policy": map[string]interface{}{
 			"goal": "Decide whether this campaign is ready to launch as a coherent cold outreach system — not whether a single email is well written.",
 			"rules": []string{
@@ -123,6 +124,7 @@ func BuildCampaignReviewState(in CampaignReviewInput) map[string]interface{} {
 				"A/B tests need a clear hypothesis and meaningfully different variants — not duplicate copy.",
 				"Follow-ups should advance the conversation, not spam the same pitch.",
 				"Audience fit matters: weak variable coverage or many missing-vars contacts is a launch risk.",
+				"Email bodies use jupsend merge syntax ({{name}}, {{@mailbox}}, {{~fit}}, |filters, {% if %}). Those tokens are intentional — not typos or unfinished copy.",
 				"Cold outreach commitment rules still apply across every step.",
 				"Prefer revise when issues are fixable; do_not_send for deceptive or fundamentally broken campaigns.",
 				"manual_review when essential campaign context is missing (no contacts, unmapped workflow steps, empty templates).",
@@ -175,8 +177,9 @@ to personalize these templates without widespread empty merge fields?`,
 		},
 		"personalization_honest": map[string]interface{}{
 			"type": "noul",
-			"instructions": `Across the emails, is personalization structured honestly (placeholders / evidence-friendly)
-rather than fabricating prospect-specific facts?`,
+			"instructions": `Across the emails, is personalization structured honestly via jupsend merge fields
+({{name}}, {{company}}, {% if %}, etc.) rather than fabricating prospect-specific facts as verified truth?
+Merge tokens themselves are good personalization structure.`,
 		},
 		"value_clear_across_steps": map[string]interface{}{
 			"type":         "noul",
@@ -192,8 +195,10 @@ rather than fabricating prospect-specific facts?`,
 			"instructions": `Is the requested commitment proportionate to cold outreach across all steps?`,
 		},
 		"credibility_ok": map[string]interface{}{
-			"type":         "noul",
-			"instructions": `Are claims across the campaign credible and appropriately qualified?`,
+			"type": "noul",
+			"instructions": `Are claims across the campaign believable and appropriately qualified (not overhyped)?
+Flag unsupported guarantees, fake social proof, or hard claims that would make a stranger distrust you.
+Merge fields like {{company}} do not reduce credibility.`,
 		},
 		"deliverability_risk_low": map[string]interface{}{
 			"type": "noul",
@@ -253,18 +258,19 @@ Yes = risk looks low.`,
 var campaignNoulMeta = []struct {
 	ID    string
 	Label string
+	Hint  string
 }{
-	{"sequence_coherent", "Sequence is coherent"},
-	{"ab_design_sound", "A/B design is sound"},
-	{"hypothesis_clear", "Hypothesis is clear"},
-	{"followups_add_value", "Follow-ups add value"},
-	{"audience_ready", "Audience looks ready"},
-	{"personalization_honest", "Personalization is honest"},
-	{"value_clear_across_steps", "Value is clear"},
-	{"cta_staging_ok", "CTA staging is OK"},
-	{"commitment_appropriate", "Commitment fits cold outreach"},
-	{"credibility_ok", "Claims are credible"},
-	{"deliverability_risk_low", "Deliverability risk looks low"},
+	{"sequence_coherent", "Sequence is coherent", "Checks first email and follow-ups feel like one planned thread, not random disconnected messages."},
+	{"ab_design_sound", "A/B design is sound", "Checks A/B variants differ in a useful way (or skips this if you are not A/B testing)."},
+	{"hypothesis_clear", "Hypothesis is clear", "Checks your experiment idea is clear enough to learn from — or N/A when there is no A/B."},
+	{"followups_add_value", "Follow-ups add value", "Checks later emails add something new instead of repeating the same pitch."},
+	{"audience_ready", "Audience looks ready", "Checks list size and variable coverage so most contacts can fill {{placeholders}}."},
+	{"personalization_honest", "Personalization is honest", "Checks merge fields / honest setup vs inventing prospect facts as if verified."},
+	{"value_clear_across_steps", "Value is clear", "Checks recipients can tell what you offer and why it might help."},
+	{"cta_staging_ok", "CTA staging is OK", "Checks asks escalate sensibly (light early; no payment ask on first touch)."},
+	{"commitment_appropriate", "Commitment fits cold outreach", "Checks you are not asking cold leads for too much too soon across the sequence."},
+	{"credibility_ok", "Claims are credible", "Checks for overhyped guarantees, fake proof, or hard claims that would make strangers distrust you."},
+	{"deliverability_risk_low", "Deliverability risk looks low", "Higher % = copy/sequence looks less spammy from a reputation perspective."},
 }
 
 // ReviewCampaign runs Jev on a full campaign and shapes the UI payload.
@@ -303,7 +309,7 @@ func ReviewCampaign(ctx context.Context, client *JevClient, in CampaignReviewInp
 		if err != nil {
 			continue
 		}
-		out.Checks = append(out.Checks, TemplateReviewCheck{ID: meta.ID, Label: meta.Label, Yes: n.Noul})
+		out.Checks = append(out.Checks, TemplateReviewCheck{ID: meta.ID, Label: meta.Label, Hint: meta.Hint, Yes: n.Noul})
 	}
 	out.PrimaryIssue = decodeChoiceLabeled(resp.Answers, "launch_blocker", "Launch blocker")
 	out.ProblemArea = decodeChoiceLabeled(resp.Answers, "focus_area", "Focus area")

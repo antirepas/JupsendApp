@@ -1050,16 +1050,27 @@
             checksEl.innerHTML = (review.checks || [])
                 .map(function (c) {
                     const yes = typeof c.yes === 'number' ? c.yes : 0;
+                    const hint = String(c.hint || '').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+                    const hintHtml = hint
+                        ? '<p class="jev-check-hint">' + hint + '</p>'
+                        : '';
                     return (
-                        '<div class="jev-check"><span class="jev-check-label">' +
+                        '<div class="jev-check"' +
+                        (hint ? ' title="' + hint + '"' : '') +
+                        '><div class="jev-check-main"><span class="jev-check-label">' +
                         (c.label || c.id) +
+                        (hint
+                            ? ' <span class="jev-check-info" aria-hidden="true">?</span>'
+                            : '') +
                         '</span><span class="jev-check-pct">' +
                         pct(yes) +
-                        '</span><div class="jev-bar ' +
+                        '</span></div><div class="jev-bar ' +
                         barClass(c.id, yes) +
                         '"><span style="width:' +
                         Math.max(2, Math.round(yes * 100)) +
-                        '%"></span></div></div>'
+                        '%"></span></div>' +
+                        hintHtml +
+                        '</div>'
                     );
                 })
                 .join('');

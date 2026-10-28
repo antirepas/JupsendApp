@@ -36,6 +36,14 @@ func TestBuildTemplateReviewStateOmitsContact(t *testing.T) {
 	if tpl["has_placeholders"] != true {
 		t.Fatal("expected placeholders flag")
 	}
+	syntax, _ := state["template_syntax"].(map[string]interface{})
+	if syntax["engine"] != "jupsend" {
+		t.Fatalf("syntax=%v", syntax)
+	}
+	forms, _ := syntax["forms"].([]string)
+	if len(forms) < 3 {
+		t.Fatalf("expected syntax forms, got %v", forms)
+	}
 }
 
 func TestExtractCTA(t *testing.T) {

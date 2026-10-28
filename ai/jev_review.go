@@ -24,7 +24,8 @@ type TemplateReviewInput struct {
 type TemplateReviewCheck struct {
 	ID    string  `json:"id"`
 	Label string  `json:"label"`
-	Yes   float64 `json:"yes"` // P(yes)
+	Hint  string  `json:"hint,omitempty"` // short explanation for hover / help
+	Yes   float64 `json:"yes"`            // P(yes)
 }
 
 // TemplateReviewChoice is a choice answer for the UI.
@@ -80,6 +81,7 @@ func BuildTemplateReviewState(in TemplateReviewInput) map[string]interface{} {
 			"channel":           "cold_email",
 			"is_template_draft": true,
 		},
+		"template_syntax": jupsendTemplateSyntax(in.Variables),
 		"offer": map[string]interface{}{
 			"product":       product,
 			"sales_stage":   "cold_outreach",
@@ -91,16 +93,34 @@ func BuildTemplateReviewState(in TemplateReviewInput) map[string]interface{} {
 		"evaluation_policy": map[string]interface{}{
 			"goal": "Maximize relevant, credible, and appropriate cold outreach templates; do not simply reward persuasive writing.",
 			"rules": []string{
-				"This is a reusable email template — {{placeholders}} are intentional, not missing data.",
+				"This is a jupsend reusable email template. Merge tokens are intentional — never treat them as typos, unfinished draft text, or missing content.",
+				"Supported tokens: {{name}}, {{company}}, filters like {{name|default:there}}, mailbox fields {{@from_name}}, AI-fit {{~company}} / {{company|fit}}, and conditionals {% if company %}…{% endif %}.",
+				"After send, tokens are replaced with each contact’s data (or mailbox data for {{@…}}). Judging empty braces as broken is wrong.",
 				"Evaluate the offer framing and requested commitment, not just wording polish.",
 				"Never treat a cold prospect as ready to pay merely because the problem sounds relevant.",
 				"Distinguish a clear CTA from a commercially appropriate CTA for cold outreach.",
-				"Do not invent company-specific problems; flag fake or unsupported personalization claims written as facts.",
+				"Do not invent company-specific problems; flag fake or unsupported personalization claims written as facts (not {{placeholders}}).",
 				"Flag inconsistent sender identities, unsupported claims, and misleading personalization copy.",
 				"Treat missing critical commercial context as uncertainty (manual_review), not as proof the email is good.",
 				"Prefer revise when issues are fixable; reserve do_not_send for deceptive or fundamentally inappropriate copy.",
 			},
 		},
+	}
+}
+
+// jupsendTemplateSyntax documents merge-field syntax for Jev (shared by template + campaign review).
+func jupsendTemplateSyntax(detectedVars []string) map[string]interface{} {
+	return map[string]interface{}{
+		"engine": "jupsend",
+		"forms": []string{
+			"{{name}} — contact variable filled at send time",
+			"{{@from_name}} — sending mailbox field (not contact data)",
+			"{{~company}} or {{company|fit}} — AI-fit the value into the sentence",
+			"{{name|default:there}} — pipe filters (default, etc.)",
+			"{% if company %}…{% endif %} — omit the block when the variable is empty",
+		},
+		"detected_variables": detectedVars,
+		"rule":               "These tokens are valid template syntax. Do not score them as broken placeholders, typos, or incomplete copy.",
 	}
 }
 
@@ -115,7 +135,8 @@ value proposition, CTA, and sales stage together.
 A clearly worded CTA does not automatically make a template appropriate to send.
 For cold outreach, requesting payment or an invoice before purchase agreement
 is a material issue. Prefer revise when the problem is fixable.
-Placeholders like {{name}} or {{company}} are expected in templates.`,
+jupsend merge fields ({{name}}, {{company}}, {{@mailbox}}, {{~fit}}, |filters, {% if %})
+are expected and must not be treated as defects.`,
 			"criteria": map[string]string{
 				"send":          "The template is credible, appropriately staged, and ready to use. No material issues remain.",
 				"revise":        "The template has potential but contains fixable issues involving relevance framing, personalization, value proposition, CTA, trust, or requested commitment.",
@@ -125,15 +146,17 @@ Placeholders like {{name}} or {{company}} are expected in templates.`,
 		},
 		"placeholders_ok": map[string]interface{}{
 			"type": "noul",
-			"instructions": `Are template placeholders used in a natural way (e.g. {{name}}, {{company}})
-without looking broken, doubled, or like unfinished draft notes? Empty placeholders
-in a template draft are acceptable; nonsense tokens are not.`,
+			"instructions": `Are jupsend merge tokens used correctly and naturally?
+Valid: {{name}}, {{company}}, {{@from_name}}, {{~company}}, {{name|default:there}}, {% if company %}…{% endif %}.
+These are filled at send time — they are NOT unfinished draft text.
+Score low only for clearly broken tokens (e.g. {{{name}}}, {{123}}, mismatched braces) or doubled nonsense.`,
 		},
 		"personalization_ok": map[string]interface{}{
 			"type": "noul",
-			"instructions": `Does the template set up accurate, evidence-friendly personalization
-(via placeholders or clearly marked optional lines) rather than fabricating
-specific facts about a prospect as if verified?`,
+			"instructions": `Does the template set up honest personalization via merge fields / conditionals
+rather than fabricating specific verified facts about a prospect as hard truth?
+Using {{company}} or {% if role %} is good. Claiming “I saw you raised Series B last week”
+as a fixed fact (with no placeholder) is not.`,
 		},
 		"offer_relevant": map[string]interface{}{
 			"type": "noul",
@@ -168,8 +191,9 @@ or light next step) rather than jumping to purchase or payment?`,
 		},
 		"credible": map[string]interface{}{
 			"type": "noul",
-			"instructions": `Are claims specific, credible, and appropriately qualified?
-Flag unsupported guarantees or assumptions presented as hard facts.`,
+			"instructions": `Are claims specific, believable, and appropriately qualified (not overhyped)?
+Flag unsupported guarantees (“guaranteed 10x”), fake social proof, or assumptions stated as hard facts.
+Merge fields like {{company}} do not reduce credibility.`,
 		},
 		"sender_consistent": map[string]interface{}{
 			"type": "noul",
@@ -258,18 +282,19 @@ func extractCTA(body string) string {
 var noulCheckMeta = []struct {
 	ID    string
 	Label string
+	Hint  string
 }{
-	{"placeholders_ok", "Placeholders look natural"},
-	{"personalization_ok", "Personalization is honest"},
-	{"offer_relevant", "Offer framing is relevant"},
-	{"value_proposition_clear", "Value proposition is clear"},
-	{"cta_clear", "CTA is clear"},
-	{"commitment_appropriate", "Commitment fits cold outreach"},
-	{"price_framing_appropriate", "Price framing is appropriate"},
-	{"sales_sequence_appropriate", "Sales step is appropriate"},
-	{"credible", "Claims are credible"},
-	{"sender_consistent", "Sender identity is consistent"},
-	{"ai_slop", "Sounds like AI slop"}, // high yes = bad
+	{"placeholders_ok", "Placeholders look natural", "Checks that {{name}} / {{@mailbox}} / filters look like real jupsend merge fields, not broken braces or draft junk."},
+	{"personalization_ok", "Personalization is honest", "Checks you personalize via merge fields instead of inventing prospect-specific facts as if verified."},
+	{"offer_relevant", "Offer framing is relevant", "Checks whether a typical cold recipient could plausibly care about this offer."},
+	{"value_proposition_clear", "Value proposition is clear", "Checks that the email says what you do and why it helps — not only vague buzzwords."},
+	{"cta_clear", "CTA is clear", "Checks that the next step is easy to understand (separate from whether that ask is too big)."},
+	{"commitment_appropriate", "Commitment fits cold outreach", "Checks you are not asking a cold lead to pay, buy, or over-commit too early."},
+	{"price_framing_appropriate", "Price framing is appropriate", "Checks pricing talk (if any) fits a first cold email — or that there is no premature payment ask."},
+	{"sales_sequence_appropriate", "Sales step is appropriate", "Checks this reads like an early outreach step, not a late-stage purchase email."},
+	{"credible", "Claims are credible", "Checks for overhyped guarantees, fake proof, or hard claims that would make a stranger distrust you."},
+	{"sender_consistent", "Sender identity is consistent", "Checks From name / signature / body don’t look like different people."},
+	{"ai_slop", "Sounds like AI slop", "Higher % = more generic or robotic. Lower is better on this one."},
 }
 
 // ReviewTemplate runs Jev on a template draft and shapes the UI payload.
@@ -307,7 +332,7 @@ func ReviewTemplate(ctx context.Context, client *JevClient, in TemplateReviewInp
 		if err != nil {
 			continue
 		}
-		out.Checks = append(out.Checks, TemplateReviewCheck{ID: meta.ID, Label: meta.Label, Yes: n.Noul})
+		out.Checks = append(out.Checks, TemplateReviewCheck{ID: meta.ID, Label: meta.Label, Hint: meta.Hint, Yes: n.Noul})
 	}
 	out.PrimaryIssue = decodeChoiceLabeled(resp.Answers, "primary_issue", "Primary issue")
 	out.ProblemArea = decodeChoiceLabeled(resp.Answers, "problem_area", "Problem area")

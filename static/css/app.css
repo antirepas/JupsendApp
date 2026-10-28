@@ -5588,11 +5588,44 @@ a.dash-list-main:hover .dash-list-name { color: #059669; }
 .jev-checks { display: flex; flex-direction: column; gap: 0.55rem; }
 .jev-check {
   display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.35rem;
+  padding: 0.35rem 0.15rem;
+  border-radius: 0.5rem;
+}
+.jev-check:hover { background: #f8fafc; }
+.jev-check-main {
+  display: grid;
   grid-template-columns: minmax(0, 1fr) 3.2rem;
   gap: 0.55rem;
   align-items: center;
 }
 .jev-check-label { font-size: 0.85rem; color: #334155; }
+.jev-check-info {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 0.95rem;
+  height: 0.95rem;
+  margin-left: 0.2rem;
+  border-radius: 999px;
+  border: 1px solid #cbd5e1;
+  color: #64748b;
+  font-size: 0.65rem;
+  font-weight: 700;
+  vertical-align: 0.05em;
+}
+.jev-check-hint {
+  display: none;
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  color: #64748b;
+}
+.jev-check:hover .jev-check-hint,
+.jev-check:focus-within .jev-check-hint {
+  display: block;
+}
 .jev-check-pct {
   font-size: 0.8rem;
   font-variant-numeric: tabular-nums;
@@ -5600,7 +5633,6 @@ a.dash-list-main:hover .dash-list-name { color: #059669; }
   color: #475569;
 }
 .jev-bar {
-  grid-column: 1 / -1;
   height: 0.4rem;
   border-radius: 999px;
   background: #e2e8f0;
