@@ -101,7 +101,8 @@ func BuildTemplateReviewState(in TemplateReviewInput) map[string]interface{} {
 				"Never treat a cold prospect as ready to pay merely because the problem sounds relevant.",
 				"Distinguish a clear CTA from a commercially appropriate CTA for cold outreach.",
 				"Do not invent company-specific problems; flag fake or unsupported personalization claims written as facts (not {{placeholders}}).",
-				"Flag inconsistent sender identities, unsupported claims, and misleading personalization copy.",
+				"Flag inconsistent sender identities only for real From/signature contradictions — not case-study client names or {{@mailbox}} signature merges.",
+				"Do not label normal specific cold email as AI slop just because it uses a common outreach structure.",
 				"Treat missing critical commercial context as uncertainty (manual_review), not as proof the email is good.",
 				"Prefer revise when issues are fixable; reserve do_not_send for deceptive or fundamentally inappropriate copy.",
 			},
@@ -212,12 +213,24 @@ Merge fields like {{company}} do not reduce credibility.`,
 		"sender_consistent": map[string]interface{}{
 			"type": "noul",
 			"instructions": `Is the sender identity consistent across From address, body, and signature?
-Flag obvious mismatches that would undermine trust. Missing signature alone is not fatal.`,
+Score HIGH when the body is first-person from one person/company and the signature matches
+(e.g. Founder @jupsend with {{@first_name}} / {{@email}} mailbox merges).
+A named CLIENT or case-study company in the body (e.g. “I set up outbound for Infradone”)
+is NOT a sender mismatch — that is social proof about someone else.
+{{@first_name}}, {{@from_name}}, {{@email}} in the signature are filled from the sending mailbox
+and are consistent by design.
+Score LOW only for clear contradictions: two different people claiming to write the email,
+signature company conflicting with the From/brand voice, or “we are X” while signing as unrelated Y.
+Missing signature alone is not fatal.`,
 		},
 		"ai_slop": map[string]interface{}{
 			"type": "noul",
-			"instructions": `Does the email sound generic, formulaic, overly polished, repetitive,
-or unnatural? Judge the writing itself — yes means it feels like AI slop.`,
+			"instructions": `Does the email sound generic, formulaic, overly polished, repetitive, or unnatural?
+Yes = AI slop. Score HIGH (bad) only for clear tells: “I hope this finds you well”, vague buzzword stacks,
+symmetric fluff paragraphs, empty hype, or copy that could be about any product/company.
+Score LOW (good) for short, specific cold email with a concrete case study, clear ask, and natural voice —
+even if it uses common outreach patterns (“rather than pitch you”, reply yes / soft P.S.).
+Do not mark normal B2B cold email structure as slop just because it is structured.`,
 		},
 		"primary_issue": map[string]interface{}{
 			"type": "choice",
@@ -307,8 +320,8 @@ var noulCheckMeta = []struct {
 	{"price_framing_appropriate", "Price framing is appropriate", "Checks pricing talk (if any) fits a first cold email — or that there is no premature payment ask."},
 	{"sales_sequence_appropriate", "Sales step is appropriate", "Checks this reads like an early outreach step, not a late-stage purchase email."},
 	{"credible", "Claims are credible", "Flags fake guarantees — not normal client case studies (e.g. “14 calls in month one”)."},
-	{"sender_consistent", "Sender identity is consistent", "Checks From name / signature / body don’t look like different people."},
-	{"ai_slop", "Sounds like AI slop", "Higher % = more generic or robotic. Lower is better on this one."},
+	{"sender_consistent", "Sender identity is consistent", "Flags real From/signature contradictions — not case-study clients or {{@mailbox}} signature lines."},
+	{"ai_slop", "Sounds like AI slop", "Higher % = robotic fluff. Normal short cold email with a case study should score low."},
 }
 
 // ReviewTemplate runs Jev on a template draft and shapes the UI payload.
