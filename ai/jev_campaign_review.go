@@ -126,6 +126,7 @@ func BuildCampaignReviewState(in CampaignReviewInput) map[string]interface{} {
 				"Audience fit matters: weak variable coverage or many missing-vars contacts is a launch risk.",
 				"Email bodies use jupsend merge syntax ({{name}}, {{@mailbox}}, {{~fit}}, |filters, {% if %}). Those tokens are intentional — not typos or unfinished copy.",
 				"Cold outreach commitment rules still apply across every step.",
+				"Deliverability from copy alone: do not mark normal short cold email with soft CTAs as high spam risk just for mild salesy subjects.",
 				"Prefer revise when issues are fixable; do_not_send for deceptive or fundamentally broken campaigns.",
 				"manual_review when essential campaign context is missing (no contacts, unmapped workflow steps, empty templates).",
 			},
@@ -204,8 +205,16 @@ Merge fields like {{company}} do not reduce credibility.`,
 		"deliverability_risk_low": map[string]interface{}{
 			"type": "noul",
 			"instructions": `From copy and sequence design alone, does this look reasonably low-risk for spammy
-or reputation-damaging cold email patterns (excessive repetition, aggressive CTAs, misleading subjects)?
-Yes = risk looks low.`,
+or reputation-damaging cold email patterns? Yes = risk looks low.
+
+Score HIGH (low risk) for normal B2B cold email: short personal copy, soft reply CTA,
+honest opt-out P.S., light personalization in subjects, no link spam / ALL CAPS / miracle claims.
+Mildly salesy subjects like “clients for {{company}}” or “cold emails at {{company}}” are common
+and should NOT by themselves make risk look high.
+
+Score LOW (high risk) only for clear spam patterns: heavy spam-trigger stacks, deceptive subjects,
+aggressive multi-link pitching, ALL CAPS hype, “guaranteed” miracle outcomes, or near-identical
+blasts that look like mass spam rather than outreach.`,
 		},
 		"launch_blocker": map[string]interface{}{
 			"type":         "choice",
@@ -271,7 +280,7 @@ var campaignNoulMeta = []struct {
 	{"cta_staging_ok", "CTA staging is OK", "Checks asks escalate sensibly (light early; no payment ask on first touch)."},
 	{"commitment_appropriate", "Commitment fits cold outreach", "Checks you are not asking cold leads for too much too soon across the sequence."},
 	{"credibility_ok", "Claims are credible", "Checks for overhyped guarantees, fake proof, or hard claims that would make strangers distrust you."},
-	{"deliverability_risk_low", "Deliverability risk looks low", "Higher % = copy/sequence looks less spammy from a reputation perspective."},
+	{"deliverability_risk_low", "Deliverability risk looks low", "Higher % = less spammy. Normal short cold email with a soft CTA should score high — not just mild salesy subjects."},
 }
 
 // ReviewCampaign runs Jev on a full campaign and shapes the UI payload.
