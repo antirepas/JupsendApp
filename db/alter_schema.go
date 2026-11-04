@@ -319,6 +319,8 @@ func runAlterSchema() {
 		`ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS local_send_enabled BOOLEAN NOT NULL DEFAULT FALSE`,
 		`ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS local_send_minute SMALLINT NOT NULL DEFAULT 540`,
 		`ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS local_send_fallback_tz TEXT NOT NULL DEFAULT 'America/New_York'`,
+		`ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS local_send_location_key TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS local_send_date DATE`,
 	}
 	for _, stmt := range alters {
 		if _, err := DB.Exec(stmt); err != nil {

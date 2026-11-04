@@ -138,27 +138,65 @@
 
 {{if ne .campaign.DisplayStatus "sent"}}
 {{if ne .campaign.DisplayStatus "stopped"}}
-<div class="card mb-6" id="local-send-card">
-  <h3 class="card-title">Send at local time</h3>
-  <p class="text-sm text-slate-500 mb-4">
-    Every email (and follow-up) goes out at the same clock time in each contact’s timezone.
-    Uses their <code class="text-xs bg-slate-100 px-1 rounded">timezone</code> or <code class="text-xs bg-slate-100 px-1 rounded">country</code> from your list.
+{{if gt .campaign.ContactCount 0}}
+<div class="card mb-6" id="schedule-card">
+  <h3 class="card-title">{{if .isWorkflow}}Schedule workflow start{{else}}Schedule send{{end}}</h3>
+  {{if .campaign.ScheduledAt}}
+  <p class="text-sm text-slate-600 mb-3">
+    {{if .localSendEnabled}}
+    Local-time schedule is on: each contact gets mail at <strong>{{.localSendTime}}</strong> on <strong>{{.localSendDate}}</strong> in their timezone
+    {{if .localSendLocationKey}}(from <code class="text-xs bg-slate-100 px-1 rounded">{{.localSendLocationKey}}</code>){{end}}.
+    First absolute send ~ <strong>{{.campaign.ScheduledAt.Format "Mon, Jan 2 15:04 MST"}}</strong>.
+    {{else}}
+    Scheduled for <strong>{{.campaign.ScheduledAt.Format "Monday, Jan 2, 2006 at 15:04"}}</strong> (your local time).
+    {{end}}
+    The server checks every 30 seconds and {{if .isWorkflow}}starts the workflow{{else}}sends{{end}} automatically.
   </p>
-  <form method="POST" action="/campaigns/{{.campaign.ID}}/local-send" class="space-y-4" id="local-send-form">
+  <form method="POST" action="/campaigns/{{.campaign.ID}}/cancel-schedule" class="mb-4">
+    <button type="submit" class="btn-secondary text-red-600">Cancel schedule</button>
+  </form>
+  {{else}}
+  <p class="text-sm text-slate-600 mb-3">
+    Send everyone at the same local clock time on a date, or pick one absolute time for the whole campaign.
+  </p>
+  {{end}}
+
+  <form method="POST" action="/campaigns/{{.campaign.ID}}/schedule" class="space-y-4" id="schedule-form">
     <label class="flex items-start gap-3 cursor-pointer">
       <input type="checkbox" name="local_send_enabled" value="1" class="mt-1" id="local-send-enabled" {{if .localSendEnabled}}checked{{end}}>
       <span>
-        <span class="font-medium text-slate-900">Send at a preferred local time</span>
-        <span class="block text-xs text-slate-500 mt-0.5">Off = send as soon as the campaign launches</span>
+        <span class="font-medium text-slate-900">Send at each contact’s local time</span>
+        <span class="block text-xs text-slate-500 mt-0.5">
+          Pick a location column (country / city / timezone). Everyone gets the email at the same clock time on the same date in their timezone — New York and Greece both at 9:00 local.
+        </span>
       </span>
     </label>
-    <div id="local-send-options" class="grid grid-cols-1 sm:grid-cols-2 gap-4 {{if not .localSendEnabled}}opacity-50 pointer-events-none{{end}}">
+
+    <div id="local-send-options" class="grid grid-cols-1 sm:grid-cols-2 gap-4 {{if not .localSendEnabled}}hidden{{end}}">
       <div>
-        <label class="form-label" for="local_send_time">Local time</label>
-        <input type="time" name="local_send_time" id="local_send_time" class="form-input" value="{{.localSendTime}}" required>
+        <label class="form-label" for="local_send_date">Date</label>
+        <input type="date" name="local_send_date" id="local_send_date" class="form-input" value="{{.localSendDate}}">
       </div>
       <div>
-        <label class="form-label" for="local_send_fallback_tz">If timezone unknown</label>
+        <label class="form-label" for="local_send_time">Local time</label>
+        <input type="time" name="local_send_time" id="local_send_time" class="form-input" value="{{.localSendTime}}">
+      </div>
+      <div class="sm:col-span-2">
+        <label class="form-label" for="local_send_location_key">Location column</label>
+        <select name="local_send_location_key" id="local_send_location_key" class="form-input">
+          <option value="">Select a contact field…</option>
+          {{range .localSendLocationKeys}}
+          <option value="{{.}}" {{if eq $.localSendLocationKey .}}selected{{end}}>{{.}}</option>
+          {{end}}
+        </select>
+        {{if not .localSendLocationKeys}}
+        <p class="text-xs text-amber-700 mt-1">No contact variables found yet. Add contacts with a country/timezone column first.</p>
+        {{else}}
+        <p class="text-xs text-slate-500 mt-1">Values can be a country name, city, or IANA timezone (e.g. Greece, New York, Europe/Athens).</p>
+        {{end}}
+      </div>
+      <div class="sm:col-span-2">
+        <label class="form-label" for="local_send_fallback_tz">If location can’t be resolved</label>
         <select name="local_send_fallback_tz" id="local_send_fallback_tz" class="form-input">
           {{range .localSendTimezones}}
           <option value="{{.}}" {{if eq $.localSendFallbackTZ .}}selected{{end}}>{{.}}</option>
@@ -166,43 +204,46 @@
         </select>
       </div>
     </div>
-    <button type="submit" class="btn-primary">Save local send</button>
+
+    <div id="absolute-schedule-options" class="{{if .localSendEnabled}}hidden{{end}}">
+      <label class="form-label" for="scheduled_at">Date &amp; time (your timezone)</label>
+      <input type="datetime-local" name="scheduled_at" id="scheduled_at" class="form-input" value="{{.scheduledAtLocal}}">
+    </div>
+
+    <button type="submit" class="btn-primary">{{if .campaign.ScheduledAt}}Update schedule{{else}}{{if .isWorkflow}}Schedule workflow{{else}}Schedule campaign{{end}}{{end}}</button>
   </form>
 </div>
 <script>
 (function () {
   var box = document.getElementById('local-send-enabled');
-  var opts = document.getElementById('local-send-options');
-  if (!box || !opts) return;
+  var localOpts = document.getElementById('local-send-options');
+  var absOpts = document.getElementById('absolute-schedule-options');
+  var absInput = document.getElementById('scheduled_at');
+  var dateInput = document.getElementById('local_send_date');
+  var timeInput = document.getElementById('local_send_time');
+  var locSelect = document.getElementById('local_send_location_key');
+  if (!box || !localOpts || !absOpts) return;
   function sync() {
     if (box.checked) {
-      opts.classList.remove('opacity-50', 'pointer-events-none');
+      localOpts.classList.remove('hidden');
+      absOpts.classList.add('hidden');
+      if (absInput) absInput.removeAttribute('required');
+      if (dateInput) dateInput.setAttribute('required', 'required');
+      if (timeInput) timeInput.setAttribute('required', 'required');
+      if (locSelect) locSelect.setAttribute('required', 'required');
     } else {
-      opts.classList.add('opacity-50', 'pointer-events-none');
+      localOpts.classList.add('hidden');
+      absOpts.classList.remove('hidden');
+      if (absInput) absInput.setAttribute('required', 'required');
+      if (dateInput) dateInput.removeAttribute('required');
+      if (timeInput) timeInput.removeAttribute('required');
+      if (locSelect) locSelect.removeAttribute('required');
     }
   }
   box.addEventListener('change', sync);
+  sync();
 })();
 </script>
-{{if gt .campaign.ContactCount 0}}
-<div class="card mb-6">
-    <h3 class="card-title">{{if .isWorkflow}}Schedule workflow start{{else}}Schedule send{{end}}</h3>
-    {{if .campaign.ScheduledAt}}
-    <p class="text-sm text-slate-600 mb-3">Scheduled for <strong>{{.campaign.ScheduledAt.Format "Monday, Jan 2, 2006 at 15:04"}}</strong> (your local time). The server checks every 30 seconds and {{if .isWorkflow}}starts the workflow{{else}}sends{{end}} automatically.</p>
-    <form method="POST" action="/campaigns/{{.campaign.ID}}/cancel-schedule" class="mb-4">
-        <button type="submit" class="btn-secondary text-red-600">Cancel schedule</button>
-    </form>
-    {{else}}
-    <p class="text-sm text-slate-600 mb-3">Pick a date and time to {{if .isWorkflow}}start this workflow{{else}}send this campaign{{end}} automatically.</p>
-    {{end}}
-    <form method="POST" action="/campaigns/{{.campaign.ID}}/schedule" class="flex flex-wrap gap-3 items-end">
-        <div class="flex-1 min-w-[200px]">
-            <label class="form-label">Date &amp; time</label>
-            <input type="datetime-local" name="scheduled_at" class="form-input" required value="{{.scheduledAtLocal}}">
-        </div>
-        <button type="submit" class="btn-primary">{{if .campaign.ScheduledAt}}Update schedule{{else}}{{if .isWorkflow}}Schedule workflow{{else}}Schedule campaign{{end}}{{end}}</button>
-    </form>
-</div>
 {{end}}
 {{end}}
 {{end}}

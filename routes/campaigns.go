@@ -459,6 +459,23 @@ func CampaignDetailPage(ctx *gin.Context) {
 	if detail.ScheduledAt != nil {
 		scheduledAtLocal = detail.ScheduledAt.Format("2006-01-02T15:04")
 	}
+	localSendDate := ""
+	if detail.LocalSendDate != nil {
+		localSendDate = detail.LocalSendDate.Format("2006-01-02")
+	}
+	locationKeys, _ := model.ListCampaignLocationVariableKeys(detail.ID)
+	if detail.LocalSendLocationKey != "" {
+		found := false
+		for _, k := range locationKeys {
+			if k == detail.LocalSendLocationKey {
+				found = true
+				break
+			}
+		}
+		if !found {
+			locationKeys = append([]string{detail.LocalSendLocationKey}, locationKeys...)
+		}
+	}
 
 	pickerPage := pageExtras.PickerPage
 	canEditMode := detail.DisplayStatus != "sent" && detail.DisplayStatus != "sending" && detail.DisplayStatus != "stopped"
@@ -518,7 +535,10 @@ func CampaignDetailPage(ctx *gin.Context) {
 		"localSendEnabled":        detail.LocalSendEnabled,
 		"localSendTime":           model.LocalSendTimeString(detail.LocalSendMinute),
 		"localSendFallbackTZ":     detail.LocalSendFallbackTZ,
+		"localSendLocationKey":    detail.LocalSendLocationKey,
+		"localSendDate":           localSendDate,
 		"localSendTimezones":      model.CommonFallbackTimezones,
+		"localSendLocationKeys":   locationKeys,
 		"success":                 ctx.Query("success"),
 		"error":                   ctx.Query("error"),
 		"isWorkflow":              isWorkflow,
@@ -1079,45 +1099,61 @@ func StopCampaign(ctx *gin.Context) {
 }
 
 func UpdateCampaignLocalSend(ctx *gin.Context) {
+	// Kept for backwards compatibility — prefer scheduling via ScheduleCampaign.
 	userID := mustUserID(ctx)
 	campaignID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
 	if err != nil {
 		ctx.Redirect(http.StatusFound, "/campaigns?error=Invalid+campaign")
 		return
 	}
-	enabled := ctx.PostForm("local_send_enabled") == "1" || ctx.PostForm("local_send_enabled") == "on"
-	minute, ok := model.ParseLocalSendTime(ctx.PostForm("local_send_time"))
-	if !ok {
-		minute = model.DefaultLocalSendMinute
-	}
-	fallback := strings.TrimSpace(ctx.PostForm("local_send_fallback_tz"))
-	if err := model.SetCampaignLocalSend(campaignID, userID, enabled, minute, fallback); err != nil {
+	enabled, minute, fallback, locationKey, sendDate, err := parseLocalSendForm(ctx)
+	if err != nil {
 		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error="+url.QueryEscape(err.Error()))
 		return
 	}
-	msg := "Local send time saved"
+	if err := model.SetCampaignLocalSend(campaignID, userID, enabled, minute, fallback, locationKey, sendDate); err != nil {
+		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error="+url.QueryEscape(err.Error()))
+		return
+	}
+	msg := "Local send off — emails send as soon as the campaign launches"
 	if enabled {
-		msg = "Local send on — emails go out at " + model.LocalSendTimeString(minute) + " in each contact's timezone"
-	} else {
-		msg = "Local send off — emails send as soon as the campaign launches"
+		msg = "Local send on — each contact gets mail at " + model.LocalSendTimeString(minute) + " in their timezone"
+		if sendDate != nil {
+			msg += " on " + sendDate.Format("Jan 2, 2006")
+		}
 	}
 	ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?success="+url.QueryEscape(msg))
 }
 
+func parseLocalSendForm(ctx *gin.Context) (enabled bool, minute int, fallback, locationKey string, sendDate *time.Time, err error) {
+	enabled = ctx.PostForm("local_send_enabled") == "1" || ctx.PostForm("local_send_enabled") == "on"
+	minute, ok := model.ParseLocalSendTime(ctx.PostForm("local_send_time"))
+	if !ok {
+		minute = model.DefaultLocalSendMinute
+	}
+	fallback = strings.TrimSpace(ctx.PostForm("local_send_fallback_tz"))
+	locationKey = strings.TrimSpace(ctx.PostForm("local_send_location_key"))
+	if dateStr := strings.TrimSpace(ctx.PostForm("local_send_date")); dateStr != "" {
+		d, perr := time.ParseInLocation("2006-01-02", dateStr, time.UTC)
+		if perr != nil {
+			return false, 0, "", "", nil, fmt.Errorf("invalid local send date")
+		}
+		sendDate = &d
+	}
+	if enabled && locationKey == "" {
+		return false, 0, "", "", nil, fmt.Errorf("pick a location column for local-time sending")
+	}
+	if enabled && sendDate == nil {
+		return false, 0, "", "", nil, fmt.Errorf("pick a date for local-time sending")
+	}
+	return enabled, minute, fallback, locationKey, sendDate, nil
+}
+
 func ScheduleCampaign(ctx *gin.Context) {
+	userID := mustUserID(ctx)
 	campaignID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
 	if err != nil {
 		ctx.Redirect(http.StatusFound, "/campaigns?error=Invalid+campaign")
-		return
-	}
-
-	at, err := parseScheduledAt(ctx.PostForm("scheduled_at"))
-	if err != nil {
-		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error=Invalid+date+or+time")
-		return
-	}
-	if !at.After(time.Now()) {
-		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error=Schedule+time+must+be+in+the+future")
 		return
 	}
 
@@ -1127,13 +1163,61 @@ func ScheduleCampaign(ctx *gin.Context) {
 		return
 	}
 
+	localMode := ctx.PostForm("local_send_enabled") == "1" || ctx.PostForm("local_send_enabled") == "on"
+	var at time.Time
+	var msg string
+
+	if localMode {
+		enabled, minute, fallback, locationKey, sendDate, perr := parseLocalSendForm(ctx)
+		if perr != nil {
+			ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error="+url.QueryEscape(perr.Error()))
+			return
+		}
+		if err := model.SetCampaignLocalSend(campaignID, userID, enabled, minute, fallback, locationKey, sendDate); err != nil {
+			ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error="+url.QueryEscape(err.Error()))
+			return
+		}
+		camp, err := model.GetCampaignForUser(campaignID, userID)
+		if err != nil {
+			ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error=Campaign+not+found")
+			return
+		}
+		earliest, err := model.EarliestCampaignLocalSend(camp, contactIDs, time.Now())
+		if err != nil {
+			ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error="+url.QueryEscape(err.Error()))
+			return
+		}
+		at = earliest
+		if !at.After(time.Now()) {
+			at = time.Now().Add(30 * time.Second)
+		}
+		msg = fmt.Sprintf(
+			"Scheduled: each contact gets mail at %s their local time on %s (from %s). First sends start ~%s.",
+			model.LocalSendTimeString(minute),
+			sendDate.Format("Jan 2, 2006"),
+			locationKey,
+			at.Local().Format("Jan 2 15:04 MST"),
+		)
+	} else {
+		_ = model.SetCampaignLocalSend(campaignID, userID, false, model.DefaultLocalSendMinute, model.DefaultLocalSendFallbackTZ, "", nil)
+		at, err = parseScheduledAt(ctx.PostForm("scheduled_at"))
+		if err != nil {
+			ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error=Invalid+date+or+time")
+			return
+		}
+		if !at.After(time.Now()) {
+			ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error=Schedule+time+must+be+in+the+future")
+			return
+		}
+		msg = fmt.Sprintf("Campaign scheduled for %s", at.Format("Jan 2, 2006 15:04"))
+	}
+
 	if err := model.ScheduleCampaign(campaignID, at); err != nil {
 		log.Print(err)
 		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error=Could+not+schedule+campaign")
 		return
 	}
 
-	msg := fmt.Sprintf("Campaign scheduled for %s", at.Format("Jan 2, 2006 15:04"))
 	ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?success="+url.QueryEscape(msg))
 }
 

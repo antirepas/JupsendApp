@@ -21,6 +21,7 @@ var CommonFallbackTimezones = []string{
 	"Europe/London",
 	"Europe/Paris",
 	"Europe/Berlin",
+	"Europe/Athens",
 	"Europe/Amsterdam",
 	"Asia/Dubai",
 	"Asia/Kolkata",
@@ -43,6 +44,18 @@ var timezoneAliases = map[string]string{
 	"gmt": "Europe/London", "bst": "Europe/London", "uk": "Europe/London",
 	"cet": "Europe/Paris", "cest": "Europe/Paris",
 	"ist": "Asia/Kolkata", "jst": "Asia/Tokyo", "aest": "Australia/Sydney", "aedt": "Australia/Sydney",
+	// Common city / metro labels from CRM exports
+	"new york": "America/New_York", "nyc": "America/New_York", "new york city": "America/New_York",
+	"los angeles": "America/Los_Angeles", "la": "America/Los_Angeles", "san francisco": "America/Los_Angeles",
+	"chicago": "America/Chicago", "houston": "America/Chicago", "dallas": "America/Chicago",
+	"denver": "America/Denver", "phoenix": "America/Phoenix", "seattle": "America/Los_Angeles",
+	"toronto": "America/Toronto", "vancouver": "America/Vancouver", "montreal": "America/Toronto",
+	"london": "Europe/London", "paris": "Europe/Paris", "berlin": "Europe/Berlin",
+	"amsterdam": "Europe/Amsterdam", "madrid": "Europe/Madrid", "rome": "Europe/Rome",
+	"athens": "Europe/Athens", "istanbul": "Europe/Istanbul", "stockholm": "Europe/Stockholm",
+	"dublin": "Europe/Dublin", "zurich": "Europe/Zurich", "vienna": "Europe/Vienna",
+	"sydney": "Australia/Sydney", "melbourne": "Australia/Melbourne", "tokyo": "Asia/Tokyo",
+	"singapore": "Asia/Singapore", "dubai": "Asia/Dubai", "mumbai": "Asia/Kolkata", "delhi": "Asia/Kolkata",
 }
 
 var countryToTZ = map[string]string{
@@ -67,8 +80,15 @@ var countryToTZ = map[string]string{
 	"no": "Europe/Oslo", "norway": "Europe/Oslo",
 	"dk": "Europe/Copenhagen", "denmark": "Europe/Copenhagen",
 	"fi": "Europe/Helsinki", "finland": "Europe/Helsinki",
+	"gr": "Europe/Athens", "greece": "Europe/Athens",
+	"tr": "Europe/Istanbul", "turkey": "Europe/Istanbul", "türkiye": "Europe/Istanbul",
 	"pl": "Europe/Warsaw", "poland": "Europe/Warsaw",
 	"cz": "Europe/Prague", "czech": "Europe/Prague", "czech republic": "Europe/Prague", "czechia": "Europe/Prague",
+	"ro": "Europe/Bucharest", "romania": "Europe/Bucharest",
+	"hu": "Europe/Budapest", "hungary": "Europe/Budapest",
+	"lt": "Europe/Vilnius", "lithuania": "Europe/Vilnius",
+	"lv": "Europe/Riga", "latvia": "Europe/Riga",
+	"ee": "Europe/Tallinn", "estonia": "Europe/Tallinn",
 	"au": "Australia/Sydney", "australia": "Australia/Sydney",
 	"nz": "Pacific/Auckland", "new zealand": "Pacific/Auckland",
 	"in": "Asia/Kolkata", "india": "Asia/Kolkata",
@@ -93,8 +113,21 @@ var countryToTZ = map[string]string{
 	"pe": "America/Lima", "peru": "America/Lima",
 }
 
+// ResolveLocationValue maps a raw location cell (IANA TZ, alias, or country) to an IANA zone.
+func ResolveLocationValue(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	if tz := NormalizeTimezone(raw); tz != "" {
+		return tz
+	}
+	return CountryToTimezone(raw)
+}
+
 // ResolveContactTimezone picks an IANA timezone from contact variables, else fallback.
-func ResolveContactTimezone(vars []ContactVariables, fallbackIANA string) string {
+// When preferredKey is set, that column is tried first (campaign location column).
+func ResolveContactTimezone(vars []ContactVariables, fallbackIANA, preferredKey string) string {
 	fallback := NormalizeTimezone(fallbackIANA)
 	if fallback == "" {
 		fallback = DefaultLocalSendFallbackTZ
@@ -109,6 +142,14 @@ func ResolveContactTimezone(vars []ContactVariables, fallbackIANA string) string
 		byKey[k] = strings.TrimSpace(v.Value)
 	}
 
+	if pref := NormalizeVariableKey(preferredKey); pref != "" {
+		if raw := byKey[pref]; raw != "" {
+			if tz := ResolveLocationValue(raw); tz != "" {
+				return tz
+			}
+		}
+	}
+
 	for _, key := range []string{"timezone", "tz", "time_zone"} {
 		if raw := byKey[key]; raw != "" {
 			if tz := NormalizeTimezone(raw); tz != "" {
@@ -116,7 +157,7 @@ func ResolveContactTimezone(vars []ContactVariables, fallbackIANA string) string
 			}
 		}
 	}
-	for _, key := range []string{"country", "country_code", "nation"} {
+	for _, key := range []string{"country", "country_code", "nation", "location", "region"} {
 		if raw := byKey[key]; raw != "" {
 			if tz := CountryToTimezone(raw); tz != "" {
 				return tz
@@ -216,18 +257,25 @@ func ClampLocalSendMinute(m int) int {
 }
 
 // SetCampaignLocalSend updates preferred local send settings (draft campaigns).
-func SetCampaignLocalSend(campaignID, userID int64, enabled bool, minute int, fallbackTZ string) error {
+func SetCampaignLocalSend(campaignID, userID int64, enabled bool, minute int, fallbackTZ, locationKey string, sendDate *time.Time) error {
 	minute = ClampLocalSendMinute(minute)
 	if tz := NormalizeTimezone(fallbackTZ); tz != "" {
 		fallbackTZ = tz
 	} else {
 		fallbackTZ = DefaultLocalSendFallbackTZ
 	}
+	locationKey = NormalizeVariableKey(locationKey)
+	var dateArg interface{}
+	if sendDate != nil && !sendDate.IsZero() {
+		y, m, d := sendDate.Date()
+		dateArg = time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
+	}
 	res, err := db.Exec(`
 		UPDATE campaigns
-		SET local_send_enabled = ?, local_send_minute = ?, local_send_fallback_tz = ?
+		SET local_send_enabled = ?, local_send_minute = ?, local_send_fallback_tz = ?,
+		    local_send_location_key = ?, local_send_date = ?
 		WHERE id = ? AND user_id = ? AND status NOT IN ('sent', 'sending')
-	`, enabled, minute, fallbackTZ, campaignID, userID)
+	`, enabled, minute, fallbackTZ, locationKey, dateArg, campaignID, userID)
 	if err != nil {
 		return err
 	}
@@ -238,29 +286,110 @@ func SetCampaignLocalSend(campaignID, userID int64, enabled bool, minute int, fa
 	return nil
 }
 
-// CampaignLocalSendAt returns the next preferred local send time when enabled.
-func CampaignLocalSendAt(camp Campaign, vars []ContactVariables, after time.Time) (time.Time, bool) {
-	if !camp.LocalSendEnabled {
-		return time.Time{}, false
-	}
+func contactLocation(camp Campaign, vars []ContactVariables) *time.Location {
 	fallback := camp.LocalSendFallbackTZ
 	if fallback == "" {
 		fallback = DefaultLocalSendFallbackTZ
 	}
-	tzName := ResolveContactTimezone(vars, fallback)
+	tzName := ResolveContactTimezone(vars, fallback, camp.LocalSendLocationKey)
 	loc, err := time.LoadLocation(tzName)
 	if err != nil {
 		loc, _ = time.LoadLocation(DefaultLocalSendFallbackTZ)
 	}
 	if loc == nil {
+		return time.UTC
+	}
+	return loc
+}
+
+// LocalSendAtOnCivilDate returns hour:minute on the given civil date in loc.
+func LocalSendAtOnCivilDate(civilDate time.Time, loc *time.Location, minute int) time.Time {
+	if loc == nil {
 		loc = time.UTC
 	}
+	minute = ClampLocalSendMinute(minute)
+	y, m, d := civilDate.Date()
+	return time.Date(y, m, d, minute/60, minute%60, 0, 0, loc)
+}
+
+// CampaignLocalSendAt returns the send instant for a contact when local send is enabled.
+// If LocalSendDate is set: that civil date at the preferred local clock time
+// (may be in the past if launch ran late — workers treat past scheduled_at as send-now).
+// Otherwise: next preferred local clock time after `after`.
+func CampaignLocalSendAt(camp Campaign, vars []ContactVariables, after time.Time) (time.Time, bool) {
+	if !camp.LocalSendEnabled {
+		return time.Time{}, false
+	}
+	loc := contactLocation(camp, vars)
 	minute := ClampLocalSendMinute(camp.LocalSendMinute)
+	if camp.LocalSendDate != nil && !camp.LocalSendDate.IsZero() {
+		return LocalSendAtOnCivilDate(*camp.LocalSendDate, loc, minute), true
+	}
 	return NextLocalSendAt(after, loc, minute/60, minute%60), true
 }
 
+// EarliestCampaignLocalSend returns the soonest absolute send time among contacts.
+func EarliestCampaignLocalSend(camp Campaign, contactIDs []int64, after time.Time) (time.Time, error) {
+	if !camp.LocalSendEnabled {
+		return time.Time{}, fmt.Errorf("local send disabled")
+	}
+	var earliest time.Time
+	found := false
+	for _, id := range contactIDs {
+		_, vars, err := GetContact(id)
+		if err != nil {
+			vars = nil
+		}
+		at, ok := CampaignLocalSendAt(camp, vars, after)
+		if !ok {
+			continue
+		}
+		if !found || at.Before(earliest) {
+			earliest = at
+			found = true
+		}
+	}
+	if !found {
+		return time.Time{}, fmt.Errorf("no contacts")
+	}
+	return earliest, nil
+}
+
+// ListCampaignLocationVariableKeys returns distinct contact variable keys on the campaign.
+func ListCampaignLocationVariableKeys(campaignID int64) ([]string, error) {
+	rows, err := db.Query(`
+		SELECT DISTINCT cv.key
+		FROM contact_variables cv
+		INNER JOIN campaign_contacts cc ON cc.contact_id = cv.contact_id
+		WHERE cc.campaign_id = ?
+		  AND TRIM(COALESCE(cv.key, '')) <> ''
+		  AND TRIM(COALESCE(cv.value, '')) <> ''
+		ORDER BY cv.key
+	`, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var keys []string
+	seen := map[string]bool{}
+	for rows.Next() {
+		var raw string
+		if err := rows.Scan(&raw); err != nil {
+			return nil, err
+		}
+		k := NormalizeVariableKey(raw)
+		if k == "" || seen[k] {
+			continue
+		}
+		seen[k] = true
+		keys = append(keys, k)
+	}
+	return keys, nil
+}
+
 // SnapLocalSendWake advances a relative wait wake to the preferred local clock time.
-// The wake is never earlier than floor (delay honored).
+// The wake is never earlier than floor (delay honored). Ignores LocalSendDate —
+// that date is only for the initial campaign send; follow-ups use the clock time.
 func SnapLocalSendWake(camp Campaign, contactID int64, floor time.Time) time.Time {
 	if !camp.LocalSendEnabled {
 		return floor
@@ -269,10 +398,9 @@ func SnapLocalSendWake(camp Campaign, contactID int64, floor time.Time) time.Tim
 	if err != nil {
 		vars = nil
 	}
-	at, ok := CampaignLocalSendAt(camp, vars, floor.Add(-time.Nanosecond))
-	if !ok {
-		return floor
-	}
+	loc := contactLocation(camp, vars)
+	minute := ClampLocalSendMinute(camp.LocalSendMinute)
+	at := NextLocalSendAt(floor.Add(-time.Nanosecond), loc, minute/60, minute%60)
 	if at.Before(floor) {
 		return floor
 	}

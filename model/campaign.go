@@ -35,6 +35,8 @@ type Campaign struct {
 	LocalSendEnabled     bool
 	LocalSendMinute      int // minutes from midnight local (e.g. 9:00 → 540)
 	LocalSendFallbackTZ  string
+	LocalSendLocationKey string // contact variable used as location (country / timezone)
+	LocalSendDate        *time.Time // civil date for local-time schedule (date only)
 }
 
 type CampaignListItem struct {
@@ -82,6 +84,8 @@ type CampaignDetail struct {
 	LocalSendEnabled     bool
 	LocalSendMinute      int
 	LocalSendFallbackTZ  string
+	LocalSendLocationKey string
+	LocalSendDate        *time.Time
 	VariantA             VariantStats
 	VariantB             VariantStats
 }
@@ -288,7 +292,8 @@ func GetCampaign(id int64) (Campaign, error) {
 			COALESCE(experiment_variable, ''), COALESCE(experiment_hypothesis, ''), COALESCE(success_metric, 'reply'),
 			COALESCE(open_tracking_enabled, FALSE), COALESCE(click_tracking_enabled, FALSE), COALESCE(temperature_rules_json, ''),
 			COALESCE(stop_on_reply, TRUE), COALESCE(stop_on_hot, FALSE),
-			COALESCE(local_send_enabled, FALSE), COALESCE(local_send_minute, 540), COALESCE(NULLIF(TRIM(local_send_fallback_tz), ''), 'America/New_York')
+			COALESCE(local_send_enabled, FALSE), COALESCE(local_send_minute, 540), COALESCE(NULLIF(TRIM(local_send_fallback_tz), ''), 'America/New_York'),
+			COALESCE(local_send_location_key, ''), local_send_date
 		FROM campaigns WHERE id = ?
 	`, id)
 	return scanCampaignRow(row)
@@ -302,7 +307,8 @@ func GetCampaignForUser(id, userID int64) (Campaign, error) {
 			COALESCE(experiment_variable, ''), COALESCE(experiment_hypothesis, ''), COALESCE(success_metric, 'reply'),
 			COALESCE(open_tracking_enabled, FALSE), COALESCE(click_tracking_enabled, FALSE), COALESCE(temperature_rules_json, ''),
 			COALESCE(stop_on_reply, TRUE), COALESCE(stop_on_hot, FALSE),
-			COALESCE(local_send_enabled, FALSE), COALESCE(local_send_minute, 540), COALESCE(NULLIF(TRIM(local_send_fallback_tz), ''), 'America/New_York')
+			COALESCE(local_send_enabled, FALSE), COALESCE(local_send_minute, 540), COALESCE(NULLIF(TRIM(local_send_fallback_tz), ''), 'America/New_York'),
+			COALESCE(local_send_location_key, ''), local_send_date
 		FROM campaigns WHERE id = ? AND user_id = ?
 	`, id, userID)
 	return scanCampaignRow(row)
@@ -315,12 +321,14 @@ func scanCampaignRow(row interface{ Scan(...interface{}) error }) (Campaign, err
 	var isSending int
 	var listID sql.NullInt64
 	var folderID sql.NullInt64
+	var localDate sql.NullTime
 	err := row.Scan(&c.ID, &c.UserID, &c.Name, &c.TemplateAID, &bID, &c.Status, &c.CreatedAt, &scheduled,
 		&c.ExecutionMode, &c.WorkflowVersionID, &isSending, &listID, &folderID,
 		&c.ExperimentVariable, &c.ExperimentHypothesis, &c.SuccessMetric,
 		&c.OpenTrackingEnabled, &c.ClickTrackingEnabled,
 		&c.TemperatureRulesJSON, &c.StopOnReply, &c.StopOnHot,
-		&c.LocalSendEnabled, &c.LocalSendMinute, &c.LocalSendFallbackTZ)
+		&c.LocalSendEnabled, &c.LocalSendMinute, &c.LocalSendFallbackTZ,
+		&c.LocalSendLocationKey, &localDate)
 	if err != nil {
 		return Campaign{}, err
 	}
@@ -334,6 +342,10 @@ func scanCampaignRow(row interface{ Scan(...interface{}) error }) (Campaign, err
 		c.LibraryFolderID = folderID.Int64
 	}
 	c.ScheduledAt = scanScheduledAt(scheduled)
+	if localDate.Valid {
+		t := localDate.Time
+		c.LocalSendDate = &t
+	}
 	c.IsSending = isSending == 1
 	return c, nil
 }
@@ -502,6 +514,8 @@ func GetCampaignDetail(id, userID int64) (CampaignDetail, error) {
 		LocalSendEnabled:     c.LocalSendEnabled,
 		LocalSendMinute:      c.LocalSendMinute,
 		LocalSendFallbackTZ:  c.LocalSendFallbackTZ,
+		LocalSendLocationKey: c.LocalSendLocationKey,
+		LocalSendDate:        c.LocalSendDate,
 		VariantA:             variantA,
 		VariantB:             variantB,
 	}
