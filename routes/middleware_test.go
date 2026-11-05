@@ -38,9 +38,8 @@ func TestRequireSubscriptionRedirectsUnsubscribed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Pro without an active paid membership must be gated; Free users have app access.
-	// Set plan_tier directly — ApplyPlanLimitsToUser(Free) needs shared SMTP env, which CI/tests may lack.
-	if _, err := db.Exec(`UPDATE users SET plan_tier = 'pro', subscription_status = 'none' WHERE id = ?`, userID); err != nil {
+	// Paid tier without an active membership must be gated.
+	if _, err := db.Exec(`UPDATE users SET plan_tier = 'starter', subscription_status = 'none' WHERE id = ?`, userID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -78,7 +77,7 @@ func TestRequireSubscriptionRedirectsUnsubscribed(t *testing.T) {
 		t.Fatalf("expected 200 with active subscription, got %d", okW.Code)
 	}
 
-	// Free plan should have access without a paid membership.
+	// Free / unpaid tier must not access the app.
 	if _, err := db.Exec(`UPDATE users SET plan_tier = 'free', subscription_status = 'none', whop_membership_id = '', whop_member_id = '' WHERE id = ?`, userID); err != nil {
 		t.Fatal(err)
 	}
@@ -86,8 +85,8 @@ func TestRequireSubscriptionRedirectsUnsubscribed(t *testing.T) {
 	freeReq.Header.Set("Cookie", cookieHeader)
 	freeW := httptest.NewRecorder()
 	r.ServeHTTP(freeW, freeReq)
-	if freeW.Code != http.StatusOK {
-		t.Fatalf("expected 200 for free plan, got %d", freeW.Code)
+	if freeW.Code != http.StatusFound || !strings.Contains(freeW.Header().Get("Location"), "/settings/billing") {
+		t.Fatalf("expected billing redirect for free plan, got %d %s", freeW.Code, freeW.Header().Get("Location"))
 	}
 }
 

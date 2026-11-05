@@ -79,7 +79,6 @@ func RegisterRoutes(server *gin.Engine) {
 		"templates/guide_templates.html",
 		"templates/guide_campaigns.html",
 		"templates/guide_workflows.html",
-		"templates/guide_outreach.html",
 		"templates/guide_mailboxes.html",
 		"templates/guide_sends.html",
 		"templates/guide_interested.html",

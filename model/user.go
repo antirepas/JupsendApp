@@ -181,11 +181,8 @@ func UserHasAppAccess(u User) bool {
 	if UserIsAdmin(u) {
 		return true
 	}
-	// Free is a real plan — no paid membership required.
-	if NormalizePlanTier(u.PlanTier) == PlanTierFree {
-		return true
-	}
-	return UserHasActiveSubscription(u)
+	// Paid plans only — cancelled / unpaid accounts must check out again.
+	return IsPaidPlanTier(NormalizePlanTier(u.PlanTier)) && UserHasActiveSubscription(u)
 }
 
 func SetUserAdmin(userID int64, admin bool) error {

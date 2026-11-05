@@ -22,7 +22,7 @@ const appGoogleModeSignup = "signup"
 
 func SignupPlanPage(c *gin.Context) {
 	plan := strings.ToLower(c.Param("plan"))
-	if plan == "standard" || plan == "pro" {
+	if plan == "standard" || plan == "pro" || plan == "free" {
 		c.Redirect(http.StatusFound, "/signup/starter")
 		return
 	}
@@ -34,7 +34,7 @@ func SignupPlanPage(c *gin.Context) {
 
 	spec, err := model.PlanSpecForTier(tier)
 	if err != nil {
-		c.Redirect(http.StatusFound, "/signup/free")
+		c.Redirect(http.StatusFound, "/signup/starter")
 		return
 	}
 
@@ -53,8 +53,8 @@ func SignupPlanPage(c *gin.Context) {
 		"warmup":            false,
 		"includedDomains":   spec.IncludedDomains,
 		"includedMailboxes": spec.IncludedMailboxes,
-		"paid":              info.Paid,
-		"stripeLikeNote":    "Whop checkout unlocks paid plans after Google sign-in.",
+		"paid":              true,
+		"stripeLikeNote":    "Whop checkout unlocks the app after Google sign-in.",
 	})
 }
 
@@ -83,7 +83,7 @@ func AppGoogleStart(c *gin.Context) {
 	}
 	tier := model.NormalizePlanTier(plan)
 	if !googleoauth.IsConfigured() {
-		c.Redirect(http.StatusFound, "/signup/free?error=Google+sign-in+not+configured")
+		c.Redirect(http.StatusFound, "/signup/starter?error=Google+sign-in+not+configured")
 		return
 	}
 
@@ -120,7 +120,7 @@ func AppGoogleCallback(c *gin.Context) {
 			c.Redirect(http.StatusFound, "/login?error="+urlQueryEscape(msg))
 			return
 		}
-		c.Redirect(http.StatusFound, "/signup/free?error="+urlQueryEscape(msg))
+		c.Redirect(http.StatusFound, "/signup/starter?error="+urlQueryEscape(msg))
 	}
 
 	if errMsg := c.Query("error"); errMsg != "" {
@@ -161,19 +161,10 @@ func AppGoogleCallback(c *gin.Context) {
 	}
 
 	auth.SetUserSession(c, userID)
-	if err := model.ApplyPlanLimitsToUser(userID, tier); err != nil && tier == model.PlanTierFree {
-		oauthErrRedirect("Free plan sending is not configured yet: " + err.Error())
-		return
-	}
-
-	if tier == model.PlanTierFree {
-		_ = model.UpdateUserSubscription(userID, model.SubStatusActive, "", "", nil)
-		c.Redirect(http.StatusFound, "/")
-		return
-	}
-
+	_ = model.ApplyPlanLimitsToUser(userID, tier)
 	_ = model.UpdateUserSubscription(userID, model.SubStatusPendingPayment, "", "", nil)
 
+	// After Whop confirms, activate page unlocks the full app (mailbox setup is optional).
 	redirectURL := strings.TrimRight(model.UserBaseURL(userID), "/") + "/onboarding/activate"
 	purchaseURL, err := whop.CreateCheckout(userID, tier, redirectURL)
 	if err != nil {
@@ -186,7 +177,7 @@ func AppGoogleCallback(c *gin.Context) {
 func appGoogleLoginComplete(c *gin.Context, email, next string) {
 	user, err := model.GetUserByEmail(email)
 	if err != nil {
-		c.Redirect(http.StatusFound, "/signup/free?error=No+account+found.+Choose+a+plan+to+sign+up.")
+		c.Redirect(http.StatusFound, "/signup/starter?error=No+account+found.+Choose+a+plan+to+sign+up.")
 		return
 	}
 
@@ -194,9 +185,6 @@ func appGoogleLoginComplete(c *gin.Context, email, next string) {
 	_ = model.SetUserAdmin(user.ID, config.IsAdminEmail(user.Email))
 	if config.IsAdminEmail(user.Email) || user.IsAdmin {
 		_ = model.EnsureAdminProAccess(user.ID)
-	} else if model.NormalizePlanTier(user.PlanTier) == model.PlanTierFree {
-		// Re-apply Free shared SMTP if needed (no Gmail send account — Google is identity only).
-		_ = model.ApplyPlanLimitsToUser(user.ID, model.PlanTierFree)
 	}
 
 	c.Redirect(http.StatusFound, safeNext(next))

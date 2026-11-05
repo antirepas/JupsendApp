@@ -30,7 +30,7 @@
         · {{.user.Email}}
       </p>
       {{if .cancelAtPeriodEnd}}
-      <p class="billing-cancel-note">Cancellation scheduled — you keep this plan until the date above, then move to Free.</p>
+      <p class="billing-cancel-note">Cancellation scheduled — you keep this plan until the date above, then access ends.</p>
       {{end}}
       {{end}}
     </div>
@@ -53,7 +53,7 @@
     </div>
     {{else if not .isAdmin}}
     <div class="billing-current-side">
-      <p class="text-sm text-slate-600">Free shared mailbox · {{.currentPlan.DailyEmails}} emails / day</p>
+      <p class="text-sm text-slate-600">No active plan — choose a tier below to unlock jupsend.</p>
     </div>
     {{end}}
   </div>
@@ -104,8 +104,8 @@
 <section class="billing-leave card">
   <h3 class="card-title">Cancel subscription</h3>
   {{if .cancelAtPeriodEnd}}
-  <p class="text-sm text-slate-600 mb-4">Your plan ends on {{if .renewalDate}}{{.renewalDate}}{{else}}the renewal date{{end}}. Revoke now to move to Free immediately.</p>
-  <form method="POST" action="/settings/billing/cancel" onsubmit="return confirm('End your plan now and switch to Free?');">
+  <p class="text-sm text-slate-600 mb-4">Your plan ends on {{if .renewalDate}}{{.renewalDate}}{{else}}the renewal date{{end}}. End now to revoke access immediately.</p>
+  <form method="POST" action="/settings/billing/cancel" onsubmit="return confirm('End your plan now? You will lose app access until you subscribe again.');">
     <input type="hidden" name="mode" value="immediate">
     <button type="submit" class="btn-secondary text-sm">End plan now</button>
   </form>
@@ -118,7 +118,7 @@
       <button type="submit" class="btn-secondary text-sm">Cancel at period end</button>
     </form>
     {{end}}
-    <form method="POST" action="/settings/billing/cancel" onsubmit="return confirm('End your plan now and switch to Free?');">
+    <form method="POST" action="/settings/billing/cancel" onsubmit="return confirm('End your plan now? You will lose app access until you subscribe again.');">
       <input type="hidden" name="mode" value="immediate">
       <button type="submit" class="btn-secondary text-sm">End plan now</button>
     </form>

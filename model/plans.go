@@ -246,9 +246,9 @@ func PaidPlanTiers() []PlanInfo {
 	}
 }
 
-// AllPlanTiers includes Free plus paid plans (legacy callers / signup).
+// AllPlanTiers returns purchasable plans (Free is no longer offered).
 func AllPlanTiers() []PlanInfo {
-	return append([]PlanInfo{PlanInfoForTier(PlanTierFree)}, PaidPlanTiers()...)
+	return PaidPlanTiers()
 }
 
 func IsPaidPlanTier(tier PlanTier) bool {
@@ -283,13 +283,18 @@ func NormalizePlanTier(s string) PlanTier {
 func IsValidSignupPlan(s string) bool {
 	raw := PlanTier(strings.ToLower(strings.TrimSpace(s)))
 	switch raw {
-	case PlanTierFree, PlanTierStarter, PlanTierGrowth, PlanTierScale, PlanTierHyper:
+	case PlanTierStarter, PlanTierGrowth, PlanTierScale, PlanTierHyper:
 		return true
 	case PlanTierPro, PlanTierStandard:
-		return true
+		return true // legacy aliases → Starter
 	default:
 		return false
 	}
+}
+
+// DefaultSignupPlan is used when signup omits a plan.
+func DefaultSignupPlan() PlanTier {
+	return PlanTierStarter
 }
 
 func UserIsPro(userID int64) bool {
@@ -405,13 +410,22 @@ func ApplyPlanLimitsToUser(userID int64, tier PlanTier) error {
 	return tx.Commit()
 }
 
-// EnsureFreeSharedMailbox attaches/refreshes the Free plan shared SMTP without resetting send counters.
+// EnsureFreeSharedMailbox attaches/refreshes legacy shared SMTP (no longer offered as a plan).
 func EnsureFreeSharedMailbox(userID int64) error {
 	spec, err := PlanSpecForTier(PlanTierFree)
 	if err != nil {
 		return err
 	}
 	return EnsureSharedSMTPAccountForUser(userID, spec)
+}
+
+// RevokePaidAccess clears paid entitlement after cancel. Does not require shared SMTP.
+func RevokePaidAccess(userID int64) error {
+	_, err := db.Exec(`UPDATE users SET plan_tier = ? WHERE id = ?`, string(PlanTierFree), userID)
+	if err != nil {
+		return err
+	}
+	return UpdateUserSubscription(userID, SubStatusCancelled, "", "", nil)
 }
 
 // EnsureSharedSMTPAccountForUser attaches the platform shared SMTP profile for Free users.

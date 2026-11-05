@@ -144,13 +144,6 @@ func Dashboard(ctx *gin.Context) {
 	}
 	steps := []setupStep{
 		{
-			Key:   "mailbox",
-			Label: "Ready to send",
-			Hint:  "Shared mailbox connected",
-			Href:  "/mailboxes",
-			Done:  mailboxReady,
-		},
-		{
 			Key:   "contacts",
 			Label: "Add contacts",
 			Hint:  "Import or paste your list",
@@ -166,19 +159,19 @@ func Dashboard(ctx *gin.Context) {
 		},
 		{
 			Key:     "campaign",
-			Label:   "Launch your first campaign",
-			Hint:    "Pick a template, add contacts, send",
+			Label:   "Build your first campaign",
+			Hint:    "Folder, sequence, and schedule — send when a mailbox is ready",
 			Href:    "/campaigns/new",
-			Done:    stats.TotalSends > 0,
+			Done:    counts.Campaigns > 0 || stats.TotalSends > 0,
 			Primary: true,
 		},
-	}
-	if isPro {
-		steps[0].Hint = "Domain & mailboxes set up"
-		if !mailboxReady {
-			steps[0].Href = "/onboarding/domain"
-			steps[0].Hint = "Buy or add your domain & mailboxes"
-		}
+		{
+			Key:   "mailbox",
+			Label: "Connect a mailbox",
+			Hint:  "Optional until you send — buy seats or add SMTP",
+			Href:  "/mailboxes",
+			Done:  mailboxReady,
+		},
 	}
 	stepsLeft := 0
 	nextHref := "/campaigns/new"

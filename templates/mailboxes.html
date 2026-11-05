@@ -7,16 +7,12 @@
 <header class="app-page-header">
   <div class="app-page-header-text">
     <h2 class="app-page-title">Mailboxes</h2>
-    <p class="app-page-sub">{{if .isPro}}Buy seats from jupsend, or add domains and credentials you already own.{{else}}Free plan uses a shared sending address. Upgrade for your own domain and mailboxes.{{end}}</p>
+    <p class="app-page-sub">Optional until you send — buy seats from jupsend, or add domains and credentials you already own.</p>
   </div>
   <div class="app-page-actions">
-    {{if .isPro}}
     <a href="/onboarding/domain?new=1" class="btn-primary">Buy or add</a>
     <a href="/mailboxes/buy" class="btn-secondary">Buy mailboxes</a>
     <a href="/mailboxes?attach=1" class="btn-secondary">Add external</a>
-    {{else}}
-    <a href="/settings/billing" class="btn-primary">See plans</a>
-    {{end}}
   </div>
 </header>
 <div class="app-page-body app-page-body--wide">
@@ -27,20 +23,9 @@
     {{if .supportEmail}}<p class="text-xs mt-2">Need help? Email <a class="underline font-medium" href="mailto:{{.supportEmail}}">{{.supportEmail}}</a></p>{{end}}
   </div>
   {{end}}
-  {{if and .isPro (not .inboxkitOK)}}
+  {{if not .inboxkitOK}}
   <div class="alert-error mb-6">InboxKit is not configured — domain search and provisioning are unavailable. You can still attach SMTP/IMAP via Add external.{{if .supportEmail}} Email <a class="underline font-medium" href="mailto:{{.supportEmail}}">{{.supportEmail}}</a> if you need this fixed.{{end}}</div>
   {{end}}
-
-  {{if not .isPro}}
-  <div class="card mb-6 space-y-2">
-    <h3 class="card-title">Free shared mailbox</h3>
-    {{if .sharedReady}}
-    <p class="text-sm text-gray-600">Sending as <strong>{{.sharedEmail}}</strong>. Domain setup is Pro-only.</p>
-    {{else}}
-    <p class="text-sm text-amber-700">Shared SMTP is not configured on this server yet. Set <code class="text-xs">SMTP_HOST</code>, <code class="text-xs">SMTP_USER</code>, and <code class="text-xs">APP_PASSWORD</code>, then reload.</p>
-    {{end}}
-  </div>
-  {{else}}
 
   <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
     <div class="rounded-xl border border-gray-200 bg-white px-5 py-4 flex items-center gap-4">
@@ -229,7 +214,7 @@
     <div class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
       <strong>Gmail tip:</strong> use an
       <a class="underline font-medium" href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener">App Password</a>
-      (not your normal login). Paste it with or without spaces — we strip spaces the same way as Free shared SMTP. Enable 2-Step Verification and turn on IMAP.
+      (not your normal login). Paste it with or without spaces — we strip spaces automatically. Enable 2-Step Verification and turn on IMAP.
     </div>
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
       <div>
@@ -272,8 +257,6 @@
     <button type="submit" class="btn-primary">Connect mailbox</button>
   </form>
   {{end}}
-
-  {{end}}{{/* isPro */}}
 
   <p class="text-xs text-gray-500 mt-6">
     <a href="/mailboxes/smtp-check-all" class="text-brand-600 font-medium">Test SMTP</a> checks <strong>all</strong> ready mailboxes.

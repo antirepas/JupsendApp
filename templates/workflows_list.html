@@ -7,29 +7,16 @@
 <header class="app-page-header">
     <div class="app-page-header-text">
         <h2 class="app-page-title">Workflows</h2>
-        <p class="app-page-sub">Behavior-based campaign automation</p>
+        <p class="app-page-sub">Optional library graphs. Day-to-day sequences are configured on campaign Manage.</p>
     </div>
     <div class="app-page-actions">
+        <a href="/guides/workflows" class="btn-secondary">Sequences guide</a>
         <a href="/workflows/new" class="btn-primary">New Workflow</a>
     </div>
 </header>
 <div class="app-page-body app-page-body--wide">
 {{if .success}}<div class="alert-success mb-6">{{.success}}</div>{{end}}
 {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
-
-<section class="playbook-banner mb-8" aria-labelledby="recommended-workflow-title">
-  <div class="playbook-banner-body">
-    <span class="help-card-label">Recommended</span>
-    <h3 id="recommended-workflow-title" class="playbook-banner-title">Outreach the correct way</h3>
-    <p class="playbook-banner-text">A/B cold intro → temperature → value prop for warm/hot → no-engagement + breakup for cold → stop for a manual Loom + Calendly when they stay engaged.</p>
-    <div class="flex flex-wrap gap-2 mt-4">
-      <form method="POST" action="/workflows/from-playbook">
-        <button type="submit" class="btn-primary">Use recommended workflow</button>
-      </form>
-      <a href="/guides/outreach" class="btn-secondary">Read playbook</a>
-    </div>
-  </div>
-</section>
 
 <div class="card overflow-hidden">
     {{if .workflows}}

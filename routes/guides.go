@@ -19,54 +19,50 @@ func GuideGettingStarted(c *gin.Context) {
 	c.HTML(http.StatusOK, "guide_getting_started.html", gin.H{
 		"title":     "Getting started",
 		"pageTitle": "Getting started with jupsend",
-		"subtitle":  "An optional playbook for running outbound outreach the right way — from mailbox to follow-ups.",
+		"subtitle":  "Subscribe, explore the app, then add mailboxes when you’re ready to send.",
 		"active":    "getting-started",
 	})
 }
 
 func GuideGmail(c *gin.Context) {
-	renderGuide(c, "guide_gmail.html", "Google sign-in", "Google sign-in", "Google is for signing in. Sending always goes through Mailboxes (shared Free seat or your Pro domain).")
+	renderGuide(c, "guide_gmail.html", "Google sign-in", "Google sign-in", "Google is for signing in. Outreach sending is configured under Mailboxes.")
 }
 
 func GuideContacts(c *gin.Context) {
-	renderGuide(c, "guide_contacts.html", "Contacts", "Contacts playbook", "Import clean lists, map variables, and keep suppressions healthy so every campaign starts with good data.")
+	renderGuide(c, "guide_contacts.html", "Contacts", "Contacts", "Sheets in campaign folders, variables, suppressions, and plan contact caps.")
 }
 
 func GuideTemplates(c *gin.Context) {
-	renderGuide(c, "guide_templates.html", "Templates", "Templates playbook", "Write personalized outreach that sounds human, uses variables correctly, and earns replies.")
+	renderGuide(c, "guide_templates.html", "Templates", "Templates", "Merge tags, Jev review, and copy that belongs in a campaign folder.")
 }
 
 func GuideCampaigns(c *gin.Context) {
-	renderGuide(c, "guide_campaigns.html", "Campaigns", "Campaigns playbook", "Choose the right campaign type, launch safely, and use lead temperature + analytics to improve.")
+	renderGuide(c, "guide_campaigns.html", "Campaigns", "Campaigns", "Folders, one-time vs sequence, local-time schedule, and launch checklist.")
 }
 
 func GuideWorkflows(c *gin.Context) {
-	renderGuide(c, "guide_workflows.html", "Workflows", "Workflows playbook", "Design follow-up sequences with waits, engagement branches, and lead temperature so warm leads get the right email.")
+	renderGuide(c, "guide_workflows.html", "Sequences", "Sequences & follow-ups", "Edit sequence on Manage, reply watchers, stop rules — and what happened to legacy workflows.")
 }
 
 func GuideOutreach(c *gin.Context) {
-	c.HTML(http.StatusOK, "guide_outreach.html", gin.H{
-		"title":     "Outreach playbook",
-		"pageTitle": "Recommended outreach playbook",
-		"subtitle":  "The jupsend default system: A/B cold → temperature → value prop or nudge → breakup → manual Loom close for hot/warm leads.",
-		"active":    "outreach",
-	})
+	// Old “recommended playbook” URL — keep bookmark-safe redirect.
+	c.Redirect(http.StatusFound, "/guides")
 }
 
 func GuideMailboxes(c *gin.Context) {
-	renderGuide(c, "guide_mailboxes.html", "Mailboxes", "Mailboxes playbook", "Set up Free shared sending or Pro domains and seats, then protect deliverability.")
+	renderGuide(c, "guide_mailboxes.html", "Mailboxes", "Mailboxes", "Domain add-ons, seats, and deliverability — set up when you’re ready to send.")
 }
 
 func GuideSends(c *gin.Context) {
-	renderGuide(c, "guide_sends.html", "Sends", "Sends playbook", "Read delivery status, human vs bot opens, and how to debug a single send.")
+	renderGuide(c, "guide_sends.html", "Sends", "Sends", "Queue status, human vs bot opens, and debugging a single email.")
 }
 
 func GuideInterested(c *gin.Context) {
-	renderGuide(c, "guide_interested.html", "Interested contacts", "Interested contacts playbook", "Prioritize people who replied, clicked, or opened — then follow up while interest is fresh.")
+	renderGuide(c, "guide_interested.html", "Interested contacts", "Interested contacts", "Prioritize positive replies and close while interest is fresh.")
 }
 
 func GuideAnalytics(c *gin.Context) {
-	renderGuide(c, "guide_analytics.html", "Analytics", "Analytics playbook", "Turn opens, clicks, and replies into decisions: what to double down on and what to stop.")
+	renderGuide(c, "guide_analytics.html", "Analytics", "Analytics", "Optimize for replies; use opens/clicks as diagnostics.")
 }
 
 func GuideWizardDismiss(c *gin.Context) {

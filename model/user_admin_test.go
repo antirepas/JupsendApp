@@ -51,7 +51,11 @@ func TestUserHasAppAccess(t *testing.T) {
 		t.Fatal("pro without active subscription should not have access")
 	}
 	free := User{Email: "d@test.com", SubscriptionStatus: SubStatusNone, PlanTier: "free"}
-	if !UserHasAppAccess(free) {
-		t.Fatal("free plan should have access")
+	if UserHasAppAccess(free) {
+		t.Fatal("free / unpaid should not have access")
+	}
+	cancelled := User{Email: "e@test.com", SubscriptionStatus: SubStatusCancelled, PlanTier: "starter"}
+	if UserHasAppAccess(cancelled) {
+		t.Fatal("cancelled subscription should not have access")
 	}
 }

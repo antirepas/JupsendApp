@@ -10,14 +10,14 @@ type PagePlaybook struct {
 
 func playbookContacts() PagePlaybook {
 	return PagePlaybook{
-		Title:     "Contacts for perfect outreach",
-		Intro:     "Clean lists and mapped variables beat big messy imports.",
+		Title:     "Contacts that send cleanly",
+		Intro:     "Sheets in campaign folders beat giant unmapped dumps.",
 		GuideHref: "/guides/contacts",
 		Bullets: []string{
-			"Import a focused ICP list — not your entire database.",
+			"Put the audience in the campaign folder sheet so Manage stays in sync.",
 			"Map columns to the same variable names your templates use.",
-			"Prefer one best email per row; use suppressions for bounces/unsubscribes.",
-			"Group people into lists so each campaign stays organized.",
+			"Add a location column if you schedule by each contact’s local time.",
+			"Suppress bounces and unsubscribes so you don’t re-mail them.",
 		},
 	}
 }
@@ -29,9 +29,9 @@ func playbookTemplates() PagePlaybook {
 		GuideHref: "/guides/templates",
 		Bullets: []string{
 			"Keep body short; make the ask easy to answer.",
-			"Only use variables you actually import on contacts.",
-			"Write a different follow-up than the intro for warm paths.",
-			"Preview with a real contact before launching a campaign.",
+			"Only use variables that exist on the contacts sheet.",
+			"Run Jev as a checklist, then edit for truth.",
+			"Preview with a real contact before launching.",
 		},
 	}
 }
@@ -39,27 +39,27 @@ func playbookTemplates() PagePlaybook {
 func playbookCampaigns() PagePlaybook {
 	return PagePlaybook{
 		Title:     "Campaigns that improve over time",
-		Intro:     "Pick the right type, set temperature rules, then launch with a checklist.",
+		Intro:     "Folders hold templates and contacts; Manage launches the campaign.",
 		GuideHref: "/guides/campaigns",
 		Bullets: []string{
-			"Use bulk for one touch; workflow when you need follow-ups.",
-			"Publish workflows and map a template to every send step.",
-			"Set lead temperature (warm/hot thresholds) on the campaign page.",
-			"Watch analytics and Interested after send — treat each campaign as an experiment.",
+			"Use one-time for a single touch; Sequence for follow-ups on Manage.",
+			"Schedule absolute time or each contact’s local time via a location column.",
+			"Set stop-on-reply / temperature / reply watchers before launch.",
+			"Watch queue progress, Interested, and analytics after send.",
 		},
 	}
 }
 
 func playbookWorkflows() PagePlaybook {
 	return PagePlaybook{
-		Title:     "Workflows that react to interest",
-		Intro:     "Start from the recommended outreach sequence, then publish and attach.",
-		GuideHref: "/guides/outreach",
+		Title:     "Sequences on Manage",
+		Intro:     "Follow-ups are configured on the campaign — not a separate attach-workflow flow.",
+		GuideHref: "/guides/workflows",
 		Bullets: []string{
-			"Clone Recommended outreach: A/B cold → temperature → value prop or breakup.",
-			"Hot/warm at the end = manual Loom + Calendly — automation stops on purpose.",
-			"Publish before attaching; map a template to every send step.",
-			"Replies stop remaining steps — follow up from Interested.",
+			"Set type to Sequence (or Sequence + A/B), then Edit sequence.",
+			"Assign a template to every follow-up step.",
+			"Reply watchers can auto-answer verified intents after a short delay.",
+			"Replies can stop remaining steps — close from Interested yourself.",
 		},
 	}
 }
@@ -70,8 +70,8 @@ func playbookMailboxes() PagePlaybook {
 		Intro:     "Your sender reputation is the foundation of outreach.",
 		GuideHref: "/guides/mailboxes",
 		Bullets: []string{
-			"Free uses a shared seat; Pro uses your own domain and mailboxes (bought as add-ons).",
-			"Use real From names on seats; warm new domains slowly.",
+			"Domains and mailboxes are add-ons — optional until you send.",
+			"Match seat count to plan volume — one cold mailbox won’t carry Hyper alone.",
 			"Stay on domain status until seats are ready, then test SMTP.",
 			"Google sign-in is for account login — sending is configured here.",
 		},
@@ -85,9 +85,9 @@ func playbookSends() PagePlaybook {
 		GuideHref: "/guides/sends",
 		Bullets: []string{
 			"Spot-check that new campaign sends reach “sent.”",
+			"Local-time schedules may leave jobs waiting until each contact’s slot.",
 			"Open send detail for human vs bot opens and clicks.",
-			"In-app previews won’t fire tracking pixels or click trackers.",
-			"Failed sends usually mean mailbox/SMTP issues — fix Mailboxes first.",
+			"Failed sends usually mean mailbox/SMTP or plan-limit issues.",
 		},
 	}
 }
@@ -98,7 +98,7 @@ func playbookInterested() PagePlaybook {
 		Intro:     "Automation finds interest — you close it.",
 		GuideHref: "/guides/interested",
 		Bullets: []string{
-			"Prioritize replies, then clicks, then meaningful opens.",
+			"Prioritize positive replies first.",
 			"Follow up the same day when possible.",
 			"Dismiss noise so the queue stays actionable.",
 			"Don’t rely on the next automated bump after a human reply.",
@@ -112,10 +112,10 @@ func playbookAnalytics() PagePlaybook {
 		Intro:     "Optimize for replies, not vanity opens.",
 		GuideHref: "/guides/analytics",
 		Bullets: []string{
-			"Dashboard shows account pulse after your first sends.",
-			"Campaign analytics compare variants and funnels.",
-			"Workflow analytics show where contacts stall in the graph.",
-			"Change one variable at a time (subject, opener, CTA) when iterating.",
+			"Dashboard shows account pulse and plan usage.",
+			"Campaign analytics compare variants and reply mix.",
+			"Billing shows monthly email and contact usage vs caps.",
+			"Change one variable at a time when iterating.",
 		},
 	}
 }
@@ -128,7 +128,7 @@ func playbookSettings() PagePlaybook {
 		Bullets: []string{
 			"Confirm plan and subscription under Billing.",
 			"Mailboxes control what address actually sends.",
-			"Optional getting-started playbook walks the full outreach path.",
+			"Getting started walks folder → sequence → launch.",
 			"Reopen any guide anytime from Help in the sidebar.",
 		},
 	}

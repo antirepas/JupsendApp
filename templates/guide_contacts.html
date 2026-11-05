@@ -14,43 +14,37 @@
 <div class="app-page-body app-page-body--narrow guide-prose">
 
 <div class="card guide-section">
-  <h3>Why list quality wins</h3>
-  <p>Deliverability and reply rate start with who you email. Perfect outreach uses a focused list with real personalization fields — not a scraped megadump.</p>
+  <h3>Contacts live with the campaign</h3>
+  <p>In a campaign folder, add a <strong>contacts sheet</strong>. jupsend snapshots that sheet onto the campaign for sending. Deleting the sheet from the folder clears the campaign audience on the next sync.</p>
 </div>
 
 <div class="card guide-section">
-  <h3>Exact steps</h3>
+  <h3>Import &amp; variables</h3>
   <ol>
-    <li>Open Contacts → Import. Paste or upload Excel/CSV.</li>
-    <li>Map columns to variables your templates use (<code>first_name</code>, <code>company</code>, etc.).</li>
-    <li>If a cell has multiple emails, jupsend prefers hello@ → contact@ → support@ → first valid.</li>
-    <li>Put people on a named list so campaigns stay organized.</li>
-    <li>Suppress bounces / unsubscribes so you don’t re-mail them.</li>
+    <li>Open the sheet in the folder (or Contacts → Import for global lists).</li>
+    <li>Map columns to variables your templates use (<code>first_name</code>, <code>company</code>, <code>country</code>, …).</li>
+    <li>For local-time sends, include a location column (country, city, or IANA timezone).</li>
+    <li>Keep one best email per row; suppress bounces and unsubscribes.</li>
   </ol>
 </div>
 
 <div class="card guide-section">
-  <h3>Perfect-outreach recipe</h3>
-  <ul>
-    <li>One ICP per campaign (same role / industry).</li>
-    <li>Verify you can fill every required template variable.</li>
-    <li>Remove role accounts (info@, sales@) unless that’s the ICP.</li>
-    <li>Refresh lists before relaunch — don’t keep dead emails.</li>
-  </ul>
+  <h3>Plan limits</h3>
+  <p>Paid plans cap how many contacts you can store (e.g. Starter 5K → Hyper 25K). Existing contacts still count; upgrades raise the ceiling.</p>
 </div>
 
 <div class="card guide-section guide-mistake">
   <h3 class="!mb-2">Common mistakes</h3>
   <ul>
-    <li>Leaving first_name unmapped → empty greetings.</li>
-    <li>Importing the same people into every campaign without suppressions.</li>
-    <li>Skipping sample download — column mapping errors are hard to spot later.</li>
+    <li>Leaving <code>first_name</code> unmapped → empty greetings.</li>
+    <li>Expecting Manage to keep contacts after deleting the folder sheet.</li>
+    <li>Scheduling local-time sends without a resolvable location column.</li>
   </ul>
 </div>
 
 <div class="card guide-section">
   <h3>Next</h3>
-  <p><a href="/contacts?tab=import" class="text-brand-600 font-medium">Import now</a> · <a href="/guides/templates" class="text-brand-600 font-medium">Templates</a></p>
+  <p><a href="/contacts" class="text-brand-600 font-medium">Contacts</a> · <a href="/guides/templates" class="text-brand-600 font-medium">Templates</a> · <a href="/guides/campaigns" class="text-brand-600 font-medium">Campaigns</a></p>
 </div>
 </div>
 </div>

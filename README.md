@@ -113,7 +113,7 @@ Protected routes redirect to login; unsubscribed users are redirected to billing
 
 ## Google sign-in (accounts only)
 
-Google OAuth is used for **login and signup only** (`openid`, `email`, `profile`). Sending uses Free shared SMTP or Pro InboxKit mailboxes — not Gmail send scopes.
+Google OAuth is used for **login and signup only** (`openid`, `email`, `profile`). Sending uses InboxKit or attached SMTP mailboxes — not Gmail send scopes.
 
 ### Google Cloud setup
 

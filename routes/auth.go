@@ -24,12 +24,12 @@ func LoginPage(c *gin.Context) {
 
 func SignupPage(c *gin.Context) {
 	// Plan-first onboarding: direct users to plan selection.
-	c.Redirect(http.StatusFound, "/signup/free")
+	c.Redirect(http.StatusFound, "/signup/starter")
 }
 
 func SignupSubmit(c *gin.Context) {
 	// Email/password signup is disabled in favor of plan-first Google onboarding.
-	c.Redirect(http.StatusFound, "/signup/free?error=Choose+a+plan+and+continue+with+Google")
+	c.Redirect(http.StatusFound, "/signup/starter?error=Choose+a+plan+and+continue+with+Google")
 }
 
 func Logout(c *gin.Context) {

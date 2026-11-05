@@ -15,31 +15,31 @@
 
 <div class="card guide-section">
   <h3>What Sends shows</h3>
-  <p>Every outbound email becomes a send record: queued → sent (or failed), then opens, clicks, replies. Use this page to verify delivery before you trust campaign stats.</p>
+  <p>Every outbound email becomes a send record in a background queue: pending → sent (or failed), then opens, clicks, and replies when tracking is enabled. Use Sends (and Inbox → Sent) to verify delivery before you trust campaign totals.</p>
 </div>
 
 <div class="card guide-section">
   <h3>How to read a send</h3>
   <ul>
-    <li><strong>Delivery status</strong> — queued, sent, failed. Failed needs SMTP/mailbox attention.</li>
+    <li><strong>Delivery status</strong> — pending/queued, sent, failed. Failures usually mean mailbox/SMTP issues.</li>
+    <li><strong>Scheduled time</strong> — absolute or per-contact local time may leave jobs waiting until their slot.</li>
     <li><strong>Human opens</strong> — bots/scanners are filtered; don’t panic over instant “opens.”</li>
-    <li><strong>Clicks</strong> — strong intent signal for warm/hot rules.</li>
-    <li><strong>Preview</strong> — in-app HTML is sanitized so tracking pixels/links don’t fire false events.</li>
+    <li><strong>Clicks</strong> — stronger intent when tracking is on.</li>
   </ul>
 </div>
 
 <div class="card guide-section">
-  <h3>Perfect-outreach habits</h3>
+  <h3>Habits</h3>
   <ol>
-    <li>After launch, spot-check 5–10 sends for “sent.”</li>
-    <li>If opens look weird, check bot/scanned metrics on the send detail.</li>
-    <li>Use send detail when a contact says “never got it.”</li>
+    <li>After launch, spot-check a handful of sends for “sent.”</li>
+    <li>If the queue stalls, check Mailboxes limits (monthly plan cap, spacing, seat status).</li>
+    <li>Use send detail when a contact says they never got it.</li>
   </ol>
 </div>
 
 <div class="card guide-section">
   <h3>Next</h3>
-  <p><a href="/inbox?folder=sent" class="text-brand-600 font-medium">Open Sent in Inbox</a> · <a href="/inbox/compose" class="text-brand-600 font-medium">New email</a> · <a href="/guides/analytics" class="text-brand-600 font-medium">Analytics</a></p>
+  <p><a href="/inbox?folder=sent" class="text-brand-600 font-medium">Sent in Inbox</a> · <a href="/guides/analytics" class="text-brand-600 font-medium">Analytics</a></p>
 </div>
 </div>
 </div>

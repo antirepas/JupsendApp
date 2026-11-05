@@ -14,75 +14,65 @@
 <div class="app-page-body app-page-body--narrow guide-prose">
 
 <div class="card guide-section">
-  <h3>Why this order</h3>
-  <p>Perfect outreach is a system: a trustworthy sender, a clean list, a clear message, a smart sequence, then disciplined follow-up on interest. Skip steps and you burn domain reputation or send generic mail nobody answers.</p>
+  <h3>How jupsend is organized</h3>
+  <p>Each outreach effort lives in a <strong>campaign folder</strong> (Library): templates, a contacts sheet, and Manage in one place. You don’t wire a separate “workflow campaign” anymore — sequences are configured on Manage.</p>
 </div>
 
 <div class="card guide-section">
-  <h3>1. Get a mailbox ready</h3>
-  <p><strong>Free:</strong> jupsend attaches a shared sending address — confirm Mailboxes shows send-ready.</p>
-  <p class="mt-2"><strong>Pro:</strong> buy or connect your outreach domain, wait until seats are ready, then send a test.</p>
-  <p class="mt-3"><a href="/mailboxes" class="text-brand-600 font-medium">Open Mailboxes</a> · <a href="/guides/mailboxes" class="text-brand-600 font-medium">Mailboxes playbook</a></p>
+  <h3>1. Subscribe, then explore</h3>
+  <p>After checkout you can use the whole product. Domains and mailboxes are add-ons — set them up when you’re ready to send, not as a gate on day one.</p>
+  <p class="mt-3"><a href="/settings/billing" class="text-brand-600 font-medium">Billing</a> · <a href="/mailboxes" class="text-brand-600 font-medium">Mailboxes</a> · <a href="/guides/mailboxes" class="text-brand-600 font-medium">Mailboxes guide</a></p>
 </div>
 
 <div class="card guide-section">
-  <h3>2. Import contacts the right way</h3>
+  <h3>2. Create a campaign folder</h3>
   <ol>
-    <li>Use a dedicated outreach list (not your whole CRM dump).</li>
-    <li>Map columns so <code>{{"{{first_name}}"}}</code> (and similar) actually fill.</li>
-    <li>Prefer one best email per row; suppress bad addresses.</li>
+    <li>Open Library / Campaigns and create a folder — jupsend creates the draft campaign for it.</li>
+    <li>Add at least one email template in that folder.</li>
+    <li>Add a contacts sheet (or import into it) with the columns your copy needs.</li>
   </ol>
-  <p class="mt-3"><a href="/contacts?tab=import" class="text-brand-600 font-medium">Import contacts</a> · <a href="/guides/contacts" class="text-brand-600 font-medium">Contacts playbook</a></p>
+  <p class="mt-3"><a href="/campaigns" class="text-brand-600 font-medium">Campaigns</a> · <a href="/guides/campaigns" class="text-brand-600 font-medium">Campaigns guide</a></p>
 </div>
 
 <div class="card guide-section">
-  <h3>3. Write a reply-worthy template</h3>
+  <h3>3. Write templates that merge cleanly</h3>
   <ul>
-    <li>One idea, one ask. Subject that sounds human.</li>
-    <li>Personalize with real variables — never “Hi {{"{{first_name}}"}}” empty.</li>
-    <li>Include a tracked link only when it helps the story.</li>
+    <li>Use <code>{{"{{first_name}}"}}</code>-style variables that exist on the sheet.</li>
+    <li>Run <strong>Jev</strong> in the editor for a quick quality pass — then edit for truth.</li>
+    <li>Sign with mailbox-aware tags when you rotate seats.</li>
   </ul>
-  <p class="mt-3"><a href="/templates/new" class="text-brand-600 font-medium">Create template</a> · <a href="/guides/templates" class="text-brand-600 font-medium">Templates playbook</a></p>
+  <p class="mt-3"><a href="/guides/templates" class="text-brand-600 font-medium">Templates guide</a></p>
 </div>
 
 <div class="card guide-section">
-  <h3>4. Use the recommended workflow</h3>
-  <p>Clone the default outreach sequence: A/B cold intro → wait → temperature → value prop (warm/hot) or no-engagement → breakup (cold). Hot/warm at the end stop so you can send a personalized Loom + Calendly. Publish before attaching to a campaign.</p>
-  <div class="mt-3 flex flex-wrap gap-3 items-center">
-    <form method="POST" action="/workflows/from-playbook">
-      <button type="submit" class="btn-primary">Clone recommended workflow</button>
-    </form>
-    <a href="/guides/outreach" class="text-brand-600 font-medium">Outreach playbook →</a>
-  </div>
-</div>
-
-<div class="card guide-section">
-  <h3>5. Launch a campaign</h3>
+  <h3>4. Configure the campaign on Manage</h3>
   <ol>
-    <li>Pick bulk (one send) or workflow / workflow A/B.</li>
-    <li>Set <strong>lead temperature</strong> rules (e.g. warm = 2 opens + 1 click).</li>
-    <li>Add contacts, map templates to send steps, then send or schedule.</li>
+    <li>Choose type: one-time, one-time A/B, sequence, or sequence + A/B first email.</li>
+    <li>For sequences, open <strong>Edit sequence</strong> — waits and follow-up templates live there.</li>
+    <li>Optional: lead temperature, stop-on-reply, reply watchers, open tracking.</li>
+    <li>Schedule: one absolute time, or <strong>each contact’s local time</strong> via a location column + date + clock time.</li>
   </ol>
-  <p class="mt-3"><a href="/campaigns/new" class="text-brand-600 font-medium">Create campaign</a> · <a href="/guides/campaigns" class="text-brand-600 font-medium">Campaigns playbook</a></p>
+  <p class="mt-3"><a href="/guides/workflows" class="text-brand-600 font-medium">Sequences guide</a></p>
 </div>
 
 <div class="card guide-section">
-  <h3>6. Work interested leads daily</h3>
-  <p>Replies and engaged contacts appear under Interested. Follow up personally while they’re warm — don’t wait for the next automated bump if they already replied.</p>
-  <p class="mt-3"><a href="/inbox?folder=interested" class="text-brand-600 font-medium">Interested in Inbox</a> · <a href="/guides/interested" class="text-brand-600 font-medium">Interested playbook</a> · <a href="/guides/analytics" class="text-brand-600 font-medium">Analytics</a></p>
+  <h3>5. Launch, then work replies</h3>
+  <p>Send or schedule from Manage. Watch queue progress, then live in <strong>Inbox → Interested</strong> for positive replies. Automation can stop remaining steps; you still close the deal yourself.</p>
+  <p class="mt-3"><a href="/inbox?folder=interested" class="text-brand-600 font-medium">Interested</a> · <a href="/guides/interested" class="text-brand-600 font-medium">Interested guide</a></p>
 </div>
 
 <div class="card guide-section guide-mistake">
   <h3 class="!mb-2">Common mistakes</h3>
   <ul>
-    <li>Sending from a brand-new domain with huge volume on day one.</li>
-    <li>Launching a workflow campaign without mapping every send step’s template.</li>
-    <li>Trusting raw opens without checking bot/scanned opens on send detail.</li>
+    <li>Huge volume on a brand-new domain with one cold seat.</li>
+    <li>Launching a sequence with empty follow-up templates.</li>
+    <li>Local-time schedule without a usable country/timezone column.</li>
+    <li>Ignoring Interested while positive replies pile up.</li>
   </ul>
 </div>
 
 <div class="flex flex-wrap gap-3 mt-6">
-  <a href="/campaigns/new" class="btn-primary">Create campaign</a>
+  <a href="/campaigns" class="btn-primary">Open campaigns</a>
   <form method="POST" action="/guides/wizard/dismiss">
     <input type="hidden" name="next" value="/">
     <button type="submit" class="btn-secondary">Done — hide banner</button>

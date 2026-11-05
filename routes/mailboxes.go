@@ -21,46 +21,12 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// RequireMailboxSetup keeps admin entitlements in sync. Paid users may explore the
+// whole app before buying domains/mailboxes — sending still fails until a seat is ready.
 func RequireMailboxSetup() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		userID := mustUserID(c)
-		ensureAdminPro(userID)
-
-		// Free: ensure shared SMTP is attached, then allow app use without domain onboarding.
-		// Do not call ApplyPlanLimitsToUser on every request — it used to reset sends_today.
-		if !model.UserIsPro(userID) {
-			_ = model.EnsureFreeSharedMailbox(userID)
-			if model.UserHasReadyMailbox(userID) {
-				c.Next()
-				return
-			}
-			path := c.Request.URL.Path
-			if strings.HasPrefix(path, "/settings") ||
-				strings.HasPrefix(path, "/mailboxes") ||
-				strings.HasPrefix(path, "/guides") ||
-				strings.HasPrefix(path, "/onboarding/") {
-				c.Next()
-				return
-			}
-			c.Redirect(http.StatusFound, "/settings?error="+url.QueryEscape("Shared sending mailbox is not configured on this server. Contact support or check SMTP_* env vars."))
-			c.Abort()
-			return
-		}
-
-		if model.UserHasReadyMailbox(userID) {
-			c.Next()
-			return
-		}
-		path := c.Request.URL.Path
-		if strings.HasPrefix(path, "/onboarding/") ||
-			strings.HasPrefix(path, "/mailboxes") ||
-			strings.HasPrefix(path, "/settings") ||
-			strings.HasPrefix(path, "/guides") {
-			c.Next()
-			return
-		}
-		c.Redirect(http.StatusFound, "/onboarding/domain")
-		c.Abort()
+		ensureAdminPro(mustUserID(c))
+		c.Next()
 	}
 }
 
@@ -74,7 +40,7 @@ func OnboardingDomainPage(c *gin.Context) {
 	userID := mustUserID(c)
 	ensureAdminPro(userID)
 	if !model.UserIsPro(userID) {
-		c.Redirect(http.StatusFound, "/settings/billing?error="+url.QueryEscape("Custom domains require Pro"))
+		c.Redirect(http.StatusFound, "/settings/billing?error="+url.QueryEscape("Custom domains require an active plan"))
 		return
 	}
 	// Stay on this page when showing flash messages or forcing a new setup.
@@ -189,7 +155,7 @@ func OnboardingDomainSearch(c *gin.Context) {
 	userID := mustUserID(c)
 	ensureAdminPro(userID)
 	if !model.UserIsPro(userID) {
-		c.Redirect(http.StatusFound, "/settings/billing?error="+url.QueryEscape("Custom domains require Pro"))
+		c.Redirect(http.StatusFound, "/settings/billing?error="+url.QueryEscape("Custom domains require an active plan"))
 		return
 	}
 	q := strings.TrimSpace(c.PostForm("q"))
@@ -257,7 +223,7 @@ func OnboardingDomainPurchase(c *gin.Context) {
 	userID := mustUserID(c)
 	ensureAdminPro(userID)
 	if !model.UserIsPro(userID) {
-		c.Redirect(http.StatusFound, "/settings/billing?error="+url.QueryEscape("Custom domains require Pro"))
+		c.Redirect(http.StatusFound, "/settings/billing?error="+url.QueryEscape("Custom domains require an active plan"))
 		return
 	}
 	domain := strings.ToLower(strings.TrimSpace(c.PostForm("domain")))
@@ -307,7 +273,7 @@ func OnboardingDomainConnect(c *gin.Context) {
 	userID := mustUserID(c)
 	ensureAdminPro(userID)
 	if !model.UserIsPro(userID) {
-		c.Redirect(http.StatusFound, "/settings/billing?error="+url.QueryEscape("Custom domains require Pro"))
+		c.Redirect(http.StatusFound, "/settings/billing?error="+url.QueryEscape("Custom domains require an active plan"))
 		return
 	}
 	domain := strings.ToLower(strings.TrimSpace(c.PostForm("domain")))
@@ -419,14 +385,6 @@ func MailboxesPage(c *gin.Context) {
 	smtpByID, _ := model.MapSMTPAccountsByID(userID)
 	user, _ := model.GetUserByID(userID)
 	isPro := model.UserIsPro(userID)
-	sharedReady := false
-	sharedEmail := ""
-	if !isPro {
-		if acc, err := model.GetSMTPAccountByUserID(userID); err == nil && acc.MailboxSource == model.MailboxSourceShared {
-			sharedReady = acc.IsSendReady()
-			sharedEmail = acc.SenderEmail()
-		}
-	}
 
 	q := strings.ToLower(strings.TrimSpace(c.Query("q")))
 	statusFilter := strings.ToLower(strings.TrimSpace(c.Query("status")))
@@ -666,8 +624,6 @@ func MailboxesPage(c *gin.Context) {
 		"statsActive":     activeMailboxes,
 		"isPro":           isPro,
 		"isAdmin":         model.UserIsAdmin(user),
-		"sharedReady":     sharedReady,
-		"sharedEmail":     sharedEmail,
 		"inboxkitOK":      inboxkit.Configured(),
 		"whopAddon":       config.WhopMailboxAddonID != "" && whop.IsConfigured(),
 		"success":         c.Query("success"),

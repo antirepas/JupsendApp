@@ -43,7 +43,7 @@ func ensureDevUser(email string) (int64, error) {
 		if config.IsAdminEmail(email) {
 			_ = model.EnsureAdminProAccess(user.ID)
 		} else {
-			_ = model.ApplyPlanLimitsToUser(user.ID, model.PlanTierFree)
+			_ = model.ApplyPlanLimitsToUser(user.ID, model.PlanTierStarter)
 		}
 		_ = model.UpdateUserSubscription(user.ID, model.SubStatusActive, "", "", nil)
 		return user.ID, nil
@@ -52,7 +52,7 @@ func ensureDevUser(email string) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	_ = model.ApplyPlanLimitsToUser(userID, model.PlanTierFree)
+	_ = model.ApplyPlanLimitsToUser(userID, model.PlanTierStarter)
 	_ = model.UpdateUserSubscription(userID, model.SubStatusActive, "", "", nil)
 	return userID, nil
 }

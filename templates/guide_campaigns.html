@@ -14,55 +14,52 @@
 <div class="app-page-body app-page-body--narrow guide-prose">
 
 <div class="card guide-section">
-  <h3>Why campaigns matter</h3>
-  <p>A campaign is the launch vehicle: who gets mail, which template or workflow runs, and where opens/clicks/replies are attributed. Perfect outreach treats each campaign as an experiment with a clear hypothesis — not a blast.</p>
+  <h3>Campaign folders</h3>
+  <p>A folder is the workspace: templates + contacts sheet + <strong>Manage</strong>. Creating the folder creates the draft campaign. Files you add/remove sync into Manage while the campaign is still editable (not sent / not scheduled).</p>
 </div>
 
 <div class="card guide-section">
-  <h3>When to use which type</h3>
+  <h3>Campaign types (on Manage)</h3>
   <ul>
-    <li><strong>One-time (bulk)</strong> — announcement or single touch. Optional Template B for A/B on the first email.</li>
-    <li><strong>Workflow</strong> — multi-step sequences (intro → wait → follow-up). Attach a <em>published</em> workflow.</li>
-    <li><strong>Workflow A/B</strong> — first send step alternates templates A/B; later steps use mapped templates.</li>
+    <li><strong>One-time send</strong> — single template blast.</li>
+    <li><strong>One-time A/B</strong> — needs two templates in the folder; alternates A/B on the first email.</li>
+    <li><strong>Sequence</strong> — email → wait → follow-ups configured in Edit sequence.</li>
+    <li><strong>Sequence + A/B first email</strong> — A/B on touch one, then shared follow-ups.</li>
+  </ul>
+  <p class="mt-2">Legacy “workflow mode” campaigns should be switched to Sequence on Manage before launch.</p>
+</div>
+
+<div class="card guide-section">
+  <h3>Scheduling</h3>
+  <ul>
+    <li><strong>Absolute time</strong> — one datetime for everyone (your timezone).</li>
+    <li><strong>Local time</strong> — pick a location column, a date, and a clock time. Each contact gets that local hour (e.g. 9:00 in New York and 9:00 in Greece).</li>
   </ul>
 </div>
 
 <div class="card guide-section">
-  <h3>Perfect-outreach launch checklist</h3>
+  <h3>Launch checklist</h3>
   <ol>
-    <li>Mailbox send-ready; domain warmed if Pro.</li>
-    <li>Contacts imported with variables that match templates.</li>
-    <li>Templates written; for sequences, configure steps on Manage (Edit sequence).</li>
-    <li>Set <strong>Lead temperature</strong> + stop rules; optionally map <strong>Reply watchers</strong> by intent.</li>
-    <li>Decide open tracking: on for learning; off for ultra-cold if scanner noise worries you (clicks/replies still work).</li>
-    <li>Preview a few contacts → Send now or schedule.</li>
-    <li>Watch analytics + Interested; stop the campaign if something’s wrong.</li>
+    <li>Mailbox send-ready; enough seats for the volume you plan.</li>
+    <li>Folder has template(s) and a contacts sheet with mapped variables.</li>
+    <li>Type + sequence steps set; temperature / stop / reply watchers as needed.</li>
+    <li>Preview a few contacts → send now or schedule.</li>
+    <li>Watch queue progress, then Interested + analytics.</li>
   </ol>
-</div>
-
-<div class="card guide-section">
-  <h3>Lead temperature &amp; reply watchers</h3>
-  <p>Temperature is defined per campaign from reply sentiment/intent. Stop-on-reply / stop-on-hot cancel remaining sequence steps. Reply watchers auto-send a mapped template after a short delay when Jev verifies the reply fits the inbound message.</p>
-</div>
-
-<div class="card guide-section">
-  <h3>A/B and experiments</h3>
-  <p>When Template B exists, label what you’re testing and write a hypothesis. jupsend can promote a winner by reply rate. Use experiments to improve one variable at a time (subject, opener, CTA) — not five at once.</p>
 </div>
 
 <div class="card guide-section guide-mistake">
   <h3 class="!mb-2">Common mistakes</h3>
   <ul>
-    <li>Leaving a campaign on legacy workflow mode — switch to Sequence on Manage.</li>
-    <li>Missing template on a follow-up step (contacts stall).</li>
-    <li>Huge first send on a fresh domain.</li>
-    <li>Ignoring Interested while the sequence keeps bumping people who already replied (replies stop remaining steps, but you still need human follow-up).</li>
+    <li>Deleting the contacts sheet and wondering why Manage still showed people (fixed on sync — keep the sheet).</li>
+    <li>Sequence follow-ups with no template assigned.</li>
+    <li>Local-time schedule with empty/unresolvable location values.</li>
   </ul>
 </div>
 
 <div class="card guide-section">
   <h3>Next</h3>
-  <p><a href="/guides/workflows" class="text-brand-600 font-medium">Workflows playbook</a> · <a href="/guides/analytics" class="text-brand-600 font-medium">Analytics</a> · <a href="/campaigns/new" class="text-brand-600 font-medium">Create campaign</a></p>
+  <p><a href="/campaigns" class="text-brand-600 font-medium">Campaigns</a> · <a href="/guides/workflows" class="text-brand-600 font-medium">Sequences</a> · <a href="/guides/analytics" class="text-brand-600 font-medium">Analytics</a></p>
 </div>
 </div>
 </div>

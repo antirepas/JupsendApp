@@ -7,108 +7,87 @@
 <header class="app-page-header">
   <div class="app-page-header-text">
     <h2 class="app-page-title">Guides</h2>
-    <p class="app-page-sub">Deep playbooks for running outbound outreach in jupsend. Optional — reopen anytime from Help.</p>
+    <p class="app-page-sub">How jupsend works today — campaign folders, sequences, mailboxes, and follow-up.</p>
   </div>
 </header>
 <div class="app-page-body app-page-body--narrow">
 
   <div class="card mb-8 flex flex-wrap items-center justify-between gap-4">
     <div>
-      <p class="help-card-label">Recommended system</p>
-      <h3 class="font-semibold text-charcoal mt-2">Outreach playbook</h3>
-      <p class="text-sm text-gray-600 mt-1">A/B cold → temperature → value prop or breakup → manual Loom close. Clone the workflow in one click.</p>
-    </div>
-    <div class="flex flex-wrap gap-2">
-      <a href="/guides/outreach" class="btn-primary">Open playbook</a>
-      <form method="POST" action="/workflows/from-playbook">
-        <button type="submit" class="btn-secondary">Clone workflow</button>
-      </form>
-    </div>
-  </div>
-
-  <div class="card mb-8 flex flex-wrap items-center justify-between gap-4">
-    <div>
       <p class="help-card-label">Start here</p>
       <h3 class="font-semibold text-charcoal mt-2">Getting started</h3>
-      <p class="text-sm text-gray-600 mt-1">Mailbox → contacts → templates → workflows → campaigns → replies.</p>
+      <p class="text-sm text-gray-600 mt-1">Plan → mailbox → campaign folder → contacts &amp; templates → sequence → launch.</p>
     </div>
     <div class="flex flex-wrap gap-2">
-      <a href="/guides/getting-started" class="btn-secondary">Open wizard</a>
+      <a href="/guides/getting-started" class="btn-primary">Open guide</a>
       <form method="POST" action="/guides/wizard/restart">
-        <button type="submit" class="btn-secondary">Restart &amp; show banner</button>
+        <button type="submit" class="btn-secondary">Show dashboard banner</button>
       </form>
     </div>
   </div>
 
   <div class="guides-grid">
-    <a class="help-card" href="/guides/outreach">
-      <div>
-        <span class="help-card-label">Playbook</span>
-        <p class="font-semibold text-charcoal mt-2">Recommended outreach</p>
-        <p class="text-sm text-gray-600 mt-1">The full system: sequence, copy skeletons, campaign checklist.</p>
-      </div>
-    </a>
     <a class="help-card" href="/guides/mailboxes">
       <div>
         <span class="help-card-label">Setup</span>
         <p class="font-semibold text-charcoal mt-2">Mailboxes</p>
-        <p class="text-sm text-gray-600 mt-1">Free shared seat vs Pro domains, send limits, deliverability.</p>
+        <p class="text-sm text-gray-600 mt-1">Domains, seats, and send limits — set up when you’re ready to send.</p>
       </div>
     </a>
     <a class="help-card" href="/guides/contacts">
       <div>
         <span class="help-card-label">Data</span>
         <p class="font-semibold text-charcoal mt-2">Contacts</p>
-        <p class="text-sm text-gray-600 mt-1">Import mapping, lists, suppressions, list hygiene.</p>
+        <p class="text-sm text-gray-600 mt-1">Sheets in campaign folders, variables, suppressions.</p>
       </div>
     </a>
     <a class="help-card" href="/guides/templates">
       <div>
         <span class="help-card-label">Copy</span>
         <p class="font-semibold text-charcoal mt-2">Templates</p>
-        <p class="text-sm text-gray-600 mt-1">Personalization, CTAs, variables that earn replies.</p>
-      </div>
-    </a>
-    <a class="help-card" href="/guides/workflows">
-      <div>
-        <span class="help-card-label">Automation</span>
-        <p class="font-semibold text-charcoal mt-2">Workflows</p>
-        <p class="text-sm text-gray-600 mt-1">Waits, branches, lead temperature, publish &amp; attach.</p>
+        <p class="text-sm text-gray-600 mt-1">Merge tags, Jev review, signatures that match the seat.</p>
       </div>
     </a>
     <a class="help-card" href="/guides/campaigns">
       <div>
         <span class="help-card-label">Launch</span>
         <p class="font-semibold text-charcoal mt-2">Campaigns</p>
-        <p class="text-sm text-gray-600 mt-1">Bulk vs workflow, A/B, temperature rules, analytics.</p>
+        <p class="text-sm text-gray-600 mt-1">Folders, one-time vs sequence, local-time schedule, A/B.</p>
+      </div>
+    </a>
+    <a class="help-card" href="/guides/workflows">
+      <div>
+        <span class="help-card-label">Follow-up</span>
+        <p class="font-semibold text-charcoal mt-2">Sequences</p>
+        <p class="text-sm text-gray-600 mt-1">Manage steps, waits, reply watchers, stop rules.</p>
       </div>
     </a>
     <a class="help-card" href="/guides/sends">
       <div>
         <span class="help-card-label">Delivery</span>
         <p class="font-semibold text-charcoal mt-2">Sends</p>
-        <p class="text-sm text-gray-600 mt-1">Queue status, human vs bot opens, debugging one send.</p>
+        <p class="text-sm text-gray-600 mt-1">Queue status, human vs bot opens, debugging one email.</p>
       </div>
     </a>
     <a class="help-card" href="/guides/interested">
       <div>
         <span class="help-card-label">Pipeline</span>
         <p class="font-semibold text-charcoal mt-2">Interested contacts</p>
-        <p class="text-sm text-gray-600 mt-1">Who to prioritize and how to follow up while warm.</p>
+        <p class="text-sm text-gray-600 mt-1">Who replied positively and how to close while warm.</p>
       </div>
     </a>
     <a class="help-card" href="/guides/analytics">
       <div>
         <span class="help-card-label">Learn</span>
         <p class="font-semibold text-charcoal mt-2">Analytics</p>
-        <p class="text-sm text-gray-600 mt-1">What metrics mean and how to iterate campaigns.</p>
+        <p class="text-sm text-gray-600 mt-1">What to optimize — replies first, vanity metrics second.</p>
       </div>
     </a>
     <a class="help-card" href="/guides/gmail">
       <div>
         <span class="help-card-label">Account</span>
         <p class="font-semibold text-charcoal mt-2">Google sign-in</p>
-        <p class="text-sm text-gray-600 mt-1">Auth vs sending — what Google does (and doesn’t) do.</p>
+        <p class="text-sm text-gray-600 mt-1">Auth vs sending — what Google does (and doesn’t).</p>
       </div>
     </a>
   </div>

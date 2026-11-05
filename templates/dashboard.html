@@ -49,19 +49,18 @@
         </ul>
         <div class="dash-empty-actions">
             <a href="/campaigns/new" class="btn-primary">Create campaign</a>
-            {{if not .mailboxReady}}
-            <a href="{{if .isPro}}/onboarding/domain{{else}}/mailboxes{{end}}" class="btn-secondary">{{if .isPro}}Set up domain{{else}}Check mailbox{{end}}</a>
-            {{else if eq .counts.Contacts 0}}
+            {{if eq .counts.Contacts 0}}
             <a href="/contacts?tab=import" class="btn-secondary">Import contacts</a>
             {{else if eq .counts.Templates 0}}
             <a href="/templates/new" class="btn-secondary">Create template</a>
+            {{else if not .mailboxReady}}
+            <a href="/mailboxes" class="btn-secondary">Set up mailbox when ready</a>
             {{end}}
         </div>
     </div>
     <aside class="dash-plan-value">
         <p class="dash-plan-value-label">Your {{.plan.Name}} plan</p>
         <ul class="dash-plan-value-list">
-            {{if .plan.Paid}}
             <li>
                 <span class="dash-plan-value-num">{{.plan.Name}}</span>
                 <span class="dash-plan-value-desc">{{.plan.Label}} · ${{.plan.MonthlyPriceUSD}}/mo</span>
@@ -78,23 +77,6 @@
                 <span class="dash-plan-value-num">{{.plan.AICredits}}</span>
                 <span class="dash-plan-value-desc">AI credits / day</span>
             </li>
-            {{else}}
-            <li>
-                <span class="dash-plan-value-num">{{.plan.DailyEmails}}</span>
-                <span class="dash-plan-value-desc">emails / day</span>
-            </li>
-            <li>
-                <span class="dash-plan-value-num">Shared</span>
-                <span class="dash-plan-value-desc">sending mailbox included</span>
-            </li>
-            <li>
-                <span class="dash-plan-value-num">{{.plan.AICredits}}</span>
-                <span class="dash-plan-value-desc">AI credits / day</span>
-            </li>
-            <li>
-                <a href="/settings/billing" class="text-sm text-brand-600 font-medium">See plans →</a>
-            </li>
-            {{end}}
         </ul>
     </aside>
 </div>

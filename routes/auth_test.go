@@ -79,8 +79,8 @@ func TestSignupRedirectAndLogout(t *testing.T) {
 	if w.Code != http.StatusFound {
 		t.Fatalf("signup expected redirect, got %d %s", w.Code, w.Body.String())
 	}
-	if !strings.Contains(w.Header().Get("Location"), "/signup/free") {
-		t.Fatalf("expected redirect to /signup/free, got %s", w.Header().Get("Location"))
+	if !strings.Contains(w.Header().Get("Location"), "/signup/starter") {
+		t.Fatalf("expected redirect to /signup/starter, got %s", w.Header().Get("Location"))
 	}
 
 	hash, err := auth.HashPassword("password123")

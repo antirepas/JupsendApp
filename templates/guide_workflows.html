@@ -13,42 +13,42 @@
 </header>
 <div class="app-page-body app-page-body--narrow guide-prose">
 
-<div class="card guide-section guide-hero-cta">
-  <p class="help-card-label">Where things live now</p>
-  <h3 class="!mb-2">Sequences vs reply watchers</h3>
-  <p class="mb-4"><strong>Outreach sequences</strong> (email → wait → follow-up) are configured on the campaign <strong>Manage</strong> page — Edit sequence modal. <strong>Reply watchers</strong> map inbound intents (interested, meeting ask, pricing, OOO, …) to a template that auto-sends after a short delay if Jev verifies the reply.</p>
-  <div class="flex flex-wrap gap-2">
-    <a href="/guides/outreach" class="btn-primary">Outreach playbook</a>
-    <a href="/guides/campaigns" class="btn-secondary">Campaigns guide</a>
-  </div>
+<div class="card guide-section">
+  <h3>Sequences live on Manage</h3>
+  <p>Multi-touch outreach is configured on the campaign <strong>Manage</strong> page — not as a separate “attach published workflow” flow. Set campaign type to Sequence (or Sequence + A/B), then open <strong>Edit sequence</strong>.</p>
 </div>
 
 <div class="card guide-section">
-  <h3>Manage sequence</h3>
+  <h3>Building a sequence</h3>
   <ul>
-    <li>Set campaign type to <strong>Sequence</strong> or <strong>Sequence + A/B first email</strong>.</li>
-    <li>Open <strong>Edit sequence</strong> — first email uses Template A/B; add follow-ups with wait days.</li>
-    <li>Optional: <strong>Apply recommended</strong> for a simple 3-touch preset from folder templates.</li>
+    <li>First email uses Template A (and B if A/B is on).</li>
+    <li>Add follow-ups with wait days and a template from the folder.</li>
+    <li>Optional recommended preset fills a simple 3-touch from folder templates — edit before launch.</li>
+    <li>With local-time sending enabled, follow-up wakes snap to the preferred local clock after the wait.</li>
   </ul>
 </div>
 
 <div class="card guide-section">
-  <h3>Reply watchers</h3>
+  <h3>Reply watchers &amp; stop rules</h3>
   <ul>
-    <li>On Manage, map each intent to a reply template (or leave blank).</li>
-    <li>When a reply arrives, Jev classifies intent, waits ~1–2 minutes, verifies the template answers the inbound message, then auto-sends — or skips with a system note.</li>
-    <li><code>unsubscribe</code> / <code>wrong_person</code> never auto-reply (suppress / stop path).</li>
+    <li><strong>Stop on reply / stop on hot</strong> cancel remaining sequence steps.</li>
+    <li><strong>Reply watchers</strong> map inbound intents (interested, meeting, pricing, OOO, …) to a reply template. After a short delay, Jev verifies the reply fits, then auto-sends — or skips with a note.</li>
+    <li><code>unsubscribe</code> / <code>wrong_person</code> never auto-reply.</li>
   </ul>
 </div>
 
 <div class="card guide-section">
   <h3>Legacy workflows</h3>
-  <p>Old send→wait→send workflow graphs are no longer used for outreach. Campaigns still on legacy workflow mode show a banner — switch to Sequence and reconfigure steps before launch.</p>
+  <p>Old graph-based workflow campaigns are retired for new outreach. If Manage shows a legacy banner, switch the type to Sequence and rebuild steps there. Library “workflow” files are optional extras — sequences on Manage are the source of truth.</p>
 </div>
 
+<div class="card guide-section">
+  <h3>Next</h3>
+  <p><a href="/guides/campaigns" class="text-brand-600 font-medium">Campaigns</a> · <a href="/guides/interested" class="text-brand-600 font-medium">Interested</a></p>
+</div>
+</div>
 </div>
 {{template "page_shell_end" .}}
-</div>
 </body>
 </html>
 {{end}}
