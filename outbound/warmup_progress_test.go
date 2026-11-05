@@ -40,9 +40,9 @@ func TestEffectiveDailyCapIgnoresWarmupFields(t *testing.T) {
 	}
 }
 
-func TestEffectiveDailyCapFallback(t *testing.T) {
-	acc := model.SMTPAccount{}
-	if got := EffectiveDailyCap(acc); got != model.DefaultDailyLimit {
-		t.Fatalf("cap=%d want %d", got, model.DefaultDailyLimit)
+func TestEffectiveDailyCapZeroMeansUnlimited(t *testing.T) {
+	acc := model.SMTPAccount{DailyLimit: 0}
+	if got := EffectiveDailyCap(acc); got != 0 {
+		t.Fatalf("cap=%d want 0 (unlimited)", got)
 	}
 }

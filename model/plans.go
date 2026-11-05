@@ -20,12 +20,16 @@ const (
 )
 
 type planSpec struct {
-	DailyEmailCap          int
+	DailyEmailCap          int // 0 = no daily send cap
 	AICreditsPerDay        int
 	PerMinuteLimit         int
 	MinSecondsBetweenSends int
 	IncludedDomains        int
 	IncludedMailboxes      int
+	MaxContacts            int // 0 = unlimited
+	MonthlyEmailCap        int // 0 = no monthly cap (Free uses daily only)
+	MonthlyPriceUSD        int
+	Label                  string
 }
 
 func PlanSpecForTier(tier PlanTier) (planSpec, error) {
@@ -38,16 +42,62 @@ func PlanSpecForTier(tier PlanTier) (planSpec, error) {
 			MinSecondsBetweenSends: 30,
 			IncludedDomains:        0,
 			IncludedMailboxes:      0,
+			MaxContacts:            0,
+			MonthlyEmailCap:        0,
+			MonthlyPriceUSD:        0,
+			Label:                  "Free",
 		}, nil
-	case PlanTierPro:
+	case PlanTierStarter:
 		return planSpec{
-			DailyEmailCap:          250, // per mailbox
-			AICreditsPerDay:        5000,
+			DailyEmailCap:          0,
+			AICreditsPerDay:        10000,
 			PerMinuteLimit:         2,
 			MinSecondsBetweenSends: 30,
-			// Domains and mailboxes are paid add-ons — not included with Pro.
-			IncludedDomains:   0,
-			IncludedMailboxes: 0,
+			IncludedDomains:        0,
+			IncludedMailboxes:      0,
+			MaxContacts:            5000,
+			MonthlyEmailCap:        10000,
+			MonthlyPriceUSD:        23,
+			Label:                  "10K",
+		}, nil
+	case PlanTierGrowth:
+		return planSpec{
+			DailyEmailCap:          0,
+			AICreditsPerDay:        10000,
+			PerMinuteLimit:         2,
+			MinSecondsBetweenSends: 30,
+			IncludedDomains:        0,
+			IncludedMailboxes:      0,
+			MaxContacts:            10000,
+			MonthlyEmailCap:        25000,
+			MonthlyPriceUSD:        49,
+			Label:                  "25K",
+		}, nil
+	case PlanTierScale:
+		return planSpec{
+			DailyEmailCap:          0,
+			AICreditsPerDay:        10000,
+			PerMinuteLimit:         2,
+			MinSecondsBetweenSends: 30,
+			IncludedDomains:        0,
+			IncludedMailboxes:      0,
+			MaxContacts:            20000,
+			MonthlyEmailCap:        50000,
+			MonthlyPriceUSD:        64,
+			Label:                  "50K",
+		}, nil
+	case PlanTierHyper:
+		return planSpec{
+			DailyEmailCap:          0,
+			AICreditsPerDay:        10000,
+			PerMinuteLimit:         2,
+			MinSecondsBetweenSends: 30,
+			IncludedDomains:        0,
+			IncludedMailboxes:      0,
+			MaxContacts:            25000,
+			MonthlyEmailCap:        100000,
+			MonthlyPriceUSD:        87,
+			Label:                  "100K",
 		}, nil
 	default:
 		return planSpec{}, fmt.Errorf("unknown plan tier %q", tier)
@@ -64,12 +114,33 @@ func AICreditsCapForTier(tier PlanTier) int {
 
 // PlanInfo is a user-facing summary of a plan tier.
 type PlanInfo struct {
-	Tier        PlanTier
-	Name        string
-	DailyEmails int
-	AICredits   int
-	Domains     int
-	Mailboxes   int
+	Tier            PlanTier
+	Name            string
+	Label           string
+	DailyEmails     int // 0 = unlimited / no daily cap
+	MonthlyEmails   int // 0 = no monthly cap
+	MaxContacts     int // 0 = unlimited
+	AICredits       int
+	MonthlyPriceUSD int
+	Domains         int
+	Mailboxes       int
+	Paid            bool
+	Recommended     bool
+}
+
+func planDisplayName(tier PlanTier) string {
+	switch NormalizePlanTier(string(tier)) {
+	case PlanTierStarter:
+		return "Starter"
+	case PlanTierGrowth:
+		return "Growth"
+	case PlanTierScale:
+		return "Scale"
+	case PlanTierHyper:
+		return "Hyper"
+	default:
+		return "Free"
+	}
 }
 
 func PlanInfoForTier(tier PlanTier) PlanInfo {
@@ -79,34 +150,145 @@ func PlanInfoForTier(tier PlanTier) PlanInfo {
 		spec, _ = PlanSpecForTier(PlanTierFree)
 		tier = PlanTierFree
 	}
-	name := "Free"
-	if tier == PlanTierPro {
-		name = "Pro"
-	}
 	return PlanInfo{
-		Tier:        tier,
-		Name:        name,
-		DailyEmails: spec.DailyEmailCap,
-		AICredits:   spec.AICreditsPerDay,
-		Domains:     spec.IncludedDomains,
-		Mailboxes:   spec.IncludedMailboxes,
+		Tier:            tier,
+		Name:            planDisplayName(tier),
+		Label:           spec.Label,
+		DailyEmails:     spec.DailyEmailCap,
+		MonthlyEmails:   spec.MonthlyEmailCap,
+		MaxContacts:     spec.MaxContacts,
+		AICredits:       spec.AICreditsPerDay,
+		MonthlyPriceUSD: spec.MonthlyPriceUSD,
+		Domains:         spec.IncludedDomains,
+		Mailboxes:       spec.IncludedMailboxes,
+		Paid:            IsPaidPlanTier(tier),
+		Recommended:     tier == PlanTierGrowth,
 	}
 }
 
-func AllPlanTiers() []PlanInfo {
+// CountUserContacts returns how many contacts the user owns.
+func CountUserContacts(userID int64) (int, error) {
+	var n int
+	err := db.QueryRow(`SELECT COUNT(*) FROM contact WHERE user_id = ?`, userID).Scan(&n)
+	return n, err
+}
+
+// AssertCanCreateContact errors when the plan contact cap would be exceeded by one new contact.
+func AssertCanCreateContact(userID int64) error {
+	u, err := GetUserByID(userID)
+	if err != nil {
+		return err
+	}
+	spec, err := PlanSpecForTier(NormalizePlanTier(u.PlanTier))
+	if err != nil || spec.MaxContacts <= 0 {
+		return nil
+	}
+	n, err := CountUserContacts(userID)
+	if err != nil {
+		return err
+	}
+	if n >= spec.MaxContacts {
+		return fmt.Errorf("contact limit reached (%d). Upgrade or delete contacts to add more", spec.MaxContacts)
+	}
+	return nil
+}
+
+// CountUserEmailsThisMonth counts delivered/attempted sends in the current calendar month (UTC).
+func CountUserEmailsThisMonth(userID int64) (int, error) {
+	now := time.Now().UTC()
+	start := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+	var n int
+	err := db.QueryRow(`
+		SELECT COUNT(*) FROM email_sends
+		WHERE user_id = ?
+		  AND sent_at IS NOT NULL
+		  AND sent_at >= ?
+	`, userID, start).Scan(&n)
+	return n, err
+}
+
+// UserMonthlyEmailRemaining returns monthly cap and how many sends are left (ok=false when exhausted).
+// Cap 0 means no monthly restriction.
+func UserMonthlyEmailRemaining(userID int64) (cap int, remaining int, ok bool) {
+	u, err := GetUserByID(userID)
+	if err != nil {
+		return 0, 0, false
+	}
+	spec, err := PlanSpecForTier(NormalizePlanTier(u.PlanTier))
+	if err != nil || spec.MonthlyEmailCap <= 0 {
+		return 0, 0, true
+	}
+	cap = spec.MonthlyEmailCap
+	used, err := CountUserEmailsThisMonth(userID)
+	if err != nil {
+		return cap, 0, false
+	}
+	remaining = cap - used
+	if remaining < 0 {
+		remaining = 0
+	}
+	return cap, remaining, remaining > 0
+}
+
+// UserUnderMonthlyEmailCap reports whether the user may send another campaign email this month.
+func UserUnderMonthlyEmailCap(userID int64) bool {
+	_, _, ok := UserMonthlyEmailRemaining(userID)
+	return ok
+}
+
+// PaidPlanTiers returns the purchasable email plans (Starter → Hyper).
+func PaidPlanTiers() []PlanInfo {
 	return []PlanInfo{
-		PlanInfoForTier(PlanTierFree),
-		PlanInfoForTier(PlanTierPro),
+		PlanInfoForTier(PlanTierStarter),
+		PlanInfoForTier(PlanTierGrowth),
+		PlanInfoForTier(PlanTierScale),
+		PlanInfoForTier(PlanTierHyper),
+	}
+}
+
+// AllPlanTiers includes Free plus paid plans (legacy callers / signup).
+func AllPlanTiers() []PlanInfo {
+	return append([]PlanInfo{PlanInfoForTier(PlanTierFree)}, PaidPlanTiers()...)
+}
+
+func IsPaidPlanTier(tier PlanTier) bool {
+	switch NormalizePlanTier(string(tier)) {
+	case PlanTierStarter, PlanTierGrowth, PlanTierScale, PlanTierHyper:
+		return true
+	default:
+		return false
 	}
 }
 
 func NormalizePlanTier(s string) PlanTier {
 	switch PlanTier(strings.ToLower(strings.TrimSpace(s))) {
+	case PlanTierStarter:
+		return PlanTierStarter
+	case PlanTierGrowth:
+		return PlanTierGrowth
+	case PlanTierScale:
+		return PlanTierScale
+	case PlanTierHyper:
+		return PlanTierHyper
 	case PlanTierPro, PlanTierStandard:
-		// Legacy "standard" maps to Pro.
-		return PlanTierPro
+		// Legacy Pro/Standard → Starter (same 10k/5k envelope).
+		return PlanTierStarter
+	case PlanTierFree:
+		return PlanTierFree
 	default:
 		return PlanTierFree
+	}
+}
+
+func IsValidSignupPlan(s string) bool {
+	raw := PlanTier(strings.ToLower(strings.TrimSpace(s)))
+	switch raw {
+	case PlanTierFree, PlanTierStarter, PlanTierGrowth, PlanTierScale, PlanTierHyper:
+		return true
+	case PlanTierPro, PlanTierStandard:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -118,10 +300,10 @@ func UserIsPro(userID int64) bool {
 	if UserIsAdmin(u) {
 		return true
 	}
-	return NormalizePlanTier(u.PlanTier) == PlanTierPro && UserHasAppAccess(u)
+	return IsPaidPlanTier(NormalizePlanTier(u.PlanTier)) && UserHasAppAccess(u)
 }
 
-// EnsureAdminProAccess marks the user as admin (if needed) and applies Pro sending limits.
+// EnsureAdminProAccess marks the user as admin (if needed) and applies Hyper limits.
 func EnsureAdminProAccess(userID int64) error {
 	u, err := GetUserByID(userID)
 	if err != nil {
@@ -133,8 +315,8 @@ func EnsureAdminProAccess(userID int64) error {
 	if !u.IsAdmin {
 		_ = SetUserAdmin(userID, true)
 	}
-	if NormalizePlanTier(u.PlanTier) != PlanTierPro {
-		return ApplyPlanLimitsToUser(userID, PlanTierPro)
+	if NormalizePlanTier(u.PlanTier) != PlanTierHyper {
+		return ApplyPlanLimitsToUser(userID, PlanTierHyper)
 	}
 	return nil
 }
@@ -169,7 +351,7 @@ func ApplyPlanLimitsToUser(userID int64, tier PlanTier) error {
 		return err
 	}
 
-	if tier == PlanTierPro {
+	if IsPaidPlanTier(tier) {
 		_, _ = tx.Exec(`
 			UPDATE smtp_accounts SET status='inactive', is_default=0, updated_at=?
 			WHERE user_id=? AND mailbox_source=?
@@ -295,9 +477,9 @@ func EnsureSharedSMTPAccountForUser(userID int64, spec planSpec) error {
 	return err
 }
 
-// MigrateLegacyStandardUsersToPro remaps plan_tier=standard → pro and reapplies limits.
+// MigrateLegacyStandardUsersToPro remaps plan_tier=standard|pro → starter and reapplies limits.
 func MigrateLegacyStandardUsersToPro() {
-	_, _ = db.Exec(`UPDATE users SET plan_tier = 'pro' WHERE LOWER(COALESCE(plan_tier,'')) = 'standard'`)
+	_, _ = db.Exec(`UPDATE users SET plan_tier = 'starter' WHERE LOWER(COALESCE(plan_tier,'')) IN ('standard', 'pro')`)
 	MigrateAllUsersToPlanLimits()
 }
 

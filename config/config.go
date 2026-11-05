@@ -29,10 +29,14 @@ var (
 	WhopAPIBase           string
 	WhopWebhookSecret     string
 	WhopCompanyID         string
-	WhopPlanID            string
-	WhopPlanIDStandard   string
-	WhopPlanIDPro        string
-	WhopProductID         string
+	WhopPlanID           string
+	WhopPlanIDStandard   string // legacy
+	WhopPlanIDPro        string // legacy → Starter fallback
+	WhopPlanIDStarter    string
+	WhopPlanIDGrowth     string
+	WhopPlanIDScale      string
+	WhopPlanIDHyper      string
+	WhopProductID        string
 	WhopMailboxAddonID    string
 	WhopDomainAddonID     string
 	InboxKitAPIKey        string
@@ -105,6 +109,10 @@ func reloadFromEnv() {
 	WhopPlanID = strings.TrimSpace(os.Getenv("WHOP_PLAN_ID"))
 	WhopPlanIDStandard = strings.TrimSpace(os.Getenv("WHOP_PLAN_ID_STANDARD"))
 	WhopPlanIDPro = strings.TrimSpace(os.Getenv("WHOP_PLAN_ID_PRO"))
+	WhopPlanIDStarter = strings.TrimSpace(os.Getenv("WHOP_PLAN_ID_STARTER"))
+	WhopPlanIDGrowth = strings.TrimSpace(os.Getenv("WHOP_PLAN_ID_GROWTH"))
+	WhopPlanIDScale = strings.TrimSpace(os.Getenv("WHOP_PLAN_ID_SCALE"))
+	WhopPlanIDHyper = strings.TrimSpace(os.Getenv("WHOP_PLAN_ID_HYPER"))
 	WhopProductID = strings.TrimSpace(os.Getenv("WHOP_PRODUCT_ID"))
 	WhopMailboxAddonID = strings.TrimSpace(os.Getenv("WHOP_MAILBOX_ADDON_ID"))
 	WhopDomainAddonID = strings.TrimSpace(os.Getenv("WHOP_DOMAIN_ADDON_ID"))

@@ -265,6 +265,36 @@ func RenameLibraryItem(userID int64, kind string, id int64, name string) error {
 	}
 }
 
+// LibraryFolderIDsForRefs returns distinct folder_ids for the given items (before move/delete).
+func LibraryFolderIDsForRefs(userID int64, refs []LibraryRef) []int64 {
+	seen := map[int64]bool{}
+	var out []int64
+	add := func(folderID int64) {
+		if folderID <= 0 || seen[folderID] {
+			return
+		}
+		seen[folderID] = true
+		out = append(out, folderID)
+	}
+	for _, ref := range refs {
+		switch strings.ToLower(ref.Kind) {
+		case LibraryKindTemplate:
+			if t, err := GetTemplateForUser(ref.ID, userID); err == nil {
+				add(t.FolderID)
+			}
+		case LibraryKindWorkflow:
+			if w, err := GetWorkflowForUser(ref.ID, userID); err == nil {
+				add(w.FolderID)
+			}
+		case LibraryKindContacts:
+			if cl, err := GetContactListForUser(ref.ID, userID); err == nil {
+				add(cl.FolderID)
+			}
+		}
+	}
+	return out
+}
+
 func DeleteLibraryItems(userID int64, refs []LibraryRef) (int, error) {
 	n := 0
 	var firstErr error

@@ -22,15 +22,15 @@ const appGoogleModeSignup = "signup"
 
 func SignupPlanPage(c *gin.Context) {
 	plan := strings.ToLower(c.Param("plan"))
-	if plan == "standard" {
-		c.Redirect(http.StatusFound, "/signup/pro")
+	if plan == "standard" || plan == "pro" {
+		c.Redirect(http.StatusFound, "/signup/starter")
+		return
+	}
+	if !model.IsValidSignupPlan(plan) {
+		c.Redirect(http.StatusFound, "/signup/starter")
 		return
 	}
 	tier := model.NormalizePlanTier(plan)
-	if plan != string(model.PlanTierFree) && plan != string(model.PlanTierPro) {
-		c.Redirect(http.StatusFound, "/signup/free")
-		return
-	}
 
 	spec, err := model.PlanSpecForTier(tier)
 	if err != nil {
@@ -38,21 +38,23 @@ func SignupPlanPage(c *gin.Context) {
 		return
 	}
 
-	planDisplay := "Free"
-	if tier == model.PlanTierPro {
-		planDisplay = "Pro"
-	}
-
+	info := model.PlanInfoForTier(tier)
 	c.HTML(http.StatusOK, "pricing_plan.html", gin.H{
-		"title":            "Pricing: " + planDisplay,
-		"active":           "pricing",
-		"plan":             string(tier),
-		"dailyEmails":      spec.DailyEmailCap,
-		"aiCreditsPerDay":  spec.AICreditsPerDay,
-		"warmup":           false,
-		"includedDomains":  spec.IncludedDomains,
+		"title":             "Pricing: " + info.Name,
+		"active":            "pricing",
+		"plan":              string(tier),
+		"planName":          info.Name,
+		"planLabel":         info.Label,
+		"monthlyPrice":      info.MonthlyPriceUSD,
+		"dailyEmails":       spec.DailyEmailCap,
+		"monthlyEmails":     spec.MonthlyEmailCap,
+		"maxContacts":       spec.MaxContacts,
+		"aiCreditsPerDay":   spec.AICreditsPerDay,
+		"warmup":            false,
+		"includedDomains":   spec.IncludedDomains,
 		"includedMailboxes": spec.IncludedMailboxes,
-		"stripeLikeNote":   "Whop checkout is used for Pro.",
+		"paid":              info.Paid,
+		"stripeLikeNote":    "Whop checkout unlocks paid plans after Google sign-in.",
 	})
 }
 
@@ -72,14 +74,14 @@ func AppGoogleLoginStart(c *gin.Context) {
 
 func AppGoogleStart(c *gin.Context) {
 	plan := strings.TrimSpace(c.Query("plan"))
-	if strings.EqualFold(plan, "standard") {
-		plan = string(model.PlanTierPro)
+	if strings.EqualFold(plan, "standard") || strings.EqualFold(plan, "pro") {
+		plan = string(model.PlanTierStarter)
 	}
-	tier := model.NormalizePlanTier(plan)
-	if plan != string(model.PlanTierFree) && plan != string(model.PlanTierPro) {
-		c.Redirect(http.StatusFound, "/signup/free")
+	if !model.IsValidSignupPlan(plan) {
+		c.Redirect(http.StatusFound, "/signup/starter")
 		return
 	}
+	tier := model.NormalizePlanTier(plan)
 	if !googleoauth.IsConfigured() {
 		c.Redirect(http.StatusFound, "/signup/free?error=Google+sign-in+not+configured")
 		return
@@ -146,11 +148,11 @@ func AppGoogleCallback(c *gin.Context) {
 		return
 	}
 
-	tier := model.NormalizePlanTier(planStr)
-	if planStr != "" && planStr != string(model.PlanTierFree) && planStr != string(model.PlanTierPro) && !strings.EqualFold(planStr, "standard") {
+	if planStr != "" && !model.IsValidSignupPlan(planStr) {
 		oauthErrRedirect("Unknown plan")
 		return
 	}
+	tier := model.NormalizePlanTier(planStr)
 
 	userID, err := ensureUserForGoogle(normalizedEmail)
 	if err != nil {

@@ -8,126 +8,258 @@
   <div class="app-page-header-text">
     <a href="/settings" class="app-page-back">← Settings</a>
     <h2 class="app-page-title">Billing</h2>
-    <p class="app-page-sub">View your plan, switch tiers, or cancel your subscription.</p>
+    <p class="app-page-sub">Pick a volume plan. Domains and mailboxes are add-ons.</p>
   </div>
 </header>
-<div class="app-page-body app-page-body--narrow">
+<div class="app-page-body">
 {{if .success}}<div class="alert-success mb-6">{{.success}}</div>{{end}}
 {{if .error}}<div class="alert-error mb-6">{{.error}}</div>{{end}}
 
-<div class="card mb-6">
-    <h3 class="card-title">Your plan</h3>
-    <p class="text-sm text-slate-600 mb-4">Signed in as <strong>{{.user.Email}}</strong></p>
-    {{if .isAdmin}}
-    <p class="text-green-700 font-medium mb-2">Admin — full app access without a subscription.</p>
-    {{else}}
-    <div class="flex flex-wrap items-start justify-between gap-4">
-        <div>
-            <p class="text-2xl font-bold text-charcoal">{{.currentPlan.Name}}</p>
-            <p class="text-sm text-slate-500 mt-1">Status: <span class="font-medium text-slate-700">{{.statusLabel}}</span></p>
-            {{if .renewalDate}}
-            <p class="text-sm text-slate-500 mt-1">{{if .cancelAtPeriodEnd}}Access until{{else}}Renews{{end}}: <span class="font-medium text-slate-700">{{.renewalDate}}</span></p>
-            {{end}}
-            {{if .cancelAtPeriodEnd}}
-            <p class="text-sm text-amber-700 mt-2">Cancellation scheduled — you keep Pro until the date above, then move to Free.</p>
-            {{end}}
-        </div>
-        <div class="text-sm text-slate-600 space-y-1">
-            <p><strong>{{.currentPlan.DailyEmails}}</strong> emails / day</p>
-            <p><strong>{{.currentPlan.AICredits}}</strong> AI credits / day</p>
-            <p>Daily limit: {{.currentPlan.DailyEmails}}/mailbox</p>
-        </div>
+<section class="billing-current mb-8">
+  <div class="billing-current-inner">
+    <div class="billing-current-main">
+      <p class="billing-eyebrow">Current plan</p>
+      {{if .isAdmin}}
+      <h3 class="billing-current-name">Admin</h3>
+      <p class="billing-current-meta">Full access without a subscription · {{.user.Email}}</p>
+      {{else}}
+      <h3 class="billing-current-name">{{.currentPlan.Name}}{{if .currentPlan.Label}} <span class="billing-current-label">{{.currentPlan.Label}}</span>{{end}}</h3>
+      <p class="billing-current-meta">
+        {{.statusLabel}}
+        {{if .renewalDate}} · {{if .cancelAtPeriodEnd}}access until{{else}}renews{{end}} {{.renewalDate}}{{end}}
+        · {{.user.Email}}
+      </p>
+      {{if .cancelAtPeriodEnd}}
+      <p class="billing-cancel-note">Cancellation scheduled — you keep this plan until the date above, then move to Free.</p>
+      {{end}}
+      {{end}}
     </div>
-    {{if .manageURL}}
-    <a href="{{.manageURL}}" target="_blank" rel="noopener" class="inline-block mt-4 text-sm text-brand-600 font-medium">Manage payment method on Whop →</a>
+    {{if and (not .isAdmin) .currentPlan.Paid}}
+    <div class="billing-usage">
+      <div class="billing-usage-row">
+        <div class="billing-usage-head">
+          <span>Emails this month</span>
+          <span>{{.emailsUsed}} / {{.emailsCap}}</span>
+        </div>
+        <div class="billing-usage-track"><div class="billing-usage-fill" style="width: {{printf "%.0f" .emailsPct}}%"></div></div>
+      </div>
+      <div class="billing-usage-row">
+        <div class="billing-usage-head">
+          <span>Contacts</span>
+          <span>{{.contactsUsed}} / {{.contactsCap}}</span>
+        </div>
+        <div class="billing-usage-track"><div class="billing-usage-fill" style="width: {{printf "%.0f" .contactsPct}}%"></div></div>
+      </div>
+    </div>
+    {{else if not .isAdmin}}
+    <div class="billing-current-side">
+      <p class="text-sm text-slate-600">Free shared mailbox · {{.currentPlan.DailyEmails}} emails / day</p>
+    </div>
     {{end}}
-    {{end}}
-</div>
+  </div>
+  {{if .manageURL}}
+  <a href="{{.manageURL}}" target="_blank" rel="noopener" class="billing-manage-link">Manage payment method on Whop →</a>
+  {{end}}
+</section>
 
 {{if not .isAdmin}}
-<h3 class="text-lg font-semibold text-charcoal mb-3">Change plan</h3>
-<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-    {{range .plans}}
-    <div class="card {{if .Current}}ring-2 ring-brand-500{{end}}">
-        <div class="flex items-center justify-between mb-2">
-            <h4 class="font-semibold text-charcoal">{{.Name}}</h4>
-            {{if .Current}}<span class="badge badge-blue text-xs">Current</span>{{end}}
-        </div>
-        <ul class="text-sm text-slate-600 space-y-1 mb-4">
-            <li>{{.DailyEmails}} emails / day{{if eq .Tier "pro"}} per mailbox{{end}}</li>
-            <li>{{.AICredits}} AI credits / day</li>
-            <li>{{.DailyEmails}} emails/day per mailbox</li>
-            {{if eq .Tier "pro"}}
-            <li>Buy domains &amp; mailboxes as add-ons</li>
-            {{else}}
-            <li>Shared sending mailbox</li>
-            {{end}}
-        </ul>
-        {{if .Current}}
-        <p class="text-xs text-slate-400">Your active plan</p>
-        {{else if eq .Tier "free"}}
-            {{if $.onPro}}
-            <div class="space-y-2">
-                {{if and $.hasPaidMembership (not $.cancelAtPeriodEnd)}}
-                <form method="POST" action="/settings/billing/cancel">
-                    <input type="hidden" name="mode" value="at_period_end">
-                    <button type="submit" class="btn-secondary w-full text-sm" onclick="return confirm('Cancel Pro at the end of this billing period? You keep Pro until then.');">Switch to Free at period end</button>
-                </form>
-                {{end}}
-                <form method="POST" action="/settings/billing/cancel">
-                    <input type="hidden" name="mode" value="immediate">
-                    <button type="submit" class="btn-primary w-full text-sm" onclick="return confirm('Revoke Pro now and switch to Free immediately?');">{{if $.hasPaidMembership}}Revoke Pro now{{else}}Switch to Free{{end}}</button>
-                </form>
-                {{if and $.hasPaidMembership $.cancelAtPeriodEnd}}
-                <p class="text-xs text-slate-500">Cancellation already scheduled. Use revoke to end Pro immediately.</p>
-                {{end}}
-            </div>
-            {{else}}
-            <p class="text-xs text-slate-400">You’re on Free when not subscribed to Pro</p>
-            {{end}}
-        {{else if $.whopConfigured}}
-        <form method="POST" action="/settings/billing/checkout">
-            <input type="hidden" name="plan" value="{{.Tier}}">
-            <button type="submit" class="btn-primary w-full text-sm">Switch to {{.Name}}</button>
-        </form>
-        {{else}}
-        <p class="text-xs text-slate-400">Whop billing not configured</p>
-        {{end}}
-    </div>
-    {{end}}
-</div>
+<section class="mb-10">
+  <div class="billing-section-head">
+    <h3 class="billing-section-title">Plans</h3>
+    <p class="billing-section-sub">Monthly email volume and contact seats. No daily send cap on paid plans.</p>
+  </div>
 
-{{if .onPro}}
-<div class="card border-amber-200 bg-amber-50/50">
-    <h3 class="card-title text-amber-900">Leave Pro</h3>
-    {{if .cancelAtPeriodEnd}}
-    <p class="text-sm text-amber-800 mb-4">Your subscription is set to end on {{if .renewalDate}}{{.renewalDate}}{{else}}the renewal date{{end}}. You can revoke Pro immediately below.</p>
-    <form method="POST" action="/settings/billing/cancel" onsubmit="return confirm('Revoke Pro now and switch to Free immediately?');">
-        <input type="hidden" name="mode" value="immediate">
-        <button type="submit" class="btn-secondary text-sm">Revoke Pro now</button>
-    </form>
-    {{else}}
-    <p class="text-sm text-amber-800 mb-4">Cancel at period end to keep Pro until renewal, or revoke immediately to move to Free now.</p>
-    <div class="flex flex-wrap gap-2">
-        {{if .hasPaidMembership}}
-        <form method="POST" action="/settings/billing/cancel" onsubmit="return confirm('Cancel Pro at the end of this billing period?');">
-            <input type="hidden" name="mode" value="at_period_end">
-            <button type="submit" class="btn-secondary text-sm">Cancel at period end</button>
-        </form>
-        {{end}}
-        <form method="POST" action="/settings/billing/cancel" onsubmit="return confirm('Revoke Pro now and switch to Free immediately?');">
-            <input type="hidden" name="mode" value="immediate">
-            <button type="submit" class="btn-secondary text-sm">Revoke Pro now</button>
-        </form>
-    </div>
+  <div class="billing-tier-grid">
+    {{range .plans}}
+    <article class="billing-tier {{if .Current}}billing-tier--current{{end}} {{if .Recommended}}billing-tier--recommended{{end}}">
+      {{if .Recommended}}<span class="billing-tier-badge">Popular</span>{{end}}
+      {{if .Current}}<span class="billing-tier-badge billing-tier-badge--current">Current</span>{{end}}
+      <div class="billing-tier-top">
+        <p class="billing-tier-name">{{.Name}}</p>
+        <p class="billing-tier-price"><span class="billing-tier-currency">$</span>{{.MonthlyPriceUSD}}<span class="billing-tier-period">/mo</span></p>
+        <p class="billing-tier-volume">{{.Label}} emails / month</p>
+      </div>
+      <ul class="billing-tier-features">
+        <li><strong>{{.MonthlyEmails}}</strong> emails / month</li>
+        <li><strong>{{.MaxContacts}}</strong> contacts</li>
+        <li><strong>{{.AICredits}}</strong> AI credits / day</li>
+        <li>Custom domains &amp; mailboxes as add-ons</li>
+      </ul>
+      {{if .Current}}
+      <p class="billing-tier-footnote">Your active plan</p>
+      {{else if $.whopConfigured}}
+      <form method="POST" action="/settings/billing/checkout">
+        <input type="hidden" name="plan" value="{{.Tier}}">
+        <button type="submit" class="billing-tier-cta {{if .Recommended}}billing-tier-cta--primary{{else}}billing-tier-cta--ghost{{end}}">{{.CheckoutLabel}}</button>
+      </form>
+      {{else}}
+      <p class="billing-tier-footnote">Whop billing not configured</p>
+      {{end}}
+    </article>
     {{end}}
-</div>
+  </div>
+</section>
+
+{{if .onPaid}}
+<section class="billing-leave card">
+  <h3 class="card-title">Cancel subscription</h3>
+  {{if .cancelAtPeriodEnd}}
+  <p class="text-sm text-slate-600 mb-4">Your plan ends on {{if .renewalDate}}{{.renewalDate}}{{else}}the renewal date{{end}}. Revoke now to move to Free immediately.</p>
+  <form method="POST" action="/settings/billing/cancel" onsubmit="return confirm('End your plan now and switch to Free?');">
+    <input type="hidden" name="mode" value="immediate">
+    <button type="submit" class="btn-secondary text-sm">End plan now</button>
+  </form>
+  {{else}}
+  <p class="text-sm text-slate-600 mb-4">Cancel at period end to keep access until renewal, or end immediately.</p>
+  <div class="flex flex-wrap gap-2">
+    {{if .hasPaidMembership}}
+    <form method="POST" action="/settings/billing/cancel" onsubmit="return confirm('Cancel at the end of this billing period?');">
+      <input type="hidden" name="mode" value="at_period_end">
+      <button type="submit" class="btn-secondary text-sm">Cancel at period end</button>
+    </form>
+    {{end}}
+    <form method="POST" action="/settings/billing/cancel" onsubmit="return confirm('End your plan now and switch to Free?');">
+      <input type="hidden" name="mode" value="immediate">
+      <button type="submit" class="btn-secondary text-sm">End plan now</button>
+    </form>
+  </div>
+  {{end}}
+</section>
 {{end}}
 {{end}}
 
 </div>
 </div>
 {{template "page_shell_end" .}}
+<style>
+.billing-current {
+  border: 1px solid #e2e8f0;
+  border-radius: 1rem;
+  background: linear-gradient(160deg, #f8fafc 0%, #fff 55%);
+  padding: 1.5rem 1.75rem;
+}
+.billing-current-inner {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.75rem;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+.billing-eyebrow {
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #64748b;
+  font-weight: 600;
+  margin: 0 0 0.35rem;
+}
+.billing-current-name {
+  font-size: 1.75rem;
+  line-height: 1.15;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+.billing-current-label {
+  display: inline-block;
+  margin-left: 0.35rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #334155;
+  background: #e2e8f0;
+  border-radius: 999px;
+  padding: 0.15rem 0.55rem;
+  vertical-align: middle;
+}
+.billing-current-meta { margin: 0.5rem 0 0; color: #64748b; font-size: 0.9rem; }
+.billing-cancel-note { margin: 0.75rem 0 0; color: #b45309; font-size: 0.875rem; }
+.billing-manage-link { display: inline-block; margin-top: 1rem; font-size: 0.875rem; font-weight: 600; color: var(--color-brand-600, #2563eb); }
+.billing-usage { min-width: min(100%, 16rem); flex: 1 1 14rem; max-width: 20rem; display: grid; gap: 0.85rem; }
+.billing-usage-head { display: flex; justify-content: space-between; font-size: 0.8rem; color: #475569; margin-bottom: 0.35rem; }
+.billing-usage-track { height: 0.45rem; background: #e2e8f0; border-radius: 999px; overflow: hidden; }
+.billing-usage-fill { height: 100%; background: #0f172a; border-radius: 999px; }
+.billing-section-head { margin-bottom: 1.25rem; }
+.billing-section-title { font-size: 1.15rem; font-weight: 700; color: #0f172a; margin: 0; }
+.billing-section-sub { margin: 0.35rem 0 0; color: #64748b; font-size: 0.9rem; }
+.billing-tier-grid {
+  display: grid;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+  gap: 1rem;
+}
+@media (min-width: 768px) {
+  .billing-tier-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (min-width: 1100px) {
+  .billing-tier-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+.billing-tier {
+  position: relative;
+  border: 1px solid #e2e8f0;
+  border-radius: 1rem;
+  background: #fff;
+  padding: 1.25rem 1.15rem 1.15rem;
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+.billing-tier--recommended {
+  border-color: #0f172a;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+}
+.billing-tier--current { background: #f8fafc; }
+.billing-tier-badge {
+  position: absolute;
+  top: 0.85rem;
+  right: 0.85rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: #0f172a;
+  color: #fff;
+  border-radius: 999px;
+  padding: 0.2rem 0.5rem;
+}
+.billing-tier-badge--current { background: #2563eb; }
+.billing-tier-name { font-size: 0.95rem; font-weight: 650; color: #0f172a; margin: 0; }
+.billing-tier-price { margin: 0.65rem 0 0; color: #0f172a; font-weight: 750; font-size: 2rem; line-height: 1; }
+.billing-tier-currency { font-size: 1.1rem; font-weight: 650; vertical-align: super; margin-right: 0.05rem; }
+.billing-tier-period { font-size: 0.85rem; font-weight: 500; color: #64748b; margin-left: 0.15rem; }
+.billing-tier-volume { margin: 0.45rem 0 0; color: #64748b; font-size: 0.85rem; }
+.billing-tier-features {
+  list-style: none;
+  padding: 0;
+  margin: 1.1rem 0 1.25rem;
+  display: grid;
+  gap: 0.45rem;
+  color: #334155;
+  font-size: 0.875rem;
+  flex: 1;
+}
+.billing-tier-features strong { color: #0f172a; font-weight: 650; }
+.billing-tier-cta {
+  width: 100%;
+  border-radius: 0.65rem;
+  padding: 0.65rem 0.85rem;
+  font-size: 0.875rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+.billing-tier-cta--primary {
+  background: #0f172a;
+  color: #fff;
+  border: 1px solid #0f172a;
+}
+.billing-tier-cta--primary:hover { background: #1e293b; }
+.billing-tier-cta--ghost {
+  background: #fff;
+  color: #0f172a;
+  border: 1px solid #cbd5e1;
+}
+.billing-tier-cta--ghost:hover { background: #f8fafc; }
+.billing-tier-footnote { margin: 0; font-size: 0.8rem; color: #94a3b8; }
+.billing-leave { border-color: #fde68a; background: #fffbeb; }
+</style>
 </body>
 </html>
 {{end}}

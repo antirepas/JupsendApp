@@ -7,7 +7,7 @@
 <header class="app-page-header">
   <div class="app-page-header-text">
     <h2 class="app-page-title">Mailboxes</h2>
-    <p class="app-page-sub">{{if .isPro}}Buy seats from jupsend, or add domains and credentials you already own.{{else}}Free plan uses a shared sending address. Upgrade to Pro for your own domain and mailboxes.{{end}}</p>
+    <p class="app-page-sub">{{if .isPro}}Buy seats from jupsend, or add domains and credentials you already own.{{else}}Free plan uses a shared sending address. Upgrade for your own domain and mailboxes.{{end}}</p>
   </div>
   <div class="app-page-actions">
     {{if .isPro}}
@@ -15,7 +15,7 @@
     <a href="/mailboxes/buy" class="btn-secondary">Buy mailboxes</a>
     <a href="/mailboxes?attach=1" class="btn-secondary">Add external</a>
     {{else}}
-    <a href="/settings/billing" class="btn-primary">Upgrade to Pro</a>
+    <a href="/settings/billing" class="btn-primary">See plans</a>
     {{end}}
   </div>
 </header>

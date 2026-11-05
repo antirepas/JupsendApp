@@ -537,9 +537,9 @@ func syncMailboxCredentialsFiltered(userID, domainID int64, domain string, allow
 		}
 	}
 
-	daily := 50
+	daily := 0
 	if u, err := GetUserByID(userID); err == nil {
-		if spec, pErr := PlanSpecForTier(NormalizePlanTier(u.PlanTier)); pErr == nil && spec.DailyEmailCap > 0 {
+		if spec, pErr := PlanSpecForTier(NormalizePlanTier(u.PlanTier)); pErr == nil {
 			daily = spec.DailyEmailCap
 		}
 	}
@@ -795,9 +795,9 @@ func RefreshMailboxFromInboxKit(userID, mailboxID int64) error {
 	if pass == "" {
 		return fmt.Errorf("InboxKit returned empty credentials")
 	}
-	daily := 50
+	daily := 0
 	if u, err := GetUserByID(userID); err == nil {
-		if spec, pErr := PlanSpecForTier(NormalizePlanTier(u.PlanTier)); pErr == nil && spec.DailyEmailCap > 0 {
+		if spec, pErr := PlanSpecForTier(NormalizePlanTier(u.PlanTier)); pErr == nil {
 			daily = spec.DailyEmailCap
 		}
 	}
@@ -909,8 +909,8 @@ func AttachMailboxSmart(userID int64, email, fromName, smtpHost, smtpPort, imapH
 				}
 				imapH := firstNonEmpty(creds.IMAPHost, imapHost, "imap.gmail.com")
 				imapP := firstNonEmpty(creds.IMAPPort, imapPort, "993")
-				daily := 50
-				if spec, err := PlanSpecForTier(PlanTierPro); err == nil && spec.DailyEmailCap > 0 {
+				daily := 0
+				if spec, err := PlanSpecForTier(PlanTierPro); err == nil {
 					daily = spec.DailyEmailCap
 				}
 				if fromName == "" {

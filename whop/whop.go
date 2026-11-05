@@ -100,10 +100,45 @@ func CreateCheckoutWithPlanID(userID int64, planID, redirectURL string, metadata
 func resolvePlanIDForTier(tier model.PlanTier) (string, error) {
 	tier = model.NormalizePlanTier(string(tier))
 	switch tier {
-	case model.PlanTierPro:
-		return resolvePlanIDFromConfig(config.WhopPlanIDPro, config.WhopPlanID, config.WhopProductID)
+	case model.PlanTierStarter:
+		return resolvePlanIDFromConfig(firstNonEmpty(config.WhopPlanIDStarter, config.WhopPlanIDPro, config.WhopPlanIDStandard), config.WhopPlanID, config.WhopProductID)
+	case model.PlanTierGrowth:
+		return resolvePlanIDFromConfig(config.WhopPlanIDGrowth, "", "")
+	case model.PlanTierScale:
+		return resolvePlanIDFromConfig(config.WhopPlanIDScale, "", "")
+	case model.PlanTierHyper:
+		return resolvePlanIDFromConfig(config.WhopPlanIDHyper, "", "")
 	default:
-		return "", fmt.Errorf("whop checkout is only available for Pro")
+		return "", fmt.Errorf("whop checkout is only available for paid plans")
+	}
+}
+
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if strings.TrimSpace(v) != "" {
+			return strings.TrimSpace(v)
+		}
+	}
+	return ""
+}
+
+// TierFromWhopPlanID maps a Whop plan_ id back to a jupsend tier (for webhooks without metadata).
+func TierFromWhopPlanID(planID string) model.PlanTier {
+	planID = strings.TrimSpace(planID)
+	if planID == "" {
+		return model.PlanTierStarter
+	}
+	switch planID {
+	case config.WhopPlanIDStarter, config.WhopPlanIDPro, config.WhopPlanIDStandard, config.WhopPlanID:
+		return model.PlanTierStarter
+	case config.WhopPlanIDGrowth:
+		return model.PlanTierGrowth
+	case config.WhopPlanIDScale:
+		return model.PlanTierScale
+	case config.WhopPlanIDHyper:
+		return model.PlanTierHyper
+	default:
+		return model.PlanTierStarter
 	}
 }
 

@@ -16,11 +16,16 @@ import (
 )
 
 type billingPlanView struct {
-	Tier        string
-	Name        string
-	DailyEmails int
-	AICredits   int
-	Current     bool
+	Tier            string
+	Name            string
+	Label           string
+	MonthlyEmails   int
+	MaxContacts     int
+	AICredits       int
+	MonthlyPriceUSD int
+	Recommended     bool
+	Current         bool
+	CheckoutLabel   string
 }
 
 func BillingPage(c *gin.Context) {
@@ -35,13 +40,28 @@ func BillingPage(c *gin.Context) {
 	currentPlan := model.PlanInfoForTier(currentTier)
 
 	var plans []billingPlanView
-	for _, p := range model.AllPlanTiers() {
+	for _, p := range model.PaidPlanTiers() {
+		checkout := "Choose " + p.Name
+		if p.Tier == currentTier {
+			checkout = "Current plan"
+		} else if model.IsPaidPlanTier(currentTier) {
+			if planRank(p.Tier) > planRank(currentTier) {
+				checkout = "Upgrade"
+			} else {
+				checkout = "Switch"
+			}
+		}
 		plans = append(plans, billingPlanView{
-			Tier:        string(p.Tier),
-			Name:        p.Name,
-			DailyEmails: p.DailyEmails,
-			AICredits:   p.AICredits,
-			Current:     p.Tier == currentTier,
+			Tier:            string(p.Tier),
+			Name:            p.Name,
+			Label:           p.Label,
+			MonthlyEmails:   p.MonthlyEmails,
+			MaxContacts:     p.MaxContacts,
+			AICredits:       p.AICredits,
+			MonthlyPriceUSD: p.MonthlyPriceUSD,
+			Recommended:     p.Recommended,
+			Current:         p.Tier == currentTier && model.UserHasActiveSubscription(user),
+			CheckoutLabel:   checkout,
 		})
 	}
 
@@ -68,7 +88,34 @@ func BillingPage(c *gin.Context) {
 		successMsg = "Subscription updated. You can now use the full app."
 	}
 
-	onPro := currentTier == model.PlanTierPro && !model.UserIsAdmin(user)
+	onPaid := model.IsPaidPlanTier(currentTier) && !model.UserIsAdmin(user)
+	emailsUsed := 0
+	emailsCap := currentPlan.MonthlyEmails
+	emailsPct := 0.0
+	contactsUsed := 0
+	contactsCap := currentPlan.MaxContacts
+	contactsPct := 0.0
+	if onPaid || model.UserIsAdmin(user) {
+		if n, err := model.CountUserEmailsThisMonth(userID); err == nil {
+			emailsUsed = n
+		}
+		if n, err := model.CountUserContacts(userID); err == nil {
+			contactsUsed = n
+		}
+		if emailsCap > 0 {
+			emailsPct = float64(emailsUsed) / float64(emailsCap) * 100
+			if emailsPct > 100 {
+				emailsPct = 100
+			}
+		}
+		if contactsCap > 0 {
+			contactsPct = float64(contactsUsed) / float64(contactsCap) * 100
+			if contactsPct > 100 {
+				contactsPct = 100
+			}
+		}
+	}
+
 	c.HTML(http.StatusOK, "billing.html", gin.H{
 		"title":             "Billing",
 		"active":            "billing",
@@ -83,10 +130,31 @@ func BillingPage(c *gin.Context) {
 		"renewalDate":       renewalDate,
 		"cancelAtPeriodEnd": cancelAtPeriodEnd,
 		"manageURL":         manageURL,
-		"onPro":             onPro,
-		"hasPaidMembership": onPro && user.WhopMembershipID != "",
+		"onPaid":            onPaid,
+		"hasPaidMembership": onPaid && user.WhopMembershipID != "",
 		"whopConfigured":    whop.IsConfigured(),
+		"emailsUsed":        emailsUsed,
+		"emailsCap":         emailsCap,
+		"emailsPct":         emailsPct,
+		"contactsUsed":      contactsUsed,
+		"contactsCap":       contactsCap,
+		"contactsPct":       contactsPct,
 	})
+}
+
+func planRank(tier model.PlanTier) int {
+	switch model.NormalizePlanTier(string(tier)) {
+	case model.PlanTierStarter:
+		return 1
+	case model.PlanTierGrowth:
+		return 2
+	case model.PlanTierScale:
+		return 3
+	case model.PlanTierHyper:
+		return 4
+	default:
+		return 0
+	}
 }
 
 func subscriptionStatusLabel(u model.User) string {
@@ -95,7 +163,7 @@ func subscriptionStatusLabel(u model.User) string {
 	}
 	switch u.SubscriptionStatus {
 	case model.SubStatusActive:
-		if model.NormalizePlanTier(u.PlanTier) == model.PlanTierFree {
+		if !model.IsPaidPlanTier(model.NormalizePlanTier(u.PlanTier)) {
 			return "Free"
 		}
 		return "Active"
@@ -106,7 +174,7 @@ func subscriptionStatusLabel(u model.User) string {
 	case model.SubStatusCancelled:
 		return "Cancelled"
 	default:
-		if model.NormalizePlanTier(u.PlanTier) == model.PlanTierFree {
+		if !model.IsPaidPlanTier(model.NormalizePlanTier(u.PlanTier)) {
 			return "Free"
 		}
 		return "Inactive"
@@ -121,11 +189,12 @@ func BillingCheckout(c *gin.Context) {
 		return
 	}
 
-	tier := model.NormalizePlanTier(c.PostForm("plan"))
-	if tier == model.PlanTierFree {
-		c.Redirect(http.StatusFound, "/settings/billing?error="+url.QueryEscape("Use cancel subscription to move to Free"))
+	raw := strings.TrimSpace(c.PostForm("plan"))
+	if !model.IsValidSignupPlan(raw) || model.NormalizePlanTier(raw) == model.PlanTierFree {
+		c.Redirect(http.StatusFound, "/settings/billing?error="+url.QueryEscape("Pick a paid plan to continue"))
 		return
 	}
+	tier := model.NormalizePlanTier(raw)
 
 	current := model.NormalizePlanTier(user.PlanTier)
 	if tier == current && model.UserHasActiveSubscription(user) {
@@ -159,7 +228,7 @@ func BillingCancel(c *gin.Context) {
 		c.Redirect(http.StatusFound, "/settings/billing?error="+url.QueryEscape("Admin accounts keep full access"))
 		return
 	}
-	if model.NormalizePlanTier(user.PlanTier) == model.PlanTierFree {
+	if !model.IsPaidPlanTier(model.NormalizePlanTier(user.PlanTier)) {
 		c.Redirect(http.StatusFound, "/settings/billing?error="+url.QueryEscape("You are already on Free"))
 		return
 	}
@@ -169,7 +238,7 @@ func BillingCancel(c *gin.Context) {
 		mode = "at_period_end"
 	}
 
-	// Local Pro without a Whop membership (manual / webhook gap): apply Free immediately.
+	// Local paid without a Whop membership (manual / webhook gap): apply Free immediately.
 	if user.WhopMembershipID == "" {
 		if err := downgradeUserToFree(userID); err != nil {
 			log.Printf("billing downgrade local: %v", err)
@@ -196,16 +265,16 @@ func BillingCancel(c *gin.Context) {
 			c.Redirect(http.StatusFound, "/settings/billing?error="+url.QueryEscape("Whop cancelled, but local Free switch failed: "+err.Error()))
 			return
 		}
-		c.Redirect(http.StatusFound, "/settings/billing?success="+url.QueryEscape("Pro revoked. You are now on the Free plan."))
+		c.Redirect(http.StatusFound, "/settings/billing?success="+url.QueryEscape("Subscription ended. You are now on the Free plan."))
 		return
 	}
 
-	// Period-end: keep Pro until renewal; refresh access-until date for the UI.
+	// Period-end: keep paid plan until renewal; refresh access-until date for the UI.
 	if mem, err := whop.GetMembership(user.WhopMembershipID); err == nil && mem.RenewalPeriodEnd != nil {
 		_ = model.UpdateUserSubscription(userID, user.SubscriptionStatus, user.WhopMembershipID, user.WhopMemberID, mem.RenewalPeriodEnd)
 	}
 
-	c.Redirect(http.StatusFound, "/settings/billing?success="+url.QueryEscape("Subscription will cancel at the end of your billing period. You keep Pro until then, then move to Free."))
+	c.Redirect(http.StatusFound, "/settings/billing?success="+url.QueryEscape("Subscription will cancel at the end of your billing period. You keep your plan until then, then move to Free."))
 }
 
 func downgradeUserToFree(userID int64) error {
@@ -269,7 +338,7 @@ func handleMembershipActivated(data json.RawMessage) {
 		return
 	}
 	userID := whop.UserIDFromMetadata(m.Metadata)
-	tier := planTierFromMetadata(m.Metadata)
+	tier := planTierFromMembership(m)
 	memberID := ""
 	if m.Member != nil {
 		memberID = m.Member.ID
@@ -379,12 +448,22 @@ func handlePaymentFailed(data json.RawMessage) {
 	}
 }
 
+func planTierFromMembership(m whop.MembershipData) model.PlanTier {
+	if tier := planTierFromMetadata(m.Metadata); model.IsPaidPlanTier(tier) {
+		return tier
+	}
+	return model.PlanTierStarter
+}
+
 func planTierFromMetadata(meta map[string]interface{}) model.PlanTier {
 	if meta == nil {
-		return model.PlanTierPro
+		return model.PlanTierStarter
 	}
-	if v, ok := meta["plan_tier"].(string); ok {
+	if v, ok := meta["plan_tier"].(string); ok && strings.TrimSpace(v) != "" {
 		return model.NormalizePlanTier(v)
 	}
-	return model.PlanTierPro
+	if v, ok := meta["plan_id"].(string); ok {
+		return whop.TierFromWhopPlanID(v)
+	}
+	return model.PlanTierStarter
 }

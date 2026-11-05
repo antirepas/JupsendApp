@@ -26,7 +26,7 @@ func TestGrantPilotAccessCreatesProUser(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if NormalizePlanTier(u.PlanTier) != PlanTierPro {
+	if NormalizePlanTier(u.PlanTier) != PlanTierStarter {
 		t.Fatalf("plan_tier=%s", u.PlanTier)
 	}
 	if u.SubscriptionStatus != SubStatusActive {
@@ -65,7 +65,7 @@ func TestGrantPilotAccessUpgradesExisting(t *testing.T) {
 		t.Fatalf("userID=%d want %d", userID, id)
 	}
 	u, _ := GetUserByID(id)
-	if NormalizePlanTier(u.PlanTier) != PlanTierPro || u.SubscriptionStatus != SubStatusActive {
+	if NormalizePlanTier(u.PlanTier) != PlanTierStarter || u.SubscriptionStatus != SubStatusActive {
 		t.Fatalf("tier=%s status=%s", u.PlanTier, u.SubscriptionStatus)
 	}
 }

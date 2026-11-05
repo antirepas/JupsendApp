@@ -47,6 +47,11 @@ type PlanTier string
 
 const (
 	PlanTierFree     PlanTier = "free"
+	PlanTierStarter  PlanTier = "starter"
+	PlanTierGrowth   PlanTier = "growth"
+	PlanTierScale    PlanTier = "scale"
+	PlanTierHyper    PlanTier = "hyper"
+	// Legacy aliases — NormalizePlanTier maps these to Starter.
 	PlanTierStandard PlanTier = "standard"
 	PlanTierPro      PlanTier = "pro"
 )
@@ -59,7 +64,7 @@ func CreateUser(email, passwordHash, baseURL string) (int64, error) {
 	isAdmin := config.IsAdminEmail(email)
 	planTier := string(PlanTierFree)
 	if isAdmin {
-		planTier = string(PlanTierPro)
+		planTier = string(PlanTierHyper)
 	}
 	row := db.QueryRow(`
 		INSERT INTO users (email, password_hash, base_url, is_admin, plan_tier) VALUES (?, ?, ?, ?, ?) RETURNING id
@@ -70,7 +75,7 @@ func CreateUser(email, passwordHash, baseURL string) (int64, error) {
 		return 0, err
 	}
 	if isAdmin {
-		_ = ApplyPlanLimitsToUser(id, PlanTierPro)
+		_ = ApplyPlanLimitsToUser(id, PlanTierHyper)
 	}
 	return id, nil
 }
@@ -215,7 +220,7 @@ func UpdateUserSubscription(userID int64, status, membershipID, memberID string,
 
 const DefaultPilotDurationDays = 60
 
-// GrantPilotAccess creates a user (if needed) and grants Pro + active subscription for durationDays.
+// GrantPilotAccess creates a user (if needed) and grants Starter + active subscription for durationDays.
 // Existing users are upgraded in place. Admin emails are refused.
 func GrantPilotAccess(email string, durationDays int) (userID int64, created bool, err error) {
 	email = strings.TrimSpace(strings.ToLower(email))
@@ -254,7 +259,7 @@ func GrantPilotAccess(email string, durationDays int) (userID int64, created boo
 		created = true
 	}
 
-	if err := ApplyPlanLimitsToUser(userID, PlanTierPro); err != nil {
+	if err := ApplyPlanLimitsToUser(userID, PlanTierStarter); err != nil {
 		return userID, created, err
 	}
 	endsAt := time.Now().Add(time.Duration(durationDays) * 24 * time.Hour)

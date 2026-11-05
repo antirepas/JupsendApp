@@ -72,6 +72,9 @@ type ContactSummary struct {
 }
 
 func (c *Contact) SaveContact(userID int64, variables []ContactVariables) (int64, error) {
+	if err := AssertCanCreateContact(userID); err != nil {
+		return 0, err
+	}
 	query := `INSERT INTO contact (email, user_id) VALUES (?, ?) RETURNING id`
 
 	row := db.QueryRow(query, c.Email, userID)

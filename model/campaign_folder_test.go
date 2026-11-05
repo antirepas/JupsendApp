@@ -188,6 +188,60 @@ func TestListContactsInLibraryFolder(t *testing.T) {
 	}
 }
 
+func TestSyncClearsContactsWhenSheetDeleted(t *testing.T) {
+	db.OpenTestDB(t)
+	email := fmt.Sprintf("camp-clear-%d@example.com", time.Now().UnixNano())
+	userID, err := CreateUser(email, "hash", "http://localhost")
+	if err != nil {
+		t.Fatal(err)
+	}
+	folderID, err := CreateLibraryFolder(userID, "Clear Camp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	camp, err := GetCampaignByLibraryFolder(folderID, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	listID, err := CreateLibraryContactSheet(userID, "Audience", folderID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	contact := Contact{Email: fmt.Sprintf("lead-%d@ex.com", time.Now().UnixNano())}
+	cid, err := contact.SaveContact(userID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := AddContactsToList(listID, userID, []int64{cid}); err != nil {
+		t.Fatal(err)
+	}
+	if err := SyncCampaignFromFolder(userID, camp.ID); err != nil {
+		t.Fatal(err)
+	}
+	members, _ := GetCampaignContactIDs(camp.ID)
+	if len(members) != 1 {
+		t.Fatalf("expected 1 member before delete, got %v", members)
+	}
+
+	if err := DeleteContactList(listID, userID); err != nil {
+		t.Fatal(err)
+	}
+	// Simulate LibraryOpsDelete post-hook
+	SyncDraftCampaignsForFolder(userID, folderID)
+
+	got, err := GetCampaignForUser(camp.ID, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ContactListID != 0 {
+		t.Fatalf("contact_list_id=%d want 0", got.ContactListID)
+	}
+	members, _ = GetCampaignContactIDs(camp.ID)
+	if len(members) != 0 {
+		t.Fatalf("expected campaign contacts cleared, got %v", members)
+	}
+}
+
 func TestRenameFolderRenamesCampaign(t *testing.T) {
 	db.OpenTestDB(t)
 	email := fmt.Sprintf("camp-rename-%d@example.com", time.Now().UnixNano())

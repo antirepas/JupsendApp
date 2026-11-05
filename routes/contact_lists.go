@@ -51,9 +51,16 @@ func DeleteContactList(c *gin.Context) {
 		c.Redirect(http.StatusFound, "/contacts?tab=lists&error=Invalid+list")
 		return
 	}
+	folderID := int64(0)
+	if list, err := model.GetContactListForUser(listID, userID); err == nil {
+		folderID = list.FolderID
+	}
 	if err := model.DeleteContactList(listID, userID); err != nil {
 		c.Redirect(http.StatusFound, "/contacts?tab=lists&error=Could+not+delete+list")
 		return
+	}
+	if folderID > 0 {
+		model.SyncDraftCampaignsForFolder(userID, folderID)
 	}
 	c.Redirect(http.StatusFound, "/contacts?tab=lists&success=List+deleted")
 }

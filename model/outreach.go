@@ -667,9 +667,7 @@ func UpsertInboxKitSMTPAccount(userID int64, email, host, port, user, password, 
 	if imapPort == "" {
 		imapPort = "993"
 	}
-	if dailyLimit <= 0 {
-		dailyLimit = 50
-	}
+	// dailyLimit 0 = no daily cap (Pro); positive values are hard per-mailbox caps.
 	now := time.Now()
 	def := 0
 	if isDefault {
@@ -795,8 +793,8 @@ func AttachManualSendingMailbox(userID int64, email, fromName, smtpHost, smtpPor
 		def = 1
 		_, _ = db.Exec(`UPDATE smtp_accounts SET is_default=0 WHERE user_id=?`, userID)
 	}
-	daily := 50
-	if spec, err := PlanSpecForTier(PlanTierPro); err == nil && spec.DailyEmailCap > 0 {
+	daily := 0 // Pro: no daily cap (monthly plan limit applies)
+	if spec, err := PlanSpecForTier(PlanTierPro); err == nil {
 		daily = spec.DailyEmailCap
 	}
 

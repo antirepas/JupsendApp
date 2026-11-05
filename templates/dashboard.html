@@ -61,20 +61,28 @@
     <aside class="dash-plan-value">
         <p class="dash-plan-value-label">Your {{.plan.Name}} plan</p>
         <ul class="dash-plan-value-list">
+            {{if .plan.Paid}}
             <li>
-                <span class="dash-plan-value-num">{{.plan.DailyEmails}}</span>
-                <span class="dash-plan-value-desc">emails / day{{if eq .plan.Tier "pro"}} per mailbox{{end}}</span>
+                <span class="dash-plan-value-num">{{.plan.Name}}</span>
+                <span class="dash-plan-value-desc">{{.plan.Label}} · ${{.plan.MonthlyPriceUSD}}/mo</span>
             </li>
-            {{if eq .plan.Tier "pro"}}
             <li>
-                <span class="dash-plan-value-num">Buy</span>
-                <span class="dash-plan-value-desc">domains &amp; mailboxes as add-ons</span>
+                <span class="dash-plan-value-num">{{.plan.MonthlyEmails}}</span>
+                <span class="dash-plan-value-desc">emails / month</span>
+            </li>
+            <li>
+                <span class="dash-plan-value-num">{{.plan.MaxContacts}}</span>
+                <span class="dash-plan-value-desc">max contacts</span>
             </li>
             <li>
                 <span class="dash-plan-value-num">{{.plan.AICredits}}</span>
                 <span class="dash-plan-value-desc">AI credits / day</span>
             </li>
             {{else}}
+            <li>
+                <span class="dash-plan-value-num">{{.plan.DailyEmails}}</span>
+                <span class="dash-plan-value-desc">emails / day</span>
+            </li>
             <li>
                 <span class="dash-plan-value-num">Shared</span>
                 <span class="dash-plan-value-desc">sending mailbox included</span>
@@ -84,7 +92,7 @@
                 <span class="dash-plan-value-desc">AI credits / day</span>
             </li>
             <li>
-                <a href="/settings/billing" class="text-sm text-brand-600 font-medium">Upgrade to Pro →</a>
+                <a href="/settings/billing" class="text-sm text-brand-600 font-medium">See plans →</a>
             </li>
             {{end}}
         </ul>
@@ -453,7 +461,7 @@
             <h3 class="card-title mb-0">Sending today</h3>
             <p class="text-sm text-gray-500 mt-1">
                 {{if .CombinedLabel}}{{.CombinedLabel}}{{else if .SenderEmail}}{{.SenderEmail}}{{else}}Sending account{{end}}
-                · {{.TodayCap}}/day limit
+                {{if le .TodayCap 0}}· no daily cap{{else}}· {{.TodayCap}}/day limit{{end}}
                 {{if gt .MailboxCount 1}} · <a href="/mailboxes" class="text-brand-600 font-medium">Manage seats</a>{{end}}
             </p>
         </div>
@@ -465,18 +473,24 @@
     <div class="warmup-panel-metrics">
         <div class="warmup-metric">
             <span class="warmup-metric-label">Sent today</span>
+            {{if le .TodayCap 0}}
+            <span class="warmup-metric-value">{{.SendsToday}}</span>
+            <span class="warmup-metric-hint">No daily cap</span>
+            {{else}}
             <span class="warmup-metric-value">{{.SendsToday}}<span class="warmup-metric-of"> / {{.TodayCap}}</span></span>
             <span class="warmup-metric-hint">
                 {{if ge .TodayRemaining 1}}{{.TodayRemaining}} remaining{{else if eq .TodayRemaining 0}}Cap reached for today{{else}}Cap reached{{end}}
             </span>
+            {{end}}
         </div>
         <div class="warmup-metric">
             <span class="warmup-metric-label">Daily limit</span>
-            <span class="warmup-metric-value">{{.TodayCap}}</span>
+            <span class="warmup-metric-value">{{if le .TodayCap 0}}∞{{else}}{{.TodayCap}}{{end}}</span>
             <span class="warmup-metric-hint">Across ready seats</span>
         </div>
     </div>
 
+    {{if gt .TodayCap 0}}
     <div class="warmup-panel-progress">
         <div class="warmup-progress-row">
             <div class="warmup-progress-head">
@@ -488,6 +502,7 @@
             </div>
         </div>
     </div>
+    {{end}}
     {{else}}
     <div class="warmup-panel-top">
         <div>

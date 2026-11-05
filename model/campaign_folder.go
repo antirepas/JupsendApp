@@ -124,7 +124,11 @@ func SyncCampaignFromFolder(userID, campaignID int64) error {
 	if len(templates) > 0 {
 		templateA = templates[0]
 	} else {
-		templateA = c.TemplateAID
+		// No templates left in the folder — reset off deleted files.
+		templateA, err = ensurePlaceholderTemplate(userID, c.LibraryFolderID)
+		if err != nil {
+			return err
+		}
 	}
 	if templateA <= 0 {
 		templateA, err = ensurePlaceholderTemplate(userID, c.LibraryFolderID)
@@ -133,7 +137,9 @@ func SyncCampaignFromFolder(userID, campaignID int64) error {
 		}
 	}
 
-	wantAB := c.ExecutionMode == "sequence_ab" || c.ExecutionMode == "workflow_ab" || c.TemplateBID > 0
+	// Only keep A/B when Variant B still exists as a folder template.
+	wantAB := c.ExecutionMode == "sequence_ab" || c.ExecutionMode == "workflow_ab" ||
+		(c.TemplateBID > 0 && inFolder[c.TemplateBID])
 	if wantAB {
 		if c.TemplateBID > 0 && inFolder[c.TemplateBID] && c.TemplateBID != templateA {
 			templateB = c.TemplateBID
@@ -199,8 +205,13 @@ func SyncCampaignFromFolder(userID, campaignID int64) error {
 				return err
 			}
 		}
-	} else if c.ContactListID > 0 {
-		_ = SetCampaignContactList(campaignID, userID, 0)
+	} else {
+		// Contact sheet removed from folder (or never present). Clear list binding
+		// and snapshot membership — FK SET NULL alone leaves campaign_contacts behind.
+		if c.ContactListID > 0 {
+			_ = SetCampaignContactList(campaignID, userID, 0)
+		}
+		_, _ = db.Exec(`DELETE FROM campaign_contacts WHERE campaign_id = ?`, campaignID)
 	}
 	return nil
 }

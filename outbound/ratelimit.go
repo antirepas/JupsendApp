@@ -25,7 +25,17 @@ func accountUnderDailyCap(account model.SMTPAccount) bool {
 	resetDailyIfNeeded(&account)
 	analytics := model.GetMailboxAnalyticsBySMTPAccountID(account.ID)
 	cap := EffectiveDailyCapWithInsights(account, analytics)
+	if cap <= 0 {
+		return true
+	}
 	return account.SendsToday < cap
+}
+
+func accountUnderMonthlyCap(account model.SMTPAccount) bool {
+	if account.UserID <= 0 {
+		return true
+	}
+	return model.UserUnderMonthlyEmailCap(account.UserID)
 }
 
 func rateLimitReason(account model.SMTPAccount, job model.SendJob) string {
@@ -35,10 +45,14 @@ func rateLimitReason(account model.SMTPAccount, job model.SendJob) string {
 	if IsAccountProviderBlocked(account.ID) {
 		return "mailbox provider limit; retry after reset"
 	}
+	if !accountUnderMonthlyCap(account) {
+		cap, _, _ := model.UserMonthlyEmailRemaining(account.UserID)
+		return "monthly email limit reached (" + strconv.Itoa(cap) + "/month); resumes next month"
+	}
 	resetDailyIfNeeded(&account)
 	analytics := model.GetMailboxAnalyticsBySMTPAccountID(account.ID)
 	cap := EffectiveDailyCapWithInsights(account, analytics)
-	if account.SendsToday >= cap {
+	if cap > 0 && account.SendsToday >= cap {
 		return "mailbox daily limit reached (" +
 			strconv.Itoa(account.SendsToday) + "/" + strconv.Itoa(cap) + "); resumes after midnight"
 	}
@@ -135,6 +149,9 @@ func accountCanSend(account model.SMTPAccount, checkDaily, checkMinute, checkSpa
 		return false
 	}
 	if IsAccountProviderBlocked(account.ID) {
+		return false
+	}
+	if checkDaily && !accountUnderMonthlyCap(account) {
 		return false
 	}
 	if checkDaily && !accountUnderDailyCap(account) {

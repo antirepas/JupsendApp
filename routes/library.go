@@ -140,10 +140,14 @@ func LibraryOpsMove(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"ok": false, "error": "items and folder_id required"})
 		return
 	}
+	sourceFolders := model.LibraryFolderIDsForRefs(userID, body.Items)
 	n, err := model.MoveLibraryItems(userID, body.Items, *body.FolderID)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"ok": false, "error": err.Error()})
 		return
+	}
+	for _, fid := range sourceFolders {
+		model.SyncDraftCampaignsForFolder(userID, fid)
 	}
 	model.SyncDraftCampaignsForFolder(userID, *body.FolderID)
 	ctx.JSON(http.StatusOK, gin.H{"ok": true, "count": n})
@@ -210,10 +214,14 @@ func LibraryOpsDelete(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"ok": false, "error": "items required"})
 		return
 	}
+	affectedFolders := model.LibraryFolderIDsForRefs(userID, body.Items)
 	n, err := model.DeleteLibraryItems(userID, body.Items)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"ok": false, "error": err.Error()})
 		return
+	}
+	for _, fid := range affectedFolders {
+		model.SyncDraftCampaignsForFolder(userID, fid)
 	}
 	ctx.JSON(http.StatusOK, gin.H{"ok": true, "count": n})
 }

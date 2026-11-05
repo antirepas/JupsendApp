@@ -213,7 +213,7 @@ func TestOpsCreatePilotAndEnter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if model.NormalizePlanTier(u.PlanTier) != model.PlanTierPro || u.SubscriptionStatus != model.SubStatusActive {
+	if model.NormalizePlanTier(u.PlanTier) != model.PlanTierStarter || u.SubscriptionStatus != model.SubStatusActive {
 		t.Fatalf("pilot not granted: tier=%s status=%s", u.PlanTier, u.SubscriptionStatus)
 	}
 
