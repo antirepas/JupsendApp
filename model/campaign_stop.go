@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"time"
 
 	"emailtracker.com/db"
 )
@@ -217,4 +218,80 @@ func cancelSequenceInstancesForCampaignTx(tx *db.Tx, campaignID int64) (int, err
 	}
 	n, _ := res.RowsAffected()
 	return int(n), nil
+}
+
+// ContinueCampaign reopens a stopped campaign and reactivates cancelled sequence/workflow runs
+// so contacts resume from their saved step (not from scratch).
+func ContinueCampaign(campaignID, userID int64) error {
+	campaign, err := GetCampaignForUser(campaignID, userID)
+	if err != nil {
+		return fmt.Errorf("campaign not found")
+	}
+	if campaign.Status != "stopped" {
+		return fmt.Errorf("campaign is not stopped")
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	now := time.Now()
+	if _, err := tx.Exec(`
+		UPDATE campaign_sequence_instances
+		SET status = 'active', next_wake_at = NULL, updated_at = ?
+		WHERE campaign_id = ? AND status = 'cancelled'
+	`, now, campaignID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`
+		UPDATE workflow_instances
+		SET status = 'active', completed_at = NULL, lock_token = NULL, lock_expires_at = NULL,
+			next_wake_at = NULL
+		WHERE campaign_id = ? AND status = 'cancelled' AND fork_root_id IS NULL
+	`, campaignID); err != nil {
+		return err
+	}
+	res, err := tx.Exec(`
+		UPDATE campaigns SET status = 'draft', scheduled_at = NULL, is_sending = 0
+		WHERE id = ? AND user_id = ? AND status = 'stopped'
+	`, campaignID, userID)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("campaign is not stopped")
+	}
+	return tx.Commit()
+}
+
+// ContactIDsWithSuccessfulSendInCampaign returns contacts who already got a delivered
+// email in this campaign (used to avoid re-queueing them on continue).
+func ContactIDsWithSuccessfulSendInCampaign(campaignID int64) (map[int64]bool, error) {
+	out := map[int64]bool{}
+	if campaignID <= 0 {
+		return out, nil
+	}
+	rows, err := db.Query(`
+		SELECT DISTINCT contact_id FROM email_sends
+		WHERE campaign_id = ?
+		  AND contact_id IS NOT NULL
+		  AND LOWER(COALESCE(delivery_status, '')) = 'sent'
+	`, campaignID)
+	if err != nil {
+		return out, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return out, err
+		}
+		if id > 0 {
+			out[id] = true
+		}
+	}
+	return out, rows.Err()
 }

@@ -333,6 +333,7 @@ func RegisterRoutes(server *gin.Engine) {
 		authd.POST("/campaigns/:id/jev-review", CampaignJevReview)
 		authd.POST("/campaigns/:id/test-workflow", TestCampaignWorkflowWeb)
 		authd.POST("/campaigns/:id/stop", StopCampaign)
+		authd.POST("/campaigns/:id/continue", ContinueCampaign)
 
 		authd.GET("/sends", SendsPageRedirect)
 		authd.GET("/sends/new", NewSendRedirect)

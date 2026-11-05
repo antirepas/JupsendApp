@@ -451,6 +451,7 @@ func CampaignDetailPage(ctx *gin.Context) {
 			canStop = true
 		}
 	}
+	canContinue := detail.DisplayStatus == "stopped" && detail.ContactCount > 0
 
 	mailboxDist, _ := model.GetCampaignMailboxDistribution(userID, detail.ID)
 	smtpSel, _ := model.GetCampaignSMTPSelection(userID, detail.ID)
@@ -543,6 +544,7 @@ func CampaignDetailPage(ctx *gin.Context) {
 		"error":                   ctx.Query("error"),
 		"isWorkflow":              isWorkflow,
 		"canStop":                 canStop,
+		"canContinue":             canContinue,
 		"canEditMode":             canEditMode,
 		"campaignMode":            campaignMode,
 		"experimentVariable":      detail.ExperimentVariable,
@@ -1096,6 +1098,77 @@ func StopCampaign(ctx *gin.Context) {
 		msg += fmt.Sprintf(" and cancelled %d workflow runs", result.CancelledInstances)
 	}
 	ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?success="+url.QueryEscape(msg))
+}
+
+// ContinueCampaign reopens a stopped campaign and launches remaining work.
+func ContinueCampaign(ctx *gin.Context) {
+	campaignID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
+	if err != nil {
+		ctx.Redirect(http.StatusFound, "/campaigns?error=Invalid+campaign")
+		return
+	}
+	userID := mustUserID(ctx)
+	redirectErr := func(msg string) {
+		ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?error="+url.QueryEscape(msg))
+	}
+
+	if err := model.ContinueCampaign(campaignID, userID); err != nil {
+		redirectErr(err.Error())
+		return
+	}
+
+	campaign, err := model.GetCampaignForUser(campaignID, userID)
+	if err != nil {
+		redirectErr("Campaign not found")
+		return
+	}
+	if _, err := model.ListSendReadyAccountsForCampaign(userID, campaignID); err != nil {
+		redirectErr(err.Error())
+		return
+	}
+	contactIDs, err := model.GetCampaignContactIDs(campaignID)
+	if err != nil || len(contactIDs) == 0 {
+		redirectErr("Add contacts before continuing")
+		return
+	}
+	if model.IsSequenceMode(campaign.ExecutionMode) {
+		_ = model.RepairCampaignSequenceSteps(campaign.ID, campaign.TemplateAID)
+		if err := model.ValidateCampaignSequenceReady(campaign); err != nil {
+			redirectErr(err.Error())
+			return
+		}
+	} else if !model.IsLegacyWorkflowMode(campaign.ExecutionMode) && campaign.TemplateAID <= 0 {
+		redirectErr("Pick a template before continuing")
+		return
+	}
+
+	if err := model.MarkCampaignSending(campaignID); err != nil {
+		if err == sql.ErrNoRows {
+			ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?success="+url.QueryEscape("Campaign is already launching in the background"))
+			return
+		}
+		log.Print(err)
+		redirectErr("Could not continue campaign")
+		return
+	}
+
+	go func(userID, campaignID int64) {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("campaign %d continue panic: %v", campaignID, r)
+				_ = model.ClearCampaignSending(campaignID)
+			}
+		}()
+		result, err := launchCampaign(userID, campaignID)
+		if err != nil {
+			log.Printf("campaign %d continue failed: %v", campaignID, err)
+			_ = model.ClearCampaignSending(campaignID)
+			return
+		}
+		log.Printf("campaign %d continue done: queued=%d skipped=%d", campaignID, result.Queued, result.Skipped)
+	}(userID, campaignID)
+
+	ctx.Redirect(http.StatusFound, "/campaigns/"+strconv.FormatInt(campaignID, 10)+"?success="+url.QueryEscape("Campaign continued — remaining emails queue in the background. Refresh to see progress."))
 }
 
 func UpdateCampaignLocalSend(ctx *gin.Context) {

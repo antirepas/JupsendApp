@@ -182,6 +182,12 @@ func FormatSkipBreakdown(counts map[string]int) string {
 	if n := counts["enqueue_error"]; n > 0 {
 		parts = append(parts, formatSkipN(n, "enqueue error"))
 	}
+	if n := counts["already_sent"]; n > 0 {
+		parts = append(parts, formatSkipN(n, "already sent"))
+	}
+	if n := counts["missing_vars"]; n > 0 {
+		parts = append(parts, formatSkipN(n, "missing variables"))
+	}
 	if len(parts) == 0 {
 		return ""
 	}

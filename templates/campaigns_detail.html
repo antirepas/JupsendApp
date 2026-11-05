@@ -46,6 +46,11 @@
       <button type="submit" class="btn-secondary text-red-600">Stop campaign</button>
     </form>
     {{end}}
+    {{if .canContinue}}
+    <form method="POST" action="/campaigns/{{.campaign.ID}}/continue" onsubmit="return confirm('Continue this campaign? Remaining contacts resume from where they left off; contacts who already got mail are skipped.');">
+      <button type="submit" class="btn-primary">Continue campaign</button>
+    </form>
+    {{end}}
     <form method="POST" action="/campaigns/{{.campaign.ID}}/delete" onsubmit="return confirm('Delete this campaign?');">
       <button type="submit" class="btn-secondary text-red-600">Delete</button>
     </form>

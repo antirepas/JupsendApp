@@ -216,6 +216,26 @@ func EnqueueCampaignContacts(userID, campaignID int64, contactIDs []int64, templ
 		Skipped:        len(skippedReasons),
 		SkippedReasons: model.CountSkipReasons(skippedReasons),
 	}
+	// Continue / re-launch must not re-send contacts who already got a delivered email.
+	alreadySent, err := model.ContactIDsWithSuccessfulSendInCampaign(campaignID)
+	if err != nil {
+		return EnqueueResult{}, err
+	}
+	if len(alreadySent) > 0 {
+		filtered := allowed[:0]
+		for _, id := range allowed {
+			if alreadySent[id] {
+				result.Skipped++
+				if result.SkippedReasons == nil {
+					result.SkippedReasons = map[string]int{}
+				}
+				result.SkippedReasons["already_sent"]++
+				continue
+			}
+			filtered = append(filtered, id)
+		}
+		allowed = filtered
+	}
 	openTrack := model.CampaignOpenTrackingEnabled(campaignID)
 	clickTrack := model.CampaignClickTrackingEnabled(campaignID)
 	camp, _ := model.GetCampaign(campaignID)
