@@ -5676,3 +5676,48 @@ a.dash-list-main:hover .dash-list-name { color: #059669; }
 }
 .jev-prob-row .jev-bar { grid-column: auto; height: 0.3rem; }
 .jev-prob-row .jev-bar > span { background: #64748b; }
+.jev-guide-intro {
+  margin: 0 0 0.75rem;
+  font-size: 0.8rem;
+  color: #64748b;
+  line-height: 1.4;
+}
+.jev-guide-clean {
+  margin: 0;
+  padding: 0.75rem 0.85rem;
+  border-radius: 0.65rem;
+  border: 1px solid #bbf7d0;
+  background: #f0fdf4;
+  font-size: 0.9rem;
+  color: #166534;
+}
+.jev-guide-row {
+  display: grid;
+  grid-template-columns: 3.25rem minmax(0, 1fr);
+  gap: 0.65rem;
+  align-items: start;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.65rem;
+  padding: 0.7rem 0.85rem;
+  margin-bottom: 0.55rem;
+  background: #fff;
+}
+.jev-guide-role {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #0f766e;
+  padding-top: 0.15rem;
+}
+.jev-guide-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #64748b;
+  margin-bottom: 0.15rem;
+}
+.jev-guide-text {
+  font-size: 0.9rem;
+  color: #0f172a;
+  line-height: 1.4;
+}

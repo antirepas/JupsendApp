@@ -983,69 +983,98 @@
         function prettyChoice(s) {
             return String(s || '—').replace(/_/g, ' ');
         }
-        function renderChoiceBlock(block) {
-            if (!block || !block.choice) return '';
-            const probs = block.probabilities || {};
-            const keys = Object.keys(probs).sort(function (a, b) {
-                return (probs[b] || 0) - (probs[a] || 0);
-            });
-            let rows = keys
-                .map(function (k) {
-                    const v = probs[k] || 0;
-                    return (
-                        '<div class="jev-prob-row"><span>' +
-                        prettyChoice(k) +
-                        '</span><div class="jev-bar"><span style="width:' +
-                        Math.max(2, Math.round(v * 100)) +
-                        '%"></span></div><span>' +
-                        pct(v) +
-                        '</span></div>'
-                    );
-                })
-                .join('');
+        const decisionHeadlines = {
+            send: 'Ready to send',
+            revise: 'Revise before sending',
+            do_not_send: 'Do not send',
+            manual_review: 'Needs manual review',
+        };
+        const issueBlurbs = {
+            none: 'No material issue.',
+            weak_subject: 'Subject is vague or unlikely to earn a relevant open.',
+            weak_personalization: 'Personalization looks fabricated or poorly structured.',
+            weak_value_proposition: 'Benefit / business value is unclear or unsupported.',
+            offer_mismatch: 'Offer framing does not fit a cold recipient.',
+            premature_price: 'Price or payment is too early for cold outreach.',
+            premature_cta: 'Ask is too big for a cold first touch.',
+            credibility_issue: 'Claims or sender identity undermine trust.',
+            unnatural_writing: 'Copy sounds generic or unnatural.',
+            missing_information: 'Too little commercial context to judge.',
+        };
+        const areaBlurbs = {
+            none: 'Nothing to edit.',
+            subject: 'Edit the subject line.',
+            opening: 'Edit the greeting or opening.',
+            personalization: 'Edit prospect-specific details.',
+            value_proposition: 'Edit how you explain the offer / benefit.',
+            price: 'Edit price or payment framing.',
+            cta: 'Edit the call to action.',
+            signature: 'Edit the signature / sender line.',
+            offer: 'Reconsider the underlying offer.',
+            multiple_parts: 'Several sections need edits.',
+        };
+        const fixBlurbs = {
+            no_change: 'No rewrite needed.',
+            rewrite_subject: 'Rewrite the subject to be specific and relevant.',
+            improve_personalization: 'Use honest merge-field personalization.',
+            clarify_value: 'Spell out the concrete benefit and how it works.',
+            justify_price: 'Add context for price — or remove it.',
+            lower_commitment: 'Replace the big ask with a lighter next step.',
+            improve_credibility: 'Fix unsupported claims or identity mismatches.',
+            rewrite_copy: 'Rewrite awkward or generic language.',
+            change_offer: 'Change the offer framing itself.',
+            gather_information: 'Gather missing context before deciding.',
+        };
+        function guidanceBlurb(kind, choice) {
+            const maps = { issue: issueBlurbs, area: areaBlurbs, fix: fixBlurbs };
+            const map = maps[kind] || {};
+            return map[choice] || prettyChoice(choice);
+        }
+        function isCleanGuidance(review) {
+            const issue = (review.primary_issue && review.primary_issue.choice) || '';
+            const area = (review.problem_area && review.problem_area.choice) || '';
+            const fix = (review.recommended_fix && review.recommended_fix.choice) || '';
+            const decision = (review.decision && review.decision.choice) || '';
             return (
-                '<div class="jev-choice-block"><div class="jev-choice-head"><span class="jev-choice-name">' +
-                (block.label || block.id) +
-                '</span><span class="jev-choice-pick">' +
-                prettyChoice(block.choice) +
-                ' · ' +
-                pct(block.confidence) +
-                ' conf</span></div>' +
-                rows +
-                '</div>'
+                decision === 'send' ||
+                ((issue === 'none' || !issue) &&
+                    (area === 'none' || !area) &&
+                    (fix === 'no_change' || !fix))
+            );
+        }
+        function renderGuidanceRow(role, label, block, kind) {
+            if (!block || !block.choice) return '';
+            return (
+                '<div class="jev-guide-row">' +
+                '<div class="jev-guide-role">' +
+                role +
+                '</div>' +
+                '<div class="jev-guide-body">' +
+                '<div class="jev-guide-label">' +
+                label +
+                '</div>' +
+                '<div class="jev-guide-text">' +
+                guidanceBlurb(kind, block.choice) +
+                '</div>' +
+                '</div></div>'
             );
         }
         function renderReview(review) {
             const d = review.decision || {};
-            decisionEl.className = 'jev-decision is-' + (d.choice || '');
-            const dProbs = d.probabilities || {};
-            const dKeys = Object.keys(dProbs).sort(function (a, b) {
-                return (dProbs[b] || 0) - (dProbs[a] || 0);
-            });
-            const dRows = dKeys
-                .map(function (k) {
-                    const v = dProbs[k] || 0;
-                    return (
-                        '<div class="jev-prob-row"><span>' +
-                        prettyChoice(k) +
-                        '</span><div class="jev-bar"><span style="width:' +
-                        Math.max(2, Math.round(v * 100)) +
-                        '%"></span></div><span>' +
-                        pct(v) +
-                        '</span></div>'
-                    );
-                })
-                .join('');
+            const choice = d.choice || '';
+            decisionEl.className = 'jev-decision is-' + choice;
             decisionEl.innerHTML =
-                '<div class="jev-decision-label">Decision</div>' +
+                '<div class="jev-decision-label">Verdict</div>' +
                 '<div class="jev-decision-value">' +
-                prettyChoice(d.choice) +
+                (decisionHeadlines[choice] || prettyChoice(choice)) +
                 '</div>' +
-                '<div class="jev-decision-meta">Confidence ' +
-                pct(d.confidence) +
-                (review.model ? ' · model ' + review.model : '') +
-                '</div>' +
-                dRows;
+                '<div class="jev-decision-meta">' +
+                (review.note
+                    ? review.note
+                    : 'Based on checks + cold-outreach staging' +
+                      (typeof d.confidence === 'number' ? ' · ' + pct(d.confidence) + ' confidence' : '')) +
+                (review.model ? ' · ' + review.model : '') +
+                '</div>';
 
             checksEl.innerHTML = (review.checks || [])
                 .map(function (c) {
@@ -1075,11 +1104,18 @@
                 })
                 .join('');
 
-            choicesEl.innerHTML =
-                '<h4 class="jev-section-title">Issues &amp; fixes</h4>' +
-                renderChoiceBlock(review.primary_issue) +
-                renderChoiceBlock(review.problem_area) +
-                renderChoiceBlock(review.recommended_fix);
+            if (isCleanGuidance(review)) {
+                choicesEl.innerHTML =
+                    '<h4 class="jev-section-title">Guidance</h4>' +
+                    '<p class="jev-guide-clean">No material edits suggested — checks support sending.</p>';
+            } else {
+                choicesEl.innerHTML =
+                    '<h4 class="jev-section-title">Guidance</h4>' +
+                    '<p class="jev-guide-intro">Three different answers: why it fails, where to edit, what to change.</p>' +
+                    renderGuidanceRow('Why', "What's wrong", review.primary_issue, 'issue') +
+                    renderGuidanceRow('Where', 'Where to edit', review.problem_area, 'area') +
+                    renderGuidanceRow('How', 'What to change', review.recommended_fix, 'fix');
+            }
 
             subEl.textContent =
                 'Template-quality review (no prospect contact in state). Uses 1 AI credit.';

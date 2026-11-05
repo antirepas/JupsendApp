@@ -39,14 +39,21 @@ type TemplateReviewChoice struct {
 
 // TemplateReviewResult is the API payload for the modal.
 type TemplateReviewResult struct {
-	Model   string                 `json:"model"`
-	Decision TemplateReviewChoice  `json:"decision"`
-	Checks  []TemplateReviewCheck  `json:"checks"`
-	PrimaryIssue TemplateReviewChoice `json:"primary_issue"`
-	ProblemArea  TemplateReviewChoice `json:"problem_area"`
-	RecommendedFix TemplateReviewChoice `json:"recommended_fix"`
-	Usage   map[string]int         `json:"usage"`
+	Model          string                `json:"model"`
+	Decision       TemplateReviewChoice  `json:"decision"`
+	Checks         []TemplateReviewCheck `json:"checks"`
+	PrimaryIssue   TemplateReviewChoice  `json:"primary_issue"`
+	ProblemArea    TemplateReviewChoice  `json:"problem_area"`
+	RecommendedFix TemplateReviewChoice  `json:"recommended_fix"`
+	Note           string                `json:"note,omitempty"` // e.g. decision aligned with green checks
+	Usage          map[string]int        `json:"usage"`
 }
+
+// checkPassThreshold matches the editor's teal / green bar cutoffs.
+const (
+	noulPassMin   = 0.65
+	aiSlopPassMax = 0.4
+)
 
 var reQuestionSentence = regexp.MustCompile(`(?s)([^.!?\n]{8,}?\?)`)
 
@@ -105,6 +112,9 @@ func BuildTemplateReviewState(in TemplateReviewInput) map[string]interface{} {
 				"Do not label normal specific cold email as AI slop just because it uses a common outreach structure.",
 				"Treat missing critical commercial context as uncertainty (manual_review), not as proof the email is good.",
 				"Prefer revise when issues are fixable; reserve do_not_send for deceptive or fundamentally inappropriate copy.",
+				"Consistency rule: if every diagnostic check would pass (placeholders/personalization/offer/value/CTA/commitment/price/sales step/credibility/sender OK, and ai_slop low), you MUST choose send — not revise for stylistic preferences.",
+				"When decision is send: primary_issue=none, problem_area=none, recommended_fix=no_change.",
+				"When decision is revise: primary_issue, problem_area, and recommended_fix must answer three DIFFERENT questions (why / where / how) — never repeat the same idea three times.",
 			},
 		},
 	}
@@ -135,17 +145,20 @@ func TemplateReviewQuestions() map[string]interface{} {
 		"decision": map[string]interface{}{
 			"type": "choice",
 			"instructions": `Choose the single best action for this cold email template.
-Evaluate relevance framing, credibility, personalization placeholders,
-value proposition, CTA, and sales stage together.
+Base the decision on material cold-outreach readiness — not wording polish.
+
+Consistency with your diagnostic checks is mandatory:
+- If the template would pass all noul checks (high yes on quality checks, low ai_slop), choose send.
+- Choose revise only when at least one material check would fail or a clear commercial staging problem remains.
+- Do not choose revise for minor style preferences when checks would pass.
 
 A clearly worded CTA does not automatically make a template appropriate to send.
-For cold outreach, requesting payment or an invoice before purchase agreement
-is a material issue. Prefer revise when the problem is fixable.
+For cold outreach, requesting payment or an invoice before purchase agreement is a material issue.
 jupsend merge fields ({{name}}, {{company}}, {{@mailbox}}, {{~fit}}, |filters, {% if %})
 are expected and must not be treated as defects.`,
 			"criteria": map[string]string{
-				"send":          "The template is credible, appropriately staged, and ready to use. No material issues remain.",
-				"revise":        "The template has potential but contains fixable issues involving relevance framing, personalization, value proposition, CTA, trust, or requested commitment.",
+				"send":          "Ready to use: credible, appropriately staged, and your diagnostic checks would pass. No material issues.",
+				"revise":        "At least one material, fixable issue remains (relevance, personalization honesty, value, CTA staging, trust, or commitment).",
 				"do_not_send":   "The offer or email is deceptive, materially misleading, or fundamentally inappropriate.",
 				"manual_review": "Essential commercial context is missing or the arrangement cannot be evaluated reliably.",
 			},
@@ -234,8 +247,9 @@ Do not mark normal B2B cold email structure as slop just because it is structure
 		},
 		"primary_issue": map[string]interface{}{
 			"type": "choice",
-			"instructions": `What is the single most important reason this template should not be sent as written?
-Select the most material issue. Placeholders alone are not an issue.`,
+			"instructions": `WHY — diagnosis only. What is the single most important reason this template should not be sent as written?
+Answer the reason (problem type), not where it appears and not the rewrite action.
+If decision is send, choose none. Placeholders alone are not an issue.`,
 			"criteria": map[string]string{
 				"none":                   "No material issue; the template is ready to send.",
 				"weak_subject":           "The subject is misleading, vague, or unlikely to attract relevant attention.",
@@ -251,7 +265,9 @@ Select the most material issue. Placeholders alone are not an issue.`,
 		},
 		"problem_area": map[string]interface{}{
 			"type": "choice",
-			"instructions": `Which part of the email most needs changing to resolve the primary issue?`,
+			"instructions": `WHERE — location only. Which part of the email body needs editing to fix the primary issue?
+Pick a structural location (subject, opening, CTA, …). Do not restate the diagnosis or the fix action.
+If primary_issue is none, choose none.`,
 			"criteria": map[string]string{
 				"subject":           "The subject line.",
 				"opening":           "The greeting or opening sentence.",
@@ -267,7 +283,9 @@ Select the most material issue. Placeholders alone are not an issue.`,
 		},
 		"recommended_fix": map[string]interface{}{
 			"type": "choice",
-			"instructions": `What type of change would best address the primary issue?`,
+			"instructions": `HOW — action only. What concrete change should the writer make?
+Pick a rewrite action. Do not restate the diagnosis or the location.
+If primary_issue is none, choose no_change.`,
 			"criteria": map[string]string{
 				"rewrite_subject":         "Rewrite the subject to be more specific and relevant.",
 				"improve_personalization": "Use accurate, evidence-based personalization structure.",
@@ -361,13 +379,71 @@ func ReviewTemplate(ctx context.Context, client *JevClient, in TemplateReviewInp
 		}
 		out.Checks = append(out.Checks, TemplateReviewCheck{ID: meta.ID, Label: meta.Label, Hint: meta.Hint, Yes: n.Noul})
 	}
-	out.PrimaryIssue = decodeChoiceLabeled(resp.Answers, "primary_issue", "Primary issue")
-	out.ProblemArea = decodeChoiceLabeled(resp.Answers, "problem_area", "Problem area")
-	out.RecommendedFix = decodeChoiceLabeled(resp.Answers, "recommended_fix", "Recommended fix")
+	out.PrimaryIssue = decodeChoiceLabeled(resp.Answers, "primary_issue", "What's wrong")
+	out.ProblemArea = decodeChoiceLabeled(resp.Answers, "problem_area", "Where to edit")
+	out.RecommendedFix = decodeChoiceLabeled(resp.Answers, "recommended_fix", "What to change")
 	if out.Decision.Choice == "" {
 		return nil, fmt.Errorf("jev returned no decision")
 	}
+	reconcileTemplateDecision(out)
 	return out, nil
+}
+
+// ChecksPassGreen reports whether every diagnostic bar would show teal in the editor.
+func ChecksPassGreen(checks []TemplateReviewCheck) bool {
+	if len(checks) == 0 {
+		return false
+	}
+	for _, c := range checks {
+		if c.ID == "ai_slop" {
+			if c.Yes >= aiSlopPassMax {
+				return false
+			}
+			continue
+		}
+		if c.Yes < noulPassMin {
+			return false
+		}
+	}
+	return true
+}
+
+// reconcileTemplateDecision upgrades revise→send when checks are all green.
+// The model often picks revise for style even when diagnostics pass; the UI must not contradict itself.
+func reconcileTemplateDecision(out *TemplateReviewResult) {
+	if out == nil {
+		return
+	}
+	choice := strings.ToLower(strings.TrimSpace(out.Decision.Choice))
+	if choice != "revise" {
+		return
+	}
+	if !ChecksPassGreen(out.Checks) {
+		return
+	}
+	out.Decision.Choice = "send"
+	if sendP, ok := out.Decision.Probabilities["send"]; ok && sendP > out.Decision.Confidence {
+		out.Decision.Confidence = sendP
+	} else if out.Decision.Confidence < 0.7 {
+		out.Decision.Confidence = 0.7
+	}
+	if out.Decision.Probabilities == nil {
+		out.Decision.Probabilities = map[string]float64{}
+	}
+	out.Decision.Probabilities["send"] = out.Decision.Confidence
+	out.PrimaryIssue = TemplateReviewChoice{
+		ID: "primary_issue", Label: "What's wrong", Choice: "none",
+		Confidence: 0.9, Probabilities: map[string]float64{"none": 0.9},
+	}
+	out.ProblemArea = TemplateReviewChoice{
+		ID: "problem_area", Label: "Where to edit", Choice: "none",
+		Confidence: 0.9, Probabilities: map[string]float64{"none": 0.9},
+	}
+	out.RecommendedFix = TemplateReviewChoice{
+		ID: "recommended_fix", Label: "What to change", Choice: "no_change",
+		Confidence: 0.9, Probabilities: map[string]float64{"no_change": 0.9},
+	}
+	out.Note = "Decision matched green checks (model had preferred revise)."
 }
 
 func decodeChoiceLabeled(answers map[string]json.RawMessage, id, label string) TemplateReviewChoice {

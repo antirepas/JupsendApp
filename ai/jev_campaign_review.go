@@ -321,12 +321,13 @@ func ReviewCampaign(ctx context.Context, client *JevClient, in CampaignReviewInp
 		}
 		out.Checks = append(out.Checks, TemplateReviewCheck{ID: meta.ID, Label: meta.Label, Hint: meta.Hint, Yes: n.Noul})
 	}
-	out.PrimaryIssue = decodeChoiceLabeled(resp.Answers, "launch_blocker", "Launch blocker")
-	out.ProblemArea = decodeChoiceLabeled(resp.Answers, "focus_area", "Focus area")
-	out.RecommendedFix = decodeChoiceLabeled(resp.Answers, "recommended_action", "Recommended action")
+	out.PrimaryIssue = decodeChoiceLabeled(resp.Answers, "launch_blocker", "What's wrong")
+	out.ProblemArea = decodeChoiceLabeled(resp.Answers, "focus_area", "Where to edit")
+	out.RecommendedFix = decodeChoiceLabeled(resp.Answers, "recommended_action", "What to change")
 	if out.Decision.Choice == "" {
 		return nil, fmt.Errorf("jev returned no decision")
 	}
+	reconcileTemplateDecision(out)
 	return out, nil
 }
 
